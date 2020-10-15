@@ -113,7 +113,11 @@ flyway_migrate() {
 flyway_migrate_k8s() {
     lastSql="$(if [ -d docs/sql-"${CI_COMMIT_REF_NAME}" ]; then git --no-pager log --name-only --no-merges --oneline docs/sql-"${CI_COMMIT_REF_NAME}" | grep -m1 '^docs/sql' || true; fi)"
     flywayPath="$HOME/efs/flyway"
-    flywayDB="${CI_PROJECT_NAME//-/_}"
+    if [ -z "$db_name" ]; then
+        flywayDB="${CI_PROJECT_NAME//-/_}"
+    else
+        flywayDB="$db_name"
+    fi
     flywaySqlPath="$flywayPath/sql-${CI_COMMIT_REF_NAME}/$flywayDB"
 
     if [[ ! -f "$flywaySqlPath/${lastSql##*/}" && -n $lastSql ]]; then
@@ -425,7 +429,7 @@ deploy_k8s_generic() {
     helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$helmDir/"
 }
 
-rsync_code() {
+deploy_rsync() {
     echo_s "rsync code file to server."
     # 读取项目发布配置文件 config from .$0.conf
     read_deploy_config
@@ -436,10 +440,10 @@ rsync_code() {
         srcPath="${CI_PROJECT_DIR}/"
     fi
     ## 目标文件夹
-    if [[ 'nodir' == "$pathDestConf" ]]; then
+    if [[ 'nodir' == "$path_rsync_dest" ]]; then
         destPath="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     else
-        destPath="$pathDestConf/"
+        destPath="$path_rsync_dest/"
     fi
     ## 发布到 aliyun oss 存储
     ## gitlab setup OSS_BUCKET=jzcrm2/jzcrm2.oss-cn-shenzhen.aliyun.com 两种都支持
@@ -477,7 +481,7 @@ rsync_code() {
     # https://blog.csdn.net/cikenerd/article/details/73740607
     ## 支持多个IP（英文逗号分割）
     # set -x
-    for ip in $(echo "${sshHost}" | awk -F, '{for(i=1;i<NF+1;i++) print $i}'); do
+    for ip in $(echo "${ssh_host}" | awk -F, '{for(i=1;i<NF+1;i++) print $i}'); do
         echo "$ip"
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $sshOpt "${sshUser}@${ip}" "test -d $destPath || mkdir -p $destPath"
@@ -491,7 +495,7 @@ rsync_code() {
     done
 }
 
-rsync_code_java() {
+deploy_rsync_java() {
     echo_s "rsync class/jar file to server."
     ## 针对单个project 有多个war包，循环处理（可能出现bug：for 不支持空格字符文件目录）
     binFind='find'
@@ -503,13 +507,13 @@ rsync_code_java() {
         ## 源文件
         srcPath="${war}"
         ## 目标文件夹
-        if [[ 'nodir' != "$pathDestConf" ]]; then
-            destPath="$pathDestConf/"
+        if [[ 'nodir' != "$path_rsync_dest" ]]; then
+            destPath="$path_rsync_dest/"
         else
             destPath="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         fi
         ## 支持多个IP（英文逗号分割）
-        for ip in $(echo "${sshHost}" | awk -F, '{for(i=1;i<NF+1;i++) print $i}'); do
+        for ip in $(echo "${ssh_host}" | awk -F, '{for(i=1;i<NF+1;i++) print $i}'); do
             echo "$ip"
             ## stop tomcat
             echo "${sshUser}@${ip}:${destPath}../bin/shutdown.sh"
@@ -539,28 +543,26 @@ rsync_code_java() {
 
 read_deploy_config() {
     ## 读取配置文件，获取 项目/分支名/war包目录
-    read -ra array <<<"$(grep "^${CI_PROJECT_NAME}/${CI_COMMIT_REF_NAME}${1}" "$scriptConf")"
-    sshHost=${array[1]}
-    sshPort=${array[2]}
-    sshUser=${array[3]}
-    pathDestConf=${array[4]} ## 从配置文件读取目标路径
-    dbName=${array[5]}
+    read -ra array <<<"$(grep "^${CI_PROJECT_PATH}/${1}" "$scriptConf")"
+    ssh_host=${array[2]}
+    ssh_port=${array[3]}
+    path_rsync_dest=${array[4]} ## 从配置文件读取目标路径
+    db_name=${array[7]}
     ## 防止出现空变量（若有空变量则自动退出）
-    if [[ -z ${sshUser} || -z ${sshHost} || -z ${sshPort} ]]; then
-        echo "if error here, check repo [pms], file: deploy.conf"
-        # ${sshUser:?empty}/${sshHost:?empty}/${sshPort:?empty}/${dbName:?empty}"
+    if [[ -z ${ssh_host} ]]; then
+        echo "if error here, check file: ${scriptName}.conf"
         return 1
     fi
-    sshOpt="ssh -i ${scriptDir}/gitlab-id_rsa -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${sshPort}"
+    sshOpt="ssh -i ${scriptDir}/id_rsa.gitlab -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
     if [[ -f "$scriptSshConf" ]]; then
         sshOpt="$sshOpt -F $scriptSshConf"
     fi
-
-    [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]] && rsyncConf="${CI_PROJECT_DIR}/rsync.exclude"
-    [[ -f "${CI_PROJECT_DIR}/rsync.conf" ]] && rsyncConf="${CI_PROJECT_DIR}/rsync.conf"
-    [[ -z "${rsyncConf}" ]] && rsyncConf="${scriptDir}/rsync.conf"
-    if [[ "${projectLang}" == 'node' || "${projectLang}" == 'java' || 'report-sync' == "${CI_PROJECT_NAME}" ]]; then
-        ## java/front 使用 delete 参数
+    if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
+        rsyncConf="${CI_PROJECT_DIR}/rsync.exclude"
+    else
+        rsyncConf="${scriptDir}/rsync.exclude"
+    fi
+    if [[ "${projectLang}" == 'node' || "${projectLang}" == 'java' ]]; then
         rsyncDelete='--delete'
     fi
     rsyncOpt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsyncConf} $rsyncDelete"
@@ -835,7 +837,7 @@ main() {
     scriptConf="${scriptDir}/${scriptName}.conf"        ## 发布到服务器的配置信息
     scriptEnv="${scriptDir}/${scriptName}.env"          ## 发布配置信息(密)
     scriptSshConf="${scriptDir}/${scriptName}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
-    scriptSshKey="${scriptDir}/gitlab-id_rsa"           ## ssh key
+    scriptSshKey="${scriptDir}/id_rsa.gitlab"           ## ssh key
 
     [ ! -f "$scriptConf" ] && touch "$scriptConf"
     [ ! -f "$scriptEnv" ] && touch "$scriptEnv"
@@ -931,7 +933,7 @@ main() {
             [[ 1 -eq "$exec_docker_push_java" ]] && java_docker_push
             [[ 1 -eq "$exec_deploy_k8s_java" ]] && java_deploy_k8s
         else
-            rsync_code_java
+            deploy_rsync_java
         fi
         ;;
     *)
@@ -947,7 +949,7 @@ main() {
     [[ "${projectDocker}" -eq 1 ]] && exec_deploy_rsync=1
     [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=1
     if [[ "${exec_deploy_rsync}" -ne 1 ]]; then
-        rsync_code
+        deploy_rsync
     fi
 
     ## 在 gitlab 的 pipeline 配置环境变量 enableFuncTest ，1 启用[default]，0 禁用

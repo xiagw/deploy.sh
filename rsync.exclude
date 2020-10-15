@@ -1,0 +1,12 @@
+.git/
+.svn/
+.swp
+.gitignore
+.gitlab-ci.yml
+
+.dockerignore
+.gitattributes
+Dockerfile
+
+deploy.env
+deploy.conf
