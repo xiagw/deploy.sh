@@ -338,7 +338,7 @@ java_docker_push() {
 
 java_deploy_k8s() {
     echo_s "deploy to k8s."
-    case $GITLAB_ENV_REGION in
+    case $PIPELINE_REGION in
     hk)
         if [ ! -f "$scriptDir/.lock.hk.namespace.$CI_COMMIT_REF_NAME" ]; then
             kubectl create namespace "$CI_COMMIT_REF_NAME" || true
@@ -603,9 +603,9 @@ send_msg_chatapp() {
             curlOpt="curl -sS -o /dev/null -X POST"
         fi
         $curlOpt -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msgBody" "$tgApiMsg"
-    elif [[ 1 -eq "${GITLAB_ENV_TEMP_PASS:-0}" ]]; then
+    elif [[ 1 -eq "${PIPELINE_TEMP_PASS:-0}" ]]; then
         python3 "$scriptDir/bin/element-up.py" "$msgBody"
-    elif [[ 1 -eq "${ENV_NOTIFY_ELEMENT:-0}" && "${GITLAB_ENV_TEMP_PASS:-0}" -ne 1 ]]; then
+    elif [[ 1 -eq "${ENV_NOTIFY_ELEMENT:-0}" && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         python3 "$scriptDir/bin/element.py" "$msgBody"
     elif [[ 1 -eq "${ENV_NOTIFY_EMAIL:-0}" ]]; then
         echo_w "TODO."
@@ -655,8 +655,6 @@ update_cert() {
                 --fullchain-file "$destDir/$d".cert.pem
         done
     done
-
-    scp -P 23 "$destDir/entry.one."* "${ENV_GITLAB_IP:?undefine var}":docker/gitlab/config/
 
     rsync -av "$destDir/" "$HOME/efs/data/nginx-conf/ssl/"
     rsync -av "$destDir/" "$HOME/efs/data/nginx-conf2/ssl/"
@@ -780,44 +778,44 @@ main() {
     ## 2，如果传入参，则通过传递入参执行单个任务。。适用于单独的gitlab job，（gitlab 一个 pipeline 多个job）
     while [[ "${#}" -ge 0 ]]; do
         case $1 in
-        GITLAB_ENV_UPDATE_SSL)
-            GITLAB_ENV_UPDATE_SSL=1
+        --update-ssl)
+            PIPELINE_UPDATE_SSL=1
             ;;
-        java_docker_build)
-            exec_java_docker_build=1
+        --docker-build-java)
+            exec_docker_build_java=1
             ;;
-        java_docker_push)
-            exec_java_docker_push=1
+        --docker-push-java)
+            exec_docker_push_java=1
             ;;
-        java_deploy_k8s)
-            exec_java_deploy_k8s=1
+        --deploy-k8s-java)
+            exec_deploy_k8s_java=1
             ;;
-        php_docker_build)
-            exec_php_docker_build=1
+        --docker-build-php)
+            exec_docker_build_php=1
             ;;
-        php_docker_push)
-            exec_php_docker_push=1
+        --docker-push-php)
+            exec_docker_push_php=1
             ;;
-        php_deploy_k8s)
-            exec_php_deploy_k8s=1
+        --deploy-k8s-php)
+            exec_deploy_k8s_php=1
             ;;
-        node_docker_build)
-            exec_node_docker_build=1
+        --docker-build-node)
+            exec_docker_build_node=1
             ;;
-        node_docker_push)
-            exec_node_docker_push=1
+        --docker-push-node)
+            exec_docker_push_node=1
             ;;
-        node_deploy_k8s)
+        --deploy-k8s-node)
             exec_node_deploy_k8s=1
             ;;
-        rsync_code)
-            enable_rsync=1
+        --deploy-rsync)
+            exec_deploy_rsync=1
             ;;
         *)
-            exec_java_docker_build=1
-            exec_java_docker_push=1
-            exec_java_deploy_k8s=1
-            exec_php_deploy_k8s=1
+            exec_docker_build_java=1
+            exec_docker_push_java=1
+            exec_deploy_k8s_java=1
+            exec_deploy_k8s_php=1
             # gitlabSingleJob=0
             break
             ;;
@@ -855,7 +853,7 @@ main() {
     ## 清理磁盘空间
     clean_disk
     ## acme.sh 更新证书
-    if [[ "$GITLAB_ENV_UPDATE_SSL" -eq 1 ]]; then
+    if [[ "$PIPELINE_UPDATE_SSL" -eq 1 ]]; then
         update_cert
     fi
     ## 判定项目类型
@@ -865,8 +863,8 @@ main() {
     [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && projectLang='python'
     [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]] && projectDocker=1
 
-    [[ "${GITLAB_ENV_SONAR:-0}" -eq 1 ]] && disable_flyway=1
-    [[ "${GITLAB_ENV_DISABLE_FLYWAY:-0}" -eq 1 ]] && disable_flyway=1
+    [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && disable_flyway=1
+    [[ "${PIPELINE_DISABLE_FLYWAY:-0}" -eq 1 ]] && disable_flyway=1
     if [[ $disable_flyway -ne 1 ]]; then
         if [[ "${projectDocker}" -eq 1 ]]; then
             ## sql导入，k8s, flyway
@@ -886,43 +884,43 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 enableUnitTest ，1 启用[default]，0 禁用
     unit_test
 
-    [[ 1 -eq "${enableFormat:-1}" && 1 -eq "${projectDocker}" ]] && dockerfile_check
+    [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" && 1 -eq "${projectDocker}" ]] && dockerfile_check
 
     case "${projectLang}" in
     'php')
-        ## 在 gitlab 的 pipeline 配置环境变量 enableFormat ，1 启用[default]，0 禁用
-        if [[ 1 -eq "${enableFormat:-1}" ]]; then
+        ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
+        if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
             php_format_check
         fi
         if [[ 1 -eq "${projectDocker}" ]]; then
-            [[ 1 -eq "$exec_php_docker_build" ]] && php_docker_build
-            [[ 1 -eq "$exec_php_docker_push" ]] && php_docker_push
-            [[ 1 -eq "$exec_php_deploy_k8s" ]] && deploy_k8s
+            [[ 1 -eq "$exec_docker_build_php" ]] && php_docker_build
+            [[ 1 -eq "$exec_docker_push_php" ]] && php_docker_push
+            [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s
         else
             ## 在 gitlab 的 pipeline 配置环境变量 enableComposer ，1 启用，0 禁用[default]
             php_composer_volume
         fi
         ;;
     'node')
-        if [[ 1 -eq "${enableFormat:-1}" ]]; then
+        if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
             eslint_check
         fi
         if [[ 1 -eq "${projectDocker}" ]]; then
-            [[ 1 -eq "$exec_node_docker_build" ]] && node_docker_build
-            [[ 1 -eq "$exec_node_docker_push" ]] && node_docker_push
+            [[ 1 -eq "$exec_docker_build_node" ]] && node_docker_build
+            [[ 1 -eq "$exec_docker_push_node" ]] && node_docker_push
             [[ 1 -eq "$exec_node_deploy_k8s" ]] && deploy_k8s
         else
             node_build_volume
         fi
         ;;
     'java')
-        if [[ 1 -eq "${enableFormat:-1}" ]]; then
+        if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
             java_format_check
         fi
         if [[ 1 -eq "${projectDocker}" ]]; then
-            [[ 1 -eq "$exec_java_docker_build" ]] && java_docker_build
-            [[ 1 -eq "$exec_java_docker_push" ]] && java_docker_push
-            [[ 1 -eq "$exec_java_deploy_k8s" ]] && java_deploy_k8s
+            [[ 1 -eq "$exec_docker_build_java" ]] && java_docker_build
+            [[ 1 -eq "$exec_docker_push_java" ]] && java_docker_push
+            [[ 1 -eq "$exec_deploy_k8s_java" ]] && java_deploy_k8s
         else
             rsync_code_java
         fi
@@ -937,9 +935,9 @@ main() {
         ;;
     esac
 
-    [[ "${projectDocker}" -eq 1 ]] && enable_rsync=1
-    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && enable_rsync=1
-    if [[ "${enable_rsync}" -ne 1 ]]; then
+    [[ "${projectDocker}" -eq 1 ]] && exec_deploy_rsync=1
+    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=1
+    if [[ "${exec_deploy_rsync}" -ne 1 ]]; then
         rsync_code
     fi
 
