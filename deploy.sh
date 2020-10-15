@@ -112,6 +112,7 @@ flyway_migrate() {
 
 flyway_migrate_k8s() {
     flyway_last_sql="$(if [ -d "${ENV_GIT_SQL_FOLDER}" ]; then git --no-pager log --name-only --no-merges --oneline "${ENV_GIT_SQL_FOLDER}" | grep -m1 "^${ENV_GIT_SQL_FOLDER}" || true; fi)"
+    ## used AWS EFS
     flyway_nfs_path="$ENV_FLYWAY_NFS_FOLDER"
     if [ -z "$db_name" ]; then
         flyway_db="${CI_PROJECT_NAME//-/_}"
@@ -246,6 +247,13 @@ php_docker_push() {
     echo_t "end docker push."
 }
 
+kube_create_namespace() {
+    if [ ! -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
+        kubectl create namespace "$CI_COMMIT_REF_NAME" || true
+        touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
+    fi
+}
+
 generate_env_file() {
     p1="$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 16)"
     db1="${CI_PROJECT_NAME//-/_}"
@@ -275,7 +283,7 @@ java_docker_build() {
     ## gitlab-CI/CD setup variables MVN_DEBUG=1 enable debug message
     echo_w "If you want to view debug msg, set MVN_DEBUG=1 on pipeline."
     [[ "${MVN_DEBUG:-0}" == 1 ]] && unset MVN_DEBUG || MVN_DEBUG='-q'
-
+    ## if you have no apollo config center, use local .env
     env_file="$script_dir/.env.${CI_PROJECT_NAME}.${CI_COMMIT_REF_NAME}"
     if [ ! -f "$env_file" ]; then
         ## generate mysql username/password
@@ -285,17 +293,24 @@ java_docker_build() {
     [ -f "$env_file" ] && cp -f "$env_file" "${CI_PROJECT_DIR}/.env"
 
     cp -f "$script_dir/docker/.dockerignore" "${CI_PROJECT_DIR}/"
+    ## maven settings.xml
     cp -f "$script_dir/docker/settings.xml" "${CI_PROJECT_DIR}/"
-    cp -f "$script_dir/docker/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
-
-    # shellcheck disable=2013
-    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
-        [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
-        DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" \
-            -t "${dockerTagLoop}" --target "$target" \
-            --build-arg GIT_BRANCH="${CI_COMMIT_REF_NAME}" \
-            --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
-    done
+    if [ -f "${CI_PROJECT_DIR}/Dockerfile.useLocal" ]; then
+        mv Dockerfile.useLocal Dockerfile
+    else
+        cp -f "$script_dir/docker/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
+    fi
+    if [[ "$(grep -c '^FROM.*as' Dockerfile || true)" -ge 2 ]]; then
+        # shellcheck disable=2013
+        for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
+            [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
+            DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${dockerTagLoop}" \
+                --target "$target" --build-arg GIT_BRANCH="${CI_COMMIT_REF_NAME}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
+        done
+    else
+        DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${dockerTag}" \
+            --build-arg GIT_BRANCH="${CI_COMMIT_REF_NAME}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
+    fi
     echo_t "end docker build."
 }
 
@@ -329,25 +344,26 @@ docker_login() {
 java_docker_push() {
     echo_s "docker push to ECR."
     docker_login
-    # shellcheck disable=2013
-    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
-        [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
-        docker images "${dockerTagLoop}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-        docker push "${dockerTagLoop}" >/dev/null
-    done
+    if [[ "$(grep -c '^FROM.*as' Dockerfile || true)" -ge 2 ]]; then
+        # shellcheck disable=2013
+        for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
+            [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
+            docker images "${dockerTagLoop}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+            docker push "${dockerTagLoop}" >/dev/null
+        done
+    else
+        docker images "${dockerTag}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+        docker push "${dockerTag}" >/dev/null
+    fi
     echo_t "end docker push."
 }
 
 java_deploy_k8s() {
     echo_s "deploy to k8s."
-    if [ ! -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
-        kubectl create namespace "$CI_COMMIT_REF_NAME" || true
-        touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
-    fi
-    kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
+    kube_create_namespace
     helm_dir_project="$script_dir/helm/${ENV_HELM_DIR}"
     # shellcheck disable=2013
-    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
+    for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
         if [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ]; then
             dockerTagLoop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-$target"
             workNameLoop="${CI_PROJECT_NAME}-$target"
@@ -361,7 +377,7 @@ java_deploy_k8s() {
             --set image.repository="${ENV_DOCKER_REPO}" \
             --set image.tag="${dockerTagLoop}" \
             --set resources.requests.cpu=200m \
-            --set resources.requests.memory=256Mi \
+            --set resources.requests.memory=512Mi \
             --set persistence.enabled=false \
             --set persistence.nfsServer="${ENV_NFS_SERVER:?undefine var}" \
             --set service.port=8080 \
@@ -370,19 +386,18 @@ java_deploy_k8s() {
             --set replicaCount="${ENV_HELM_REPLICS:-1}" \
             --set livenessProbe="${ENV_PROBE_URL:?undefine}" >/dev/null
         ## 等待就绪
-        if ! $kubeOpt rollout status deployment "${workNameLoop}"; then
-            errPod="$($kubeOpt get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
+        if ! kubectl -n "$CI_COMMIT_REF_NAME" rollout status deployment "${workNameLoop}"; then
+            errPod="$(kubectl -n "$CI_COMMIT_REF_NAME" get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
             echo_e "---------------cut---------------"
-            $kubeOpt describe "pod/${errPod}" | tail
+            kubectl -n "$CI_COMMIT_REF_NAME" describe "pod/${errPod}" | tail
             echo_e "---------------cut---------------"
-            $kubeOpt logs "pod/${errPod}" | tail -n 100
+            kubectl -n "$CI_COMMIT_REF_NAME" logs "pod/${errPod}" | tail -n 100
             echo_e "---------------cut---------------"
             deploy_result=1
         fi
     done
 
-    # shellcheck disable=2086
-    $kubeOpt get replicasets.apps | grep '0         0         0' | awk '{print $1}' | xargs $kubeOpt delete replicasets.apps >/dev/null 2>&1 || true
+    kubectl -n "$CI_COMMIT_REF_NAME" get replicasets.apps | grep '0         0         0' | awk '{print $1}' | xargs kubectl -n "$CI_COMMIT_REF_NAME" delete replicasets.apps >/dev/null 2>&1 || true
 }
 
 docker_build_generic() {
@@ -398,11 +413,7 @@ docker_push_generic() {
 
 deploy_k8s_generic() {
     echo_s "deploy k8s."
-    if ! test -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"; then
-        kubectl create namespace "$CI_COMMIT_REF_NAME" || true
-        touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
-    fi
-    kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
+    kube_create_namespace
     helmDir="$script_dir/helm/bitnami/bitnami/nginx"
     (
         cd "$helmDir"
@@ -417,7 +428,8 @@ deploy_rsync() {
     echo_s "rsync code file to server."
     ## 读取配置文件，获取 项目/分支名/war包目录
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
-        read -ra array <<<"$(echo $line)"
+        # shellcheck disable=2116
+        read -ra array <<<"$(echo "$line")"
         ssh_host=${array[2]}
         ssh_port=${array[3]}
         rsync_path_src=${array[4]}
@@ -815,7 +827,7 @@ main() {
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_php" ]] && php_docker_build
             [[ 1 -eq "$exec_docker_push_php" ]] && php_docker_push
-            [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s
+            [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
         else
             ## 在 gitlab 的 pipeline 配置环境变量 enableComposer ，1 启用，0 禁用[default]
             php_composer_volume
@@ -828,7 +840,7 @@ main() {
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_node" ]] && node_docker_build
             [[ 1 -eq "$exec_docker_push_node" ]] && node_docker_push
-            [[ 1 -eq "$exec_node_deploy_k8s" ]] && deploy_k8s
+            [[ 1 -eq "$exec_node_deploy_k8s" ]] && deploy_k8s_generic
         else
             node_build_volume
         fi
