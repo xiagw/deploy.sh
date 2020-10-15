@@ -431,141 +431,62 @@ deploy_k8s_generic() {
 
 deploy_rsync() {
     echo_s "rsync code file to server."
-    # 读取项目发布配置文件 config from .$0.conf
-    read_deploy_config
-    ## 源文件夹
-    if [[ "${projectLang}" == 'node' ]]; then
-        srcPath="${CI_PROJECT_DIR}/dist/"
-    else ## 其他使用代码库文件
-        srcPath="${CI_PROJECT_DIR}/"
-    fi
-    ## 目标文件夹
-    if [[ 'nodir' == "$path_rsync_dest" ]]; then
-        destPath="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
-    else
-        destPath="$path_rsync_dest/"
-    fi
-    ## 发布到 aliyun oss 存储
-    ## gitlab setup OSS_BUCKET=jzcrm2/jzcrm2.oss-cn-shenzhen.aliyun.com 两种都支持
-    ## gitlab setup OSS_ROOT_DIR=ijuzhong2
-    if [[ -n "$OSS_BUCKET" ]]; then
-        command -v aliyun >/dev/null || echo_e "command aliyun not exist."
-        bucktName="${OSS_BUCKET%%.*}"
-        destPathOss="oss://${bucktName}/${OSS_ROOT_DIR}"
-        endPoint="${OSS_BUCKET#*.}"
-        if [[ "${endPoint}" == *aliyuncs.com ]]; then
-            ossCmd="ossutil -e $endPoint"
-        else
-            ossCmd="ossutil"
-        fi
-        ossPath="$scriptDir/.oss.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}"
-        #shellcheck disable=SC2012
-        ossSaved="$(ls -t "${ossPath}"* | head -n 1)"
-        ossLast="${ossPath}.$CI_COMMIT_SHA"
-        if [ -f "$ossSaved" ]; then
-            gitExe="git --no-pager diff --name-only ${ossSaved##*.}..HEAD"
-        else
-            gitExe="git --no-pager diff --name-only HEAD~10"
-        fi
-
-        $ossCmd cp -rf "${CI_PROJECT_DIR}/template/" "$destPathOss/template/"
-        # for i in $($gitExe | sort | uniq | awk '/^template/ {print $0}'); do
-        #     $ossCmd cp -rf "${CI_PROJECT_DIR}/$i" "$destPathOss/$i"
-        # done
-
-        rm -f "${ossPath}"*
-        touch "$ossLast"
-    fi
-
-    # https://cikeblog.com/proxycommand.html
-    # https://blog.csdn.net/cikenerd/article/details/73740607
-    ## 支持多个IP（英文逗号分割）
-    # set -x
-    for ip in $(echo "${ssh_host}" | awk -F, '{for(i=1;i<NF+1;i++) print $i}'); do
-        echo "$ip"
-        ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
-        $sshOpt "${sshUser}@${ip}" "test -d $destPath || mkdir -p $destPath"
-        ## 复制文件到目标服务器的目标目录
-        ${rsyncOpt} -e "$sshOpt" "${srcPath}" "${sshUser}@${ip}:${destPath}"
-        ## sync 项目私密配置文件，例如数据库配置，密钥文件等
-        configDir="${scriptDir}/.config.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
-        if [ -d "$configDir" ]; then
-            rsync -acvzt -e "$sshOpt" "$configDir" "${sshUser}@${ip}:${destPath}"
-        fi
-    done
-}
-
-deploy_rsync_java() {
-    echo_s "rsync class/jar file to server."
-    ## 针对单个project 有多个war包，循环处理（可能出现bug：for 不支持空格字符文件目录）
-    binFind='find'
-    for war in $($binFind "${CI_PROJECT_DIR}" -name '*.war' -path '*target*'); do
-        ## 获取war包target所在上级目录
-        warTarget1=${war%/target*}
-        warTarget1=${warTarget1##*/}
-        read_deploy_config "/$warTarget1" ## 读取配置文件，获取 项目/分支名/war包目录
-        ## 源文件
-        srcPath="${war}"
-        ## 目标文件夹
-        if [[ 'nodir' != "$path_rsync_dest" ]]; then
-            destPath="$path_rsync_dest/"
-        else
-            destPath="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
-        fi
-        ## 支持多个IP（英文逗号分割）
-        for ip in $(echo "${ssh_host}" | awk -F, '{for(i=1;i<NF+1;i++) print $i}'); do
-            echo "$ip"
-            ## stop tomcat
-            echo "${sshUser}@${ip}:${destPath}../bin/shutdown.sh"
-            javaPid=$($sshOpt "${sshUser}@${ip}" "jps -v" | grep "${destPath%/webapps/}" | awk '{print $1}')
-            $sshOpt "${sshUser}@${ip}" "${destPath}../bin/shutdown.sh"
-            ## 30秒还未退出的java 进程，会 kill -9
-            local c=30
-            while $sshOpt "${sshUser}@${ip}" "jps -v" | grep "${destPath%/webapps/}" >/dev/null; do
-                if [[ $c == 0 ]]; then
-                    echo_e "kill -9 by waiting 30s"
-                    $sshOpt "${sshUser}@${ip}" "kill -9 $javaPid"
-                    break
-                fi
-                sleep 2
-                c=$((c - 2))
-            done
-            set -x
-            ## 复制文件到目标服务器的目标目录
-            ${rsyncOpt} -e "$sshOpt" "${srcPath}" "${sshUser}@${ip}:${destPath}"
-            ## start tomcat
-            echo_w "${sshUser}@${ip}:${destPath}../bin/startup.sh"
-            # $sshOpt "${sshUser}@${ip}" "${destPath}../bin/startup.sh"
-            set +x
-        done
-    done
-}
-
-read_deploy_config() {
     ## 读取配置文件，获取 项目/分支名/war包目录
-    read -ra array <<<"$(grep "^${CI_PROJECT_PATH}/${1}" "$scriptConf")"
-    ssh_host=${array[2]}
-    ssh_port=${array[3]}
-    path_rsync_dest=${array[4]} ## 从配置文件读取目标路径
-    db_name=${array[7]}
-    ## 防止出现空变量（若有空变量则自动退出）
-    if [[ -z ${ssh_host} ]]; then
-        echo "if error here, check file: ${scriptName}.conf"
-        return 1
-    fi
-    sshOpt="ssh -i ${scriptDir}/id_rsa.gitlab -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
-    if [[ -f "$scriptSshConf" ]]; then
-        sshOpt="$sshOpt -F $scriptSshConf"
-    fi
-    if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
-        rsyncConf="${CI_PROJECT_DIR}/rsync.exclude"
-    else
-        rsyncConf="${scriptDir}/rsync.exclude"
-    fi
-    if [[ "${projectLang}" == 'node' || "${projectLang}" == 'java' ]]; then
-        rsyncDelete='--delete'
-    fi
-    rsyncOpt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsyncConf} $rsyncDelete"
+    grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$scriptConf" | while read -r line; do
+        read -ra array <<<"$(echo $line)"
+        ssh_host=${array[2]}
+        ssh_port=${array[3]}
+        path_rsync_src=${array[4]}
+        path_rsync_dest=${array[5]} ## 从配置文件读取目标路径
+        db_name=${array[7]}
+        ## 防止出现空变量（若有空变量则自动退出）
+        if [[ -z ${ssh_host} ]]; then
+            echo "if error here, check file: ${scriptName}.conf"
+            return 1
+        fi
+        sshOpt="ssh -i ${scriptDir}/id_rsa.gitlab -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
+        [[ -f "$scriptSshConf" ]] && sshOpt="$sshOpt -F $scriptSshConf"
+        if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
+            rsyncConf="${CI_PROJECT_DIR}/rsync.exclude"
+        else
+            rsyncConf="${scriptDir}/rsync.exclude"
+        fi
+        [[ "${projectLang}" == 'node' || "${projectLang}" == 'java' ]] && rsyncDelete='--delete'
+        rsyncOpt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsyncConf} $rsyncDelete"
+
+        ## 源文件夹
+        if [[ "${projectLang}" == 'node' ]]; then
+            srcPath="${CI_PROJECT_DIR}/dist/"
+        else
+            if [[ "$path_rsync_src" != 'null' ]]; then
+                srcPath="$path_rsync_src/"
+            else ## 使用代码库文件
+                srcPath="${CI_PROJECT_DIR}/"
+            fi
+        fi
+        ## 目标文件夹
+        if [[ "$path_rsync_dest" == 'null' ]]; then
+            destPath="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        else
+            destPath="$path_rsync_dest/"
+        fi
+        ## 发布到 aliyun oss 存储
+        if [[ "${destPath}" =~ '^oss://' ]]; then
+            command -v aliyun >/dev/null || echo_e "command aliyun not exist."
+            # bucktName="${destPath#oss://}"
+            # bucktName="${bucktName%%/*}"
+            aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$destPath/"
+        fi
+        ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
+        $sshOpt "${ssh_host}" "test -d $destPath || mkdir -p $destPath"
+        ## 复制文件到目标服务器的目标目录
+        ${rsyncOpt} -e "$sshOpt" "${srcPath}" "${ssh_host}:${destPath}"
+        ## sync 项目私密配置文件，例如数据库配置，密钥文件等
+        # configDir="${scriptDir}/.config.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        # if [ -d "$configDir" ]; then
+        #     rsync -acvzt -e "$sshOpt" "$configDir" "${ssh_host%@*}@${ip}:${destPath}"
+        # fi
+    done
 }
 
 get_msg_deploy() {
@@ -932,8 +853,6 @@ main() {
             [[ 1 -eq "$exec_docker_build_java" ]] && java_docker_build
             [[ 1 -eq "$exec_docker_push_java" ]] && java_docker_push
             [[ 1 -eq "$exec_deploy_k8s_java" ]] && java_deploy_k8s
-        else
-            deploy_rsync_java
         fi
         ;;
     *)
@@ -946,9 +865,9 @@ main() {
         ;;
     esac
 
-    [[ "${projectDocker}" -eq 1 ]] && exec_deploy_rsync=1
-    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=1
-    if [[ "${exec_deploy_rsync}" -ne 1 ]]; then
+    [[ "${projectDocker}" -eq 1 ]] && exec_deploy_rsync=0
+    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
+    if [[ "${exec_deploy_rsync}" -eq 1 ]]; then
         deploy_rsync
     fi
 
