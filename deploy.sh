@@ -868,7 +868,7 @@ main() {
 
     [[ "${projectDocker}" -eq 1 ]] && exec_deploy_rsync=0
     [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
-    if [[ "${exec_deploy_rsync}" -eq 1 ]]; then
+    if [[ "${exec_deploy_rsync:-1}" -eq 1 ]]; then
         deploy_rsync
     fi
 
