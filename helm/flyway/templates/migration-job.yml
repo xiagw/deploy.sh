@@ -1,0 +1,61 @@
+# migration/migration-job.yml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-{{ .Chart.Name }}
+spec:
+  backoffLimit: 1
+  # activeDeadlineSeconds: 60
+  # ttlSecondsAfterFinished: 30
+  template:
+    spec:
+      restartPolicy: "Never"
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          {{- if .Values.baseLine }}
+          args:
+            - baseline
+          {{- else }}
+          args:
+            - info
+            - repair
+            - migrate
+            - info
+          {{- end }}
+          # env:
+          #   - name: FLYWAY_URL
+          #     value: jdbc:mysql://{{ .Values.database.host }}:3306/{{ .Values.database.name }}
+          #   - name: FLYWAY_USER
+          #     value: {{ .Values.database.user }}
+          #   - name: FLYWAY_PASSWORD
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: postgres
+          #         key: password
+          #   - name: FLYWAY_PLACEHOLDER_REPLACEMENT
+          #     value: "true"
+          #   - name: FLYWAY_PLACEHOLDERS_USERNAME
+          #     valueFrom:
+          #       configMapKeyRef:
+          #         name: post-configmap
+          #         key: spring.datasource.username
+          #   - name: FLYWAY_PLACEHOLDERS_PASSWORD
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: post-secret
+          #         key: spring.datasource.password
+          volumeMounts:
+            - mountPath: /flyway/conf
+              name: flyway-conf
+            - mountPath: /flyway/sql
+              name: flyway-sql
+      volumes:
+        - name: flyway-conf
+          nfs:
+            server: {{ .Values.nfs.server }}
+            path: {{ .Values.nfs.confPath }}
+        - name: flyway-sql
+          nfs:
+            server: {{ .Values.nfs.server }}
+            path: {{ .Values.nfs.sqlPath }}
