@@ -111,21 +111,21 @@ flyway_migrate() {
 }
 
 flyway_migrate_k8s() {
-    flyway_last_sql="$(if [ -d docs/sql-"${CI_COMMIT_REF_NAME}" ]; then git --no-pager log --name-only --no-merges --oneline docs/sql-"${CI_COMMIT_REF_NAME}" | grep -m1 '^docs/sql' || true; fi)"
-    flyway_path="$HOME/efs/flyway"
+    flyway_last_sql="$(if [ -d "${ENV_GIT_SQL_FOLDER}" ]; then git --no-pager log --name-only --no-merges --oneline "${ENV_GIT_SQL_FOLDER}" | grep -m1 "^${ENV_GIT_SQL_FOLDER}" || true; fi)"
+    flyway_nfs_path="$ENV_FLYWAY_NFS_FOLDER"
     if [ -z "$db_name" ]; then
         flyway_db="${CI_PROJECT_NAME//-/_}"
     else
         flyway_db="$db_name"
     fi
-    flyway_path_sql="$flyway_path/sql-${CI_COMMIT_REF_NAME}/$flyway_db"
+    flyway_path_db="$flyway_nfs_path/sql-${CI_COMMIT_REF_NAME}/$flyway_db"
 
-    if [[ ! -f "$flyway_path_sql/${flyway_last_sql##*/}" && -n $flyway_last_sql ]]; then
+    if [[ ! -f "$flyway_path_db/${flyway_last_sql##*/}" && -n $flyway_last_sql ]]; then
         echo_w "found new sql, enable flyway."
     else
         return 0
     fi
-    if $gitDiff | grep -qv "docs/sql-${CI_COMMIT_REF_NAME}.*\.sql$"; then
+    if $gitDiff | grep -qv "${ENV_GIT_SQL_FOLDER}.*\.sql$"; then
         echo_w "found other file, enable deploy k8s."
     else
         echo_w "skip deploy k8s."
@@ -138,7 +138,7 @@ flyway_migrate_k8s() {
     flyway_helm_dir="$script_dir/helm/flyway"
     flyway_job='job-flyway'
     flyway_base_sql='V1.0__Base_structure.sql'
-    flyway_path_conf="$flyway_path/conf-${CI_COMMIT_REF_NAME}/$flyway_db"
+    flyway_path_conf="$flyway_nfs_path/conf-${CI_COMMIT_REF_NAME}/$flyway_db"
 
     ## flyway.conf change database name to current project name.
     if [ ! -f "$flyway_path_conf/flyway.conf" ]; then
@@ -147,15 +147,15 @@ flyway_migrate_k8s() {
         sed -i "/^flyway.url/s@3306/.*@3306/${flyway_db}@" "$flyway_path_conf/flyway.conf"
     fi
     ## did you run 'flyway baseline'?
-    if [[ -f "$flyway_path_sql/$flyway_base_sql" ]]; then
-        ## copy sql file from git to efs
-        if [[ -d "${CI_PROJECT_DIR}/docs/sql-${CI_COMMIT_REF_NAME}" ]]; then
-            rsync -av --delete --exclude="$flyway_base_sql" "${CI_PROJECT_DIR}/docs/sql-${CI_COMMIT_REF_NAME}/" "$flyway_path_sql/"
+    if [[ -f "$flyway_path_db/$flyway_base_sql" ]]; then
+        ## copy sql file from git to nfs
+        if [[ -d "${CI_PROJECT_DIR}/$ENV_GIT_SQL_FOLDER" ]]; then
+            rsync -av --delete --exclude="$flyway_base_sql" "${CI_PROJECT_DIR}/$ENV_GIT_SQL_FOLDER/" "$flyway_path_db/"
         fi
         set_baseline=false
     else
-        mkdir -p "$flyway_path_sql"
-        touch "$flyway_path_sql/$flyway_base_sql"
+        mkdir -p "$flyway_path_db"
+        touch "$flyway_path_db/$flyway_base_sql"
         set_baseline=true
         echo_e "首次运行，仅仅执行了 'flyway baseline', 请重新运行此job."
         deploy_result=1
@@ -289,7 +289,7 @@ java_docker_build() {
     cp -f "$script_dir/docker/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
 
     # shellcheck disable=2013
-    for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
+    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
         [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
         DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" \
             -t "${dockerTagLoop}" --target "$target" \
@@ -330,7 +330,7 @@ java_docker_push() {
     echo_s "docker push to ECR."
     docker_login
     # shellcheck disable=2013
-    for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
+    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
         [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
         docker images "${dockerTagLoop}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
         docker push "${dockerTagLoop}" >/dev/null
@@ -345,9 +345,9 @@ java_deploy_k8s() {
         touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
     fi
     kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
-    helm_dir_tomcat="$script_dir/helm/tomcat"
+    helm_dir_project="$script_dir/helm/${ENV_HELM_DIR}"
     # shellcheck disable=2013
-    for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
+    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
         if [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ]; then
             dockerTagLoop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-$target"
             workNameLoop="${CI_PROJECT_NAME}-$target"
@@ -355,7 +355,7 @@ java_deploy_k8s() {
             dockerTagLoop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
             workNameLoop="${CI_PROJECT_NAME}"
         fi
-        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${workNameLoop}" "$helm_dir_tomcat/" \
+        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${workNameLoop}" "$helm_dir_project/" \
             --set nameOverride="$workNameLoop" \
             --set image.registry="${ENV_DOCKER_REGISTRY}" \
             --set image.repository="${ENV_DOCKER_REPO}" \
@@ -420,15 +420,15 @@ deploy_rsync() {
         read -ra array <<<"$(echo $line)"
         ssh_host=${array[2]}
         ssh_port=${array[3]}
-        path_rsync_src=${array[4]}
-        path_rsync_dest=${array[5]} ## 从配置文件读取目标路径
+        rsync_path_src=${array[4]}
+        rsync_path_dest=${array[5]} ## 从配置文件读取目标路径
         db_name=${array[7]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
             echo "if error here, check file: ${script_name}.conf"
             return 1
         fi
-        sshOpt="ssh -i ${script_dir}/id_rsa.gitlab -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
+        sshOpt="ssh -i ${script_ssh_key} -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
         [[ -f "$script_ssh_conf" ]] && sshOpt="$sshOpt -F $script_ssh_conf"
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsyncConf="${CI_PROJECT_DIR}/rsync.exclude"
@@ -440,31 +440,41 @@ deploy_rsync() {
 
         ## 源文件夹
         if [[ "${project_lang}" == 'node' ]]; then
-            path_rsync_src="${CI_PROJECT_DIR}/dist/"
+            rsync_path_src="${CI_PROJECT_DIR}/dist/"
         else
-            if [[ "$path_rsync_src" == 'null' ]]; then
-                path_rsync_src="${CI_PROJECT_DIR}/"
+            if echo "$rsync_path_src" | grep '\.[jw]ar$' || true; then
+                find_file="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
+                if [ -z "$find_file" ]; then
+                    echo "file not found: ${rsync_path_src}"
+                    return 1
+                else
+                    rsync_path_src="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
+                fi
+            fi
+            if [[ "$rsync_path_src" == 'null' || -z "$rsync_path_src" ]]; then
+                rsync_path_src="${CI_PROJECT_DIR}/"
             fi
         fi
         ## 目标文件夹
-        if [[ "$path_rsync_dest" == 'null' ]]; then
-            path_rsync_dest="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        if [[ "$rsync_path_dest" == 'null' || -z "$rsync_path_src" ]]; then
+            rsync_path_dest="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         fi
         ## 发布到 aliyun oss 存储
-        if [[ "${path_rsync_dest}" =~ '^oss://' ]]; then
+        if [[ "${rsync_path_dest}" =~ '^oss://' ]]; then
             command -v aliyun >/dev/null || echo_e "command aliyun not exist."
-            # bucktName="${path_rsync_dest#oss://}"
+            # bucktName="${rsync_path_dest#oss://}"
             # bucktName="${bucktName%%/*}"
-            aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$path_rsync_dest/"
+            aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$rsync_path_dest/"
+            return
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
-        $sshOpt "${ssh_host}" "test -d $path_rsync_dest || mkdir -p $path_rsync_dest"
+        $sshOpt "${ssh_host}" "test -d $rsync_path_dest || mkdir -p $rsync_path_dest"
         ## 复制文件到目标服务器的目标目录
-        ${rsyncOpt} -e "$sshOpt" "${path_rsync_src}" "${ssh_host}:${path_rsync_dest}"
-        ## sync 项目私密配置文件，例如数据库配置，密钥文件等
+        ${rsyncOpt} -e "$sshOpt" "${rsync_path_src}" "${ssh_host}:${rsync_path_dest}"
+        ## rsync 项目私密配置文件，例如数据库配置，密钥文件等
         # configDir="${script_dir}/.config.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         # if [ -d "$configDir" ]; then
-        #     rsync -acvzt -e "$sshOpt" "$configDir" "${ssh_host%@*}@${ip}:${path_rsync_dest}"
+        #     rsync -acvzt -e "$sshOpt" "$configDir" "${ssh_host%@*}@${ip}:${rsync_path_dest}"
         # fi
     done
 }
@@ -677,10 +687,7 @@ main() {
 
     ## 检查OS 类型和版本，安装相应命令和软件包
     check_os
-    ## branch dev: debug on
-    if [[ $CI_COMMIT_REF_NAME == dev ]]; then
-        set -x
-    fi
+
     ## 处理传入的参数
     ## 1，默认情况执行所有任务，
     ## 2，如果传入参，则通过传递入参执行单个任务。。适用于单独的gitlab job，（gitlab 一个 pipeline 多个job）
@@ -738,15 +745,15 @@ main() {
     script_conf="${script_dir}/${script_name}.conf"         ## 发布到服务器的配置信息
     script_env="${script_dir}/${script_name}.env"           ## 发布配置信息(密)
     script_ssh_conf="${script_dir}/${script_name}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
-    scriptSshKey="${script_dir}/id_rsa.gitlab"              ## ssh key
+    script_ssh_key="${script_dir}/id_rsa.gitlab"            ## ssh key
 
     [ ! -f "$script_conf" ] && touch "$script_conf"
     [ ! -f "$script_env" ] && touch "$script_env"
     [ ! -f "$script_log" ] && touch "$script_log"
 
     [[ -e "${script_ssh_conf}" && $(stat -c "%a" "${script_ssh_conf}") != 600 ]] && chmod 600 "${script_ssh_conf}"
-    [[ -e "${scriptSshKey}" && $(stat -c "%a" "${scriptSshKey}") != 600 ]] && chmod 600 "${scriptSshKey}"
-    [[ ! -e "$HOME/.ssh/id_rsa" ]] && ln -sf "${scriptSshKey}" "$HOME/".ssh/id_rsa
+    [[ -e "${script_ssh_key}" && $(stat -c "%a" "${script_ssh_key}") != 600 ]] && chmod 600 "${script_ssh_key}"
+    [[ ! -e "$HOME/.ssh/id_rsa" ]] && ln -sf "${script_ssh_key}" "$HOME/".ssh/id_rsa
     [[ ! -e "$HOME/.ssh/config" ]] && ln -sf "${script_ssh_conf}" "$HOME/".ssh/config
     [[ ! -e "${HOME}/bin" ]] && ln -sf "${script_dir}/bin" "$HOME/"
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
