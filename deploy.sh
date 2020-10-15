@@ -774,6 +774,10 @@ main() {
 
     ## 检查OS 类型和版本，安装相应命令和软件包
     check_os
+    ## branch dev: debug on
+    if [[ $CI_COMMIT_REF_NAME == dev ]]; then
+        set -x
+    fi
     ## 处理传入的参数
     ## 1，默认情况执行所有任务，
     ## 2，如果传入参，则通过传递入参执行单个任务。。适用于单独的gitlab job，（gitlab 一个 pipeline 多个job）
