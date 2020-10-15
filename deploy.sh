@@ -794,6 +794,7 @@ main() {
     [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && projectLang='python'
     [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]] && projectDocker=1
     [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 ]] && projectDocker=0
+    [[ "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && projectDocker=0
 
     [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && exec_flyway=0
     [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_flyway=0
