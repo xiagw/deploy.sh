@@ -103,11 +103,18 @@ ZAP_scan() {
 
 ## install jdk/ant/jmeter
 function_test() {
-    echo_w "[TODO]."
+    echo_w "function test"
+    command -v jmeter >/dev/null || echo_e "command not exists: jmeter"
+    # jmeter -load
 }
 
 flyway_migrate() {
-    echo_w "[TODO]."
+    echo_w "flyway migrate (normal)"
+    command -v flyway >/dev/null || echo_e "command not exists: flyway"
+    flyway info
+    flyway repair
+    flyway migrate
+    flyway info
 }
 
 flyway_migrate_k8s() {
@@ -135,7 +142,7 @@ flyway_migrate_k8s() {
         exec_deploy_rsync=0
     fi
 
-    echo_s "flyway migrate..."
+    echo_s "flyway migrate (k8s)..."
     flyway_helm_dir="$script_dir/helm/flyway"
     flyway_job='job-flyway'
     flyway_base_sql='V1.0__Base_structure.sql'
@@ -333,10 +340,10 @@ docker_login() {
         fi
         ;;
     'aliyun')
-        echo "[TODO]."
+        echo "[TODO] aliyun docker login"
         ;;
     'qcloud')
-        echo "[TODO]."
+        echo "[TODO] qcloud docker login"
         ;;
     esac
 }
@@ -425,7 +432,7 @@ deploy_k8s_generic() {
 }
 
 deploy_rsync() {
-    echo_s "rsync code file to server."
+    echo_s "rsync code file to remote server."
     ## 读取配置文件，获取 项目/分支名/war包目录
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
         # shellcheck disable=2116
@@ -473,7 +480,7 @@ deploy_rsync() {
         fi
         ## 发布到 aliyun oss 存储
         if [[ "${rsync_path_dest}" =~ '^oss://' ]]; then
-            command -v aliyun >/dev/null || echo_e "command aliyun not exist."
+            command -v aliyun >/dev/null || echo_e "command not exist: aliyun"
             # bucktName="${rsync_path_dest#oss://}"
             # bucktName="${bucktName%%/*}"
             aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$rsync_path_dest/"
@@ -534,7 +541,7 @@ send_msg_chatapp() {
     elif [[ 1 -eq "${ENV_NOTIFY_ELEMENT:-0}" && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         python3 "$script_dir/bin/element.py" "$msgBody"
     elif [[ 1 -eq "${ENV_NOTIFY_EMAIL:-0}" ]]; then
-        echo_w "TODO."
+        echo_w "[TODO] send email to you."
     else
         echo "No message send."
     fi
