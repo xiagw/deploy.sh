@@ -42,7 +42,7 @@ dockerfile_check() {
 php_format_check() {
     echo_s "starting PHP Code Sniffer, < standard=PSR12 >."
     if ! docker images | grep 'deploy/phpcs'; then
-        docker build -t deploy/phpcs -f "$scriptDir/Dockerfile.phpcs" "$scriptDir" >/dev/null
+        docker build -t deploy/phpcs -f "$script_dir/Dockerfile.phpcs" "$script_dir" >/dev/null
     fi
     phpcsResult=0
     for i in $($gitDiff | awk '/\.php$/{if (NR>0){print $0}}'); do
@@ -111,16 +111,16 @@ flyway_migrate() {
 }
 
 flyway_migrate_k8s() {
-    lastSql="$(if [ -d docs/sql-"${CI_COMMIT_REF_NAME}" ]; then git --no-pager log --name-only --no-merges --oneline docs/sql-"${CI_COMMIT_REF_NAME}" | grep -m1 '^docs/sql' || true; fi)"
-    flywayPath="$HOME/efs/flyway"
+    flyway_last_sql="$(if [ -d docs/sql-"${CI_COMMIT_REF_NAME}" ]; then git --no-pager log --name-only --no-merges --oneline docs/sql-"${CI_COMMIT_REF_NAME}" | grep -m1 '^docs/sql' || true; fi)"
+    flyway_path="$HOME/efs/flyway"
     if [ -z "$db_name" ]; then
-        flywayDB="${CI_PROJECT_NAME//-/_}"
+        flyway_db="${CI_PROJECT_NAME//-/_}"
     else
-        flywayDB="$db_name"
+        flyway_db="$db_name"
     fi
-    flywaySqlPath="$flywayPath/sql-${CI_COMMIT_REF_NAME}/$flywayDB"
+    flyway_path_sql="$flyway_path/sql-${CI_COMMIT_REF_NAME}/$flyway_db"
 
-    if [[ ! -f "$flywaySqlPath/${lastSql##*/}" && -n $lastSql ]]; then
+    if [[ ! -f "$flyway_path_sql/${flyway_last_sql##*/}" && -n $flyway_last_sql ]]; then
         echo_w "found new sql, enable flyway."
     else
         return 0
@@ -129,60 +129,60 @@ flyway_migrate_k8s() {
         echo_w "found other file, enable deploy k8s."
     else
         echo_w "skip deploy k8s."
-        projectLang=0
-        projectDocker=0
+        project_lang=0
+        project_docker=0
         exec_deploy_rsync=0
     fi
 
     echo_s "flyway migrate..."
-    flywayHelmDir="$scriptDir/helm/flyway"
-    flywayJob='job-flyway'
-    baseSQL='V1.0__Base_structure.sql'
-    flywayConfPath="$flywayPath/conf-${CI_COMMIT_REF_NAME}/$flywayDB"
+    flyway_helm_dir="$script_dir/helm/flyway"
+    flyway_job='job-flyway'
+    flyway_base_sql='V1.0__Base_structure.sql'
+    flyway_path_conf="$flyway_path/conf-${CI_COMMIT_REF_NAME}/$flyway_db"
 
     ## flyway.conf change database name to current project name.
-    if [ ! -f "$flywayConfPath/flyway.conf" ]; then
-        [ -d "$flywayConfPath" ] || mkdir -p "$flywayConfPath"
-        cp "$flywayConfPath/../flyway.conf" "$flywayConfPath/flyway.conf"
-        sed -i "/^flyway.url/s@3306/.*@3306/${flywayDB}@" "$flywayConfPath/flyway.conf"
+    if [ ! -f "$flyway_path_conf/flyway.conf" ]; then
+        [ -d "$flyway_path_conf" ] || mkdir -p "$flyway_path_conf"
+        cp "$flyway_path_conf/../flyway.conf" "$flyway_path_conf/flyway.conf"
+        sed -i "/^flyway.url/s@3306/.*@3306/${flyway_db}@" "$flyway_path_conf/flyway.conf"
     fi
     ## did you run 'flyway baseline'?
-    if [[ -f "$flywaySqlPath/$baseSQL" ]]; then
+    if [[ -f "$flyway_path_sql/$flyway_base_sql" ]]; then
         ## copy sql file from git to efs
         if [[ -d "${CI_PROJECT_DIR}/docs/sql-${CI_COMMIT_REF_NAME}" ]]; then
-            rsync -av --delete --exclude="$baseSQL" "${CI_PROJECT_DIR}/docs/sql-${CI_COMMIT_REF_NAME}/" "$flywaySqlPath/"
+            rsync -av --delete --exclude="$flyway_base_sql" "${CI_PROJECT_DIR}/docs/sql-${CI_COMMIT_REF_NAME}/" "$flyway_path_sql/"
         fi
-        setBaseline=false
+        set_baseline=false
     else
-        mkdir -p "$flywaySqlPath"
-        touch "$flywaySqlPath/$baseSQL"
-        setBaseline=true
+        mkdir -p "$flyway_path_sql"
+        touch "$flyway_path_sql/$flyway_base_sql"
+        set_baseline=true
         echo_e "首次运行，仅仅执行了 'flyway baseline', 请重新运行此job."
         deploy_result=1
     fi
     ## delete old job
-    helm -n "$CI_COMMIT_REF_NAME" delete $flywayJob || true
+    helm -n "$CI_COMMIT_REF_NAME" delete $flyway_job || true
     ## create new job
     helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 \
-        -f "$flywayHelmDir/values.yaml" \
-        --set baseLine=$setBaseline \
-        --set nfs.confPath="/flyway/conf-${CI_COMMIT_REF_NAME}/$flywayDB" \
-        --set nfs.sqlPath="/flyway/sql-${CI_COMMIT_REF_NAME}/$flywayDB" \
-        $flywayJob "$flywayHelmDir/" >/dev/null
+        -f "$flyway_helm_dir/values.yaml" \
+        --set baseLine=$set_baseline \
+        --set nfs.confPath="/flyway/conf-${CI_COMMIT_REF_NAME}/$flyway_db" \
+        --set nfs.sqlPath="/flyway/sql-${CI_COMMIT_REF_NAME}/$flyway_db" \
+        $flyway_job "$flyway_helm_dir/" >/dev/null
     ## wait result
-    until [[ "$SECONDS" -gt 60 || "$flywayJobResult" -eq 1 ]]; do
-        [[ $(kubectl -n "$CI_COMMIT_REF_NAME" get jobs $flywayJob -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}') == "True" ]] && flywayJobResult=0
-        [[ $(kubectl -n "$CI_COMMIT_REF_NAME" get jobs $flywayJob -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}') == "True" ]] && flywayJobResult=1
+    until [[ "$SECONDS" -gt 60 || "$flyway_result" -eq 1 ]]; do
+        [[ $(kubectl -n "$CI_COMMIT_REF_NAME" get jobs $flyway_job -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}') == "True" ]] && flyway_result=0
+        [[ $(kubectl -n "$CI_COMMIT_REF_NAME" get jobs $flyway_job -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}') == "True" ]] && flyway_result=1
         sleep 2
         SECONDS=$((SECONDS + 2))
     done
     ## get logs
-    pods=$(kubectl -n "$CI_COMMIT_REF_NAME" get pods --selector=job-name=$flywayJob --output=jsonpath='{.items[*].metadata.name}')
+    pods=$(kubectl -n "$CI_COMMIT_REF_NAME" get pods --selector=job-name=$flyway_job --output=jsonpath='{.items[*].metadata.name}')
     for p in $pods; do
         kubectl -n "$CI_COMMIT_REF_NAME" logs "pod/$p"
     done
     ## set result
-    if [[ "$flywayJobResult" -eq 1 ]]; then
+    if [[ "$flyway_result" -eq 1 ]]; then
         deploy_result=1
     fi
     echo_t "end flyway migrate"
@@ -199,14 +199,14 @@ node_build_volume() {
 
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node'; then
-        docker build -t deploy/node -f "$scriptDir/node/Dockerfile" "$scriptDir/node" >/dev/null
+        docker build -t deploy/node -f "$script_dir/node/Dockerfile" "$script_dir/node" >/dev/null
     fi
     DOCKER_BUILDKIT=1 $runDocker -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "yarn install; yarn run build"
 }
 
 node_docker_build() {
     echo_s "node docker build."
-    \cp -f "$scriptDir/node/Dockerfile" "${CI_PROJECT_DIR}/Dockerfile"
+    \cp -f "$script_dir/node/Dockerfile" "${CI_PROJECT_DIR}/Dockerfile"
     DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" -t "${dockerTag}"
 }
 
@@ -218,7 +218,7 @@ node_docker_push() {
 php_composer_volume() {
     echo_s "php composer install..."
     if ! docker images | grep 'deploy/composer'; then
-        docker build -t deploy/composer --build-arg CHANGE_SOURCE=true -f "$scriptDir/Dockerfile.composer" "$scriptDir/dockerfile" >/dev/null
+        docker build -t deploy/composer --build-arg CHANGE_SOURCE=true -f "$script_dir/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
     if [[ "${composerUpdate:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
         p=update
@@ -235,7 +235,7 @@ php_docker_build() {
     echo_s "php docker build..."
     pushTag="${ENV_DOCKER_REGISTRY:?empty}/${ENV_DOCKER_REPO}:${CI_PROJECT_NAME}-${CI_COMMIT_REF_NAME}"
     echo_s "starting docker build..."
-    \cp "$scriptDir/Dockerfile.swoft" "${CI_PROJECT_DIR}/Dockerfile"
+    \cp "$script_dir/Dockerfile.swoft" "${CI_PROJECT_DIR}/Dockerfile"
     DOCKER_BUILDKIT=1 docker build --tag "${pushTag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
     echo_t "end docker build."
 }
@@ -250,7 +250,7 @@ generate_env_file() {
     p1="$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 16)"
     db1="${CI_PROJECT_NAME//-/_}"
     f1="$1"
-    cp -f "$scriptDir/.env.tpl" "$f1"
+    cp -f "$script_dir/.env.tpl" "$f1"
 
     if [ "${CI_COMMIT_REF_NAME}" = 'develop' ]; then
         sed -i -e "s/TPL_PROJECT/$db1/" -e "s/TPL_SECRET/$p1/" -e "s/TPL_DBHOST/pxc1-pxc.dbs.svc/" -e "s/TPL_CACHEHOST/redis1-master.dbs.svc/" "$f1"
@@ -276,18 +276,18 @@ java_docker_build() {
     echo_w "If you want to view debug msg, set MVN_DEBUG=1 on pipeline."
     [[ "${MVN_DEBUG:-0}" == 1 ]] && unset MVN_DEBUG || MVN_DEBUG='-q'
 
-    env_file="$scriptDir/.env.${CI_PROJECT_NAME}.${CI_COMMIT_REF_NAME}"
+    env_file="$script_dir/.env.${CI_PROJECT_NAME}.${CI_COMMIT_REF_NAME}"
     if [ ! -f "$env_file" ]; then
         ## generate mysql username/password
         # [ -x generate_env_file.sh ] && bash generate_env_file.sh
-        [ -f "$scriptDir/.env.tpl" ] && generate_env_file "$env_file"
+        [ -f "$script_dir/.env.tpl" ] && generate_env_file "$env_file"
     fi
     [ -f "$env_file" ] && cp -f "$env_file" "${CI_PROJECT_DIR}/.env"
 
-    cp -f "$scriptDir/tomcat/.dockerignore" "${CI_PROJECT_DIR}/"
-    cp -f "$scriptDir/tomcat/settings.xml" "${CI_PROJECT_DIR}/"
+    cp -f "$script_dir/tomcat/.dockerignore" "${CI_PROJECT_DIR}/"
+    cp -f "$script_dir/tomcat/settings.xml" "${CI_PROJECT_DIR}/"
     if [[ ${ENV_LOCAL_Dockerfile:-0} != 1 ]]; then
-        cp -f "$scriptDir/tomcat/Dockerfile" "${CI_PROJECT_DIR}/Dockerfile"
+        cp -f "$script_dir/tomcat/Dockerfile" "${CI_PROJECT_DIR}/Dockerfile"
     fi
 
     # shellcheck disable=2013
@@ -306,7 +306,7 @@ docker_login() {
     'aws')
         ## 比较上一次登陆时间，超过12小时则再次登录
         local lock_file
-        lock_file="$scriptDir/.aws.ecr.login.${ENV_AWS_PROFILE:?undefine}"
+        lock_file="$script_dir/.aws.ecr.login.${ENV_AWS_PROFILE:?undefine}"
         touch "$lock_file"
         local timeSave
         timeSave="$(cat "$lock_file")"
@@ -344,23 +344,23 @@ java_deploy_k8s() {
     echo_s "deploy to k8s."
     case $PIPELINE_REGION in
     hk)
-        if [ ! -f "$scriptDir/.lock.hk.namespace.$CI_COMMIT_REF_NAME" ]; then
+        if [ ! -f "$script_dir/.lock.hk.namespace.$CI_COMMIT_REF_NAME" ]; then
             kubectl create namespace "$CI_COMMIT_REF_NAME" || true
-            touch "$scriptDir/.lock.hk.namespace.$CI_COMMIT_REF_NAME"
+            touch "$script_dir/.lock.hk.namespace.$CI_COMMIT_REF_NAME"
         fi
         ;;
     *)
-        if [ ! -f "$scriptDir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
+        if [ ! -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
             kubectl create namespace "$CI_COMMIT_REF_NAME" || true
-            touch "$scriptDir/.lock.namespace.$CI_COMMIT_REF_NAME"
+            touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
         fi
         ;;
     esac
     kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
     if [[ "${ENV_LOCAL_Dockerfile}" -eq 1 ]]; then
-        tomcatHelmDir="$scriptDir/helm/tomcat-noprobe"
+        tomcatHelmDir="$script_dir/helm/tomcat-noprobe"
     else
-        tomcatHelmDir="$scriptDir/helm/tomcat"
+        tomcatHelmDir="$script_dir/helm/tomcat"
     fi
     # shellcheck disable=2013
     for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
@@ -414,12 +414,12 @@ docker_push_generic() {
 
 deploy_k8s_generic() {
     echo_s "deploy k8s."
-    if ! test -f "$scriptDir/.lock.namespace.$CI_COMMIT_REF_NAME"; then
+    if ! test -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"; then
         kubectl create namespace "$CI_COMMIT_REF_NAME" || true
-        touch "$scriptDir/.lock.namespace.$CI_COMMIT_REF_NAME"
+        touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
     fi
     kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
-    helmDir="$scriptDir/helm/bitnami/bitnami/nginx"
+    helmDir="$script_dir/helm/bitnami/bitnami/nginx"
     (
         cd "$helmDir"
         git checkout master
@@ -432,7 +432,7 @@ deploy_k8s_generic() {
 deploy_rsync() {
     echo_s "rsync code file to server."
     ## 读取配置文件，获取 项目/分支名/war包目录
-    grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$scriptConf" | while read -r line; do
+    grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
         read -ra array <<<"$(echo $line)"
         ssh_host=${array[2]}
         ssh_port=${array[3]}
@@ -441,50 +441,46 @@ deploy_rsync() {
         db_name=${array[7]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
-            echo "if error here, check file: ${scriptName}.conf"
+            echo "if error here, check file: ${script_name}.conf"
             return 1
         fi
-        sshOpt="ssh -i ${scriptDir}/id_rsa.gitlab -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
-        [[ -f "$scriptSshConf" ]] && sshOpt="$sshOpt -F $scriptSshConf"
+        sshOpt="ssh -i ${script_dir}/id_rsa.gitlab -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
+        [[ -f "$script_ssh_conf" ]] && sshOpt="$sshOpt -F $script_ssh_conf"
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsyncConf="${CI_PROJECT_DIR}/rsync.exclude"
         else
-            rsyncConf="${scriptDir}/rsync.exclude"
+            rsyncConf="${script_dir}/rsync.exclude"
         fi
-        [[ "${projectLang}" == 'node' || "${projectLang}" == 'java' ]] && rsyncDelete='--delete'
+        [[ "${project_lang}" == 'node' || "${project_lang}" == 'java' ]] && rsyncDelete='--delete'
         rsyncOpt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsyncConf} $rsyncDelete"
 
         ## 源文件夹
-        if [[ "${projectLang}" == 'node' ]]; then
-            srcPath="${CI_PROJECT_DIR}/dist/"
+        if [[ "${project_lang}" == 'node' ]]; then
+            path_rsync_src="${CI_PROJECT_DIR}/dist/"
         else
-            if [[ "$path_rsync_src" != 'null' ]]; then
-                srcPath="$path_rsync_src/"
-            else ## 使用代码库文件
-                srcPath="${CI_PROJECT_DIR}/"
+            if [[ "$path_rsync_src" == 'null' ]]; then
+                path_rsync_src="${CI_PROJECT_DIR}/"
             fi
         fi
         ## 目标文件夹
         if [[ "$path_rsync_dest" == 'null' ]]; then
-            destPath="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
-        else
-            destPath="$path_rsync_dest/"
+            path_rsync_dest="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         fi
         ## 发布到 aliyun oss 存储
-        if [[ "${destPath}" =~ '^oss://' ]]; then
+        if [[ "${path_rsync_dest}" =~ '^oss://' ]]; then
             command -v aliyun >/dev/null || echo_e "command aliyun not exist."
-            # bucktName="${destPath#oss://}"
+            # bucktName="${path_rsync_dest#oss://}"
             # bucktName="${bucktName%%/*}"
-            aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$destPath/"
+            aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$path_rsync_dest/"
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
-        $sshOpt "${ssh_host}" "test -d $destPath || mkdir -p $destPath"
+        $sshOpt "${ssh_host}" "test -d $path_rsync_dest || mkdir -p $path_rsync_dest"
         ## 复制文件到目标服务器的目标目录
-        ${rsyncOpt} -e "$sshOpt" "${srcPath}" "${ssh_host}:${destPath}"
+        ${rsyncOpt} -e "$sshOpt" "${path_rsync_src}" "${ssh_host}:${path_rsync_dest}"
         ## sync 项目私密配置文件，例如数据库配置，密钥文件等
-        # configDir="${scriptDir}/.config.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        # configDir="${script_dir}/.config.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         # if [ -d "$configDir" ]; then
-        #     rsync -acvzt -e "$sshOpt" "$configDir" "${ssh_host%@*}@${ip}:${destPath}"
+        #     rsync -acvzt -e "$sshOpt" "$configDir" "${ssh_host%@*}@${ip}:${path_rsync_dest}"
         # fi
     done
 }
@@ -528,9 +524,9 @@ send_msg_chatapp() {
         fi
         $curlOpt -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msgBody" "$tgApiMsg"
     elif [[ 1 -eq "${PIPELINE_TEMP_PASS:-0}" ]]; then
-        python3 "$scriptDir/bin/element-up.py" "$msgBody"
+        python3 "$script_dir/bin/element-up.py" "$msgBody"
     elif [[ 1 -eq "${ENV_NOTIFY_ELEMENT:-0}" && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
-        python3 "$scriptDir/bin/element.py" "$msgBody"
+        python3 "$script_dir/bin/element.py" "$msgBody"
     elif [[ 1 -eq "${ENV_NOTIFY_EMAIL:-0}" ]]; then
         echo_w "TODO."
     else
@@ -540,55 +536,55 @@ send_msg_chatapp() {
 
 update_cert() {
     echo_s "update ssl cert (dns api)."
-    acmeHome="${HOME}/.acme.sh"
-    cmd1="${acmeHome}/acme.sh"
+    acme_home="${HOME}/.acme.sh"
+    cmd1="${acme_home}/acme.sh"
     ## install acme.sh
     if [[ ! -x "${cmd1}" ]]; then
         curl https://get.acme.sh | sh
     fi
-    destDir="${acmeHome}/dest"
-    [ -d "$destDir" ] || mkdir "$destDir"
+    cert_dir="${acme_home}/dest"
+    [ -d "$cert_dir" ] || mkdir "$cert_dir"
 
-    if [[ "$(find "${acmeHome}/" -name 'account.conf*' | wc -l)" == 1 ]]; then
-        cp "${acmeHome}/"account.conf "${acmeHome}/"account.conf.1
+    if [[ "$(find "${acme_home}/" -name 'account.conf*' | wc -l)" == 1 ]]; then
+        cp "${acme_home}/"account.conf "${acme_home}/"account.conf.1
     fi
 
-    for a in "${acmeHome}/"account.conf.*; do
-        if [ -f "$scriptDir/.cloudflare.conf" ]; then
+    for a in "${acme_home}/"account.conf.*; do
+        if [ -f "$script_dir/.cloudflare.conf" ]; then
             command -v flarectl || return 1
-            source "$scriptDir/.cloudflare.conf" "${a##*.}"
-            domainName="$(flarectl zone list | awk '/active/ {print $3}')"
+            source "$script_dir/.cloudflare.conf" "${a##*.}"
+            domain_name="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
-        elif [ -f "$scriptDir/.aliyun.dnsapi.conf" ]; then
+        elif [ -f "$script_dir/.aliyun.dnsapi.conf" ]; then
             command -v aliyun || return 1
-            source "$scriptDir/.aliyun.dnsapi.conf" "${a##*.}"
-            domainName="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
+            source "$script_dir/.aliyun.dnsapi.conf" "${a##*.}"
+            domain_name="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
             dnsType='dns_ali'
-        elif [ -f "$scriptDir/.qcloud.dnspod.conf" ]; then
+        elif [ -f "$script_dir/.qcloud.dnspod.conf" ]; then
             echo_w "[TODO] use dnspod api."
         fi
-        \cp -vf "$a" "${acmeHome}/account.conf"
+        \cp -vf "$a" "${acme_home}/account.conf"
 
-        for d in ${domainName}; do
-            if [ -d "${acmeHome}/$d" ]; then
+        for d in ${domain_name}; do
+            if [ -d "${acme_home}/$d" ]; then
                 "${cmd1}" --renew -d "${d}" || true
             else
                 "${cmd1}" --issue --dns $dnsType -d "$d" -d "*.$d"
             fi
-            "${cmd1}" --install-cert -d "$d" --key-file "$destDir/$d".key.pem \
-                --fullchain-file "$destDir/$d".cert.pem
+            "${cmd1}" --install-cert -d "$d" --key-file "$cert_dir/$d".key.pem \
+                --fullchain-file "$cert_dir/$d".cert.pem
         done
     done
 
-    rsync -av "$destDir/" "$HOME/efs/data/nginx-conf/ssl/"
-    rsync -av "$destDir/" "$HOME/efs/data/nginx-conf2/ssl/"
+    rsync -av "$cert_dir/" "$HOME/efs/data/nginx-conf/ssl/"
+    rsync -av "$cert_dir/" "$HOME/efs/data/nginx-conf2/ssl/"
     ## bitnami/nginx user 1001
     sudo chown 1001 "$HOME"/efs/data/nginx-conf/ssl/*.key.pem
     sudo chown 1001 "$HOME"/efs/data/nginx-conf2/ssl/*.key.pem
 
     for i in ${ENV_NGINX_IPS:?empty}; do
         echo "$i"
-        rsync -a "$destDir/" "root@$i":/etc/nginx/conf.d/ssl/
+        rsync -a "$cert_dir/" "root@$i":/etc/nginx/conf.d/ssl/
     done
 }
 
@@ -615,7 +611,7 @@ check_os() {
         command -v rsync >/dev/null || sudo apt install -y rsync
         command -v git >/dev/null || sudo apt install -y git
         git lfs version >/dev/null || sudo apt install -y git-lfs
-        command -v docker >/dev/null || bash "$scriptDir/bin/get-docker.sh"
+        command -v docker >/dev/null || bash "$script_dir/bin/get-docker.sh"
         id | grep -q docker || sudo usermod -aG docker "$USER"
         command -v pip3 >/dev/null || sudo apt install -y python3-pip
         command -v java >/dev/null || sudo apt install -y openjdk-8-jdk
@@ -630,7 +626,7 @@ check_os() {
         command -v rsync >/dev/null || sudo yum install -y rsync
         command -v git >/dev/null || sudo yum install -y git2u
         git lfs version >/dev/null || sudo yum install -y git-lfs
-        command -v docker >/dev/null || sh "$scriptDir/bin/get-docker.sh"
+        command -v docker >/dev/null || sh "$script_dir/bin/get-docker.sh"
         id | grep -q docker || sudo usermod -aG docker "$USER"
     elif [[ "$OS" == 'amzn' ]]; then
         rpm -q epel-release >/dev/null || sudo amazon-linux-extras install -y epel
@@ -642,16 +638,16 @@ check_os() {
     fi
 
     command -v gitlab >/dev/null || python3 -m pip install --user --upgrade python-gitlab
-    [ -e "$HOME/".python-gitlab.cfg ] || ln -sf "$scriptDir/bin/.python-gitlab.cfg" "$HOME/"
+    [ -e "$HOME/".python-gitlab.cfg ] || ln -sf "$script_dir/bin/.python-gitlab.cfg" "$HOME/"
     command -v kubectl >/dev/null || {
         kVer="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
         kUrl="https://storage.googleapis.com/kubernetes-release/release/$kVer/bin/linux/amd64/kubectl"
         if [ -z "$ENV_HTTP_PROXY" ]; then
-            curl -Lo "$scriptDir/bin/kubectl" "$kUrl"
+            curl -Lo "$script_dir/bin/kubectl" "$kUrl"
         else
-            curl -x "$ENV_HTTP_PROXY" -Lo "$scriptDir/bin/kubectl" "$kUrl"
+            curl -x "$ENV_HTTP_PROXY" -Lo "$script_dir/bin/kubectl" "$kUrl"
         fi
-        chmod +x "$scriptDir/bin/kubectl"
+        chmod +x "$script_dir/bin/kubectl"
     }
 }
 
@@ -686,13 +682,13 @@ get_maxmind_ip() {
 }
 
 main() {
-    scriptName="$(basename "$0")"
-    scriptName="${scriptName%.sh}"
-    scriptDir="$(cd "$(dirname "$0")" && pwd)"
+    script_name="$(basename "$0")"
+    script_name="${script_name%.sh}"
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
 
     PATH="$HOME/bin:/usr/bin:/usr/sbin:/usr/local/sbin:/usr/local/bin"
-    PATH="$PATH:$scriptDir/jdk/bin:$scriptDir/jmeter/bin:$scriptDir/ant/bin:$scriptDir/sonar-scanner/bin"
-    PATH="$PATH:$scriptDir/maven/bin:$HOME/.config/composer/vendor/bin:/snap/bin:$HOME/.local/bin"
+    PATH="$PATH:$script_dir/jdk/bin:$script_dir/jmeter/bin:$script_dir/ant/bin:$script_dir/sonar-scanner/bin"
+    PATH="$PATH:$script_dir/maven/bin:$HOME/.config/composer/vendor/bin:/snap/bin:$HOME/.local/bin"
     export PATH
 
     ## 检查OS 类型和版本，安装相应命令和软件包
@@ -754,27 +750,27 @@ main() {
         shift
     done
     ##
-    scriptLog="${scriptDir}/${scriptName}.log"          ## 记录sql文件的执行情况
-    scriptConf="${scriptDir}/${scriptName}.conf"        ## 发布到服务器的配置信息
-    scriptEnv="${scriptDir}/${scriptName}.env"          ## 发布配置信息(密)
-    scriptSshConf="${scriptDir}/${scriptName}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
-    scriptSshKey="${scriptDir}/id_rsa.gitlab"           ## ssh key
+    script_log="${script_dir}/${script_name}.log"           ## 记录sql文件的执行情况
+    script_conf="${script_dir}/${script_name}.conf"         ## 发布到服务器的配置信息
+    script_env="${script_dir}/${script_name}.env"           ## 发布配置信息(密)
+    script_ssh_conf="${script_dir}/${script_name}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
+    scriptSshKey="${script_dir}/id_rsa.gitlab"              ## ssh key
 
-    [ ! -f "$scriptConf" ] && touch "$scriptConf"
-    [ ! -f "$scriptEnv" ] && touch "$scriptEnv"
-    [ ! -f "$scriptLog" ] && touch "$scriptLog"
+    [ ! -f "$script_conf" ] && touch "$script_conf"
+    [ ! -f "$script_env" ] && touch "$script_env"
+    [ ! -f "$script_log" ] && touch "$script_log"
 
-    [[ -e "${scriptSshConf}" && $(stat -c "%a" "${scriptSshConf}") != 600 ]] && chmod 600 "${scriptSshConf}"
+    [[ -e "${script_ssh_conf}" && $(stat -c "%a" "${script_ssh_conf}") != 600 ]] && chmod 600 "${script_ssh_conf}"
     [[ -e "${scriptSshKey}" && $(stat -c "%a" "${scriptSshKey}") != 600 ]] && chmod 600 "${scriptSshKey}"
     [[ ! -e "$HOME/.ssh/id_rsa" ]] && ln -sf "${scriptSshKey}" "$HOME/".ssh/id_rsa
-    [[ ! -e "$HOME/.ssh/config" ]] && ln -sf "${scriptSshConf}" "$HOME/".ssh/config
-    [[ ! -e "${HOME}/bin" ]] && ln -sf "${scriptDir}/bin" "$HOME/"
-    [[ ! -e "${HOME}/.acme.sh" && -e "${scriptDir}/.acme.sh" ]] && ln -sf "${scriptDir}/.acme.sh" "$HOME/"
-    [[ ! -e "${HOME}/.aws" && -e "${scriptDir}/.aws" ]] && ln -sf "${scriptDir}/.aws" "$HOME/"
-    [[ ! -e "${HOME}/.kube" && -e "${scriptDir}/.kube" ]] && ln -sf "${scriptDir}/.kube" "$HOME/"
-    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${scriptDir}/.python-gitlab.cfg" ]] && ln -sf "${scriptDir}/.python-gitlab.cfg" "$HOME/"
+    [[ ! -e "$HOME/.ssh/config" ]] && ln -sf "${script_ssh_conf}" "$HOME/".ssh/config
+    [[ ! -e "${HOME}/bin" ]] && ln -sf "${script_dir}/bin" "$HOME/"
+    [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
+    [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
+    [[ ! -e "${HOME}/.kube" && -e "${script_dir}/.kube" ]] && ln -sf "${script_dir}/.kube" "$HOME/"
+    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${script_dir}/.python-gitlab.cfg" ]] && ln -sf "${script_dir}/.python-gitlab.cfg" "$HOME/"
     ## source ENV, 获取 ENV_ 开头的所有全局变量
-    source "$scriptEnv"
+    source "$script_env"
     ## run docker using current user
     runDocker="docker run --interactive --rm -u $UID:$UID"
     ## run docker using root
@@ -788,18 +784,18 @@ main() {
         update_cert
     fi
     ## 判定项目类型
-    [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]] && projectLang='node'
-    [[ -f "${CI_PROJECT_DIR}/composer.json" ]] && projectLang='php'
-    [[ -f "${CI_PROJECT_DIR}/pom.xml" ]] && projectLang='java'
-    [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && projectLang='python'
-    [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]] && projectDocker=1
-    [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 ]] && projectDocker=0
-    [[ "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && projectDocker=0
+    [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]] && project_lang='node'
+    [[ -f "${CI_PROJECT_DIR}/composer.json" ]] && project_lang='php'
+    [[ -f "${CI_PROJECT_DIR}/pom.xml" ]] && project_lang='java'
+    [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && project_lang='python'
+    [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]] && project_docker=1
+    [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 ]] && project_docker=0
+    [[ "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && project_docker=0
 
     [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && exec_flyway=0
     [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
-        if [[ "${projectDocker}" -eq 1 ]]; then
+        if [[ "${project_docker}" -eq 1 ]]; then
             ## sql导入，k8s, flyway
             flyway_migrate_k8s
         else
@@ -817,15 +813,15 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 enableUnitTest ，1 启用[default]，0 禁用
     unit_test
 
-    [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" && 1 -eq "${projectDocker}" ]] && dockerfile_check
+    [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" && 1 -eq "${project_docker}" ]] && dockerfile_check
 
-    case "${projectLang}" in
+    case "${project_lang}" in
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
         if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
             php_format_check
         fi
-        if [[ 1 -eq "${projectDocker}" ]]; then
+        if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_php" ]] && php_docker_build
             [[ 1 -eq "$exec_docker_push_php" ]] && php_docker_push
             [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s
@@ -838,7 +834,7 @@ main() {
         if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
             eslint_check
         fi
-        if [[ 1 -eq "${projectDocker}" ]]; then
+        if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_node" ]] && node_docker_build
             [[ 1 -eq "$exec_docker_push_node" ]] && node_docker_push
             [[ 1 -eq "$exec_node_deploy_k8s" ]] && deploy_k8s
@@ -850,7 +846,7 @@ main() {
         if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
             java_format_check
         fi
-        if [[ 1 -eq "${projectDocker}" ]]; then
+        if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_java" ]] && java_docker_build
             [[ 1 -eq "$exec_docker_push_java" ]] && java_docker_push
             [[ 1 -eq "$exec_deploy_k8s_java" ]] && java_deploy_k8s
@@ -858,7 +854,7 @@ main() {
         ;;
     *)
         ## 各种Build， npm/composer/mvn/docker
-        if [[ "$projectDocker" -eq 1 ]]; then
+        if [[ "$project_docker" -eq 1 ]]; then
             docker_build_generic
             docker_push_generic
             deploy_k8s_generic
@@ -866,7 +862,7 @@ main() {
         ;;
     esac
 
-    [[ "${projectDocker}" -eq 1 ]] && exec_deploy_rsync=0
+    [[ "${project_docker}" -eq 1 ]] && exec_deploy_rsync=0
     [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
     if [[ "${exec_deploy_rsync:-1}" -eq 1 ]]; then
         deploy_rsync
