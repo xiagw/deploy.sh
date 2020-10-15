@@ -1,0 +1,7 @@
+.git/
+.gitignore
+.gitlab-ci.yml
+.dockerignore
+Dockerfile
+docs/
+doc
