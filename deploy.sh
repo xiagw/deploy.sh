@@ -428,7 +428,7 @@ deploy_rsync() {
             echo "if error here, check file: ${script_name}.conf"
             return 1
         fi
-        sshOpt="ssh -i ${script_dir}/id_rsa.gitlab -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
+        sshOpt="ssh -i ${script_ssh_key} -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
         [[ -f "$script_ssh_conf" ]] && sshOpt="$sshOpt -F $script_ssh_conf"
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsyncConf="${CI_PROJECT_DIR}/rsync.exclude"
@@ -442,11 +442,17 @@ deploy_rsync() {
         if [[ "${project_lang}" == 'node' ]]; then
             rsync_path_src="${CI_PROJECT_DIR}/dist/"
         else
+            if echo "$rsync_path_src" | grep '\.[jw]ar$' || true; then
+                find_file="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
+                if [ -z "$find_file" ]; then
+                    echo "file not found: ${rsync_path_src}"
+                    return 1
+                else
+                    rsync_path_src="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
+                fi
+            fi
             if [[ "$rsync_path_src" == 'null' || -z "$rsync_path_src" ]]; then
                 rsync_path_src="${CI_PROJECT_DIR}/"
-            fi
-            if echo "$rsync_path_src" | grep '\.[jw]ar$' || true; then
-                rsync_path_src="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
             fi
         fi
         ## 目标文件夹
@@ -739,15 +745,15 @@ main() {
     script_conf="${script_dir}/${script_name}.conf"         ## 发布到服务器的配置信息
     script_env="${script_dir}/${script_name}.env"           ## 发布配置信息(密)
     script_ssh_conf="${script_dir}/${script_name}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
-    scriptSshKey="${script_dir}/id_rsa.gitlab"              ## ssh key
+    script_ssh_key="${script_dir}/id_rsa.gitlab"            ## ssh key
 
     [ ! -f "$script_conf" ] && touch "$script_conf"
     [ ! -f "$script_env" ] && touch "$script_env"
     [ ! -f "$script_log" ] && touch "$script_log"
 
     [[ -e "${script_ssh_conf}" && $(stat -c "%a" "${script_ssh_conf}") != 600 ]] && chmod 600 "${script_ssh_conf}"
-    [[ -e "${scriptSshKey}" && $(stat -c "%a" "${scriptSshKey}") != 600 ]] && chmod 600 "${scriptSshKey}"
-    [[ ! -e "$HOME/.ssh/id_rsa" ]] && ln -sf "${scriptSshKey}" "$HOME/".ssh/id_rsa
+    [[ -e "${script_ssh_key}" && $(stat -c "%a" "${script_ssh_key}") != 600 ]] && chmod 600 "${script_ssh_key}"
+    [[ ! -e "$HOME/.ssh/id_rsa" ]] && ln -sf "${script_ssh_key}" "$HOME/".ssh/id_rsa
     [[ ! -e "$HOME/.ssh/config" ]] && ln -sf "${script_ssh_conf}" "$HOME/".ssh/config
     [[ ! -e "${HOME}/bin" ]] && ln -sf "${script_dir}/bin" "$HOME/"
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
