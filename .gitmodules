@@ -1,0 +1,6 @@
+[submodule "helm/stable"]
+	path = helm/stable
+	url = git@github.com:helm/charts.git
+[submodule "bitnami"]
+	path = helm/bitnami
+	url = git@github.com:bitnami/charts.git

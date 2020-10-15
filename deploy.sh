@@ -284,11 +284,9 @@ java_docker_build() {
     fi
     [ -f "$env_file" ] && cp -f "$env_file" "${CI_PROJECT_DIR}/.env"
 
-    cp -f "$script_dir/tomcat/.dockerignore" "${CI_PROJECT_DIR}/"
-    cp -f "$script_dir/tomcat/settings.xml" "${CI_PROJECT_DIR}/"
-    if [[ ${ENV_LOCAL_Dockerfile:-0} != 1 ]]; then
-        cp -f "$script_dir/tomcat/Dockerfile" "${CI_PROJECT_DIR}/Dockerfile"
-    fi
+    cp -f "$script_dir/docker/.dockerignore" "${CI_PROJECT_DIR}/"
+    cp -f "$script_dir/docker/settings.xml" "${CI_PROJECT_DIR}/"
+    cp -f "$script_dir/docker/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
 
     # shellcheck disable=2013
     for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
@@ -342,26 +340,12 @@ java_docker_push() {
 
 java_deploy_k8s() {
     echo_s "deploy to k8s."
-    case $PIPELINE_REGION in
-    hk)
-        if [ ! -f "$script_dir/.lock.hk.namespace.$CI_COMMIT_REF_NAME" ]; then
-            kubectl create namespace "$CI_COMMIT_REF_NAME" || true
-            touch "$script_dir/.lock.hk.namespace.$CI_COMMIT_REF_NAME"
-        fi
-        ;;
-    *)
-        if [ ! -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
-            kubectl create namespace "$CI_COMMIT_REF_NAME" || true
-            touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
-        fi
-        ;;
-    esac
-    kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
-    if [[ "${ENV_LOCAL_Dockerfile}" -eq 1 ]]; then
-        tomcatHelmDir="$script_dir/helm/tomcat-noprobe"
-    else
-        tomcatHelmDir="$script_dir/helm/tomcat"
+    if [ ! -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
+        kubectl create namespace "$CI_COMMIT_REF_NAME" || true
+        touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
     fi
+    kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
+    helm_dir_tomcat="$script_dir/helm/tomcat"
     # shellcheck disable=2013
     for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
         if [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ]; then
@@ -371,7 +355,7 @@ java_deploy_k8s() {
             dockerTagLoop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
             workNameLoop="${CI_PROJECT_NAME}"
         fi
-        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${workNameLoop}" "$tomcatHelmDir/" \
+        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${workNameLoop}" "$helm_dir_tomcat/" \
             --set nameOverride="$workNameLoop" \
             --set image.registry="${ENV_DOCKER_REGISTRY}" \
             --set image.repository="${ENV_DOCKER_REPO}" \
