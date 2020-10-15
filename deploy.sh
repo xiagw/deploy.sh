@@ -127,7 +127,7 @@ flyway_migrate_k8s() {
         echo_w "skip deploy k8s."
         projectLang=0
         projectDocker=0
-        exec_rsync_code=0
+        exec_deploy_rsync=0
     fi
 
     echo_s "flyway migrate..."
@@ -404,6 +404,7 @@ docker_build_generic() {
 
 docker_push_generic() {
     echo_s "docker push only."
+    docker_login
     docker push "$dockerTag"
 }
 
@@ -414,7 +415,7 @@ deploy_k8s_generic() {
         touch "$scriptDir/.lock.namespace.$CI_COMMIT_REF_NAME"
     fi
     kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
-    helmDir="$scriptDir/helm/charts.bitnami/bitnami/nginx"
+    helmDir="$scriptDir/helm/bitnami/bitnami/nginx"
     (
         cd "$helmDir"
         git checkout master
@@ -615,7 +616,7 @@ send_msg_chatapp() {
 }
 
 update_cert() {
-    echo_s "update ssl cert."
+    echo_s "update ssl cert (dns api)."
     acmeHome="${HOME}/.acme.sh"
     cmd1="${acmeHome}/acme.sh"
     ## install acme.sh
@@ -662,7 +663,7 @@ update_cert() {
     sudo chown 1001 "$HOME"/efs/data/nginx-conf/ssl/*.key.pem
     sudo chown 1001 "$HOME"/efs/data/nginx-conf2/ssl/*.key.pem
 
-    for i in ${ENV_PROXY_IPS:?empty}; do
+    for i in ${ENV_NGINX_IPS:?empty}; do
         echo "$i"
         rsync -a "$destDir/" "root@$i":/etc/nginx/conf.d/ssl/
     done
@@ -755,7 +756,7 @@ get_maxmind_ip() {
     curl -qs -Lo "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
     curl -qs -Lo "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
     gunzip "$t1" "$t2"
-    for i in ${ENV_PROXY_IPS:?undefine var}; do
+    for i in ${ENV_NGINX_IPS:?undefine var}; do
         echo "$i"
         rsync -av "${t}/" "root@$i":/etc/nginx/conf.d/
     done
@@ -808,8 +809,11 @@ main() {
         --deploy-k8s-node)
             exec_node_deploy_k8s=1
             ;;
-        --deploy-rsync)
-            exec_deploy_rsync=1
+        --disable-rsync)
+            exec_deploy_rsync=0
+            ;;
+        --diable-flyway)
+            exec_flyway=0
             ;;
         *)
             exec_docker_build_java=1
@@ -862,10 +866,11 @@ main() {
     [[ -f "${CI_PROJECT_DIR}/pom.xml" ]] && projectLang='java'
     [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && projectLang='python'
     [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]] && projectDocker=1
+    [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 ]] && projectDocker=0
 
-    [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && disable_flyway=1
-    [[ "${PIPELINE_DISABLE_FLYWAY:-0}" -eq 1 ]] && disable_flyway=1
-    if [[ $disable_flyway -ne 1 ]]; then
+    [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && exec_flyway=0
+    [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_flyway=0
+    if [[ ${exec_flyway:-1} -eq 1 ]]; then
         if [[ "${projectDocker}" -eq 1 ]]; then
             ## sql导入，k8s, flyway
             flyway_migrate_k8s
@@ -876,8 +881,8 @@ main() {
     fi
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
 
-    ## 在 gitlab 的 pipeline 配置环境变量 enableSonar ，1 启用，0 禁用[default]
-    if [[ 1 -eq "${enableSonar:-0}" ]]; then
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
+    if [[ 1 -eq "${PIPELINE_SONAR:-0}" ]]; then
         sonar_scan
         return $?
     fi
