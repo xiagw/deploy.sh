@@ -32,6 +32,7 @@ deploy.sh for GitLab CI/CD：
 1. 设置 .gitlab-ci.yaml 于目标git仓库
 
 # 以下显示图片需要 mermain 支持
+![](readme.png)
 
 ```mermaid
 graph TB;
