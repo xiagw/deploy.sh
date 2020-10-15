@@ -111,21 +111,21 @@ flyway_migrate() {
 }
 
 flyway_migrate_k8s() {
-    flyway_last_sql="$(if [ -d docs/sql-"${CI_COMMIT_REF_NAME}" ]; then git --no-pager log --name-only --no-merges --oneline docs/sql-"${CI_COMMIT_REF_NAME}" | grep -m1 '^docs/sql' || true; fi)"
-    flyway_path="$HOME/efs/flyway"
+    flyway_last_sql="$(if [ -d "${ENV_GIT_SQL_FOLDER}" ]; then git --no-pager log --name-only --no-merges --oneline "${ENV_GIT_SQL_FOLDER}" | grep -m1 "^${ENV_GIT_SQL_FOLDER}" || true; fi)"
+    flyway_nfs_path="$ENV_FLYWAY_NFS_FOLDER"
     if [ -z "$db_name" ]; then
         flyway_db="${CI_PROJECT_NAME//-/_}"
     else
         flyway_db="$db_name"
     fi
-    flyway_path_sql="$flyway_path/sql-${CI_COMMIT_REF_NAME}/$flyway_db"
+    flyway_path_db="$flyway_nfs_path/sql-${CI_COMMIT_REF_NAME}/$flyway_db"
 
-    if [[ ! -f "$flyway_path_sql/${flyway_last_sql##*/}" && -n $flyway_last_sql ]]; then
+    if [[ ! -f "$flyway_path_db/${flyway_last_sql##*/}" && -n $flyway_last_sql ]]; then
         echo_w "found new sql, enable flyway."
     else
         return 0
     fi
-    if $gitDiff | grep -qv "docs/sql-${CI_COMMIT_REF_NAME}.*\.sql$"; then
+    if $gitDiff | grep -qv "${ENV_GIT_SQL_FOLDER}.*\.sql$"; then
         echo_w "found other file, enable deploy k8s."
     else
         echo_w "skip deploy k8s."
@@ -138,7 +138,7 @@ flyway_migrate_k8s() {
     flyway_helm_dir="$script_dir/helm/flyway"
     flyway_job='job-flyway'
     flyway_base_sql='V1.0__Base_structure.sql'
-    flyway_path_conf="$flyway_path/conf-${CI_COMMIT_REF_NAME}/$flyway_db"
+    flyway_path_conf="$flyway_nfs_path/conf-${CI_COMMIT_REF_NAME}/$flyway_db"
 
     ## flyway.conf change database name to current project name.
     if [ ! -f "$flyway_path_conf/flyway.conf" ]; then
@@ -147,15 +147,15 @@ flyway_migrate_k8s() {
         sed -i "/^flyway.url/s@3306/.*@3306/${flyway_db}@" "$flyway_path_conf/flyway.conf"
     fi
     ## did you run 'flyway baseline'?
-    if [[ -f "$flyway_path_sql/$flyway_base_sql" ]]; then
-        ## copy sql file from git to efs
-        if [[ -d "${CI_PROJECT_DIR}/docs/sql-${CI_COMMIT_REF_NAME}" ]]; then
-            rsync -av --delete --exclude="$flyway_base_sql" "${CI_PROJECT_DIR}/docs/sql-${CI_COMMIT_REF_NAME}/" "$flyway_path_sql/"
+    if [[ -f "$flyway_path_db/$flyway_base_sql" ]]; then
+        ## copy sql file from git to nfs
+        if [[ -d "${CI_PROJECT_DIR}/$ENV_GIT_SQL_FOLDER" ]]; then
+            rsync -av --delete --exclude="$flyway_base_sql" "${CI_PROJECT_DIR}/$ENV_GIT_SQL_FOLDER/" "$flyway_path_db/"
         fi
         set_baseline=false
     else
-        mkdir -p "$flyway_path_sql"
-        touch "$flyway_path_sql/$flyway_base_sql"
+        mkdir -p "$flyway_path_db"
+        touch "$flyway_path_db/$flyway_base_sql"
         set_baseline=true
         echo_e "首次运行，仅仅执行了 'flyway baseline', 请重新运行此job."
         deploy_result=1
@@ -289,7 +289,7 @@ java_docker_build() {
     cp -f "$script_dir/docker/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
 
     # shellcheck disable=2013
-    for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
+    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
         [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
         DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" \
             -t "${dockerTagLoop}" --target "$target" \
@@ -330,7 +330,7 @@ java_docker_push() {
     echo_s "docker push to ECR."
     docker_login
     # shellcheck disable=2013
-    for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
+    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
         [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
         docker images "${dockerTagLoop}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
         docker push "${dockerTagLoop}" >/dev/null
@@ -345,9 +345,9 @@ java_deploy_k8s() {
         touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
     fi
     kubeOpt="kubectl -n $CI_COMMIT_REF_NAME"
-    helm_dir_tomcat="$script_dir/helm/tomcat"
+    helm_dir_project="$script_dir/helm/${ENV_HELM_DIR}"
     # shellcheck disable=2013
-    for target in $(awk '/^FROM.*tomcat.*as/ {print $4}' Dockerfile); do
+    for target in $(awk '/^FROM.*as/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
         if [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ]; then
             dockerTagLoop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-$target"
             workNameLoop="${CI_PROJECT_NAME}-$target"
@@ -355,7 +355,7 @@ java_deploy_k8s() {
             dockerTagLoop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
             workNameLoop="${CI_PROJECT_NAME}"
         fi
-        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${workNameLoop}" "$helm_dir_tomcat/" \
+        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${workNameLoop}" "$helm_dir_project/" \
             --set nameOverride="$workNameLoop" \
             --set image.registry="${ENV_DOCKER_REGISTRY}" \
             --set image.repository="${ENV_DOCKER_REPO}" \
