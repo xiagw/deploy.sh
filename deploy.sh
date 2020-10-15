@@ -420,8 +420,8 @@ deploy_rsync() {
         read -ra array <<<"$(echo $line)"
         ssh_host=${array[2]}
         ssh_port=${array[3]}
-        path_rsync_src=${array[4]}
-        path_rsync_dest=${array[5]} ## 从配置文件读取目标路径
+        rsync_path_src=${array[4]}
+        rsync_path_dest=${array[5]} ## 从配置文件读取目标路径
         db_name=${array[7]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
@@ -440,31 +440,35 @@ deploy_rsync() {
 
         ## 源文件夹
         if [[ "${project_lang}" == 'node' ]]; then
-            path_rsync_src="${CI_PROJECT_DIR}/dist/"
+            rsync_path_src="${CI_PROJECT_DIR}/dist/"
         else
-            if [[ "$path_rsync_src" == 'null' ]]; then
-                path_rsync_src="${CI_PROJECT_DIR}/"
+            if [[ "$rsync_path_src" == 'null' || -z "$rsync_path_src" ]]; then
+                rsync_path_src="${CI_PROJECT_DIR}/"
+            fi
+            if echo "$rsync_path_src" | grep '\.[jw]ar$' || true; then
+                rsync_path_src="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
             fi
         fi
         ## 目标文件夹
-        if [[ "$path_rsync_dest" == 'null' ]]; then
-            path_rsync_dest="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        if [[ "$rsync_path_dest" == 'null' || -z "$rsync_path_src" ]]; then
+            rsync_path_dest="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         fi
         ## 发布到 aliyun oss 存储
-        if [[ "${path_rsync_dest}" =~ '^oss://' ]]; then
+        if [[ "${rsync_path_dest}" =~ '^oss://' ]]; then
             command -v aliyun >/dev/null || echo_e "command aliyun not exist."
-            # bucktName="${path_rsync_dest#oss://}"
+            # bucktName="${rsync_path_dest#oss://}"
             # bucktName="${bucktName%%/*}"
-            aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$path_rsync_dest/"
+            aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$rsync_path_dest/"
+            return
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
-        $sshOpt "${ssh_host}" "test -d $path_rsync_dest || mkdir -p $path_rsync_dest"
+        $sshOpt "${ssh_host}" "test -d $rsync_path_dest || mkdir -p $rsync_path_dest"
         ## 复制文件到目标服务器的目标目录
-        ${rsyncOpt} -e "$sshOpt" "${path_rsync_src}" "${ssh_host}:${path_rsync_dest}"
-        ## sync 项目私密配置文件，例如数据库配置，密钥文件等
+        ${rsyncOpt} -e "$sshOpt" "${rsync_path_src}" "${ssh_host}:${rsync_path_dest}"
+        ## rsync 项目私密配置文件，例如数据库配置，密钥文件等
         # configDir="${script_dir}/.config.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         # if [ -d "$configDir" ]; then
-        #     rsync -acvzt -e "$sshOpt" "$configDir" "${ssh_host%@*}@${ip}:${path_rsync_dest}"
+        #     rsync -acvzt -e "$sshOpt" "$configDir" "${ssh_host%@*}@${ip}:${rsync_path_dest}"
         # fi
     done
 }
