@@ -1,0 +1,14 @@
+## use local gitlab server git repo: root/deploy.sh
+# include:
+#   - project: 'root/deploy.sh'
+#     ref: main
+#     file: 'templates/gitlab-ci.yml'
+
+## use current repo folder
+include:
+  - local: '/templates/gitlab-ci.yml'
+
+## use remote file
+# include:
+#   - remote: 'https://raw.githubusercontent.com/xiagw/deploy.sh/main/templates/gitlab-ci.yml'
+
