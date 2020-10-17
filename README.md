@@ -25,11 +25,25 @@ deploy.sh for GitLab CI/CD：
 - 支持 结果的消息提醒，企业微信，Telegram，Element(Matrix)
 
 # Quick Start
-1. 安装操作系统 ubuntu/centos...
-1. 安装 gitlab-runner 并且 register it 并且启动 gitlab-runner...
+1. 安装 gitlab-runner 并且 register it 并且启动 gitlab-runner
 1. cd $HOME
 1. git clone https://github.com/xiagw/deploy.sh.git
-1. 设置 .gitlab-ci.yaml 于目标git仓库
+1. 拷贝 deploy.conf 为 .deploy.conf （修改为你的配置）
+1. 拷贝 deploy.env 为 .deploy.env（修改为你的配置）
+1. 参看本项目 .gitlab-ci.yaml 设置于目标git仓库
+1. 目标git仓库提交/push代码
+
+# 实例：
+1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/gitlab-docker.git) 用 docker-compose 启动一台）
+1. 已有一台服务器已经安装好 gitlab-runner，并且是默认安装（shell）
+1. 已经准备好 ssh key file，并可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/ 目录）
+1. `cd $USER/gitlab-runner; git clone https://github.com/xiagw/deploy.sh.git`
+1. `cd deploy.sh; cp deploy.conf .deploy.conf; cp deploy.env .deploy.env`
+1. 参照例子修改好以上配置文件
+1. 例如 gitlab 已经建立 projectA 在 root 账号下面
+1. 在 projectA 修改相应代码，
+1. 并创建 .gitlab-ci.yml ，（可以参照本项目）
+1. 提交并push代码即可自动 CI/CD
 
 # 以下显示图片需要 mermain 支持
 ![](readme.png)

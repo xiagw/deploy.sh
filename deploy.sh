@@ -447,7 +447,8 @@ deploy_rsync() {
             echo "if error here, check file: ${script_name}.conf"
             return 1
         fi
-        sshOpt="ssh -i ${script_ssh_key} -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port}"
+        [ -f "${script_ssh_key}" ] && sshOpt="ssh -i ${script_ssh_key}"
+        sshOpt="$sshOpt -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
         [[ -f "$script_ssh_conf" ]] && sshOpt="$sshOpt -F $script_ssh_conf"
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsyncConf="${CI_PROJECT_DIR}/rsync.exclude"
@@ -699,7 +700,7 @@ main() {
     script_name="${script_name%.sh}"
     script_dir="$(cd "$(dirname "$0")" && pwd)"
 
-    PATH="$HOME/bin:/usr/bin:/usr/sbin:/usr/local/sbin:/usr/local/bin"
+    PATH="$script_dir/bin:/usr/bin:/usr/sbin:/usr/local/sbin:/usr/local/bin"
     PATH="$PATH:$script_dir/jdk/bin:$script_dir/jmeter/bin:$script_dir/ant/bin:$script_dir/sonar-scanner/bin"
     PATH="$PATH:$script_dir/maven/bin:$HOME/.config/composer/vendor/bin:/snap/bin:$HOME/.local/bin"
     export PATH
@@ -761,10 +762,10 @@ main() {
     done
     ##
     script_log="${script_dir}/${script_name}.log"           ## 记录sql文件的执行情况
-    script_conf="${script_dir}/${script_name}.conf"         ## 发布到服务器的配置信息
-    script_env="${script_dir}/${script_name}.env"           ## 发布配置信息(密)
-    script_ssh_conf="${script_dir}/${script_name}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
-    script_ssh_key="${script_dir}/id_rsa.gitlab"            ## ssh key
+    script_conf="${script_dir}/.${script_name}.conf"         ## 发布到服务器的配置信息
+    script_env="${script_dir}/.${script_name}.env"           ## 发布配置信息(密)
+    script_ssh_conf="${script_dir}/.${script_name}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
+    script_ssh_key="${script_dir}/id_rsa"            ## ssh key
 
     [ ! -f "$script_conf" ] && touch "$script_conf"
     [ ! -f "$script_env" ] && touch "$script_env"
@@ -772,9 +773,7 @@ main() {
 
     [[ -e "${script_ssh_conf}" && $(stat -c "%a" "${script_ssh_conf}") != 600 ]] && chmod 600 "${script_ssh_conf}"
     [[ -e "${script_ssh_key}" && $(stat -c "%a" "${script_ssh_key}") != 600 ]] && chmod 600 "${script_ssh_key}"
-    [[ ! -e "$HOME/.ssh/id_rsa" ]] && ln -sf "${script_ssh_key}" "$HOME/".ssh/id_rsa
     [[ ! -e "$HOME/.ssh/config" ]] && ln -sf "${script_ssh_conf}" "$HOME/".ssh/config
-    [[ ! -e "${HOME}/bin" ]] && ln -sf "${script_dir}/bin" "$HOME/"
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
     [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
     [[ ! -e "${HOME}/.kube" && -e "${script_dir}/.kube" ]] && ln -sf "${script_dir}/.kube" "$HOME/"
