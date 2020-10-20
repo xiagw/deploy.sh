@@ -35,13 +35,16 @@ deploy.sh for GitLab CI/CD：
 
 # 实例：
 1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/gitlab-docker.git) 用 docker-compose 启动一台）
-1. 已有一台服务器已经安装好 gitlab-runner，并且是默认安装（shell）
-1. 已经准备好 ssh key file，并可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/ 目录）
-1. `cd $USER/gitlab-runner; git clone https://github.com/xiagw/deploy.sh.git`
-1. `cd deploy.sh; cp deploy.conf .deploy.conf; cp deploy.env .deploy.env`
-1. 参照例子修改好以上配置文件
+1. 已有一台服务器已经安装好 gitlab-runner，并且是默认安装（executer 为 shell）
+1. 已经准备好 ssh key file，从 gitlab-runner 服务器可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/ 目录）
+1. 登录到 gitlab-runner 服务器，执行
+```shell
+cd $USER/gitlab-runner
+git clone https://github.com/xiagw/deploy.sh.git
+```
+1. 参照 .deploy.conf, .deploy.env 例子修改好文件
 1. 例如 gitlab 已经建立 projectA 在 root 账号下面
-1. 在 projectA 修改相应代码，
+1. 在 projectA 修改代码，
 1. 并创建 .gitlab-ci.yml ，（可以参照本项目）
 1. 提交并push代码即可自动 CI/CD
 

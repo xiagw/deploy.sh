@@ -29,17 +29,17 @@ echo_s() {
 # https://www.cnblogs.com/lsgxeva/p/7994474.html
 # https://eslint.bootcss.com
 # http://eslint.cn/docs/user-guide/getting-started
-eslint_check() {
+format_check_node() {
     echo_s "[TODO] eslint format check."
 }
 
-dockerfile_check() {
+format_check_python() {
     echo_s "[TODO] vsc-extension-hadolint."
 }
 
 ## https://github.com/squizlabs/PHP_CodeSniffer
 ## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)
-php_format_check() {
+format_check_php() {
     echo_s "starting PHP Code Sniffer, < standard=PSR12 >."
     if ! docker images | grep 'deploy/phpcs'; then
         docker build -t deploy/phpcs -f "$script_dir/Dockerfile.phpcs" "$script_dir" >/dev/null
@@ -60,13 +60,26 @@ php_format_check() {
 }
 
 # https://github.com/alibaba/p3c/wiki/FAQ
-java_format_check() {
+format_check_java() {
     echo_s "[TODO] Java code format check."
+}
+
+format_check_dockerfile() {
+    echo_s "[TODO] vsc-extension-hadolint."
+}
+
+code_format_check() {
+    [[ "${project_lang}" == php ]] && format_check_php
+    [[ "${project_lang}" == node ]] && format_check_node
+    [[ "${project_lang}" == java ]] && format_check_java
+    [[ "${project_lang}" == python ]] && format_check_python
+    if [[ 1 -eq "${project_docker}" ]]; then
+        format_check_dockerfile
+    fi
 }
 
 ## install phpunit
 unit_test() {
-    [[ "${enableUnitTest:-1}" -eq 0 ]] && return
     echo_s "[TODO] unit test."
 }
 
@@ -99,6 +112,10 @@ sonar_scan() {
 ZAP_scan() {
     echo_s "[TODO] ZAP scan"
     # docker pull owasp/zap2docker-stable
+}
+
+vulmap_scan(){
+    echo_s "[TODO] vulmap scan"
 }
 
 ## install jdk/ant/jmeter
@@ -300,7 +317,6 @@ java_docker_build() {
     [ -f "$env_file" ] && cp -f "$env_file" "${CI_PROJECT_DIR}/.env"
 
     cp -f "$script_dir/docker/.dockerignore" "${CI_PROJECT_DIR}/"
-    ## maven settings.xml
     cp -f "$script_dir/docker/settings.xml" "${CI_PROJECT_DIR}/"
     if [ -f "${CI_PROJECT_DIR}/Dockerfile.useLocal" ]; then
         mv Dockerfile.useLocal Dockerfile
@@ -761,14 +777,14 @@ main() {
         shift
     done
     ##
-    script_log="${script_dir}/${script_name}.log"           ## 记录sql文件的执行情况
+    script_log="${script_dir}/${script_name}.log"            ## 记录sql文件的执行情况
     script_conf="${script_dir}/.${script_name}.conf"         ## 发布到服务器的配置信息
     script_env="${script_dir}/.${script_name}.env"           ## 发布配置信息(密)
     script_ssh_conf="${script_dir}/.${script_name}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
-    script_ssh_key="${script_dir}/id_rsa"            ## ssh key
+    script_ssh_key="${script_dir}/id_rsa"                    ## ssh key
 
-    [ ! -f "$script_conf" ] && touch "$script_conf"
-    [ ! -f "$script_env" ] && touch "$script_env"
+    [[ ! -f "$script_conf" && -f "${script_dir}/${script_name}.conf" ]] && cp "${script_dir}/${script_name}.conf" "$script_conf"
+    [[ ! -f "$script_env" && -f "${script_dir}/${script_name}.env" ]] && cp "${script_dir}/${script_name}.env" "$script_env"
     [ ! -f "$script_log" ] && touch "$script_log"
 
     [[ -e "${script_ssh_conf}" && $(stat -c "%a" "${script_ssh_conf}") != 600 ]] && chmod 600 "${script_ssh_conf}"
@@ -819,17 +835,18 @@ main() {
         sonar_scan
         return $?
     fi
-    ## 在 gitlab 的 pipeline 配置环境变量 enableUnitTest ，1 启用[default]，0 禁用
-    unit_test
-
-    [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" && 1 -eq "${project_docker}" ]] && dockerfile_check
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
+    if [[ "${PIPELINE_UNIT_TEST:-1}" -eq 1 ]]; then
+        unit_test
+    fi
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
+    if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
+        code_format_check
+    fi
 
     case "${project_lang}" in
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
-        if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
-            php_format_check
-        fi
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_php" ]] && php_docker_build
             [[ 1 -eq "$exec_docker_push_php" ]] && php_docker_push
@@ -840,9 +857,6 @@ main() {
         fi
         ;;
     'node')
-        if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
-            eslint_check
-        fi
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_node" ]] && node_docker_build
             [[ 1 -eq "$exec_docker_push_node" ]] && node_docker_push
@@ -852,9 +866,6 @@ main() {
         fi
         ;;
     'java')
-        if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
-            java_format_check
-        fi
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_java" ]] && java_docker_build
             [[ 1 -eq "$exec_docker_push_java" ]] && java_docker_push
@@ -878,7 +889,9 @@ main() {
     fi
 
     ## 在 gitlab 的 pipeline 配置环境变量 enableFuncTest ，1 启用[default]，0 禁用
-    function_test
+    if [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 1 ]]; then
+        function_test
+    fi
 
     ## notify
     ## 发送消息到群组, enable_send_msg， 0 不发， 1 不发.
