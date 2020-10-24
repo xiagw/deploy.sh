@@ -114,7 +114,7 @@ ZAP_scan() {
     # docker pull owasp/zap2docker-stable
 }
 
-vulmap_scan(){
+vulmap_scan() {
     echo_s "[TODO] vulmap scan"
 }
 
@@ -182,6 +182,7 @@ flyway_migrate_k8s() {
         mkdir -p "$flyway_path_db"
         touch "$flyway_path_db/$flyway_base_sql"
         set_baseline=true
+        echo_e "First run，only 'flyway baseline' was executed, please rerun this job."
         echo_e "首次运行，仅仅执行了 'flyway baseline', 请重新运行此job."
         deploy_result=1
     fi
@@ -323,7 +324,7 @@ java_docker_build() {
     else
         cp -f "$script_dir/docker/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
     fi
-    if [[ "$(grep -c '^FROM.*as' Dockerfile || true)" -ge 2 ]]; then
+    if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
         # shellcheck disable=2013
         for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
             [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
@@ -356,10 +357,12 @@ docker_login() {
         fi
         ;;
     'aliyun')
-        echo "[TODO] aliyun docker login"
+        echo "aliyun docker login"
+        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
         ;;
     'qcloud')
-        echo "[TODO] qcloud docker login"
+        echo "qcloud docker login"
+        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
         ;;
     esac
 }
@@ -367,7 +370,7 @@ docker_login() {
 java_docker_push() {
     echo_s "docker push to ECR."
     docker_login
-    if [[ "$(grep -c '^FROM.*as' Dockerfile || true)" -ge 2 ]]; then
+    if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
         # shellcheck disable=2013
         for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
             [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && dockerTagLoop="${dockerTag}-$target" || dockerTagLoop="${dockerTag}"
@@ -460,7 +463,7 @@ deploy_rsync() {
         db_name=${array[7]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
-            echo "if error here, check file: ${script_name}.conf"
+            echo "if error here, check file: ${script_conf}"
             return 1
         fi
         [ -f "${script_ssh_key}" ] && sshOpt="ssh -i ${script_ssh_key}"
@@ -477,18 +480,18 @@ deploy_rsync() {
         ## 源文件夹
         if [[ "${project_lang}" == 'node' ]]; then
             rsync_path_src="${CI_PROJECT_DIR}/dist/"
-        else
-            if echo "$rsync_path_src" | grep '\.[jw]ar$' || true; then
-                find_file="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
-                if [ -z "$find_file" ]; then
-                    echo "file not found: ${rsync_path_src}"
-                    return 1
-                else
-                    rsync_path_src="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
-                fi
-            fi
-            if [[ "$rsync_path_src" == 'null' || -z "$rsync_path_src" ]]; then
-                rsync_path_src="${CI_PROJECT_DIR}/"
+        elif [[ "$rsync_path_src" == 'null' || -z "$rsync_path_src" ]]; then
+            rsync_path_src="${CI_PROJECT_DIR}/"
+        elif [[ "$rsync_path_src" =~ \.[jw]ar$ ]]; then
+            find_file="$(find "${CI_PROJECT_DIR}" -name "$rsync_path_src" -print0 | head -n 1)"
+            if [ -z "$find_file" ]; then
+                echo "file not found: ${find_file}"
+                return 1
+            elif [[ "$find_file" =~ \.[jw]ar$ ]]; then
+                rsync_path_src="$find_file"
+            else
+                echo "file type error:${find_file}"
+                return 1
             fi
         fi
         ## 目标文件夹
