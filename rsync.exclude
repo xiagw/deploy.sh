@@ -4,6 +4,8 @@
 .gitignore
 .gitlab-ci.yml
 
+.DS_Store
+
 .dockerignore
 .gitattributes
 Dockerfile

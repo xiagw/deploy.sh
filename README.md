@@ -10,7 +10,7 @@ deploy.sh for GitLab CI/CD：
 - 支持 调用单元测试
 - 支持 调用Sonarqube Scan
 - 支持 调用功能自动化测试
-- 支持 调用性能压测
+- 支持 调用性能压测，例如 jmeter 之类
 - 支持 docker 挂载 nfs，直接部署文件模式
 - 支持 Node， npm/yarn，直接部署文件模式
 - 支持 Node， docker image 直接部署image模式

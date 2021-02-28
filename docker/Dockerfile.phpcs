@@ -1,0 +1,28 @@
+FROM php:7.2-alpine
+
+ARG CHANGE_SOURCE=false
+ARG PHPCS_VERSION=3.5.8
+ARG PROXY=socks5://192.168.10.10:1081
+# url -sS -H "Accept: application/vnd.github.v3+json" -L 'https://api.github.com/repos/squizlabs/PHP_CodeSniffer/releases/latest' |awk -F: '/tag_name/' | grep -oP '\d+(\.\d+)*'
+
+RUN set -x; \
+    if [ ${CHANGE_SOURCE} = true ]; then \
+    sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories \
+    ;fi \
+    && curl -L -o /usr/local/bin/phpcs https://github.com/squizlabs/PHP_CodeSniffer/releases/download/$PHPCS_VERSION/phpcs.phar \
+    # && curl -L https://github.com/squizlabs/PHP_CodeSniffer/releases/download/$PHPCS_VERSION/phpcs.phar.asc > /usr/local/bin/phpcs.asc \
+    && curl -L -o /usr/local/bin/phpcbf https://github.com/squizlabs/PHP_CodeSniffer/releases/download/$PHPCS_VERSION/phpcbf.phar \
+    # && curl -L https://github.com/squizlabs/PHP_CodeSniffer/releases/download/$PHPCS_VERSION/phpcbf.phar.asc > /usr/local/bin/phpcbf.asc \
+    && chmod +x /usr/local/bin/phpcs \
+    && chmod +x /usr/local/bin/phpcbf \
+    && rm -rf /var/cache/apk/* /var/tmp/* /tmp/*
+
+VOLUME ["/project"]
+WORKDIR /project
+
+# ENTRYPOINT ["phpcs"]
+CMD ["phpcs","--version"]
+
+# docker build --build-arg CHANGE_SOURCE=true --build-arg PHPCS_VERSION=3.5.4 -t xia/phpcs .
+# docker run --rm -ti -v $PWD:/project xia/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcsReport:-full}" /project
+# docker run --rm -ti -v $PWD:/project xia/phpcs phpcbf --standard=PSR12 /project

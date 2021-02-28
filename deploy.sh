@@ -1,5 +1,5 @@
-#!/bin/bash
-# shellcheck disable=SC1090,SC1091,SC2091
+#!/usr/bin/env bash
+
 # set -x #debug mode = true # set +x #debug mode = false
 set -e ## 出现错误自动退出
 # set -u ## 变量未定义报错
@@ -42,7 +42,7 @@ format_check_python() {
 format_check_php() {
     echo_s "starting PHP Code Sniffer, < standard=PSR12 >."
     if ! docker images | grep 'deploy/phpcs'; then
-        docker build -t deploy/phpcs -f "$script_dir/Dockerfile.phpcs" "$script_dir" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dir/docker/Dockerfile.phpcs" "$script_dir/docker" >/dev/null
     fi
     phpcsResult=0
     for i in $($gitDiff | awk '/\.php$/{if (NR>0){print $0}}'); do
