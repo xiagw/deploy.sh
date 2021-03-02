@@ -246,10 +246,10 @@ php_composer_volume() {
     if ! docker images | grep 'deploy/composer'; then
         docker build -t deploy/composer --build-arg CHANGE_SOURCE=true -f "$script_dir/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
-    if [[ "${composerUpdate:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
+    if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
         p=update
     fi
-    if [[ ! -d vendor || "${composerInstall:-0}" -eq 1 ]]; then
+    if [[ ! -d vendor || "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]]; then
         p=install
     fi
     if [[ -n "$p" ]]; then
@@ -855,7 +855,8 @@ main() {
             [[ 1 -eq "$exec_docker_push_php" ]] && php_docker_push
             [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
         else
-            ## 在 gitlab 的 pipeline 配置环境变量 enableComposer ，1 启用，0 禁用[default]
+            ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_COMPOSER_UPDATE ，1 启用，0 禁用[default]
+            ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_COMPOSER_INSTALL ，1 启用，0 禁用[default]
             php_composer_volume
         fi
         ;;
@@ -891,7 +892,7 @@ main() {
         deploy_rsync
     fi
 
-    ## 在 gitlab 的 pipeline 配置环境变量 enableFuncTest ，1 启用[default]，0 禁用
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     if [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 1 ]]; then
         function_test
     fi
