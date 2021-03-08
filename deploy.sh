@@ -812,7 +812,13 @@ main() {
         update_cert
     fi
     ## 判定项目类型
-    [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]] && project_lang='node'
+    if [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]]; then
+        if [[ -d "${CI_PROJECT_DIR}/ios" || -d "${CI_PROJECT_DIR}/android" ]]; then
+            project_lang='react'
+        else
+            project_lang='node'
+        fi
+    fi
     [[ -f "${CI_PROJECT_DIR}/composer.json" ]] && project_lang='php'
     [[ -f "${CI_PROJECT_DIR}/pom.xml" ]] && project_lang='java'
     [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && project_lang='python'
@@ -875,6 +881,10 @@ main() {
             [[ 1 -eq "$exec_docker_push_java" ]] && java_docker_push
             [[ 1 -eq "$exec_deploy_k8s_java" ]] && java_deploy_k8s
         fi
+        ;;
+    'react')
+        echo_e "manual package"
+        return
         ;;
     *)
         ## 各种Build， npm/composer/mvn/docker
