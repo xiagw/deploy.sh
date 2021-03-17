@@ -1,0 +1,64 @@
+
+FROM composer:1
+LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
+
+#ENV TIMEZONE="UTC"
+
+ARG CHANGE_SOURCE=false
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN set -x \
+    ## change SOURCE
+    && if [ ${CHANGE_SOURCE} = true ]; then \
+    sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/' /etc/apk/repositories \
+    ;fi \
+    ## install packages
+    && apk update \
+    && apk add --no-cache --virtual \
+    .build-deps bash curl binutils autoconf dpkg-dev dpkg file g++ gcc make \
+    php7-pear pkgconf re2c libc-dev php7-dev pcre-dev zlib-dev \
+    libjpeg-turbo-dev libpng-dev libxpm-dev freetype-dev gd-dev \
+    gettext-dev libmcrypt-dev libaio-dev openssl-dev
+RUN set -x \
+    ## Install PHP extensions
+    && docker-php-ext-install bcmath gd pdo_mysql sockets sysvmsg sysvsem sysvshm
+# RUN set -x \
+    # https://pecl.php.net/get/redis-5.3.2.tgz
+    # && pecl install redis
+RUN set -x \
+    # https://pecl.php.net/get/swoole-4.6.1.tgz
+    # && pecl install swoole \
+    ## enable extensions
+    # && docker-php-ext-enable bcmath gd pdo_mysql sockets redis swoole \
+    && docker-php-ext-enable bcmath gd pdo_mysql sockets \
+    # && php -m | grep -E 'redis|swoole' \
+    ## add user
+    && addgroup -g 1000 -S ubuntu \
+    && adduser -u 1000 -D -S -G ubuntu ubuntu \
+    # Clear dev deps
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/lastlog /var/log/faillog
+RUN set -x; \
+    # Install composer
+    # curl -sS https://getcomposer.org/installer | php \
+    # && mv composer.phar /usr/local/bin/composer \
+    # && chmod +x /usr/local/bin/composer \
+    composer self-update --clean-backups \
+    && composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/ \
+    && mkdir -p /var/www/.composer /.composer \
+    && chown 1000:1000 /tmp/config.json /tmp/cache /tmp/auth.json /var/www/.composer /.composer \
+    ## Timezone
+    # && cp /usr/share/zoneinfo/"${TIMEZONE}" /etc/localtime \
+    # && printf "%s" "${TIMEZONE}" > /etc/timezone \
+    # && printf "[Date]\ndate.timezone=%s" "${TIMEZONE}" > /usr/local/etc/php/conf.d/timezone.ini \
+    # && composer install --no-dev \
+    && composer clearcache
+
+WORKDIR /app
+
+USER 1000
+# RUN set -x; composer config repo.packagist composer https://mirrors.aliyun.com/composer/
+
+#COPY . /app/
+
+# ENTRYPOINT ["composer"]
+# CMD ["--version"]
+CMD ["composer"]

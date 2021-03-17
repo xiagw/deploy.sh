@@ -1,0 +1,128 @@
+FROM php:7.3-fpm as build-env
+LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN set -x \
+    && sed -i \
+    -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
+    -e 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
+    && apt-get update \
+    # && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+    apt-utils bash curl zip unzip \
+    libssl-dev libnghttp2-dev libpcre3-dev libjpeg-dev libpng-dev \
+    libfreetype6-dev libpq-dev libmcrypt-dev libmemcached-dev \
+    jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick \
+    ## next lines are here becase there is no auto build on dockerhub see https://github.com/laradock/laradock/pull/1903#issuecomment-463142846
+    libzip-dev zlib1g-dev libicu-dev g++
+COPY ./redis-5.3.3.tgz /tmp/
+COPY ./swoole-4.6.2.tgz /tmp/
+# RUN pecl channel-update pecl.php.net \
+RUN pecl install /tmp/redis-5.3.3.tgz \
+    # && pecl install redis \
+    && docker-php-ext-enable redis \
+    && php -m |grep 'redis'
+RUN pecl install /tmp/swoole-4.6.2.tgz \
+    && docker-php-ext-enable swoole \
+    && php -m |grep 'swoole'
+## Install the zip extension
+RUN docker-php-ext-configure zip \
+    && docker-php-ext-install zip \
+    && docker-php-ext-enable zip \
+    && php -m | grep 'zip'
+## Install the PHP pdo_mysql extention
+RUN docker-php-ext-install pdo_mysql \
+    && docker-php-ext-enable pdo_mysql
+# Install the PHP pdo_pgsql extention
+RUN docker-php-ext-install pdo_pgsql \
+    && docker-php-ext-enable pdo_pgsql
+## install intl
+RUN docker-php-ext-configure intl \
+    && docker-php-ext-install intl \
+    && docker-php-ext-enable intl
+## Install the PHP gd library
+## php 7.3.26
+RUN docker-php-ext-configure gd --with-jpeg-dir=/usr/lib --with-freetype-dir=/usr/include/freetype2 \
+## php 7.4.14
+# RUN docker-php-ext-configure gd --with-jpeg=/usr/lib --with-freetype=/usr/include/freetype2 \
+    && docker-php-ext-install gd \
+    && docker-php-ext-enable gd \
+    && php -m | grep 'gd'
+RUN docker-php-ext-install bcmath sockets sysvmsg sysvsem sysvshm \
+    && docker-php-ext-enable bcmath sockets sysvmsg sysvsem sysvshm
+RUN docker-php-ext-install opcache \
+    && docker-php-ext-enable opcache
+RUN docker-php-ext-install mysqli \
+    && docker-php-ext-enable mysqli
+RUN pecl install imagick \
+    && docker-php-ext-enable imagick
+RUN usermod -u 1000 www-data \
+    && sed -i \
+    -e '/rlimit_files/s/^;//' \
+    -e '/rlimit_files/s/1024/51200/' /usr/local/etc/php-fpm.conf \
+    && sed -i \
+    -e '/pm = dynamic/s/dynamic/ondemand/' \
+    -e '/pm.max_children/s/5/2000/' \
+    -e '/pm.start_servers/s/2/10/' \
+    -e '/pm.min_spare_servers/s/1/10/' \
+    -e '/pm.max_spare_servers/s/3/20/' /usr/local/etc/php-fpm.d/www.conf \
+    && printf 'opcache.enable=1\nopcache.memory_consumption=256\nopcache.use_cwd=0\nopcache.max_file_size=0\nopcache.max_accelerated_files=30000\nopcache.validate_timestamps=1\nopcache.revalidate_freq=0' >/usr/local/etc/php/conf.d/opcache.ini \
+    && sed -i \
+    -e '/^disable_functions/s/$/ phpinfo,system,mail,exec/' \
+    -e '/^expose_php/s/On/Off/' \
+    -e '/^;track_errors/s/;//' -e '/track_errors/s/On/Off/' \
+    -e '/^upload_max_filesize/s/2M/48M/' \
+    -e '/^max_file_uploads/s/20/200/' \
+    -e '/^memory_limit/s/128/256/' \
+    -e '/^post_max_size/s/8/32/' /usr/local/etc/php/php.ini-production \
+    && grep -E 'disable_functions|expose_php|^track_errors|upload_max_filesize|max_file_uploads|memory_limit|post_max_size' /usr/local/etc/php/php.ini-production
+
+#############################################################
+FROM php:7.3-fpm
+LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
+USER root
+COPY --from=build-env /usr/local/lib/php/extensions/no-debug-non-zts-20180731 /usr/local/lib/php/extensions/no-debug-non-zts-20180731/
+COPY --from=build-env /usr/local/etc/php-fpm.conf /usr/local/etc/
+COPY --from=build-env /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
+COPY --from=build-env /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
+COPY --from=build-env /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+COPY ./startup.sh /
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN set -x \
+    && sed -i \
+    -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
+    -e 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
+    && pecl channel-update pecl.php.net \
+    && apt-get update \
+    # && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+    apt-utils bash curl zip unzip cron \
+    # libssl-dev libnghttp2-dev libpcre3-dev libjpeg-dev libpng-dev \
+    # libfreetype6-dev libpq-dev libmcrypt-dev libmemcached-dev \
+    ## next lines are here becase there is no auto build on dockerhub see https://github.com/laradock/laradock/pull/1903#issuecomment-463142846
+    libzip-dev zlib1g-dev libicu-dev g++ \
+    ## for image magick ext
+    jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick \
+    ## enable extention
+    && docker-php-ext-enable bcmath gd zip opcache pdo_mysql sockets sysvmsg sysvsem sysvshm redis swoole imagick \
+    && usermod -u 1000 www-data \
+    && chmod +x /startup.sh \
+    # Clear dev deps
+    && apt-get clean \
+    && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/lastlog /var/log/faillog \
+    ## used localtime
+    && /bin/cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo 'Asia/Shanghai' >/etc/timezone
+
+WORKDIR /var/www
+
+USER 1000
+
+EXPOSE 9000
+
+# ENTRYPOINT ["php-fpm"]
+# CMD ["php-fpm"]
+CMD ["/startup.sh"]
+
