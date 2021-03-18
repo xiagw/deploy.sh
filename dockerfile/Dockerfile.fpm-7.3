@@ -86,7 +86,6 @@ COPY --from=build-env /usr/local/etc/php-fpm.conf /usr/local/etc/
 COPY --from=build-env /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
 COPY --from=build-env /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
 COPY --from=build-env /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
-COPY ./startup.sh /
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
@@ -107,7 +106,6 @@ RUN set -x \
     ## enable extention
     && docker-php-ext-enable bcmath gd zip opcache pdo_mysql sockets sysvmsg sysvsem sysvshm redis swoole imagick \
     && usermod -u 1000 www-data \
-    && chmod +x /startup.sh \
     # Clear dev deps
     && apt-get clean \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
@@ -115,6 +113,10 @@ RUN set -x \
     ## used localtime
     && /bin/cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo 'Asia/Shanghai' >/etc/timezone
+    
+COPY ./startup.sh /
+RUN set -x \
+    && chmod +x /startup.sh
 
 WORKDIR /var/www
 
