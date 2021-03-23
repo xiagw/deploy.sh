@@ -2,5 +2,5 @@ tmp/
 python/
 deploy.log
 .deploy.conf
-.deploy.ssh.conf
 .deploy.env
+.deploy.ssh.conf
