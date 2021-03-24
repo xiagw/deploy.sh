@@ -812,10 +812,8 @@ main() {
     [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
         if [[ "${project_docker}" -eq 1 ]]; then
-            ## sql导入，k8s, flyway
             flyway_migrate_k8s
         else
-            ## sql导入，flyway 传统方式
             flyway_migrate
         fi
     fi
