@@ -700,9 +700,9 @@ main() {
     script_name="${script_name%.sh}"
     script_dir="$(cd "$(dirname "$0")" && pwd)"
 
-    PATH="$script_dir/bin:/usr/bin:/usr/sbin:/usr/local/sbin:/usr/local/bin"
-    PATH="$PATH:$script_dir/jdk/bin:$script_dir/jmeter/bin:$script_dir/ant/bin:$script_dir/sonar-scanner/bin"
-    PATH="$PATH:$script_dir/maven/bin:$HOME/.config/composer/vendor/bin:/snap/bin:$HOME/.local/bin"
+    PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
+    PATH="$PATH:$script_dir/jdk/bin:$script_dir/jmeter/bin:$script_dir/ant/bin:$script_dir/maven/bin"
+    PATH="$PATH:$script_dir/bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
     ## 检查OS 类型和版本，安装相应命令和软件包
@@ -876,8 +876,7 @@ main() {
         ;;
     esac
 
-    [[ "${project_docker}" -eq 1 ]] && exec_deploy_rsync=0
-    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
+    [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
     if [[ "${exec_deploy_rsync:-1}" -eq 1 ]]; then
         deploy_rsync
     fi
