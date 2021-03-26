@@ -123,13 +123,66 @@ function_test() {
     # jmeter -load
 }
 
-flyway_migrate() {
-    echo_warn "flyway migrate (normal)"
-    command -v flyway >/dev/null || echo_err "command not exists: flyway"
-    flyway info
-    flyway repair
-    flyway migrate
-    flyway info
+flyway_migrate_runner() {
+    [[ "${enableSonar:-0}" -eq 1 ]] && return 0
+    [[ "${disableFlyway:-0}" -eq 1 ]] && return 0
+    command -v java >/dev/null || sudo apt install openjdk-14-jdk
+
+    read_deploy_config
+
+    # findNewSql="$(if [ -d docs/sql ]; then git --no-pager log --name-only --no-merges --oneline 'docs/sql/V*.sql' | grep -m1 '^docs/sql/V' | uniq | head -n 1 || true; fi)"
+    if [ -d "${script_dir}/flyway" ]; then
+        flywayHome="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
+    else
+        flywayHome="${ENV_FLYWAY_PATH:-/usr/local/flyway}"
+    fi
+    flywayDB="${db_name//-/_}"
+    flywayConfPath="$flywayHome/conf/${CI_COMMIT_REF_NAME}.$flywayDB"
+    flywaySqlPath="$flywayHome/sql/${CI_COMMIT_REF_NAME}.$flywayDB"
+    baseSQL='V0__Base_structure.sql'
+
+    if $git_diff | grep -qv "docs/sql.*\.sql$"; then
+        echo_w "found other file, enable deploy file."
+    else
+        echo_w "skip deploy file."
+        project_lang=0
+        project_docker=0
+        exec_deploy_rsync=0
+    fi
+
+    echo_s "flyway migrate..."
+
+    ## flyway.conf change database name to current project name.
+    if [ ! -f "$flywayConfPath/flyway.conf" ]; then
+        echo_e "not found $flywayConfPath/flyway.conf."
+        return 1
+    fi
+    ## did you run 'flyway baseline'?
+    if [[ -f "$flywaySqlPath/$baseSQL" ]]; then
+        if [[ -d "${CI_PROJECT_DIR}/docs/sql/" ]]; then
+            rsync -rltv --delete --exclude="$baseSQL" "${CI_PROJECT_DIR}/docs/sql/" "$flywaySqlPath/"
+        fi
+        setBaseline=false
+    else
+        mkdir -p "$flywaySqlPath"
+        touch "$flywaySqlPath/$baseSQL"
+        setBaseline=true
+        echo_e "run first，only 'flyway baseline', please re-run this gitlab job."
+        deploy_result=1
+    fi
+
+    ## exec flyway
+    if [[ "$setBaseline" == 'true' ]]; then
+        flyway -configFiles="$flywayConfPath"/flyway.conf baseline
+    else
+        if flyway -configFiles="$flywayConfPath"/flyway.conf info | grep -i pending; then
+            flyway -configFiles="$flywayConfPath"/flyway.conf repair
+            flyway -configFiles="$flywayConfPath"/flyway.conf migrate && deploy_result=1
+            flyway -configFiles="$flywayConfPath"/flyway.conf info
+        fi
+    fi
+
+    echo_t "end flyway migrate"
 }
 
 flyway_migrate_k8s() {
@@ -814,7 +867,7 @@ main() {
         if [[ "${project_docker}" -eq 1 ]]; then
             flyway_migrate_k8s
         else
-            flyway_migrate
+            flyway_migrate_runner
         fi
     fi
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
