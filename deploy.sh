@@ -123,7 +123,7 @@ function_test() {
     # jmeter -load
 }
 
-flyway_migrate_runner() {
+flyway_use_local() {
     [[ "${enableSonar:-0}" -eq 1 ]] && return 0
     [[ "${disableFlyway:-0}" -eq 1 ]] && return 0
     command -v java >/dev/null || sudo apt install openjdk-14-jdk
@@ -185,7 +185,7 @@ flyway_migrate_runner() {
     echo_t "end flyway migrate"
 }
 
-flyway_migrate_k8s() {
+flyway_use_helm() {
     flyway_last_sql="$(if [ -d "${ENV_GIT_SQL_FOLDER}" ]; then git --no-pager log --name-only --no-merges --oneline "${ENV_GIT_SQL_FOLDER}" | grep -m1 "^${ENV_GIT_SQL_FOLDER}" || true; fi)"
     ## used AWS EFS
     flyway_path_nfs="$ENV_FLYWAY_NFS_FOLDER"
@@ -865,9 +865,9 @@ main() {
     [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
         if [[ "${project_docker}" -eq 1 ]]; then
-            flyway_migrate_k8s
+            flyway_use_helm
         else
-            flyway_migrate_runner
+            flyway_use_local
         fi
     fi
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
