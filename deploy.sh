@@ -498,8 +498,8 @@ deploy_rsync() {
             echo "if error here, check file: ${script_conf}"
             return 1
         fi
-        [ -f "${script_ssh_key}" ] && ssh_opt="ssh -i ${script_ssh_key}"
-        ssh_opt="$ssh_opt -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
+        ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
+        [[ -f "${script_ssh_key}" ]] && ssh_opt="$ssh_opt -i ${script_ssh_key}"
         [[ -f "$script_ssh_conf" ]] && ssh_opt="$ssh_opt -F $script_ssh_conf"
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsync_conf="${CI_PROJECT_DIR}/rsync.exclude"
