@@ -54,7 +54,7 @@ k8s:
   #     - target/
   #     - dist/
   script:
-    - bash deploy.sh
+    - bash -x deploy.sh
   environment:
     name: ENV-${CI_COMMIT_REF_NAME}
     url: https://git.example.com/root/pms/wikis/rules-domain
