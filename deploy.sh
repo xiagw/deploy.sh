@@ -882,7 +882,7 @@ main() {
         unit_test
     fi
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
-    if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-1}" ]]; then
+    if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-0}" ]]; then
         code_format_check
     fi
 
