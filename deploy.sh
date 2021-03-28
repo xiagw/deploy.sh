@@ -73,7 +73,7 @@ code_format_check() {
     [[ "${project_lang}" == node ]] && format_check_node
     [[ "${project_lang}" == java ]] && format_check_java
     [[ "${project_lang}" == python ]] && format_check_python
-    [[ "${project_docker}" -eq 1 ]] && format_check_dockerfile
+    [[ "${project_docker}" == 1 ]] && format_check_dockerfile
 }
 
 ## install phpunit
