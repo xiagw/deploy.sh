@@ -4,3 +4,8 @@ deploy.log
 .deploy.conf
 .deploy.env
 .deploy.ssh.conf
+
+.DS_Store
+
+builds/
+etc/

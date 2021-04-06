@@ -653,6 +653,32 @@ update_cert() {
     done
 }
 
+install_aws() {
+    if ! command -v aws >/dev/null; then
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip awscliv2.zip
+        sudo ./aws/install
+    fi
+}
+
+install_python_gitlab() {
+    command -v gitlab >/dev/null || python3 -m pip install --user --upgrade python-gitlab
+    [ -e "$HOME/".python-gitlab.cfg ] || ln -sf "$script_dir/etc/python-gitlab.cfg" "$HOME/"
+}
+
+install_kubectl() {
+    command -v kubectl >/dev/null || {
+        kube_ver="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
+        kube_url="https://storage.googleapis.com/kubernetes-release/release/$kube_ver/bin/linux/amd64/kubectl"
+        if [ -z "$ENV_HTTP_PROXY" ]; then
+            curl -Lo "$script_dir/bin/kubectl" "$kube_url"
+        else
+            curl -x "$ENV_HTTP_PROXY" -Lo "$script_dir/bin/kubectl" "$kube_url"
+        fi
+        chmod +x "$script_dir/bin/kubectl"
+    }
+}
+
 check_os() {
     if [[ -e /etc/debian_version ]]; then
         # shellcheck disable=SC1091
@@ -675,47 +701,30 @@ check_os() {
         if [[ -e "$HOME"/.bash_logout ]]; then
             mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         fi
-        command -v rsync >/dev/null || sudo apt install -y rsync
         command -v git >/dev/null || sudo apt install -y git
         git lfs version >/dev/null || sudo apt install -y git-lfs
-        command -v docker >/dev/null || bash "$script_dir/bin/get-docker.sh"
+        command -v unzip >/dev/null || sudo apt install -y unzip
+        command -v rsync >/dev/null || sudo apt install -y rsync
+        # command -v docker >/dev/null || bash "$script_dir/bin/get-docker.sh"
         id | grep -q docker || sudo usermod -aG docker "$USER"
         command -v pip3 >/dev/null || sudo apt install -y python3-pip
         command -v java >/dev/null || sudo apt install -y openjdk-8-jdk
-        command -v shc >/dev/null || sudo apt install -y shc
-        if ! command -v aws >/dev/null; then
-            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-            unzip awscliv2.zip
-            sudo ./aws/install
-        fi
-    elif [[ "$OS" == centos ]]; then
+        # command -v shc >/dev/null || sudo apt install -y shc
+    elif [[ "$OS" == 'centos' ]]; then
         rpm -q epel-release >/dev/null || sudo yum install -y epel-release
-        command -v rsync >/dev/null || sudo yum install -y rsync
         command -v git >/dev/null || sudo yum install -y git2u
         git lfs version >/dev/null || sudo yum install -y git-lfs
-        command -v docker >/dev/null || sh "$script_dir/bin/get-docker.sh"
+        command -v rsync >/dev/null || sudo yum install -y rsync
+        # command -v docker >/dev/null || sh "$script_dir/bin/get-docker.sh"
         id | grep -q docker || sudo usermod -aG docker "$USER"
     elif [[ "$OS" == 'amzn' ]]; then
         rpm -q epel-release >/dev/null || sudo amazon-linux-extras install -y epel
-        command -v rsync >/dev/null || sudo yum install -y rsync
         command -v git >/dev/null || sudo yum install -y git2u
         git lfs version >/dev/null || sudo yum install -y git-lfs
-        command -v docker >/dev/null || sudo amazon-linux-extras install -y docker
+        command -v rsync >/dev/null || sudo yum install -y rsync
+        # command -v docker >/dev/null || sudo amazon-linux-extras install -y docker
         id | grep -q docker || sudo usermod -aG docker "$USER"
     fi
-
-    command -v gitlab >/dev/null || python3 -m pip install --user --upgrade python-gitlab
-    [ -e "$HOME/".python-gitlab.cfg ] || ln -sf "$script_dir/bin/.python-gitlab.cfg" "$HOME/"
-    command -v kubectl >/dev/null || {
-        kVer="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
-        kUrl="https://storage.googleapis.com/kubernetes-release/release/$kVer/bin/linux/amd64/kubectl"
-        if [ -z "$ENV_HTTP_PROXY" ]; then
-            curl -Lo "$script_dir/bin/kubectl" "$kUrl"
-        else
-            curl -x "$ENV_HTTP_PROXY" -Lo "$script_dir/bin/kubectl" "$kUrl"
-        fi
-        chmod +x "$script_dir/bin/kubectl"
-    }
 }
 
 clean_disk() {
@@ -760,6 +769,10 @@ main() {
 
     ## 检查OS 类型和版本，安装相应命令和软件包
     check_os
+
+    [[ "${ENV_INSTALL_AWS}" == true ]] && install_aws
+    [[ "${ENV_INSTALL_PYTHON_GITLAB}" == true ]] && install_python_gitlab
+    [[ "${ENV_INSTALL_KUBECTL}" == true ]] && install_kubectl
 
     ## 处理传入的参数
     ## 1，默认情况执行所有任务，
