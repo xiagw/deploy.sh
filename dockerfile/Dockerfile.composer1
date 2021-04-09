@@ -1,5 +1,5 @@
 
-FROM composer:1
+FROM composer:1.10.9
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
 
 #ENV TIMEZONE="UTC"
