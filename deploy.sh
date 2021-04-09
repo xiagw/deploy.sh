@@ -295,7 +295,7 @@ node_docker_push() {
 php_composer_volume() {
     echo_time_step "php composer install..."
     if ! docker images | grep 'deploy/composer'; then
-        docker build -t deploy/composer --build-arg CHANGE_SOURCE=true -f "$script_dir/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
+        docker build -t deploy/composer --build-arg CHANGE_SOURCE=true -f "$script_dir/dockerfile/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
     if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
         p=update
@@ -656,7 +656,7 @@ update_cert() {
 install_aws() {
     if ! command -v aws >/dev/null; then
         curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip awscliv2.zip
+        unzip -qq awscliv2.zip
         sudo ./aws/install
     fi
 }
