@@ -13,3 +13,4 @@ cache/
 etc/
 
 id_*
+.secret.*/

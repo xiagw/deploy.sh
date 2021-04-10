@@ -542,11 +542,11 @@ deploy_rsync() {
         $ssh_opt "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
         ## 复制文件到目标服务器的目标目录
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
-        ## rsync 项目私密配置文件，例如数据库配置，密钥文件等
-        # configDir="${script_dir}/.config.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
-        # if [ -d "$configDir" ]; then
-        #     rsync -acvzt -e "$ssh_opt" "$configDir" "${ssh_host%@*}@${ip}:${rsync_dest}"
-        # fi
+        ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
+        secret_dir="${script_dir}/.secret.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        if [ -d "$secret_dir" ]; then
+            rsync -rlcvzt -e "$ssh_opt" "$secret_dir" "${ssh_host}:${rsync_dest}"
+        fi
     done
 }
 
