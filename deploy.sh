@@ -278,8 +278,8 @@ node_build_volume() {
     if ! docker images | grep 'deploy/node'; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dir/dockerfile/Dockerfile.node" "$script_dir/dockerfile" >/dev/null
     fi
-    if [[ -f bin/custome.docker.build.sh ]]; then
-        source bin/custome.docker.build.sh
+    if [[ -f "$script_dir/bin/custome.docker.build.sh" ]]; then
+        source "$script_dir/bin/custome.docker.build.sh"
     else
         $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "yarn install; yarn run build"
     fi
