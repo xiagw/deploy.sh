@@ -499,7 +499,6 @@ deploy_rsync() {
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
-        [[ -f "${script_ssh_key}" ]] && ssh_opt="$ssh_opt -i ${script_ssh_key}"
         [[ -f "$script_ssh_conf" ]] && ssh_opt="$ssh_opt -F $script_ssh_conf"
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsync_conf="${CI_PROJECT_DIR}/rsync.exclude"
@@ -831,15 +830,27 @@ main() {
     script_conf="${script_dir}/.${script_name}.conf"         ## 发布到服务器的配置信息
     script_env="${script_dir}/.${script_name}.env"           ## 发布配置信息(密)
     script_ssh_conf="${script_dir}/.${script_name}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
-    script_ssh_key="${script_dir}/id_rsa"                    ## ssh key
 
     [[ ! -f "$script_conf" && -f "${script_dir}/${script_name}.conf" ]] && cp "${script_dir}/${script_name}.conf" "$script_conf"
     [[ ! -f "$script_env" && -f "${script_dir}/${script_name}.env" ]] && cp "${script_dir}/${script_name}.env" "$script_env"
-    [ ! -f "$script_log" ] && touch "$script_log"
+    [[ ! -f "$script_log" ]] && touch "$script_log"
 
-    [[ -e "${script_ssh_conf}" && $(stat -c "%a" "${script_ssh_conf}") != 600 ]] && chmod 600 "${script_ssh_conf}"
-    [[ -e "${script_ssh_key}" && $(stat -c "%a" "${script_ssh_key}") != 600 ]] && chmod 600 "${script_ssh_key}"
-    [[ ! -e "$HOME/.ssh/config" ]] && ln -sf "${script_ssh_conf}" "$HOME/".ssh/config
+    if [[ -f "${script_dir}/id_rsa" ]]; then
+        chmod 600 "${script_dir}/id_rsa"
+        ln -sf "${script_dir}/id_rsa" "$HOME/.ssh/"
+    fi
+    if [[ -f "${script_dir}/id_ed25519" ]]; then
+        chmod 600 "${script_dir}/id_ed25519"
+        ln -sf "${script_dir}/id_ed25519" "$HOME/.ssh/"
+    fi
+    if [[ -f "${script_dir}/id_ecdsa" ]]; then
+        chmod 600 "${script_dir}/id_ecdsa"
+        ln -sf "${script_dir}/id_ecdsa" "$HOME/.ssh/"
+    fi
+    if [[ -f "${script_ssh_conf}" ]]; then
+        chmod 600 "${script_ssh_conf}"
+        ln -sf "${script_ssh_conf}" "$HOME/.ssh/config"
+    fi
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
     [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
     [[ ! -e "${HOME}/.kube" && -e "${script_dir}/.kube" ]] && ln -sf "${script_dir}/.kube" "$HOME/"
