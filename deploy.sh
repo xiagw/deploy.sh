@@ -304,7 +304,7 @@ php_composer_volume() {
         p=install
     fi
     if [[ -n "$p" ]]; then
-        $docker_run -v "$PWD:/app" -w /app deploy/composer composer $p
+        $docker_run -v "$PWD:/app" -w /app deploy/composer composer $p || true
     fi
 }
 
