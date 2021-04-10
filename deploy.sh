@@ -276,9 +276,9 @@ node_build_volume() {
 
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node'; then
-        docker build -t deploy/node -f "$script_dir/node/Dockerfile" "$script_dir/node" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dir/dockerfile/Dockerfile.node" "$script_dir/dockerfile" >/dev/null
     fi
-    DOCKER_BUILDKIT=1 $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "yarn install; yarn run build"
+    $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "rnpm install; yarn run build"
 }
 
 node_docker_build() {
@@ -494,7 +494,7 @@ deploy_rsync() {
         rsync_dest=${array[5]} ## 从配置文件读取目标路径
         # db_user=${array[6]}
         # db_host=${array[7]}
-        # db_name=${array[8]}
+        db_name=${array[8]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
             echo "if error here, check file: ${script_conf}"
