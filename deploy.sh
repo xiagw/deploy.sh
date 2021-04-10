@@ -492,14 +492,15 @@ deploy_rsync() {
         ssh_port=${array[3]}
         rsync_src=${array[4]}
         rsync_dest=${array[5]} ## 从配置文件读取目标路径
-        db_name=${array[7]}
+        # db_user=${array[6]}
+        # db_host=${array[7]}
+        # db_name=${array[8]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
             echo "if error here, check file: ${script_conf}"
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
-        [[ -f "$script_ssh_conf" ]] && ssh_opt="$ssh_opt -F $script_ssh_conf"
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsync_conf="${CI_PROJECT_DIR}/rsync.exclude"
         else

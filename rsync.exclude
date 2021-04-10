@@ -12,3 +12,5 @@ Dockerfile
 
 deploy.env
 deploy.conf
+
+*.log
