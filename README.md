@@ -1,52 +1,61 @@
-deploy.sh for GitLab CI/CD：
+# deploy.sh for GitLab CI/CD：
 
-- 支持 阿里云，
-- 支持 腾讯云，
-- 支持 AWS，
-- 支持 直接拷代码文件，
-- 支持 docker build image，
-- 支持 PHP，Java，Vue，Dockerfile 代码格式化检查，
-- 支持 调用acme.sh更新ssl证书
-- 支持 调用单元测试
-- 支持 调用Sonarqube Scan
-- 支持 调用功能自动化测试
-- 支持 调用性能压测，例如 jmeter 之类
-- 支持 docker 挂载 nfs，直接部署文件模式
-- 支持 Node， npm/yarn，直接部署文件模式
-- 支持 Node， docker image 直接部署image模式
-- 支持 Java， maven/gradle打包，直接部署jar包文件模式
-- 支持 Java， docker image 直接部署image模式
-- 支持 PHP， 直接部署文件模式
-- 支持 PHP， composer，直接部署文件模式
-- 支持 PHP， docker image 直接部署image模式
-- 支持 k8s 部署
-- 支持 helm 部署
-- 支持 普通文件模式部署
-- 支持 结果的消息提醒，企业微信，Telegram，Element(Matrix)
+deploy.sh is a CI/CD program for GitLab Server.
+# Description
+* support aliyun,qcloud,AWS
+* support rsync file
+* support docker build image,
+* support code format check (PHP，Java，Vue，Dockerfile)
+* call [acme.sh](https://github.com/acmesh-official/acme.sh.git) update ssl cert
+* call Unit test
+* call function test
+* call Sonarqube scan
+* call performance test, stress test, (jmeter)
+* Node: deploy docker image with NFS, rsync file to NFS
+* Node: run npm/yarn using docker image
+* Node: docker run image
+* Java: package with maven/gradle, and rsync jar/war file
+* Java: deploy docker image
+* PHP: rsync file
+* PHP: docker run composer and rsync file
+* PHP: deploy docker image
+* deploy to k8s
+* deploy to k8s using helm3
+* send message of deploy result with work-weixin, Telegram, Element(Matrix)
+
+# Installing
+`git clone https://github.com/xiagw/deploy.sh.git $HOME/gitlab-runner`
 
 # Quick Start
-1. 安装 gitlab-runner 并且 register it 并且启动 gitlab-runner
-1. cd $HOME
-1. git clone https://github.com/xiagw/deploy.sh.git
-1. 拷贝 deploy.conf 为 .deploy.conf （修改为你的配置）
-1. 拷贝 deploy.env 为 .deploy.env（修改为你的配置）
-1. 参看本项目 .gitlab-ci.yaml 设置于目标git仓库
-1. 目标git仓库提交/push代码
+1. Prepare a server
+1. Install gitlab-runner, register to gitlab-server, and start gitlab-runner
 
-# 实例：
-1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) 用 docker-compose 启动一台）
-1. 已有一台服务器已经安装好 gitlab-runner，并且是默认安装（executer 为 shell）
-1. 已经准备好 ssh key file，从 gitlab-runner 服务器可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/ 目录）
-1. 登录到 gitlab-runner 服务器，执行
+1. cd $HOME
+1. git clone https://github.com/xiagw/deploy.sh.git 1. gitlab-runner
+1. cd gitlab-runner
+1. cp deploy.conf .deploy.conf  ## change to your 1. configuration
+1. cp deploy.env .deploy.env  ## change to your 1. configuration
+1. Refer to .gitlab-ci.yaml of this project, setup yours
+
+
+# Actual case
+1. There is already a server gitlab (if not, you can refer to [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
+1. There is already a server that has installed gitlab-runner, (executer is shell)
+1. The ssh key file has been prepared, and you can log in to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/ directory)
+1. Log in to the gitlab-runner server and execute
 ```shell
-cd $USER/gitlab-runner
-git clone https://github.com/xiagw/deploy.sh.git
+git clone https://github.com/xiagw/deploy.sh.git $HOME/gitlab-runner
 ```
-1. 参照 .deploy.conf, .deploy.env 例子修改好文件
-1. 例如 gitlab 已经建立 projectA 在 root 账号下面
-1. 在 projectA 修改代码，
-1. 并创建 .gitlab-ci.yml ，（可以参照本项目）
-1. 提交并push代码即可自动 CI/CD
+1. Refer to the deploy.conf/deploy.env, modify the file
+```shell
+cd gitlab-runner
+cp deploy.conf .deploy.conf
+cp deploy.env .deploy.env
+```
+1. For example: created projectA under the root account (root/projectA)
+1. Create .gitlab-ci.yml (refer to ME)
+1. Submit and push
+1. Enjoy CI/CD
 
 # 以下显示图片需要 mermain 支持
 ![](readme.png)
