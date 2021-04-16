@@ -34,7 +34,7 @@ deploy.sh for GitLab CI/CD：
 1. 目标git仓库提交/push代码
 
 # 实例：
-1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/gitlab-docker.git) 用 docker-compose 启动一台）
+1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) 用 docker-compose 启动一台）
 1. 已有一台服务器已经安装好 gitlab-runner，并且是默认安装（executer 为 shell）
 1. 已经准备好 ssh key file，从 gitlab-runner 服务器可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/ 目录）
 1. 登录到 gitlab-runner 服务器，执行
