@@ -1,8 +1,6 @@
 deploy.sh for GitLab CI/CD：
 
-- 支持 阿里云，
-- 支持 腾讯云，
-- 支持 AWS，
+- 支持 阿里云，腾讯云，AWS，
 - 支持 直接拷代码文件，
 - 支持 docker build image，
 - 支持 PHP，Java，Vue，Dockerfile 代码格式化检查，
@@ -12,13 +10,13 @@ deploy.sh for GitLab CI/CD：
 - 支持 调用功能自动化测试
 - 支持 调用性能压测，例如 jmeter 之类
 - 支持 docker 挂载 nfs，直接部署文件模式
-- 支持 Node， npm/yarn，直接部署文件模式
-- 支持 Node， docker image 直接部署image模式
-- 支持 Java， maven/gradle打包，直接部署jar包文件模式
-- 支持 Java， docker image 直接部署image模式
-- 支持 PHP， 直接部署文件模式
-- 支持 PHP， composer，直接部署文件模式
-- 支持 PHP， docker image 直接部署image模式
+- Node， npm/yarn，直接部署文件模式
+- Node， docker image 直接部署image模式
+- Java， maven/gradle打包，直接部署jar包文件模式
+- Java， docker image 直接部署image模式
+- PHP， 直接部署文件模式
+- PHP， composer，直接部署文件模式
+- PHP， docker image 直接部署image模式
 - 支持 k8s 部署
 - 支持 helm 部署
 - 支持 普通文件模式部署
@@ -34,18 +32,17 @@ deploy.sh for GitLab CI/CD：
 1. 目标git仓库提交/push代码
 
 # 实例：
-1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) 用 docker-compose 启动一台）
+1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) 用 docker-compose up -d gitlab 启动一台）
 1. 已有一台服务器已经安装好 gitlab-runner，并且是默认安装（executer 为 shell）
 1. 已经准备好 ssh key file，从 gitlab-runner 服务器可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/ 目录）
 1. 登录到 gitlab-runner 服务器，执行
-```shell
-cd $USER/gitlab-runner
-git clone https://github.com/xiagw/deploy.sh.git
-```
-1. 参照 .deploy.conf, .deploy.env 例子修改好文件
+`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
+1. 参照 deploy.conf, deploy.env 例子修改好文件
+ `cd gitlab-runner && cp deploy.conf .deploy.conf && cp deploy.env .deploy.env
+`
 1. 例如 gitlab 已经建立 projectA 在 root 账号下面
 1. 在 projectA 修改代码，
-1. 并创建 .gitlab-ci.yml ，（可以参照本项目）
+1. 并创建 .gitlab-ci.yml ，（同样可以参照本项目的.gitlab-ci.yml）
 1. 提交并push代码即可自动 CI/CD
 
 # 以下显示图片需要 mermain 支持
