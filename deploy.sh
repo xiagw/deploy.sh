@@ -142,19 +142,19 @@ flyway_use_local() {
     baseSQL='V0__Base_structure.sql'
 
     if $git_diff | grep -qv "docs/sql.*\.sql$"; then
-        echo_w "found other file, enable deploy file."
+        echo_warn "found other file, enable deploy file."
     else
-        echo_w "skip deploy file."
+        echo_warn "skip deploy file."
         project_lang=0
         project_docker=0
         exec_deploy_rsync=0
     fi
 
-    echo_s "flyway migrate..."
+    echo_time_step "flyway migrate..."
 
     ## flyway.conf change database name to current project name.
     if [ ! -f "$flywayConfPath/flyway.conf" ]; then
-        echo_e "not found $flywayConfPath/flyway.conf."
+        echo_err "not found $flywayConfPath/flyway.conf."
         return 1
     fi
     ## did you run 'flyway baseline'?
@@ -167,7 +167,7 @@ flyway_use_local() {
         mkdir -p "$flywaySqlPath"
         touch "$flywaySqlPath/$baseSQL"
         setBaseline=true
-        echo_e "run first，only 'flyway baseline', please re-run this gitlab job."
+        echo_err "run first，only 'flyway baseline', please re-run this gitlab job."
         deploy_result=1
     fi
 
@@ -182,14 +182,14 @@ flyway_use_local() {
         fi
     fi
 
-    echo_t "end flyway migrate"
+    echo_time "end flyway migrate"
 }
 
 flyway_use_local2() {
     [[ "${enableSonar:-0}" -eq 1 ]] && return 0
     [[ "${disableFlyway:-0}" -eq 1 ]] && return 0
 
-    echo_s "flyway migrate..."
+    echo_time_step "flyway migrate..."
 
     flywayHome="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
     flywayConfPath="$flywayHome/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}::/flyway/conf"
@@ -202,7 +202,7 @@ flyway_use_local2() {
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info
     fi
 
-    echo_t "end flyway migrate"
+    echo_time "end flyway migrate"
 }
 
 flyway_use_helm() {
