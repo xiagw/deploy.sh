@@ -782,6 +782,7 @@ get_maxmind_ip() {
 }
 
 main() {
+    [[ $ENV_DEBUG == 1 ]] && set -x
     script_name="$(basename "$0")"
     script_name="${script_name%.sh}"
     script_dir="$(cd "$(dirname "$0")" && pwd)"
