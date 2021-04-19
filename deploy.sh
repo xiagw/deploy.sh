@@ -185,6 +185,26 @@ flyway_use_local() {
     echo_t "end flyway migrate"
 }
 
+flyway_use_local2() {
+    [[ "${enableSonar:-0}" -eq 1 ]] && return 0
+    [[ "${disableFlyway:-0}" -eq 1 ]] && return 0
+
+    echo_s "flyway migrate..."
+
+    flywayHome="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
+    flywayConfPath="$flywayHome/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}::/flyway/conf"
+    flywaySqlPath="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
+
+    ## exec flyway
+    if docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info | grep -i pending; then
+        docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway repair
+        docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway migrate && deploy_result=1
+        docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info
+    fi
+
+    echo_t "end flyway migrate"
+}
+
 flyway_use_helm() {
     flyway_last_sql="$(if [ -d "${ENV_GIT_SQL_FOLDER}" ]; then git --no-pager log --name-only --no-merges --oneline "${ENV_GIT_SQL_FOLDER}" | grep -m1 "^${ENV_GIT_SQL_FOLDER}" || true; fi)"
     ## used AWS EFS
@@ -896,7 +916,7 @@ main() {
         if [[ "${project_docker}" -eq 1 ]]; then
             flyway_use_helm
         else
-            flyway_use_local
+            flyway_use_local2
         fi
     fi
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
