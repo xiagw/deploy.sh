@@ -1,28 +1,30 @@
-FROM php:7.3-fpm as build-env
+FROM php:${LARADOCK_PHP_VERSION}-fpm as BUILDENV
+
+# ARG LARADOCK_PHP_VERSION
+# ARG BASE_IMAGE_TAG_PREFIX=latest
+# FROM laradock/php-fpm:${BASE_IMAGE_TAG_PREFIX}-${LARADOCK_PHP_VERSION}
+
+
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
-    && sed -i \
-    -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
-    -e 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
+    # && sed -i -e 's/deb.debian.org/mirrors.aliyun.com/g' \
+    # -e 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
     && apt-get update \
     # && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
     apt-utils bash curl zip unzip \
     libssl-dev libnghttp2-dev libpcre3-dev libjpeg-dev libpng-dev \
     libfreetype6-dev libpq-dev libmcrypt-dev libmemcached-dev \
-    jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick \
+    jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick libgmp-dev \
     ## next lines are here becase there is no auto build on dockerhub see https://github.com/laradock/laradock/pull/1903#issuecomment-463142846
     libzip-dev zlib1g-dev libicu-dev g++
-COPY ./redis-5.3.3.tgz /tmp/
-COPY ./swoole-4.6.2.tgz /tmp/
-# RUN pecl channel-update pecl.php.net \
-RUN pecl install /tmp/redis-5.3.3.tgz \
-    # && pecl install redis \
+RUN pecl channel-update pecl.php.net \
+    && pecl install redis \
     && docker-php-ext-enable redis \
     && php -m |grep 'redis'
-RUN pecl install /tmp/swoole-4.6.2.tgz \
+RUN pecl install swoole \
     && docker-php-ext-enable swoole \
     && php -m |grep 'swoole'
 ## Install the zip extension
@@ -43,11 +45,14 @@ RUN docker-php-ext-configure intl \
 ## Install the PHP gd library
 ## php 7.3.26
 RUN docker-php-ext-configure gd --with-jpeg-dir=/usr/lib --with-freetype-dir=/usr/include/freetype2 \
-## php 7.4.14
-# RUN docker-php-ext-configure gd --with-jpeg=/usr/lib --with-freetype=/usr/include/freetype2 \
+    ## php 7.4.14
+    # RUN docker-php-ext-configure gd --with-jpeg=/usr/lib --with-freetype=/usr/include/freetype2 \
     && docker-php-ext-install gd \
     && docker-php-ext-enable gd \
     && php -m | grep 'gd'
+RUN docker-php-ext-install gmp \
+    && docker-php-ext-enable gmp \
+    && php -m | grep 'gmp'
 RUN docker-php-ext-install bcmath sockets sysvmsg sysvsem sysvshm \
     && docker-php-ext-enable bcmath sockets sysvmsg sysvsem sysvshm
 RUN docker-php-ext-install opcache \
@@ -80,18 +85,20 @@ RUN usermod -u 1000 www-data \
 #############################################################
 FROM php:7.3-fpm
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
-USER root
-COPY --from=build-env /usr/local/lib/php/extensions/no-debug-non-zts-20180731 /usr/local/lib/php/extensions/no-debug-non-zts-20180731/
-COPY --from=build-env /usr/local/etc/php-fpm.conf /usr/local/etc/
-COPY --from=build-env /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
-COPY --from=build-env /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
-COPY --from=build-env /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
-    && sed -i \
-    -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
-    -e 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
+    && curl -sS https://getcomposer.org/installer | php \
+    && mv composer.phar /usr/local/bin/composer \
+    && chmod +x /usr/local/bin/composer \
+    && composer self-update --clean-backups \
+    # && composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/ \
+    && mkdir -p /var/www/.composer /.composer \
+    && chown 1000:1000 /var/www/.composer /.composer
+RUN set -x \
+    # && sed -i \
+    # -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
+    # -e 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
     && pecl channel-update pecl.php.net \
     && apt-get update \
     # && apt-get upgrade -y \
@@ -102,21 +109,30 @@ RUN set -x \
     ## next lines are here becase there is no auto build on dockerhub see https://github.com/laradock/laradock/pull/1903#issuecomment-463142846
     libzip-dev zlib1g-dev libicu-dev g++ \
     ## for image magick ext
-    jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick \
+    jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick libgmp-dev\
     ## enable extention
-    && docker-php-ext-enable bcmath gd zip opcache pdo_mysql sockets sysvmsg sysvsem sysvshm redis swoole imagick \
+    && docker-php-ext-enable bcmath gmp gd zip opcache pdo_mysql sockets sysvmsg sysvsem sysvshm redis swoole imagick \
     && usermod -u 1000 www-data \
     # Clear dev deps
     && apt-get clean \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/lastlog /var/log/faillog \
-    ## used localtime
-    && /bin/cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
-    && echo 'Asia/Shanghai' >/etc/timezone
-    
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/lastlog /var/log/faillog
+
+#####################################
+# Set Timezone
+#####################################
+ARG TZ=UTC
+ENV TZ ${TZ}
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+USER root
+COPY --from=BUILDENV /usr/local/lib/php/extensions/no-debug-non-zts-20180731 /usr/local/lib/php/extensions/no-debug-non-zts-20180731/
+COPY --from=BUILDENV /usr/local/etc/php-fpm.conf /usr/local/etc/
+COPY --from=BUILDENV /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
+COPY --from=BUILDENV /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
+COPY --from=BUILDENV /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+
 COPY ./startup.sh /
-RUN set -x \
-    && chmod +x /startup.sh
+RUN chmod +x /startup.sh
 
 WORKDIR /var/www
 
