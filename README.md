@@ -24,27 +24,26 @@ deploy.sh is a CI/CD program for GitLab Server.
 * send message of deploy result with work-weixin, Telegram, Element(Matrix)
 
 # Installing
-`git clone https://github.com/xiagw/deploy.sh.git $HOME/gitlab-runner`
+`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
 
 # Quick Start
-1. Prepare a server
-1. Install gitlab-runner, register to gitlab-server, and start gitlab-runner
-
+1. Prepare a gitlab-server and gitlab-runner-server
+1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
 1. cd $HOME
-1. git clone https://github.com/xiagw/deploy.sh.git 1. gitlab-runner
-1. cd gitlab-runner
-1. cp deploy.conf .deploy.conf  ## change to your 1. configuration
-1. cp deploy.env .deploy.env  ## change to your 1. configuration
+1. git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
+1. cd $HOME/runner
+1. cp deploy.conf .deploy.conf      ## change to yours
+1. cp deploy.env .deploy.env        ## change to yours
 1. Refer to .gitlab-ci.yaml of this project, setup yours
 
 
 # Actual case
-1. There is already a server gitlab (if not, you can refer to [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
+1. There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
 1. There is already a server that has installed gitlab-runner, (executer is shell)
 1. The ssh key file has been prepared, and you can log in to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/ directory)
-1. Log in to the gitlab-runner server and execute
+1. Login to the gitlab-runner server and execute
 ```shell
-git clone https://github.com/xiagw/deploy.sh.git $HOME/gitlab-runner
+git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 1. Refer to the deploy.conf/deploy.env, modify the file
 ```shell
@@ -52,12 +51,12 @@ cd gitlab-runner
 cp deploy.conf .deploy.conf
 cp deploy.env .deploy.env
 ```
-1. For example: created projectA under the root account (root/projectA)
-1. Create .gitlab-ci.yml (refer to ME)
+1. For example: created projectA under the root account on gitlab-server (root/projectA)
+1. Create .gitlab-ci.yml
 1. Submit and push
 1. Enjoy CI/CD
 
-# 以下显示图片需要 mermain 支持
+# The following pictures need "mermain" support
 ![](readme.png)
 
 ```mermaid
