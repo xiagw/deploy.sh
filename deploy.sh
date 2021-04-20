@@ -118,74 +118,12 @@ vulmap_scan() {
 
 ## install jdk/ant/jmeter
 function_test() {
-    echo_warn "function test"
+    echo_time_step "function test"
     command -v jmeter >/dev/null || echo_err "command not exists: jmeter"
     # jmeter -load
 }
 
 flyway_use_local() {
-    [[ "${enableSonar:-0}" -eq 1 ]] && return 0
-    [[ "${disableFlyway:-0}" -eq 1 ]] && return 0
-    command -v java >/dev/null || sudo apt install openjdk-14-jdk
-
-    read_deploy_config
-
-    # findNewSql="$(if [ -d docs/sql ]; then git --no-pager log --name-only --no-merges --oneline 'docs/sql/V*.sql' | grep -m1 '^docs/sql/V' | uniq | head -n 1 || true; fi)"
-    if [ -d "${script_dir}/flyway" ]; then
-        flywayHome="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
-    else
-        flywayHome="${ENV_FLYWAY_PATH:-/usr/local/flyway}"
-    fi
-    flywayDB="${db_name//-/_}"
-    flywayConfPath="$flywayHome/conf/${CI_COMMIT_REF_NAME}.$flywayDB"
-    flywaySqlPath="$flywayHome/sql/${CI_COMMIT_REF_NAME}.$flywayDB"
-    baseSQL='V0__Base_structure.sql'
-
-    if $git_diff | grep -qv "docs/sql.*\.sql$"; then
-        echo_warn "found other file, enable deploy file."
-    else
-        echo_warn "skip deploy file."
-        project_lang=0
-        project_docker=0
-        exec_deploy_rsync=0
-    fi
-
-    echo_time_step "flyway migrate..."
-
-    ## flyway.conf change database name to current project name.
-    if [ ! -f "$flywayConfPath/flyway.conf" ]; then
-        echo_err "not found $flywayConfPath/flyway.conf."
-        return 1
-    fi
-    ## did you run 'flyway baseline'?
-    if [[ -f "$flywaySqlPath/$baseSQL" ]]; then
-        if [[ -d "${CI_PROJECT_DIR}/docs/sql/" ]]; then
-            rsync -rltv --delete --exclude="$baseSQL" "${CI_PROJECT_DIR}/docs/sql/" "$flywaySqlPath/"
-        fi
-        setBaseline=false
-    else
-        mkdir -p "$flywaySqlPath"
-        touch "$flywaySqlPath/$baseSQL"
-        setBaseline=true
-        echo_err "run first，only 'flyway baseline', please re-run this gitlab job."
-        deploy_result=1
-    fi
-
-    ## exec flyway
-    if [[ "$setBaseline" == 'true' ]]; then
-        flyway -configFiles="$flywayConfPath"/flyway.conf baseline
-    else
-        if flyway -configFiles="$flywayConfPath"/flyway.conf info | grep -i pending; then
-            flyway -configFiles="$flywayConfPath"/flyway.conf repair
-            flyway -configFiles="$flywayConfPath"/flyway.conf migrate && deploy_result=1
-            flyway -configFiles="$flywayConfPath"/flyway.conf info
-        fi
-    fi
-
-    echo_time "end flyway migrate"
-}
-
-flyway_use_local2() {
     [[ "${enableSonar:-0}" -eq 1 ]] && return 0
     [[ "${disableFlyway:-0}" -eq 1 ]] && return 0
 
@@ -198,7 +136,7 @@ flyway_use_local2() {
     ## exec flyway
     if docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info | grep -i pending; then
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway repair
-        docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway migrate && deploy_result=1
+        docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info
     fi
 
@@ -918,7 +856,7 @@ main() {
         if [[ "${project_docker}" -eq 1 ]]; then
             flyway_use_helm
         else
-            flyway_use_local2
+            flyway_use_local
         fi
     fi
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
