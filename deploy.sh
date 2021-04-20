@@ -913,6 +913,7 @@ main() {
     [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && project_docker=0
 
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
+    [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
         if [[ "${project_docker}" -eq 1 ]]; then
             flyway_use_helm
