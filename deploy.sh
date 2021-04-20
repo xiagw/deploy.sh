@@ -287,7 +287,7 @@ flyway_use_helm() {
 
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
-    config_env_path="src/config/${CI_COMMIT_REF_NAME}.env.js src/api/${CI_COMMIT_REF_NAME}.config.js"
+    config_env_path="config/${CI_COMMIT_REF_NAME}.env.js src/config/${CI_COMMIT_REF_NAME}.env.js src/api/${CI_COMMIT_REF_NAME}.config.js"
     for file in $config_env_path; do
         if [ -f "${CI_PROJECT_DIR}/$file" ]; then
             cp -vf "${CI_PROJECT_DIR}/$file" "${file/${CI_COMMIT_REF_NAME}./}"
@@ -295,7 +295,7 @@ node_build_volume() {
     done
 
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
-    if ! docker images | grep 'deploy/node'; then
+    if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dir/dockerfile/Dockerfile.node" "$script_dir/dockerfile" >/dev/null
     fi
     if [[ -f "$script_dir/bin/custome.docker.build.sh" ]]; then
