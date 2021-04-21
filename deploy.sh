@@ -78,7 +78,7 @@ code_format_check() {
 
 ## install phpunit
 unit_test() {
-    echo_time_step "[TODO] unit test."
+    echo_time_step "unit test."
 }
 
 ## install sonar-scanner to system user: "gitlab-runner"
@@ -119,7 +119,7 @@ vulmap_scan() {
 ## install jdk/ant/jmeter
 function_test() {
     echo_time_step "function test"
-    command -v jmeter >/dev/null || echo_err "command not exists: jmeter"
+    command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
     # jmeter -load
 }
 
@@ -256,7 +256,7 @@ node_docker_push() {
 
 php_composer_volume() {
     echo_time_step "php composer install..."
-    if ! docker images | grep 'deploy/composer'; then
+    if ! docker images | grep 'deploy/composer' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" -f "$script_dir/dockerfile/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
     if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
@@ -513,15 +513,15 @@ deploy_rsync() {
 }
 
 get_msg_deploy() {
-    mr_iid="$(gitlab project-merge-request list --project-id "$CI_PROJECT_ID" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
+    # mr_iid="$(gitlab project-merge-request list --project-id "$CI_PROJECT_ID" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
     ## sudo -H python3 -m pip install PyYaml
-    [ -z "$msg_describe" ] && msg_describe="$(gitlab -v project-merge-request get --project-id "$CI_PROJECT_ID" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')"
+    # [ -z "$msg_describe" ] && msg_describe="$(gitlab -v project-merge-request get --project-id "$CI_PROJECT_ID" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')"
     [ -z "$msg_describe" ] && msg_describe="$(git --no-pager log --no-merges --oneline -1)"
     git_username="$(gitlab -v user get --id "${GITLAB_USER_ID}" | awk '/^name:/ {print $2}')"
 
     msg_body="[Gitlab Deploy]
 Project = ${CI_PROJECT_PATH}/${CI_COMMIT_REF_NAME}
-Pipeline = ${CI_PIPELINE_ID}/Job_ID-$CI_JOB_ID
+Pipeline = ${CI_PIPELINE_ID}/Job-id-$CI_JOB_ID
 Description = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}/${GITLAB_USER_ID}-${git_username}
 Deploy_Result = $([ 0 = "${deploy_result:-0}" ] && echo SUCCESS || echo FAILURE)
 "
