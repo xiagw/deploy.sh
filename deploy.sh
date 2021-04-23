@@ -225,11 +225,10 @@ flyway_use_helm() {
 
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
-    config_env_path="config/${CI_COMMIT_REF_NAME}.env.js src/config/${CI_COMMIT_REF_NAME}.env.js src/api/${CI_COMMIT_REF_NAME}.config.js"
+    config_env_path="$(find config -name "${CI_COMMIT_REF_NAME}.*")"
+
     for file in $config_env_path; do
-        if [ -f "${CI_PROJECT_DIR}/$file" ]; then
-            cp -vf "${CI_PROJECT_DIR}/$file" "${file/${CI_COMMIT_REF_NAME}./}"
-        fi
+        \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
     done
 
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
@@ -522,8 +521,9 @@ get_msg_deploy() {
     msg_body="[Gitlab Deploy]
 Project = ${CI_PROJECT_PATH}/${CI_COMMIT_REF_NAME}
 Pipeline = ${CI_PIPELINE_ID}/Job-id-$CI_JOB_ID
-Description = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}/${GITLAB_USER_ID}-${git_username}
-Deploy_Result = $([ 0 = "${deploy_result:-0}" ] && echo SUCCESS || echo FAILURE)
+Describe = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}
+Username = ${GITLAB_USER_ID}-${git_username}
+Result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)
 "
 }
 
