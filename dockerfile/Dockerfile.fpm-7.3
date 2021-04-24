@@ -1,9 +1,4 @@
-FROM php:${LARADOCK_PHP_VERSION}-fpm as BUILDENV
-
-# ARG LARADOCK_PHP_VERSION
-# ARG BASE_IMAGE_TAG_PREFIX=latest
-# FROM laradock/php-fpm:${BASE_IMAGE_TAG_PREFIX}-${LARADOCK_PHP_VERSION}
-
+FROM php:7.3-fpm as BUILDENV
 
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
 
@@ -84,7 +79,21 @@ RUN usermod -u 1000 www-data \
 
 #############################################################
 FROM php:7.3-fpm
+
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
+
+USER root
+#####################################
+# Set Timezone
+#####################################
+ARG TZ=UTC
+ENV TZ ${TZ}
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+COPY --from=BUILDENV /usr/local/lib/php/extensions/no-debug-non-zts-20180731 /usr/local/lib/php/extensions/no-debug-non-zts-20180731/
+COPY --from=BUILDENV /usr/local/etc/php-fpm.conf /usr/local/etc/
+COPY --from=BUILDENV /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
+COPY --from=BUILDENV /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
+COPY --from=BUILDENV /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
@@ -117,19 +126,6 @@ RUN set -x \
     && apt-get clean \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/lastlog /var/log/faillog
-
-#####################################
-# Set Timezone
-#####################################
-ARG TZ=UTC
-ENV TZ ${TZ}
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-USER root
-COPY --from=BUILDENV /usr/local/lib/php/extensions/no-debug-non-zts-20180731 /usr/local/lib/php/extensions/no-debug-non-zts-20180731/
-COPY --from=BUILDENV /usr/local/etc/php-fpm.conf /usr/local/etc/
-COPY --from=BUILDENV /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
-COPY --from=BUILDENV /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
-COPY --from=BUILDENV /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 
 COPY ./startup.sh /
 RUN chmod +x /startup.sh

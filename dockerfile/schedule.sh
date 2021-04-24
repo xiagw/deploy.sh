@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090,SC1091
 
-## program type
-if [ -f artisan ]; then
-    prog_type=laraval
-    prog_file=artisan
-elif [ -f think ]; then
-    prog_type=ThinkPHP
-    prog_file=think
-fi
-
 # echo "SwooleTask start" >task.swoole.1
 # echo "RefundCheck" >task.cron.1
 # echo "PushTask" >task.cron.2
@@ -20,28 +11,35 @@ fi
 # echo "base:socket start --d" >task.cron.7
 # echo "queue:work --queue=sms" >task.cron.8
 
-task_swoole() {
-    for i in task.swoole.*; do
-        echo "[$prog_type] starting $i..."
-        php "${prog_file}" $(cat "$i") &
-    done
-}
-
-task_cron() {
-    while true; do
-        for j in task.cron.*; do
-            echo "[$prog_type] starting $j..."
-            php "${prog_file}" $(cat "$j") &
-        done
-        sleep 60
-    done
-}
-
 main() {
-    for f in /var/www/*/"${prog_file}"; do
-        cd "${f%/*}" || exit 1
-        task_swoole &
-        task_cron &
+    for d in /var/www/*; do
+        if [ -d "$d" ]; then
+            cd "${d}" || exit 1
+            ## program type
+            if [ -f artisan ]; then
+                prog_type=laraval
+                prog_file=artisan
+            elif [ -f think ]; then
+                prog_type=ThinkPHP
+                prog_file=think
+            else
+                continue
+            fi
+            for i in task.*; do
+                if [ -f "$i" ]; then
+                    echo "[$prog_type] starting $i..."
+                    if [[ "$i" =~ task.swoole.* ]]; then
+                        php "${prog_file}" $(cat "$i") &
+                    elif [[ "$i" =~ task.cron.* ]]; then
+                        while true; do
+                            php "${prog_file}" $(cat "$i") &
+                            sleep 60
+                        done &
+                    fi
+                fi
+            done
+
+        fi
     done
 }
 
