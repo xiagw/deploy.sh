@@ -2,11 +2,11 @@
 # shellcheck disable=SC1090,SC1091
 
 # echo "SwooleTask start" >task.swoole.1
-# echo "RefundCheck" >task.cron.1
-# echo "PushTask" >task.cron.2
-# echo "OrderCheck" >task.cron.3
-# echo "Fix" >task.cron.4
-# echo "TsOrderCheck" >task.cron.5
+# echo "RefundCheck" >task.cron.RefundCheck
+# echo "PushTask" >task.cron.PushTask
+# echo "OrderCheck" >task.cron.OrderCheck
+# echo "Fix" >task.cron.Fix
+# echo "TsOrderCheck" >task.cron.TsOrderCheck
 # echo "schedule:run" >task.cron.6
 # echo "base:socket start --d" >task.cron.7
 # echo "queue:work --queue=sms" >task.cron.8

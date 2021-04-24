@@ -2,10 +2,12 @@ FROM php:7.3-fpm as BUILDENV
 
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
 
+ARG CHANGE_SOURCE=false
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
-    # && sed -i -e 's/deb.debian.org/mirrors.aliyun.com/g' \
-    # -e 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
+    && if [ ${CHANGE_SOURCE} = true ]; then \
+    sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
+    ;fi \
     && apt-get update \
     # && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
@@ -95,8 +97,12 @@ COPY --from=BUILDENV /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
 COPY --from=BUILDENV /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
 COPY --from=BUILDENV /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 
+ARG CHANGE_SOURCE=false
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
+    && if [ "${CHANGE_SOURCE}" = true ]; then \
+    sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
+    ;fi \
     && curl -sS https://getcomposer.org/installer | php \
     && mv composer.phar /usr/local/bin/composer \
     && chmod +x /usr/local/bin/composer \
