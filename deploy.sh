@@ -447,6 +447,10 @@ deploy_k8s_generic() {
 deploy_rsync() {
     echo_time_step "rsync code file to remote server."
     ## 读取配置文件，获取 项目/分支名/war包目录
+    grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" || {
+        echo_err "if stop here, check PMS/.deploy.conf"
+        return 1
+    }
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
         # for line in $(grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf"); do
         # shellcheck disable=2116
@@ -460,7 +464,7 @@ deploy_rsync() {
         db_name=${array[8]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
-            echo "if error here, check file: ${script_conf}"
+            echo "if stop here, check PMS/.deploy.conf"
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
