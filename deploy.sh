@@ -447,7 +447,7 @@ deploy_rsync() {
     echo_time_step "rsync code file to remote server."
     ## 读取配置文件，获取 项目/分支名/war包目录
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
-        # for line in grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf"; do
+        # for line in $(grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf"); do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
         ssh_host=${array[2]}
@@ -494,7 +494,7 @@ deploy_rsync() {
         fi
         ## 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ '^oss://' ]]; then
-            command -v aliyun >/dev/null || echo_err "command not exist: aliyun"
+            command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
             # bucktName="${rsync_dest#oss://}"
             # bucktName="${bucktName%%/*}"
             aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$rsync_dest/"

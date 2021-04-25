@@ -10,7 +10,10 @@
 .gitattributes
 Dockerfile
 
-deploy.env
-deploy.conf
+.deploy.env
+.deploy.conf
 
 *.log
+
+docs/
+doc/
