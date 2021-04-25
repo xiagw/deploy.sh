@@ -446,8 +446,8 @@ deploy_k8s_generic() {
 deploy_rsync() {
     echo_time_step "rsync code file to remote server."
     ## 读取配置文件，获取 项目/分支名/war包目录
-    # grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
-    for line in grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf"; do
+    grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
+        # for line in grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf"; do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
         ssh_host=${array[2]}
