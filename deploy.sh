@@ -916,6 +916,10 @@ main() {
         ;;
     esac
 
+    if [[ -f "${CI_PROJECT_DIR}/apidoc.json" ]]; then
+        $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
+    fi
+
     [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
     if [[ "${exec_deploy_rsync:-1}" -eq 1 ]]; then
         deploy_rsync

@@ -2,6 +2,7 @@
 # shellcheck disable=SC1090,SC1091
 
 # echo "SwooleTask start" >task.swoole.1
+
 # echo "RefundCheck" >task.cron.RefundCheck
 # echo "PushTask" >task.cron.PushTask
 # echo "OrderCheck" >task.cron.OrderCheck
@@ -13,33 +14,35 @@
 
 main() {
     for d in /var/www/*; do
-        if [ -d "$d" ]; then
-            cd "${d}" || exit 1
-            ## program type
-            if [ -f artisan ]; then
-                prog_type=laraval
-                prog_file=artisan
-            elif [ -f think ]; then
-                prog_type=ThinkPHP
-                prog_file=think
-            else
+        if [ ! -d "$d" ]; then
+            continue
+        fi
+        cd "${d}" || exit 1
+        ## program type
+        if [ -f artisan ]; then
+            prog_type=laraval
+            prog_file=artisan
+        elif [ -f think ]; then
+            prog_type=ThinkPHP
+            prog_file=think
+        else
+            continue
+        fi
+        for i in task.*; do
+            if [ ! -f "$i" ]; then
                 continue
             fi
-            for i in task.*; do
-                if [ -f "$i" ]; then
-                    echo "[$prog_type] starting $i..."
-                    if [[ "$i" =~ task.swoole.* ]]; then
-                        php "${prog_file}" $(cat "$i") &
-                    elif [[ "$i" =~ task.cron.* ]]; then
-                        while true; do
-                            php "${prog_file}" $(cat "$i") &
-                            sleep 60
-                        done &
-                    fi
-                fi
-            done
+            echo "[$prog_type] starting $i..."
+            if [[ "$i" =~ task.swoole.* ]]; then
+                php "${prog_file}" $(cat "$i") &
+            elif [[ "$i" =~ task.cron.* ]]; then
+                while true; do
+                    php "${prog_file}" $(cat "$i") &
+                    sleep 60
+                done &
+            fi
+        done
 
-        fi
     done
 }
 
