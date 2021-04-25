@@ -225,11 +225,12 @@ flyway_use_helm() {
 
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
-    config_env_path="$(find config -name "${CI_COMMIT_REF_NAME}.*")"
-
-    for file in $config_env_path; do
-        \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
-    done
+    if [ -d "${CI_PROJECT_DIR}/config" ]; then
+        config_env_path="$(find "${CI_PROJECT_DIR}/config" -name "${CI_COMMIT_REF_NAME}.*")"
+        for file in $config_env_path; do
+            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
+        done
+    fi
 
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node' >/dev/null; then
