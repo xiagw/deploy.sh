@@ -17,3 +17,5 @@ Dockerfile
 
 docs/
 doc/
+
+*.js.map
