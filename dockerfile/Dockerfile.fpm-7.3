@@ -78,6 +78,7 @@ RUN usermod -u 1000 www-data \
     -e '/^memory_limit/s/128/256/' \
     -e '/^post_max_size/s/8/32/' /usr/local/etc/php/php.ini-production \
     && grep -E 'disable_functions|expose_php|^track_errors|upload_max_filesize|max_file_uploads|memory_limit|post_max_size' /usr/local/etc/php/php.ini-production
+RUN docker-php-ext-install pcntl
 
 #############################################################
 FROM php:7.3-fpm
@@ -85,18 +86,6 @@ FROM php:7.3-fpm
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
 
 USER root
-#####################################
-# Set Timezone
-#####################################
-ARG TZ=UTC
-ENV TZ ${TZ}
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-COPY --from=BUILDENV /usr/local/lib/php/extensions/no-debug-non-zts-20180731 /usr/local/lib/php/extensions/no-debug-non-zts-20180731/
-COPY --from=BUILDENV /usr/local/etc/php-fpm.conf /usr/local/etc/
-COPY --from=BUILDENV /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
-COPY --from=BUILDENV /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
-COPY --from=BUILDENV /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
-
 ARG CHANGE_SOURCE=false
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
@@ -110,6 +99,18 @@ RUN set -x \
     # && composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/ \
     && mkdir -p /var/www/.composer /.composer \
     && chown 1000:1000 /var/www/.composer /.composer
+#####################################
+# Set Timezone
+#####################################
+ARG TZ=UTC
+ENV TZ ${TZ}
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+COPY --from=BUILDENV /usr/local/lib/php/extensions/no-debug-non-zts-20180731 /usr/local/lib/php/extensions/no-debug-non-zts-20180731/
+COPY --from=BUILDENV /usr/local/etc/php-fpm.conf /usr/local/etc/
+COPY --from=BUILDENV /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
+COPY --from=BUILDENV /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
+COPY --from=BUILDENV /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+
 RUN set -x \
     # && sed -i \
     # -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
@@ -126,7 +127,7 @@ RUN set -x \
     ## for image magick ext
     jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick libgmp-dev\
     ## enable extention
-    && docker-php-ext-enable bcmath gmp gd zip opcache pdo_mysql sockets sysvmsg sysvsem sysvshm redis swoole imagick \
+    && docker-php-ext-enable bcmath gmp gd zip opcache pdo_mysql sockets sysvmsg sysvsem sysvshm redis swoole imagick pcntl \
     && usermod -u 1000 www-data \
     # Clear dev deps
     && apt-get clean \
