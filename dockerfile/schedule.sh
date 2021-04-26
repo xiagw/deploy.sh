@@ -42,7 +42,12 @@ main() {
                 done &
             fi
         done
-
+        if [[ -f cron.php ]]; then
+            while true; do
+                php cron.php &
+                sleep 60
+            done &
+        fi
     done
 }
 
