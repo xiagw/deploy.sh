@@ -849,8 +849,10 @@ main() {
     [[ -f "${CI_PROJECT_DIR}/pom.xml" ]] && project_lang='java'
     [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && project_lang='python'
     [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]] && project_docker=1
+    echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && project_docker=0
-
+    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
+    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
     [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
@@ -868,10 +870,12 @@ main() {
         return $?
     fi
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
+    echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-1}"
     if [[ "${PIPELINE_UNIT_TEST:-1}" -eq 1 ]]; then
         unit_test
     fi
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
+    echo "PIPELINE_CODE_FORMAT: ${PIPELINE_CODE_FORMAT:-0}"
     if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-0}" ]]; then
         code_format_check
     fi
@@ -927,6 +931,7 @@ main() {
     fi
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
+    echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
     if [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 1 ]]; then
         function_test
     fi
