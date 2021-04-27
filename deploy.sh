@@ -234,7 +234,7 @@ node_build_volume() {
     if [[ -f "${CI_PROJECT_DIR}/${CI_COMMIT_REF_NAME}.env" ]]; then
         config_env_path="$(find "${CI_PROJECT_DIR}" -name "${CI_COMMIT_REF_NAME}.*")"
         for file in $config_env_path; do
-            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
+            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
         done
     fi
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
