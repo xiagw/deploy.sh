@@ -225,18 +225,13 @@ flyway_use_helm() {
 
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
+    config_env_path1="$(find "${CI_PROJECT_DIR}" -name "${CI_COMMIT_REF_NAME}.*")"
     if [[ -d "${CI_PROJECT_DIR}/config" ]]; then
-        config_env_path="$(find "${CI_PROJECT_DIR}/config" -name "${CI_COMMIT_REF_NAME}.*")"
-        for file in $config_env_path; do
-            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
-        done
+        config_env_path="${config_env_path1}$(find "${CI_PROJECT_DIR}/config" -name "${CI_COMMIT_REF_NAME}.*")"
     fi
-    if [[ -f "${CI_PROJECT_DIR}/${CI_COMMIT_REF_NAME}.env" ]]; then
-        config_env_path="$(find "${CI_PROJECT_DIR}" -name "${CI_COMMIT_REF_NAME}.*")"
-        for file in $config_env_path; do
-            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
-        done
-    fi
+    for file in $config_env_path; do
+        \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
+    done
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dir/dockerfile/Dockerfile.node" "$script_dir/dockerfile" >/dev/null
