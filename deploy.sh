@@ -227,7 +227,7 @@ flyway_use_helm() {
 node_build_volume() {
     config_env_path1="$(find "${CI_PROJECT_DIR}" -name "${CI_COMMIT_REF_NAME}.*")"
     if [[ -d "${CI_PROJECT_DIR}/config" ]]; then
-        config_env_path="${config_env_path1}$(find "${CI_PROJECT_DIR}/config" -name "${CI_COMMIT_REF_NAME}.*")"
+        config_env_path="${config_env_path1} $(find "${CI_PROJECT_DIR}/config" -name "${CI_COMMIT_REF_NAME}.*")"
     fi
     for file in $config_env_path; do
         \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
@@ -246,7 +246,7 @@ node_build_volume() {
 node_docker_build() {
     echo_time_step "node docker build."
     \cp -f "$script_dir/node/Dockerfile" "${CI_PROJECT_DIR}/Dockerfile"
-    DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" -t "${docker_tag}"
+    DOCKER_BUILDKIT=1 docker build -t "${docker_tag}" "${CI_PROJECT_DIR}"
 }
 
 node_docker_push() {
@@ -256,6 +256,8 @@ node_docker_push() {
 
 php_composer_volume() {
     echo_time_step "php composer install..."
+    echo "PIPELINE_COMPOSER_UPDATE: ${PIPELINE_COMPOSER_UPDATE:-0}"
+    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
     if ! docker images | grep 'deploy/composer' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" -f "$script_dir/dockerfile/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
@@ -449,7 +451,7 @@ deploy_rsync() {
     echo_time_step "rsync code file to remote server."
     ## 读取配置文件，获取 项目/分支名/war包目录
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" || {
-        echo_err "if stop here, check PMS/.deploy.conf"
+        echo_err "if stop here, check .deploy.conf"
         return 1
     }
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
@@ -465,7 +467,7 @@ deploy_rsync() {
         db_name=${array[8]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
-            echo "if stop here, check PMS/.deploy.conf"
+            echo "if stop here, check .deploy.conf"
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
@@ -529,7 +531,7 @@ get_msg_deploy() {
 Project = ${CI_PROJECT_PATH}/${CI_COMMIT_REF_NAME}
 Pipeline = ${CI_PIPELINE_ID}/Job-id-$CI_JOB_ID
 Describe = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}
-Whoami = ${GITLAB_USER_ID}-${git_username}
+Who = ${GITLAB_USER_ID}-${git_username}
 Result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)
 "
 }
@@ -571,9 +573,9 @@ send_msg_chatapp() {
 update_cert() {
     echo_time_step "update ssl cert (dns api)."
     acme_home="${HOME}/.acme.sh"
-    cmd1="${acme_home}/acme.sh"
+    cmd_run="${acme_home}/acme.sh"
     ## install acme.sh
-    if [[ ! -x "${cmd1}" ]]; then
+    if [[ ! -x "${cmd_run}" ]]; then
         curl https://get.acme.sh | sh
     fi
     cert_dir="${acme_home}/dest"
@@ -601,24 +603,13 @@ update_cert() {
 
         for d in ${domain_name}; do
             if [ -d "${acme_home}/$d" ]; then
-                "${cmd1}" --renew -d "${d}" || true
+                "${cmd_run}" --renew -d "${d}" || true
             else
-                "${cmd1}" --issue --dns $dnsType -d "$d" -d "*.$d"
+                "${cmd_run}" --issue --dns $dnsType -d "$d" -d "*.$d"
             fi
-            "${cmd1}" --install-cert -d "$d" --key-file "$cert_dir/$d".key.pem \
+            "${cmd_run}" --install-cert -d "$d" --key-file "$cert_dir/$d".key.pem \
                 --fullchain-file "$cert_dir/$d".cert.pem
         done
-    done
-
-    rsync -av "$cert_dir/" "$HOME/efs/data/nginx-conf/ssl/"
-    rsync -av "$cert_dir/" "$HOME/efs/data/nginx-conf2/ssl/"
-    ## bitnami/nginx user 1001
-    sudo chown 1001 "$HOME"/efs/data/nginx-conf/ssl/*.key.pem
-    sudo chown 1001 "$HOME"/efs/data/nginx-conf2/ssl/*.key.pem
-
-    for i in ${ENV_NGINX_IPS:?empty}; do
-        echo "$i"
-        rsync -a "$cert_dir/" "root@$i":/etc/nginx/conf.d/ssl/
     done
 }
 
