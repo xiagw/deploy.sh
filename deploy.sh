@@ -226,12 +226,12 @@ flyway_use_helm() {
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
     echo_time_step "node yarn build."
-    config_env_path="$(find "${CI_PROJECT_DIR}" -name "${CI_COMMIT_REF_NAME}.*")"
+    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name "${CI_COMMIT_REF_NAME}.*")"
     for file in $config_env_path; do
         \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
     done
     if [[ -d "${CI_PROJECT_DIR}/config" ]]; then
-        config_env_path="$(find "${CI_PROJECT_DIR}/config" -name "${CI_COMMIT_REF_NAME}.*")"
+        config_env_path="$(find "${CI_PROJECT_DIR}/config" -maxdepth 1 -name "${CI_COMMIT_REF_NAME}.*")"
         for file in $config_env_path; do
             \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
         done
