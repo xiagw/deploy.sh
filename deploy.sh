@@ -236,6 +236,7 @@ node_build_volume() {
             \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
         done
     fi
+    rm -f package-lock.json
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dir/dockerfile/Dockerfile.node" "$script_dir/dockerfile" >/dev/null
