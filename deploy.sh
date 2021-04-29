@@ -130,7 +130,13 @@ flyway_use_local() {
     echo_time_step "flyway migrate..."
 
     flywayHome="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
-    flywayConfPath="$flywayHome/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
+
+    if [ "${ENV_FLYWAY_USER_ROOT}" = 'true' ]; then
+        flywayConfPath="$flywayHome/conf:/flyway/conf"
+    else
+        flywayConfPath="$flywayHome/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
+    fi
+
     flywaySqlPath="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
 
     ## exec flyway
