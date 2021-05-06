@@ -144,6 +144,8 @@ flyway_use_local() {
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway repair
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info
+    else
+        echo "Nothing to do."
     fi
 
     echo_time "end flyway migrate"
