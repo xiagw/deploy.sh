@@ -1,5 +1,7 @@
 # deploy.sh for GitLab CI/CD：
 
+# 中文 [README_zh.md](README_zh.md)
+
 deploy.sh is a CI/CD program for GitLab Server.
 # Description
 * support aliyun,qcloud,AWS
