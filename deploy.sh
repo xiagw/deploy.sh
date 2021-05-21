@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# set -x #debug mode = true # set +x #debug mode = false
-set -e ## 出现错误自动退出
-# set -u ## 变量未定义报错
 ################################################################################
 #
 # Description: Gitlab deploy, rsync file, import sql, deploy k8s
@@ -11,6 +8,9 @@ set -e ## 出现错误自动退出
 # Date: 2019-04-03
 #
 ################################################################################
+
+set -e ## 出现错误自动退出
+# set -u ## 变量未定义报错
 
 # install gitlab-runner, https://docs.gitlab.com/runner/install/linux-manually.html
 # http://www.ttlsa.com/auto/gitlab-cicd-variables-zh-document/
@@ -861,6 +861,8 @@ main() {
     [[ -f "${CI_PROJECT_DIR}/composer.json" ]] && project_lang='php'
     [[ -f "${CI_PROJECT_DIR}/pom.xml" ]] && project_lang='java'
     [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && project_lang='python'
+    grep '^## android' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null && project_lang='android'
+    grep '^## ios' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null && project_lang='ios'
     [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]] && project_docker=1
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && project_docker=0
@@ -925,6 +927,12 @@ main() {
     'react')
         echo_err "manual package"
         return
+        ;;
+    'android')
+        exec_deploy_rsync=0
+        ;;
+    'ios')
+        exec_deploy_rsync=0
         ;;
     *)
         ## 各种Build， npm/composer/mvn/docker
