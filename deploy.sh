@@ -140,7 +140,7 @@ flyway_use_local() {
     flywaySqlPath="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
 
     ## exec flyway
-    if docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info | grep -v -i Success; then
+    if docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info | grep 'Versioned' |grep -v Success; then
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway repair
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info
