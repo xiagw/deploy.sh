@@ -21,7 +21,8 @@ echo_err() { echo -e "\033[31m$*\033[0m"; }     ## red
 echo_ques() { echo -e "\033[35m$*\033[0m"; }    ## brown
 echo_time() { echo "[$(date +%F-%T-%w)], $*"; } ## time
 echo_time_step() {
-    echo -e "[$(date +%F-%T-%w)], \033[33mstep-$((STEP + 1))\033[0m, $*"
+    ## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
+    echo -e "[$(date +%Y%m%d-%T-%u)], \033[33mstep-$((STEP + 1))\033[0m, $*"
     STEP=$((STEP + 1))
 }
 # https://zhuanlan.zhihu.com/p/48048906
@@ -944,6 +945,7 @@ main() {
         ;;
     esac
 
+    ## generate api docs
     gen_apidoc
 
     [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
