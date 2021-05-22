@@ -141,7 +141,7 @@ flyway_use_local() {
     flywaySqlPath="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
 
     ## exec flyway
-    if docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info | grep 'Versioned' |grep -v Success; then
+    if docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info | grep 'Versioned' | grep -v Success; then
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway repair
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
         docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info
@@ -275,14 +275,14 @@ php_composer_volume() {
     if ! docker images | grep 'deploy/composer' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" -f "$script_dir/dockerfile/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
-    if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
-        p=update
+    if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]]; then
+        arg1=update
     fi
     if [[ ! -d vendor || "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]]; then
-        p=install
+        arg1=install
     fi
-    if [[ -n "$p" ]]; then
-        $docker_run -v "$PWD:/app" -w /app deploy/composer composer $p || true
+    if [[ -n "$arg1" ]]; then
+        $docker_run -v "$PWD:/app" -w /app deploy/composer composer $arg1 || true
         # $docker_run -v "$PWD:/app" -w /app deploy/composer composer update || true
     fi
 }
