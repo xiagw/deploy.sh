@@ -125,110 +125,27 @@ function_test() {
 }
 
 flyway_use_local() {
-    [[ "${enableSonar:-0}" -eq 1 ]] && return 0
-    [[ "${disableFlyway:-0}" -eq 1 ]] && return 0
-
     echo_time_step "flyway migrate..."
 
-    flywayHome="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
+    flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
 
     if [ "${ENV_FLYWAY_USER_ROOT}" = 'true' ]; then
-        flywayConfPath="$flywayHome/conf:/flyway/conf"
+        flyway_path_conf="$flyway_home/conf:/flyway/conf"
     else
-        flywayConfPath="$flywayHome/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
+        flyway_path_conf="$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
     fi
 
-    flywaySqlPath="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
+    flyway_path_sql="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
 
     ## exec flyway
-    if docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info | grep 'Versioned' | grep -v Success; then
-        docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway repair
-        docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
-        docker run --rm -v "${flywaySqlPath}" -v "${flywayConfPath}" flyway/flyway info
+    if docker run --rm -v "${flyway_path_sql}" -v "${flyway_path_conf}" flyway/flyway info | grep 'Versioned' | grep -v Success; then
+        docker run --rm -v "${flyway_path_sql}" -v "${flyway_path_conf}" flyway/flyway repair
+        docker run --rm -v "${flyway_path_sql}" -v "${flyway_path_conf}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
+        docker run --rm -v "${flyway_path_sql}" -v "${flyway_path_conf}" flyway/flyway info
     else
         echo "Nothing to do."
     fi
 
-    echo_time "end flyway migrate"
-}
-
-flyway_use_helm() {
-    flyway_last_sql="$(if [ -d "${ENV_GIT_SQL_FOLDER}" ]; then git --no-pager log --name-only --no-merges --oneline "${ENV_GIT_SQL_FOLDER}" | grep -m1 "^${ENV_GIT_SQL_FOLDER}" || true; fi)"
-    ## used AWS EFS
-    flyway_path_nfs="$ENV_FLYWAY_NFS_FOLDER"
-    if [ -z "$db_name" ]; then
-        flyway_db="${CI_PROJECT_NAME//-/_}"
-    else
-        flyway_db="$db_name"
-    fi
-    flyway_path_db="$flyway_path_nfs/sql-${CI_COMMIT_REF_NAME}/$flyway_db"
-
-    if [[ ! -f "$flyway_path_db/${flyway_last_sql##*/}" && -n $flyway_last_sql ]]; then
-        echo_warn "found new sql, enable flyway."
-    else
-        return 0
-    fi
-    if $git_diff | grep -qv "${ENV_GIT_SQL_FOLDER}.*\.sql$"; then
-        echo_warn "found other file, enable deploy k8s."
-    else
-        echo_warn "skip deploy k8s."
-        project_lang=0
-        project_docker=0
-        exec_deploy_rsync=0
-    fi
-
-    echo_time_step "flyway migrate (k8s)..."
-    flyway_path_helm="$script_dir/helm/flyway"
-    flyway_job='job-flyway'
-    flyway_base_sql='V1.0__Base_structure.sql'
-    flyway_path_conf="$flyway_path_nfs/conf-${CI_COMMIT_REF_NAME}/$flyway_db"
-
-    ## flyway.conf change database name to current project name.
-    if [ ! -f "$flyway_path_conf/flyway.conf" ]; then
-        [ -d "$flyway_path_conf" ] || mkdir -p "$flyway_path_conf"
-        cp "$flyway_path_conf/../flyway.conf" "$flyway_path_conf/flyway.conf"
-        sed -i "/^flyway.url/s@3306/.*@3306/${flyway_db}@" "$flyway_path_conf/flyway.conf"
-    fi
-    ## did you run 'flyway baseline'?
-    if [[ -f "$flyway_path_db/$flyway_base_sql" ]]; then
-        ## copy sql file from git to nfs
-        if [[ -d "${CI_PROJECT_DIR}/$ENV_GIT_SQL_FOLDER" ]]; then
-            rsync -av --delete --exclude="$flyway_base_sql" "${CI_PROJECT_DIR}/$ENV_GIT_SQL_FOLDER/" "$flyway_path_db/"
-        fi
-        set_baseline=false
-    else
-        mkdir -p "$flyway_path_db"
-        touch "$flyway_path_db/$flyway_base_sql"
-        set_baseline=true
-        echo_err "First run，only 'flyway baseline' was executed, please rerun this job."
-        echo_err "首次运行，仅仅执行了 'flyway baseline', 请重新运行此job."
-        deploy_result=1
-    fi
-    ## delete old job
-    helm -n "$CI_COMMIT_REF_NAME" delete $flyway_job || true
-    ## create new job
-    helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 \
-        -f "$flyway_path_helm/values.yaml" \
-        --set baseLine=$set_baseline \
-        --set nfs.confPath="/flyway/conf-${CI_COMMIT_REF_NAME}/$flyway_db" \
-        --set nfs.sqlPath="/flyway/sql-${CI_COMMIT_REF_NAME}/$flyway_db" \
-        $flyway_job "$flyway_path_helm/" >/dev/null
-    ## wait result
-    until [[ "$SECONDS" -gt 60 || "$flyway_result" -eq 1 ]]; do
-        [[ $(kubectl -n "$CI_COMMIT_REF_NAME" get jobs $flyway_job -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}') == "True" ]] && flyway_result=0
-        [[ $(kubectl -n "$CI_COMMIT_REF_NAME" get jobs $flyway_job -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}') == "True" ]] && flyway_result=1
-        sleep 2
-        SECONDS=$((SECONDS + 2))
-    done
-    ## get logs
-    pods=$(kubectl -n "$CI_COMMIT_REF_NAME" get pods --selector=job-name=$flyway_job --output=jsonpath='{.items[*].metadata.name}')
-    for p in $pods; do
-        kubectl -n "$CI_COMMIT_REF_NAME" logs "pod/$p"
-    done
-    ## set result
-    if [[ "$flyway_result" -eq 1 ]]; then
-        deploy_result=1
-    fi
     echo_time "end flyway migrate"
 }
 
@@ -868,15 +785,12 @@ main() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && project_docker=0
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
+
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
     [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
-        if [[ "${project_docker}" -eq 1 ]]; then
-            flyway_use_helm
-        else
-            flyway_use_local
-        fi
+        flyway_use_local
     fi
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
 
