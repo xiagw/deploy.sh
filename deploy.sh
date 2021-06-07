@@ -652,8 +652,11 @@ gen_apidoc() {
     echo_time_step "generate apidoc."
     if [[ -f "${CI_PROJECT_DIR}/apidoc.json" ]]; then
         $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
+    else
+        echo_warn "apidoc.json not exists."
     fi
 }
+
 main() {
     script_name="$(basename "$0")"
     script_name="${script_name%.sh}"
@@ -727,27 +730,14 @@ main() {
     script_log="${script_dir}/${script_name}.log"            ## 记录sql文件的执行情况
     script_conf="${script_dir}/.${script_name}.conf"         ## 发布到服务器的配置信息
     script_env="${script_dir}/.${script_name}.env"           ## 发布配置信息(密)
-    script_ssh_conf="${script_dir}/.${script_name}.ssh.conf" ## ssh config 信息，跳板机/堡垒机
 
     [[ ! -f "$script_conf" && -f "${script_dir}/${script_name}.conf" ]] && cp "${script_dir}/${script_name}.conf" "$script_conf"
     [[ ! -f "$script_env" && -f "${script_dir}/${script_name}.env" ]] && cp "${script_dir}/${script_name}.env" "$script_env"
     [[ ! -f "$script_log" ]] && touch "$script_log"
 
-    if [[ -f "${script_dir}/id_rsa" ]]; then
-        chmod 600 "${script_dir}/id_rsa"
-        ln -sf "${script_dir}/id_rsa" "$HOME/.ssh/"
-    fi
-    if [[ -f "${script_dir}/id_ed25519" ]]; then
-        chmod 600 "${script_dir}/id_ed25519"
-        ln -sf "${script_dir}/id_ed25519" "$HOME/.ssh/"
-    fi
-    if [[ -f "${script_dir}/id_ecdsa" ]]; then
-        chmod 600 "${script_dir}/id_ecdsa"
-        ln -sf "${script_dir}/id_ecdsa" "$HOME/.ssh/"
-    fi
-    if [[ -f "${script_ssh_conf}" ]]; then
-        chmod 600 "${script_ssh_conf}"
-        ln -sf "${script_ssh_conf}" "$HOME/.ssh/config"
+    if [[ -d "${script_dir}/.ssh" ]]; then
+        chmod 600 "${script_dir}/.ssh"/*
+        ln -sf "${script_dir}/.ssh"/* "$HOME/.ssh/"
     fi
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
     [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
@@ -756,18 +746,21 @@ main() {
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     # shellcheck disable=SC1090
     source "$script_env"
-    ## run docker using current user
+    ## run docker with current user
     docker_run="docker run --interactive --rm -u $UID:$UID"
-    ## run docker using root
+    ## run docker with root
     # runDockeRoot="docker run --interactive --rm"
     docker_tag="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-${CI_COMMIT_SHORT_SHA}"
     git_diff="git --no-pager diff --name-only HEAD^"
+
     ## 清理磁盘空间
     clean_disk
+
     ## acme.sh 更新证书
     if [[ "$PIPELINE_UPDATE_SSL" -eq 1 ]]; then
         update_cert
     fi
+
     ## 判定项目类型
     if [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]]; then
         if [[ -d "${CI_PROJECT_DIR}/ios" || -d "${CI_PROJECT_DIR}/android" ]]; then
