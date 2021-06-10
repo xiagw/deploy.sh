@@ -737,7 +737,9 @@ main() {
 
     if [[ -d "${script_dir}/.ssh" ]]; then
         chmod 600 "${script_dir}/.ssh"/*
-        ln -sf "${script_dir}/.ssh"/* "$HOME/.ssh/"
+        for f in "${script_dir}/.ssh"/*; do
+            [ ! -f "$f" ] || ln -sf "${f}" "$HOME/.ssh/"
+        done
     fi
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
     [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"

@@ -17,3 +17,5 @@ id_*
 
 flyway/conf/
 .acme.sh/
+
+.ssh/
