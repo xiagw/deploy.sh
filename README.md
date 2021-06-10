@@ -42,14 +42,14 @@ deploy.sh is a CI/CD program for GitLab Server.
 # Actual case
 1. There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
 1. There is already a server that has installed gitlab-runner, (executer is shell)
-1. The ssh key file has been prepared, and you can log in to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/ directory)
+1. The ssh key file has been prepared, and you can log in to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/.ssh/ directory)
 1. Login to the gitlab-runner server and execute
 ```shell
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 1. Refer to the deploy.conf/deploy.env, modify the file
 ```shell
-cd gitlab-runner
+cd runner
 cp deploy.conf .deploy.conf
 cp deploy.env .deploy.env
 ```

@@ -25,7 +25,7 @@ deploy.sh for GitLab CI/CD：
 # Quick Start
 1. 安装 gitlab-runner 并且 register it 并且启动 gitlab-runner
 1. cd $HOME
-1. git clone https://github.com/xiagw/deploy.sh.git
+1. git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 1. 拷贝 deploy.conf 为 .deploy.conf （修改为你的配置）
 1. 拷贝 deploy.env 为 .deploy.env（修改为你的配置）
 1. 参看本项目 .gitlab-ci.yaml 设置于目标git仓库
@@ -34,11 +34,11 @@ deploy.sh for GitLab CI/CD：
 # 实例：
 1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) 用 docker-compose up -d gitlab 启动一台）
 1. 已有一台服务器已经安装好 gitlab-runner，并且是默认安装（executer 为 shell）
-1. 已经准备好 ssh key file，从 gitlab-runner 服务器可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/ 目录）
+1. 已经准备好 ssh key file，从 gitlab-runner 服务器可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/.ssh/ 目录）
 1. 登录到 gitlab-runner 服务器，执行
 `git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
 1. 参照 deploy.conf, deploy.env 例子修改好文件
- `cd gitlab-runner && cp deploy.conf .deploy.conf && cp deploy.env .deploy.env
+ `cd runner && cp deploy.conf .deploy.conf && cp deploy.env .deploy.env
 `
 1. 例如 gitlab 已经建立 projectA 在 root 账号下面
 1. 在 projectA 修改代码，

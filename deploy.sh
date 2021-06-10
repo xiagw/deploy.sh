@@ -735,12 +735,15 @@ main() {
     [[ ! -f "$script_env" && -f "${script_dir}/${script_name}.env" ]] && cp "${script_dir}/${script_name}.env" "$script_env"
     [[ ! -f "$script_log" ]] && touch "$script_log"
 
-    if [[ -d "${script_dir}/.ssh" ]]; then
-        chmod 600 "${script_dir}/.ssh"/*
-        for f in "${script_dir}/.ssh"/*; do
-            [ ! -f "$f" ] || ln -sf "${f}" "$HOME/.ssh/"
-        done
+    if [[ ! -d "${script_dir}/.ssh" ]]; then
+        mkdir -m 700 "${script_dir}/.ssh"
+        ssh-keygen -t ed25519 -N '' -f "${script_dir}/.ssh/id_ed25519"
     fi
+    chmod 700 "${script_dir}/.ssh"
+    chmod 600 "${script_dir}/.ssh"/*
+    for f in "${script_dir}/.ssh"/*; do
+        [ ! -f "$f" ] || ln -sf "${f}" "$HOME/.ssh/"
+    done
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
     [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
     [[ ! -e "${HOME}/.kube" && -e "${script_dir}/.kube" ]] && ln -sf "${script_dir}/.kube" "$HOME/"
