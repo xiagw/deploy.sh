@@ -1,6 +1,6 @@
 # deploy.sh for GitLab CI/CD：
 
-# 中文 [README_zh.md](README_zh.md)
+# 中文 [README_zh.md](docs/README_zh.md)
 
 deploy.sh is a CI/CD program for GitLab Server.
 # Description
@@ -59,7 +59,7 @@ cp deploy.env .deploy.env
 1. Enjoy CI/CD
 
 # The following pictures need "mermain" support
-![](readme.png)
+![](docs/readme.png)
 
 ```mermaid
 graph TB;
