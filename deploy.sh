@@ -727,9 +727,9 @@ main() {
         shift
     done
     ##
-    script_log="${script_dir}/${script_name}.log"            ## 记录sql文件的执行情况
-    script_conf="${script_dir}/.${script_name}.conf"         ## 发布到服务器的配置信息
-    script_env="${script_dir}/.${script_name}.env"           ## 发布配置信息(密)
+    script_log="${script_dir}/${script_name}.log"    ## 记录sql文件的执行情况
+    script_conf="${script_dir}/.${script_name}.conf" ## 发布到服务器的配置信息
+    script_env="${script_dir}/.${script_name}.env"   ## 发布配置信息(密)
 
     [[ ! -f "$script_conf" && -f "${script_dir}/${script_name}.conf" ]] && cp "${script_dir}/${script_name}.conf" "$script_conf"
     [[ ! -f "$script_env" && -f "${script_dir}/${script_name}.env" ]] && cp "${script_dir}/${script_name}.env" "$script_env"
@@ -739,10 +739,11 @@ main() {
         mkdir -m 700 "${script_dir}/.ssh"
         ssh-keygen -t ed25519 -N '' -f "${script_dir}/.ssh/id_ed25519"
     fi
-    chmod 700 "${script_dir}/.ssh"
-    chmod 600 "${script_dir}/.ssh"/*
     for f in "${script_dir}/.ssh"/*; do
-        [ ! -f "$f" ] || ln -sf "${f}" "$HOME/.ssh/"
+        if [ ! -f "$HOME/.ssh/${f##*/}" ]; then
+            chmod 600 "${f}"
+            ln -sf "${f}" "$HOME/.ssh/"
+        fi
     done
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
     [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
