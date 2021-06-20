@@ -560,6 +560,9 @@ install_kubectl() {
             curl -x "$ENV_HTTP_PROXY" -Lo "$script_dir/bin/kubectl" "$kube_url"
         fi
         chmod +x "$script_dir/bin/kubectl"
+        curl -fsSL -o "$script_dir/bin/get_helm.sh" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+        chmod 700 "$script_dir/bin/get_helm.sh"
+        "$script_dir"/bin/get_helm.sh
     }
 }
 
