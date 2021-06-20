@@ -367,13 +367,7 @@ docker_push_generic() {
 deploy_k8s_generic() {
     echo_time_step "deploy k8s."
     kube_create_namespace
-    path_helm="$script_dir/helm/bitnami/bitnami/nginx"
-    (
-        cd "$path_helm"
-        git checkout master
-        git checkout -- .
-        git pull --prune
-    )
+    path_helm="$CI_PROJECT_PATH/helm"
     helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
 }
 
