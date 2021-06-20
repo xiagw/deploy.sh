@@ -174,6 +174,35 @@ node_build_volume() {
     fi
 }
 
+docker_login() {
+    case "$ENV_DOCKER_LOGIN" in
+    'aws')
+        ## 比较上一次登陆时间，超过12小时则再次登录
+        local lock_file
+        lock_file="$script_dir/.aws.ecr.login.${ENV_AWS_PROFILE:?undefine}"
+        touch "$lock_file"
+        local timeSave
+        timeSave="$(cat "$lock_file")"
+        local time_compare
+        time_compare="$(date +%s -d '12 hours ago')"
+        if [ "$time_compare" -gt "${timeSave:-0}" ]; then
+            echo_time "docker login..."
+            docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
+            aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $docker_login >/dev/null
+            date +%s >"$lock_file"
+        fi
+        ;;
+    'aliyun')
+        echo "aliyun docker login"
+        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
+        ;;
+    'qcloud')
+        echo "qcloud docker login"
+        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
+        ;;
+    esac
+}
+
 node_docker_build() {
     echo_time_step "node docker build."
     \cp -f "$script_dir/node/Dockerfile" "${CI_PROJECT_DIR}/Dockerfile"
@@ -182,6 +211,7 @@ node_docker_build() {
 
 node_docker_push() {
     echo_time_step "node docker push."
+    docker_login
     docker push "${docker_tag}"
 }
 
@@ -206,16 +236,14 @@ php_composer_volume() {
 
 php_docker_build() {
     echo_time_step "php docker build..."
-    push_tag="${ENV_DOCKER_REGISTRY:?empty}/${ENV_DOCKER_REPO}:${CI_PROJECT_NAME}-${CI_COMMIT_REF_NAME}"
-    echo_time_step "starting docker build..."
-    \cp "$script_dir/Dockerfile.swoft" "${CI_PROJECT_DIR}/Dockerfile"
-    DOCKER_BUILDKIT=1 docker build --tag "${push_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
+    # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
+    DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" -q "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
 }
 
 php_docker_push() {
     echo_time_step "starting docker push..."
-    docker push "${push_tag}"
+    docker push "${docker_tag}"
     echo_time "end docker push."
 }
 
@@ -231,7 +259,7 @@ kube_create_namespace() {
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
-docker_build_java() {
+java_docker_build() {
     echo_time_step "java docker build."
     ## gitlab-CI/CD setup variables MVN_DEBUG=1 enable debug message
     echo_warn "If you want to view debug msg, set MVN_DEBUG=1 on pipeline."
@@ -266,36 +294,7 @@ docker_build_java() {
     echo_time "end docker build."
 }
 
-docker_login() {
-    case "$ENV_DOCKER_LOGIN" in
-    'aws')
-        ## 比较上一次登陆时间，超过12小时则再次登录
-        local lock_file
-        lock_file="$script_dir/.aws.ecr.login.${ENV_AWS_PROFILE:?undefine}"
-        touch "$lock_file"
-        local timeSave
-        timeSave="$(cat "$lock_file")"
-        local time_compare
-        time_compare="$(date +%s -d '12 hours ago')"
-        if [ "$time_compare" -gt "${timeSave:-0}" ]; then
-            echo_time "docker login..."
-            docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
-            aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $docker_login >/dev/null
-            date +%s >"$lock_file"
-        fi
-        ;;
-    'aliyun')
-        echo "aliyun docker login"
-        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
-        ;;
-    'qcloud')
-        echo "qcloud docker login"
-        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
-        ;;
-    esac
-}
-
-docker_push_java() {
+java_docker_push() {
     echo_time_step "docker push to ECR."
     docker_login
     if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
@@ -683,10 +682,10 @@ main() {
             PIPELINE_UPDATE_SSL=1
             ;;
         --docker-build-java)
-            exec_docker_build_java=1
+            exec_java_docker_build=1
             ;;
         --docker-push-java)
-            exec_docker_push_java=1
+            exec_java_docker_push=1
             ;;
         --deploy-k8s-java)
             exec_deploy_k8s_java=1
@@ -716,8 +715,8 @@ main() {
             exec_flyway=0
             ;;
         *)
-            exec_docker_build_java=1
-            exec_docker_push_java=1
+            exec_java_docker_build=1
+            exec_java_docker_push=1
             exec_deploy_k8s_java=1
             exec_deploy_k8s_php=1
             # gitlabSingleJob=0
@@ -833,8 +832,8 @@ main() {
         ;;
     'java')
         if [[ 1 -eq "${project_docker}" ]]; then
-            [[ 1 -eq "$exec_docker_build_java" ]] && docker_build_java
-            [[ 1 -eq "$exec_docker_push_java" ]] && docker_push_java
+            [[ 1 -eq "$exec_java_docker_build" ]] && java_docker_build
+            [[ 1 -eq "$exec_java_docker_push" ]] && java_docker_push
             [[ 1 -eq "$exec_deploy_k8s_java" ]] && java_deploy_k8s
         fi
         ;;
