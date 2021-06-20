@@ -812,8 +812,8 @@ main() {
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
         if [[ 1 -eq "${project_docker}" ]]; then
-            [[ 1 -eq "$exec_docker_build_php" ]] && php_docker_build
-            [[ 1 -eq "$exec_docker_push_php" ]] && php_docker_push
+            [[ 1 -eq "${exec_docker_build_php:-1}" ]] && php_docker_build
+            [[ 1 -eq "${exec_docker_push_php:-1}" ]] && php_docker_push
             [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
         else
             ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_COMPOSER_UPDATE ，1 启用，0 禁用[default]
