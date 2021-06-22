@@ -126,26 +126,24 @@ function_test() {
 
 flyway_use_local() {
     echo_time_step "flyway migrate..."
-
+    ## projcet dir 不存在 docs/sql 文件夹，则返回
+    [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && return
     flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
 
-    if [ "${ENV_FLYWAY_USER_ROOT}" = 'true' ]; then
-        flyway_path_conf="$flyway_home/conf:/flyway/conf"
+    if [ "${ENV_FLYWAY_GLOBAL}" = 'true' ]; then
+        flyway_volume_conf="$flyway_home/conf:/flyway/conf"
     else
-        flyway_path_conf="$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
+        flyway_volume_conf="$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
     fi
-
-    flyway_path_sql="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
-
+    flyway_volume_sql="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
     ## exec flyway
-    if docker run --rm -v "${flyway_path_sql}" -v "${flyway_path_conf}" flyway/flyway info | grep 'Versioned' | grep -v Success; then
-        docker run --rm -v "${flyway_path_sql}" -v "${flyway_path_conf}" flyway/flyway repair
-        docker run --rm -v "${flyway_path_sql}" -v "${flyway_path_conf}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
-        docker run --rm -v "${flyway_path_sql}" -v "${flyway_path_conf}" flyway/flyway info
+    if docker run --rm -v "${flyway_volume_sql}" -v "${flyway_volume_conf}" flyway/flyway info | grep 'Versioned' | grep -v Success; then
+        docker run --rm -v "${flyway_volume_sql}" -v "${flyway_volume_conf}" flyway/flyway repair
+        docker run --rm -v "${flyway_volume_sql}" -v "${flyway_volume_conf}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
+        docker run --rm -v "${flyway_volume_sql}" -v "${flyway_volume_conf}" flyway/flyway info
     else
         echo "Nothing to do."
     fi
-
     echo_time "end flyway migrate"
 }
 
@@ -791,9 +789,9 @@ main() {
     [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && project_docker=0
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
 
+    ## use flyway deploy sql file
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
-    [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
         flyway_use_local
     fi
