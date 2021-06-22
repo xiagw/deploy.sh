@@ -367,8 +367,18 @@ docker_push_generic() {
 deploy_k8s_generic() {
     echo_time_step "deploy k8s."
     kube_create_namespace
-    path_helm="$CI_PROJECT_PATH/helm"
-    helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
+    if [ -d "$CI_PROJECT_PATH/helm" ]; then
+        path_helm="$CI_PROJECT_PATH/helm"
+    elif [ -d "$script_dir/helm/$CI_COMMIT_REF_NAME.${CI_PROJECT_DIR}" ]; then
+        path_helm="$script_dir/helm/$CI_COMMIT_REF_NAME.${CI_PROJECT_DIR}"
+    else
+        path_helm=none
+    fi
+    if [ "$path_helm" = none ]; then
+        echo_warn "$path_helm not exists, nothing to do."
+    else
+        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
+    fi
 }
 
 deploy_rsync() {
