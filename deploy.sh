@@ -335,7 +335,7 @@ docker_build_generic() {
 }
 docker_push_generic() {
     echo_time_step "docker push only."
-    docker_login
+    docker_login 2>/dev/null
     docker push -q "$docker_tag"
     echo_time "end docker push."
 }
