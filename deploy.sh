@@ -201,18 +201,6 @@ docker_login() {
     esac
 }
 
-node_docker_build() {
-    echo_time_step "node docker build."
-    \cp -f "$script_dir/node/Dockerfile" "${CI_PROJECT_DIR}/Dockerfile"
-    DOCKER_BUILDKIT=1 docker build -t "${docker_tag}" "${CI_PROJECT_DIR}"
-}
-
-node_docker_push() {
-    echo_time_step "node docker push."
-    docker_login
-    docker push "${docker_tag}"
-}
-
 php_composer_volume() {
     echo_time_step "php composer install..."
     echo "PIPELINE_COMPOSER_UPDATE: ${PIPELINE_COMPOSER_UPDATE:-0}"
@@ -232,18 +220,6 @@ php_composer_volume() {
     fi
 }
 
-php_docker_build() {
-    echo_time_step "php docker build..."
-    # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
-    DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" -q "${CI_PROJECT_DIR}" >/dev/null
-    echo_time "end docker build."
-}
-
-php_docker_push() {
-    echo_time_step "starting docker push..."
-    docker push "${docker_tag}"
-    echo_time "end docker push."
-}
 
 kube_create_namespace() {
     if [ ! -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
@@ -353,13 +329,15 @@ java_deploy_k8s() {
 
 docker_build_generic() {
     echo_time_step "docker build only."
-    DOCKER_BUILDKIT=1 docker build -t "$docker_tag" "${CI_PROJECT_DIR}"
+    # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
+    DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" -q "${CI_PROJECT_DIR}" >/dev/null
+    echo_time "end docker build."
 }
-
 docker_push_generic() {
     echo_time_step "docker push only."
     docker_login
     docker push -q "$docker_tag"
+    echo_time "end docker push."
 }
 
 deploy_k8s_generic() {
@@ -817,8 +795,8 @@ main() {
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
         if [[ 1 -eq "${project_docker}" ]]; then
-            [[ 1 -eq "${exec_docker_build_php:-1}" ]] && php_docker_build
-            [[ 1 -eq "${exec_docker_push_php:-1}" ]] && php_docker_push
+            [[ 1 -eq "${exec_docker_build_php:-1}" ]] && docker_build_generic
+            [[ 1 -eq "${exec_docker_push_php:-1}" ]] && docker_push_generic
             [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
         else
             ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_COMPOSER_UPDATE ，1 启用，0 禁用[default]
@@ -828,8 +806,8 @@ main() {
         ;;
     'node')
         if [[ 1 -eq "${project_docker}" ]]; then
-            [[ 1 -eq "$exec_docker_build_node" ]] && node_docker_build
-            [[ 1 -eq "$exec_docker_push_node" ]] && node_docker_push
+            [[ 1 -eq "$exec_docker_build_node" ]] && docker_build_generic
+            [[ 1 -eq "$exec_docker_push_node" ]] && docker_push_generic
             [[ 1 -eq "$exec_node_deploy_k8s" ]] && deploy_k8s_generic
         else
             node_build_volume
