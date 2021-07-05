@@ -351,7 +351,7 @@ deploy_k8s_generic() {
         path_helm=none
     fi
     if [ "$path_helm" = none ]; then
-        echo_warn "$path_helm not exists, nothing to do."
+        echo_warn "helm not exists, nothing to do."
     else
         helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
     fi
