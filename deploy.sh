@@ -359,7 +359,7 @@ docker_build_generic() {
 docker_push_generic() {
     echo_time_step "docker push only."
     docker_login
-    docker push "$docker_tag"
+    docker push -q "$docker_tag"
 }
 
 deploy_k8s_generic() {
