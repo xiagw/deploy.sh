@@ -329,10 +329,13 @@ java_deploy_k8s() {
 
 docker_build_generic() {
     echo_time_step "docker build only."
+    secret_file="${script_dir}/.secret.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/.env"
+    [ -f "$secret_file" ] && \cp "$secret_file" "${CI_PROJECT_DIR}/"
     # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
     DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" -q "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
 }
+
 docker_push_generic() {
     echo_time_step "docker push only."
     docker_login 2>/dev/null
@@ -374,7 +377,7 @@ deploy_rsync() {
         rsync_dest=${array[5]} ## 从配置文件读取目标路径
         # db_user=${array[6]}
         # db_host=${array[7]}
-        db_name=${array[8]}
+        # db_name=${array[8]}
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
             echo "if stop here, check .deploy.conf"
