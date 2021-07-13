@@ -22,7 +22,7 @@ echo_ques() { echo -e "\033[35m$*\033[0m"; }    ## brown
 echo_time() { echo "[$(date +%F-%T-%w)], $*"; } ## time
 echo_time_step() {
     ## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
-    echo -e "[$(date +%Y%m%d-%T-%u)], \033[33mstep-$((STEP + 1))\033[0m, $*"
+    echo -e "\033[33m[$(date +%Y%m%d-%T-%u)], step-$((STEP + 1))\033[0m, $*"
     STEP=$((STEP + 1))
 }
 # https://zhuanlan.zhihu.com/p/48048906
@@ -220,7 +220,6 @@ php_composer_volume() {
     fi
 }
 
-
 kube_create_namespace() {
     if [ ! -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
         kubectl create namespace "$CI_COMMIT_REF_NAME" || true
@@ -410,7 +409,7 @@ deploy_rsync() {
             fi
         fi
         ## 目标文件夹
-        if [[ "$rsync_dest" == 'null' || -z "$rsync_src" ]]; then
+        if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         fi
         ## 发布到 aliyun oss 存储
@@ -422,7 +421,7 @@ deploy_rsync() {
             return
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
-        $ssh_opt "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
+        # $ssh_opt "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
         ## 复制文件到目标服务器的目标目录
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
         ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
