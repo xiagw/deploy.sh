@@ -421,7 +421,7 @@ deploy_rsync() {
             return
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
-        # $ssh_opt "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
+        $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
         ## 复制文件到目标服务器的目标目录
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
         ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
