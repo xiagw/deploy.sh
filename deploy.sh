@@ -857,10 +857,10 @@ main() {
     fi
 
     ## notify
-    ## 发送消息到群组, enable_send_msg， 0 不发， 1 不发.
+    ## 发送消息到群组, enable_send_msg， 0 不发， 1 发.
     [[ "${deploy_result}" -eq 1 ]] && enable_send_msg=1
     [[ "$ENV_DISABLE_MSG" = 1 ]] && enable_send_msg=0
-    [[ "$CI_COMMIT_REF_NAME" = "$ENV_DISABLE_MSG_BRANCH" ]] && enable_send_msg=0
+    [[ "$ENV_DISABLE_MSG_BRANCH" =~ $CI_COMMIT_REF_NAME ]] && enable_send_msg=0
     if [[ "${enable_send_msg:-1}" == 1 ]]; then
         get_msg_deploy
         send_msg_chatapp
