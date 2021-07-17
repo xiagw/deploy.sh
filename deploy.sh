@@ -439,8 +439,10 @@ get_msg_deploy() {
     [ -z "$msg_describe" ] && msg_describe="$(git --no-pager log --no-merges --oneline -1)"
     git_username="$(gitlab -v user get --id "${GITLAB_USER_ID}" | awk '/^name:/ {print $2}')"
 
-    msg_body="[Gitlab Deploy]
-Project = ${CI_PROJECT_PATH}/${CI_COMMIT_REF_NAME}
+    msg_body="
+[Gitlab Deploy]
+Project = ${CI_PROJECT_PATH}
+Branche = ${CI_COMMIT_REF_NAME}
 Pipeline = ${CI_PIPELINE_ID}/Job-id-$CI_JOB_ID
 Describe = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}
 Who = ${GITLAB_USER_ID}-${git_username}
