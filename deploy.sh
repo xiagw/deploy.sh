@@ -136,11 +136,12 @@ flyway_use_local() {
         flyway_volume_conf="$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
     fi
     flyway_volume_sql="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
+    flyway_docker_run="docker run --rm -v ${flyway_volume_sql} -v ${flyway_volume_conf} flyway/flyway"
     ## exec flyway
-    if docker run --rm -v "${flyway_volume_sql}" -v "${flyway_volume_conf}" flyway/flyway info | grep 'Versioned' | grep -v Success; then
-        docker run --rm -v "${flyway_volume_sql}" -v "${flyway_volume_conf}" flyway/flyway repair
-        docker run --rm -v "${flyway_volume_sql}" -v "${flyway_volume_conf}" flyway/flyway migrate && deploy_result=0 || deploy_result=1
-        docker run --rm -v "${flyway_volume_sql}" -v "${flyway_volume_conf}" flyway/flyway info
+    if $flyway_docker_run info | grep -vE 'Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
+        $flyway_docker_run repair
+        $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
+        $flyway_docker_run info
     else
         echo "Nothing to do."
     fi
