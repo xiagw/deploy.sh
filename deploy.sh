@@ -138,7 +138,7 @@ flyway_use_local() {
     flyway_volume_sql="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_volume_sql} -v ${flyway_volume_conf} flyway/flyway"
     ## exec flyway
-    if $flyway_docker_run info | grep -vE 'Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
+    if $flyway_docker_run info | sed '1,3d' | grep -vE 'Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
         $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
         $flyway_docker_run info
