@@ -431,6 +431,9 @@ deploy_rsync() {
             rsync -rlcvzt -e "$ssh_opt" "$secret_dir" "${ssh_host}:${rsync_dest}"
         fi
     done
+    if [ -x "$script_dir/bin/special.sh" ]; then
+        "$script_dir"/bin/special.sh
+    fi
 }
 
 get_msg_deploy() {
