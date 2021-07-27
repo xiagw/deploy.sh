@@ -488,9 +488,9 @@ send_msg_chatapp() {
 update_cert() {
     echo_time_step "update ssl cert (dns api)."
     acme_home="${HOME}/.acme.sh"
-    cmd_run="${acme_home}/acme.sh"
+    acme_cmd="${acme_home}/acme.sh"
     ## install acme.sh
-    if [[ ! -x "${cmd_run}" ]]; then
+    if [[ ! -x "${acme_cmd}" ]]; then
         curl https://get.acme.sh | sh
     fi
     cert_dir="${acme_home}/dest"
@@ -518,14 +518,17 @@ update_cert() {
 
         for d in ${domain_name}; do
             if [ -d "${acme_home}/$d" ]; then
-                "${cmd_run}" --renew -d "${d}" || true
+                "${acme_cmd}" --renew -d "${d}" || true
             else
-                "${cmd_run}" --issue --dns $dnsType -d "$d" -d "*.$d"
+                "${acme_cmd}" --issue --dns $dnsType -d "$d" -d "*.$d"
             fi
-            "${cmd_run}" --install-cert -d "$d" --key-file "$cert_dir/$d".key.pem \
-                --fullchain-file "$cert_dir/$d".cert.pem
+            "${acme_cmd}" --install-cert -d "$d" --key-file "$cert_dir/$d".key \
+                --fullchain-file "$cert_dir/$d".crt
         done
     done
+    if [ -f "${acme_home}/deploy.acme.sh" ]; then
+        bash "${acme_home}"/deploy.acme.sh
+    fi
 }
 
 install_aws() {
@@ -752,6 +755,7 @@ main() {
     ## acme.sh 更新证书
     if [[ "$PIPELINE_UPDATE_SSL" -eq 1 ]]; then
         update_cert
+        return
     fi
 
     ## 判定项目类型
