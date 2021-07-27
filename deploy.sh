@@ -124,19 +124,20 @@ function_test() {
     # jmeter -load
 }
 
-flyway_use_local() {
+deploy_use_flyway() {
     echo_time_step "flyway migrate..."
     ## projcet dir 不存在 docs/sql 文件夹，则返回
     [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && return
     flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
 
-    if [ "${ENV_FLYWAY_GLOBAL}" = 'true' ]; then
-        flyway_volume_conf="$flyway_home/conf:/flyway/conf"
-    else
+    if [ -d "$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}" ]; then
         flyway_volume_conf="$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
+    else
+        flyway_volume_conf="$flyway_home/conf:/flyway/conf"
     fi
     flyway_volume_sql="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_volume_sql} -v ${flyway_volume_conf} flyway/flyway"
+
     ## exec flyway
     if $flyway_docker_run info | sed '1,3d' | grep -vE 'Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
@@ -780,7 +781,7 @@ main() {
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
-        flyway_use_local
+        deploy_use_flyway
     fi
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
 
