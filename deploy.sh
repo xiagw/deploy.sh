@@ -510,6 +510,7 @@ update_cert() {
         elif [ -f "$script_dir/.aliyun.dnsapi.conf" ]; then
             command -v aliyun || return 1
             source "$script_dir/.aliyun.dnsapi.conf" "${a##*.}"
+            aliyun configure set --profile "deploy${a##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
             domain_name="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
             dnsType='dns_ali'
         elif [ -f "$script_dir/.qcloud.dnspod.conf" ]; then
