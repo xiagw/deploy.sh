@@ -490,30 +490,30 @@ update_cert() {
     echo_time_step "update ssl cert (dns api)."
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
+    acme_cert="${acme_home}/dest"
     ## install acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
         curl https://get.acme.sh | sh
     fi
-    cert_dir="${acme_home}/dest"
-    [ -d "$cert_dir" ] || mkdir "$cert_dir"
+    [ -d "$acme_cert" ] || mkdir "$acme_cert"
 
     if [[ "$(find "${acme_home}/" -name 'account.conf*' | wc -l)" == 1 ]]; then
         cp "${acme_home}/"account.conf "${acme_home}/"account.conf.1
     fi
 
     for a in "${acme_home}/"account.conf.*; do
-        if [ -f "$script_dir/.cloudflare.conf" ]; then
+        if [ -f "$acme_home/.cloudflare.conf" ]; then
             command -v flarectl || return 1
-            source "$script_dir/.cloudflare.conf" "${a##*.}"
+            source "$acme_home/.cloudflare.conf" "${a##*.}"
             domain_name="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
-        elif [ -f "$script_dir/.aliyun.dnsapi.conf" ]; then
+        elif [ -f "$acme_home/.aliyun.dnsapi.conf" ]; then
             command -v aliyun || return 1
-            source "$script_dir/.aliyun.dnsapi.conf" "${a##*.}"
+            source "$acme_home/.aliyun.dnsapi.conf" "${a##*.}"
             aliyun configure set --profile "deploy${a##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
             domain_name="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
             dnsType='dns_ali'
-        elif [ -f "$script_dir/.qcloud.dnspod.conf" ]; then
+        elif [ -f "$acme_home/.qcloud.dnspod.conf" ]; then
             echo_warn "[TODO] use dnspod api."
         fi
         \cp -vf "$a" "${acme_home}/account.conf"
@@ -524,8 +524,8 @@ update_cert() {
             else
                 "${acme_cmd}" --issue --dns $dnsType -d "$d" -d "*.$d"
             fi
-            "${acme_cmd}" --install-cert -d "$d" --key-file "$cert_dir/$d".key \
-                --fullchain-file "$cert_dir/$d".crt
+            "${acme_cmd}" --install-cert -d "$d" --key-file "$acme_cert/$d".key \
+                --fullchain-file "$acme_cert/$d".crt
         done
     done
     if [ -f "${acme_home}/deploy.acme.sh" ]; then
