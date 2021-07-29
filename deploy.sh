@@ -494,6 +494,8 @@ update_cert() {
     ## install acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
         curl https://get.acme.sh | sh
+        mv "${acme_home}" "$script_dir/"
+        ln -sf "$script_dir/.acme.sh" "${HOME}/"
     fi
     [ -d "$acme_cert" ] || mkdir "$acme_cert"
 
