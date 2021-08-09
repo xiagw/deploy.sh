@@ -95,7 +95,7 @@ sonar_scan() {
     if [[ ! -f "$sonar_conf" ]]; then
         cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
-sonar.projectKey=${CI_PROJECT_NAMESPACE}_${CI_PROJECT_NAME}_${ENV_SORNAR_TOKEN:?empty}
+sonar.projectKey=${CI_PROJECT_NAMESPACE}_${CI_PROJECT_NAME}
 sonar.qualitygate.wait=true
 sonar.projectName=$CI_PROJECT_NAME
 sonar.java.binaries=.
@@ -108,7 +108,7 @@ sonar.projectVersion=1.0
 sonar.import_unknown_files=true
 EOF
     fi
-    $docker_run -v "$CI_PROJECT_DIR":/usr/src sonarsource/sonar-scanner-cli
+    $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$CI_PROJECT_DIR":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
 }
