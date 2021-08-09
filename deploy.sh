@@ -93,7 +93,8 @@ sonar_scan() {
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     if [[ ! -f "$CI_PROJECT_DIR/sonar-project.properties" ]]; then
         echo "sonar.host.url=$sonar_url
-            sonar.projectKey=$CI_PROJECT_NAME
+            sonar.projectKey=${CI_PROJECT_NAMESPACE}_${CI_PROJECT_NAME}_${ENV_SORNAR_TOKEN:?empty}
+            sonar.qualitygate.wait=true
             sonar.projectName=$CI_PROJECT_NAME
             sonar.java.binaries=.
             sonar.sourceEncoding=UTF-8
