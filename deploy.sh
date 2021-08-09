@@ -86,26 +86,30 @@ unit_test() {
 sonar_scan() {
     echo_time_step "sonar scanner."
     sonar_url="${ENV_SONAR_URL:?empty}"
+    sonar_conf="$CI_PROJECT_DIR/sonar-project.properties"
     if ! curl "$sonar_url" >/dev/null 2>&1; then
-        echo_warn "Could not found sonarqube server."
+        echo_warn "Could not found sonarqube server, exit."
         return
     fi
-    # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
-    if [[ ! -f "$CI_PROJECT_DIR/sonar-project.properties" ]]; then
-        echo "sonar.host.url=$sonar_url
-            sonar.projectKey=${CI_PROJECT_NAMESPACE}_${CI_PROJECT_NAME}_${ENV_SORNAR_TOKEN:?empty}
-            sonar.qualitygate.wait=true
-            sonar.projectName=$CI_PROJECT_NAME
-            sonar.java.binaries=.
-            sonar.sourceEncoding=UTF-8
-            sonar.exclusions=\
-            docs/**/*,\
-            log/**/*,\
-            test/**/*
-            sonar.projectVersion=1.0
-            sonar.import_unknown_files=true" >"$CI_PROJECT_DIR/sonar-project.properties"
+
+    if [[ ! -f "$sonar_conf" ]]; then
+        cat >"$sonar_conf" <<EOF
+sonar.host.url=$sonar_url
+sonar.projectKey=${CI_PROJECT_NAMESPACE}_${CI_PROJECT_NAME}_${ENV_SORNAR_TOKEN:?empty}
+sonar.qualitygate.wait=true
+sonar.projectName=$CI_PROJECT_NAME
+sonar.java.binaries=.
+sonar.sourceEncoding=UTF-8
+sonar.exclusions=\
+docs/**/*,\
+log/**/*,\
+test/**/*
+sonar.projectVersion=1.0
+sonar.import_unknown_files=true
+EOF
     fi
     $docker_run -v "$CI_PROJECT_DIR":/usr/src sonarsource/sonar-scanner-cli
+    # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
 }
 
