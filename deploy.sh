@@ -384,6 +384,7 @@ deploy_rsync() {
         # db_user=${array[6]}
         # db_host=${array[7]}
         # db_name=${array[8]}
+        echo "${ssh_host}"
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
             echo "if stop here, check .deploy.conf"
