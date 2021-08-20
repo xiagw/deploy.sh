@@ -365,7 +365,7 @@ deploy_k8s_generic() {
         helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
     fi
     if [ -x "$script_dir/bin/special.sh" ]; then
-        "$script_dir"/bin/special.sh
+        . "$script_dir"/bin/special.sh
     fi
 }
 
