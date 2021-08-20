@@ -364,6 +364,9 @@ deploy_k8s_generic() {
     else
         helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
     fi
+    if [ -x "$script_dir/bin/special.sh" ]; then
+        "$script_dir"/bin/special.sh
+    fi
 }
 
 deploy_rsync() {
@@ -546,7 +549,7 @@ update_cert() {
 install_python_gitlab() {
     command -v gitlab >/dev/null && return
     python3 -m pip install --user --upgrade python-gitlab
-    [ -e "$HOME/".python-gitlab.cfg ] || ln -sf "$script_dir/etc/python-gitlab.cfg" "$HOME/"
+    [ -f "$HOME/.python-gitlab.cfg" ] || ln -sf "${script_dir}/etc/.python-gitlab.cfg" "${HOME}/"
 }
 
 install_aws() {
@@ -559,13 +562,13 @@ install_aws() {
 install_kubectl() {
     command -v kubectl >/dev/null && return
     kube_ver="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
-    kube_url="https://storage.googleapis.com/kubernetes-release/release/$kube_ver/bin/linux/amd64/kubectl"
+    kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
     if [ -z "$ENV_HTTP_PROXY" ]; then
-        curl -Lo "$script_dir/bin/kubectl" "$kube_url"
+        curl -Lo "${script_dir}/bin/kubectl" "$kube_url"
     else
-        curl -x "$ENV_HTTP_PROXY" -Lo "$script_dir/bin/kubectl" "$kube_url"
+        curl -x "$ENV_HTTP_PROXY" -Lo "${script_dir}/bin/kubectl" "$kube_url"
     fi
-    chmod +x "$script_dir/bin/kubectl"
+    chmod +x "${script_dir}/bin/kubectl"
 }
 
 install_helm() {

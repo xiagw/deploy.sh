@@ -3,8 +3,6 @@ python/
 deploy.log
 .deploy.conf
 .deploy.env
-.deploy.ssh.conf
-.python-gitlab.cfg
 
 .DS_Store
 
@@ -12,7 +10,6 @@ builds/
 cache/
 etc/
 
-id_*
 .secret.*/
 
 flyway/conf/
