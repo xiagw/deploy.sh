@@ -543,33 +543,33 @@ update_cert() {
     fi
 }
 
-install_aws() {
-    if ! command -v aws >/dev/null; then
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip -qq awscliv2.zip
-        sudo ./aws/install
-    fi
-}
-
 install_python_gitlab() {
-    command -v gitlab >/dev/null || python3 -m pip install --user --upgrade python-gitlab
+    command -v gitlab >/dev/null && return
+    python3 -m pip install --user --upgrade python-gitlab
     [ -e "$HOME/".python-gitlab.cfg ] || ln -sf "$script_dir/etc/python-gitlab.cfg" "$HOME/"
 }
 
+install_aws() {
+    command -v aws >/dev/null && return
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip -qq awscliv2.zip
+    sudo ./aws/install
+}
+
 install_kubectl() {
-    command -v kubectl >/dev/null || {
-        kube_ver="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
-        kube_url="https://storage.googleapis.com/kubernetes-release/release/$kube_ver/bin/linux/amd64/kubectl"
-        if [ -z "$ENV_HTTP_PROXY" ]; then
-            curl -Lo "$script_dir/bin/kubectl" "$kube_url"
-        else
-            curl -x "$ENV_HTTP_PROXY" -Lo "$script_dir/bin/kubectl" "$kube_url"
-        fi
-        chmod +x "$script_dir/bin/kubectl"
-        curl -fsSL -o "$script_dir/bin/get_helm.sh" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
-        chmod 700 "$script_dir/bin/get_helm.sh"
-        "$script_dir"/bin/get_helm.sh
-    }
+    command -v kubectl >/dev/null && return
+    kube_ver="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
+    kube_url="https://storage.googleapis.com/kubernetes-release/release/$kube_ver/bin/linux/amd64/kubectl"
+    if [ -z "$ENV_HTTP_PROXY" ]; then
+        curl -Lo "$script_dir/bin/kubectl" "$kube_url"
+    else
+        curl -x "$ENV_HTTP_PROXY" -Lo "$script_dir/bin/kubectl" "$kube_url"
+    fi
+    chmod +x "$script_dir/bin/kubectl"
+}
+
+install_helm() {
+    curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
 check_os() {
@@ -673,8 +673,9 @@ main() {
     check_os
 
     [[ "${ENV_INSTALL_AWS}" == true ]] && install_aws
-    [[ "${ENV_INSTALL_PYTHON_GITLAB}" == true ]] && install_python_gitlab
     [[ "${ENV_INSTALL_KUBECTL}" == true ]] && install_kubectl
+    [[ "${ENV_INSTALL_HELM}" == true ]] && install_helm
+    [[ "${ENV_INSTALL_PYTHON_GITLAB}" == true ]] && install_python_gitlab
 
     ## 处理传入的参数
     ## 1，默认情况执行所有任务，
