@@ -335,8 +335,8 @@ java_deploy_k8s() {
 
 docker_build_generic() {
     echo_time_step "docker build only."
-    secret_file="${script_dir}/.secret.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/.env"
-    [ -f "$secret_file" ] && \cp "$secret_file" "${CI_PROJECT_DIR}/"
+    secret_file_dir="${script_dir}/.secret.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+    [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
     DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" -q "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
@@ -391,11 +391,13 @@ deploy_rsync() {
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
+        ## rsync exclude some files
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsync_conf="${CI_PROJECT_DIR}/rsync.exclude"
         else
             rsync_conf="${script_dir}/rsync.exclude"
         fi
+        ## node/java use rsync --delete
         [[ "${project_lang}" == 'node' || "${project_lang}" == 'java' ]] && rsync_delete='--delete'
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsync_conf} $rsync_delete"
 
@@ -430,13 +432,13 @@ deploy_rsync() {
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
-        ## 复制文件到目标服务器的目标目录
-        ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
         ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
         secret_dir="${script_dir}/.secret.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         if [ -d "$secret_dir" ]; then
-            rsync -rlcvzt -e "$ssh_opt" "$secret_dir" "${ssh_host}:${rsync_dest}"
+            rsync -rlcvzt "$secret_dir" "${rsync_src}"
         fi
+        ## 复制文件到目标服务器的目标目录
+        ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
     done
 }
 
