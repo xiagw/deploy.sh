@@ -456,9 +456,9 @@ get_msg_deploy() {
 [Gitlab Deploy]
 Project = ${CI_PROJECT_PATH}
 Branche = ${CI_COMMIT_REF_NAME}
-Pipeline = ${CI_PIPELINE_ID}/Job-id-$CI_JOB_ID
+Pipeline = ${CI_PIPELINE_ID}/JobID-$CI_JOB_ID
 Describe = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}
-Who = ${GITLAB_USER_ID}-${git_username}
+Who = ${GITLAB_USER_ID}/${git_username}
 Result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)
 "
 }
@@ -654,11 +654,11 @@ get_maxmind_ip() {
 }
 
 gen_apidoc() {
-    echo_time_step "generate apidoc."
     if [[ -f "${CI_PROJECT_DIR}/apidoc.json" ]]; then
+        echo_time_step "generate apidoc."
         $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
-    else
-        echo_warn "apidoc.json not exists."
+    # else
+    #     echo_warn "apidoc.json not exists."
     fi
 }
 
@@ -675,6 +675,7 @@ main() {
     ## 检查OS 类型和版本，安装相应命令和软件包
     check_os
 
+    ## 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == true ]] && install_aws
     [[ "${ENV_INSTALL_KUBECTL}" == true ]] && install_kubectl
     [[ "${ENV_INSTALL_HELM}" == true ]] && install_helm
@@ -682,7 +683,7 @@ main() {
 
     ## 处理传入的参数
     ## 1，默认情况执行所有任务，
-    ## 2，如果传入参，则通过传递入参执行单个任务。。适用于单独的gitlab job，（gitlab 一个 pipeline 多个job）
+    ## 2，如果传入参数，则通过传递入参执行单个任务。适用于单独的gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
         case $1 in
         --update-ssl)
@@ -733,8 +734,8 @@ main() {
         shift
     done
     ##
-    script_log="${script_dir}/${script_name}.log"    ## 记录sql文件的执行情况
-    script_conf="${script_dir}/.${script_name}.conf" ## 发布到服务器的配置信息
+    script_log="${script_dir}/${script_name}.log"    ## 记录 deploy.sh 执行情况
+    script_conf="${script_dir}/.${script_name}.conf" ## 发布到目标服务器的配置信息
     script_env="${script_dir}/.${script_name}.env"   ## 发布配置信息(密)
 
     [[ ! -f "$script_conf" && -f "${script_dir}/${script_name}.conf" ]] && cp "${script_dir}/${script_name}.conf" "$script_conf"
@@ -743,6 +744,8 @@ main() {
 
     if [[ ! -d "${script_dir}/.ssh" ]]; then
         mkdir -m 700 "${script_dir}/.ssh"
+        echo "generate ssh key file for gitlab-runner: ${script_dir}/.ssh/id_ed25519"
+        echo "cat ${script_dir}/.ssh/id_ed25519 >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "${script_dir}/.ssh/id_ed25519"
     fi
     for f in "${script_dir}/.ssh"/*; do
@@ -754,7 +757,7 @@ main() {
     [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
     [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
     [[ ! -e "${HOME}/.kube" && -e "${script_dir}/.kube" ]] && ln -sf "${script_dir}/.kube" "$HOME/"
-    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${script_dir}/.python-gitlab.cfg" ]] && ln -sf "${script_dir}/.python-gitlab.cfg" "$HOME/"
+    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${script_dir}/etc/.python-gitlab.cfg" ]] && ln -sf "${script_dir}/etc/.python-gitlab.cfg" "$HOME/"
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     # shellcheck disable=SC1090
     source "$script_env"
@@ -851,9 +854,6 @@ main() {
         ;;
     'android')
         exec_deploy_rsync=0
-        if [ -x "$script_dir/bin/special.sh" ]; then
-            "$script_dir"/bin/special.sh
-        fi
         ;;
     'ios')
         exec_deploy_rsync=0
@@ -892,7 +892,7 @@ main() {
         send_msg_chatapp
     fi
 
-    ## deploy_result， 0 成功， 1 失败
+    ## deploy result:  0 成功， 1 失败
     return $deploy_result
 }
 
