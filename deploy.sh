@@ -215,16 +215,9 @@ php_composer_volume() {
     if ! docker images | grep 'deploy/composer' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" -f "$script_dir/dockerfile/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
-    if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
-        arg1=update
-    fi
-    if [[ ! -d vendor || "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]]; then
-        arg1=install
-    fi
-    if [[ -n "$arg1" ]]; then
-        $docker_run -v "$PWD:/app" -w /app deploy/composer composer $arg1 || true
-        # $docker_run -v "$PWD:/app" -w /app deploy/composer composer update || true
-    fi
+
+    $docker_run -v "$PWD:/app" -w /app deploy/composer composer install -q || true
+    $docker_run -v "$PWD:/app" -w /app deploy/composer composer update -q || true
 }
 
 kube_create_namespace() {
