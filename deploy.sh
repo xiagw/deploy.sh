@@ -498,42 +498,42 @@ update_cert() {
     ## install acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
         curl https://get.acme.sh | sh
-        mv "${acme_home}" "$script_dir/"
-        ln -sf "$script_dir/.acme.sh" "${HOME}/"
     fi
     [ -d "$acme_cert" ] || mkdir "$acme_cert"
-
-    if [[ "$(find "${acme_home}/" -name 'account.conf*' | wc -l)" == 1 ]]; then
+    ## 支持多份 account.conf.[x] 配置。只有一个 account 则 copy 成 1
+    if [[ "$(find "${acme_home}" -name 'account.conf*' | wc -l)" == 1 ]]; then
         cp "${acme_home}/"account.conf "${acme_home}/"account.conf.1
     fi
 
-    for a in "${acme_home}/"account.conf.*; do
-        if [ -f "$acme_home/.cloudflare.conf" ]; then
+    ## 根据多个不同的账号文件，循环处理 renew
+    for account in "${acme_home}/"account.conf.*; do
+        if [ -f "$HOME/.cloudflare.conf" ]; then
             command -v flarectl || return 1
-            source "$acme_home/.cloudflare.conf" "${a##*.}"
+            source "$HOME/.cloudflare.conf" "${account##*.}"
             domain_name="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
-        elif [ -f "$acme_home/.aliyun.dnsapi.conf" ]; then
+        elif [ -f "$HOME/.aliyun.dnsapi.conf" ]; then
             command -v aliyun || return 1
-            source "$acme_home/.aliyun.dnsapi.conf" "${a##*.}"
-            aliyun configure set --profile "deploy${a##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
+            source "$HOME/.aliyun.dnsapi.conf" "${account##*.}"
+            aliyun configure set --profile "deploy${account##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
             domain_name="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
             dnsType='dns_ali'
-        elif [ -f "$acme_home/.qcloud.dnspod.conf" ]; then
+        elif [ -f "$HOME/.qcloud.dnspod.conf" ]; then
             echo_warn "[TODO] use dnspod api."
         fi
-        \cp -vf "$a" "${acme_home}/account.conf"
-
-        for d in ${domain_name}; do
-            if [ -d "${acme_home}/$d" ]; then
-                "${acme_cmd}" --renew -d "${d}" || true
+        \cp -vf "$account" "${acme_home}/account.conf"
+        ## 单个 account 可能有多个 domain
+        for domain in ${domain_name}; do
+            if [ -d "${acme_home}/$domain" ]; then
+                "${acme_cmd}" --renew -d "${domain}" || true
             else
-                "${acme_cmd}" --issue --dns $dnsType -d "$d" -d "*.$d"
+                "${acme_cmd}" --issue --dns $dnsType -d "$domain" -d "*.$domain"
             fi
-            "${acme_cmd}" --install-cert -d "$d" --key-file "$acme_cert/$d".key \
-                --fullchain-file "$acme_cert/$d".crt
+            "${acme_cmd}" --install-cert -d "$domain" --key-file "$acme_cert/$domain".key \
+                --fullchain-file "$acme_cert/$domain".crt
         done
     done
+    ## 如果有特殊处理的程序则执行
     if [ -f "${acme_home}/deploy.acme.sh" ]; then
         bash "${acme_home}"/deploy.acme.sh
     fi
