@@ -751,6 +751,7 @@ main() {
     [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
     [[ ! -e "${HOME}/.kube" && -e "${script_dir}/.kube" ]] && ln -sf "${script_dir}/.kube" "$HOME/"
     [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${script_dir}/etc/.python-gitlab.cfg" ]] && ln -sf "${script_dir}/etc/.python-gitlab.cfg" "$HOME/"
+    [[ ! -e "${HOME}/.cloudflare.conf" && -e "${script_dir}/etc/.cloudflare.conf" ]] && ln -sf "${script_dir}/etc/.cloudflare.conf" "$HOME/"
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     # shellcheck disable=SC1090
     source "$script_env"
