@@ -275,11 +275,11 @@ java_docker_push() {
         for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
             [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${docker_tag}-$target" || docker_tag_loop="${docker_tag}"
             docker images "${docker_tag_loop}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-            docker push "${docker_tag_loop}" >/dev/null
+            docker push -q "${docker_tag_loop}" || echo_err "error here, maybe caused by GFW."
         done
     else
         docker images "${docker_tag}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-        docker push "${docker_tag}" >/dev/null
+        docker push -q "${docker_tag}" || echo_err "error here, maybe caused by GFW."
     fi
     echo_time "end docker push."
 }
@@ -338,7 +338,7 @@ docker_build_generic() {
 docker_push_generic() {
     echo_time_step "docker push only."
     docker_login 2>/dev/null
-    docker push -q "$docker_tag"
+    docker push -q "$docker_tag" || echo_err "error here, maybe caused by GFW."
     echo_time "end docker push."
 }
 
