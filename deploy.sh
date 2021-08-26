@@ -210,8 +210,8 @@ docker_login() {
 
 php_composer_volume() {
     echo_time_step "php composer install..."
-    echo "PIPELINE_COMPOSER_UPDATE: ${PIPELINE_COMPOSER_UPDATE:-0}"
-    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
+    # echo "PIPELINE_COMPOSER_UPDATE: ${PIPELINE_COMPOSER_UPDATE:-0}"
+    # echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
     if ! docker images | grep 'deploy/composer' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" -f "$script_dir/dockerfile/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
@@ -816,14 +816,11 @@ main() {
     case "${project_lang}" in
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
+        php_composer_volume
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "${exec_docker_build_php:-1}" ]] && docker_build_generic
             [[ 1 -eq "${exec_docker_push_php:-1}" ]] && docker_push_generic
             [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
-        else
-            ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_COMPOSER_UPDATE ，1 启用，0 禁用[default]
-            ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_COMPOSER_INSTALL ，1 启用，0 禁用[default]
-            php_composer_volume
         fi
         ;;
     'node')
