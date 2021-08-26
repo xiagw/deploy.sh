@@ -21,15 +21,15 @@ RUN set -x \
 RUN set -x \
     ## Install PHP extensions
     && docker-php-ext-install bcmath gd pdo_mysql sockets sysvmsg sysvsem sysvshm
-# RUN set -x; \
+RUN set -x; \
     # https://pecl.php.net/get/redis-5.3.2.tgz
-    # pecl install redis
+    pecl install redis
 RUN set -x \
     # https://pecl.php.net/get/swoole-4.6.1.tgz
-    # pecl install swoole \
+    pecl install swoole \
     ## enable extensions
-    # && docker-php-ext-enable bcmath gd pdo_mysql sockets redis swoole \
-    && docker-php-ext-enable bcmath gd pdo_mysql sockets \
+    && docker-php-ext-enable bcmath gd pdo_mysql sockets redis swoole \
+    # && docker-php-ext-enable bcmath gd pdo_mysql sockets \
     # && php -m | grep -E 'redis|swoole' \
     ## add user
     && addgroup -g 1000 -S ubuntu \
