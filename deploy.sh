@@ -216,8 +216,10 @@ php_composer_volume() {
         DOCKER_BUILDKIT=1 docker build -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" -f "$script_dir/dockerfile/Dockerfile.composer" "$script_dir/dockerfile" >/dev/null
     fi
 
-    $docker_run -v "$PWD:/app" -w /app deploy/composer composer install -q || true
-    $docker_run -v "$PWD:/app" -w /app deploy/composer composer update -q || true
+    if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
+        $docker_run -v "$PWD:/app" -w /app deploy/composer composer install -q || true
+        $docker_run -v "$PWD:/app" -w /app deploy/composer composer update -q || true
+    fi
 }
 
 kube_create_namespace() {
