@@ -30,17 +30,17 @@ echo_time_step() {
 # https://www.cnblogs.com/lsgxeva/p/7994474.html
 # https://eslint.bootcss.com
 # http://eslint.cn/docs/user-guide/getting-started
-format_check_node() {
+check_format_node() {
     echo_time_step "[TODO] eslint format check."
 }
 
-format_check_python() {
+check_format_python() {
     echo_time_step "[TODO] vsc-extension-hadolint."
 }
 
 ## https://github.com/squizlabs/PHP_CodeSniffer
 ## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)
-format_check_php() {
+check_format_php() {
     echo_time_step "starting PHP Code Sniffer, < standard=PSR12 >."
     if ! docker images | grep 'deploy/phpcs'; then
         DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dir/docker/Dockerfile.phpcs" "$script_dir/docker" >/dev/null
@@ -61,29 +61,29 @@ format_check_php() {
 }
 
 # https://github.com/alibaba/p3c/wiki/FAQ
-format_check_java() {
+check_format_java() {
     echo_time_step "[TODO] Java code format check."
 }
 
-format_check_dockerfile() {
+check_format_dockerfile() {
     echo_time_step "[TODO] vsc-extension-hadolint."
 }
 
-code_format_check() {
-    [[ "${project_lang}" == php ]] && format_check_php
-    [[ "${project_lang}" == node ]] && format_check_node
-    [[ "${project_lang}" == java ]] && format_check_java
-    [[ "${project_lang}" == python ]] && format_check_python
-    [[ "${project_docker}" == 1 ]] && format_check_dockerfile
+check_format_code() {
+    [[ "${project_lang}" == php ]] && check_format_php
+    [[ "${project_lang}" == node ]] && check_format_node
+    [[ "${project_lang}" == java ]] && check_format_java
+    [[ "${project_lang}" == python ]] && check_format_python
+    [[ "${project_docker}" == 1 ]] && check_format_dockerfile
 }
 
 ## install phpunit
-unit_test() {
+test_unit() {
     echo_time_step "unit test."
 }
 
 ## install sonar-scanner to system user: "gitlab-runner"
-sonar_scan() {
+scan_sonarqube() {
     echo_time_step "sonar scanner."
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$CI_PROJECT_DIR/sonar-project.properties"
@@ -113,23 +113,23 @@ EOF
     # --add-host="sonar.entry.one:192.168.145.12"
 }
 
-ZAP_scan() {
+scan_ZAP() {
     echo_time_step "[TODO] ZAP scan"
     # docker pull owasp/zap2docker-stable
 }
 
-vulmap_scan() {
+scan_vulmap() {
     echo_time_step "[TODO] vulmap scan"
 }
 
 ## install jdk/ant/jmeter
-function_test() {
+test_function() {
     echo_time_step "function test"
     command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
     # jmeter -load
 }
 
-deploy_use_flyway() {
+deploy_sql_flyway() {
     echo_time_step "flyway migrate..."
     ## projcet dir 不存在 docs/sql 文件夹，则返回
     [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && return
@@ -143,11 +143,15 @@ deploy_use_flyway() {
     flyway_volume_sql="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_volume_sql} -v ${flyway_volume_conf} flyway/flyway"
 
+    ## 判断是否需要建立数据库远程连接
+    [ -f "$script_dir/bin/ssh-port.sh" ] && bash "$script_dir/bin/ssh-port.sh" start
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
         $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
         $flyway_docker_run info | tail -n 10
+        ## 断开数据库远程连接
+        [ -f "$script_dir/bin/ssh-port.sh" ] && bash "$script_dir/bin/ssh-port.sh" stop
     else
         echo "Nothing to do."
     fi
@@ -798,24 +802,27 @@ main() {
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
-        deploy_use_flyway
+        deploy_sql_flyway
     fi
+
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     if [[ 1 -eq "${PIPELINE_SONAR:-0}" ]]; then
-        sonar_scan
+        scan_sonarqube
         return $?
     fi
+
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-1}"
     if [[ "${PIPELINE_UNIT_TEST:-1}" -eq 1 ]]; then
-        unit_test
+        test_unit
     fi
+
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_FORMAT: ${PIPELINE_CODE_FORMAT:-0}"
     if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-0}" ]]; then
-        code_format_check
+        check_format_code
     fi
 
     case "${project_lang}" in
@@ -875,7 +882,7 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
     if [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 1 ]]; then
-        function_test
+        test_function
     fi
 
     ## notify
