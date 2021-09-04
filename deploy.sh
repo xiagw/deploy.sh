@@ -151,7 +151,7 @@ deploy_sql_flyway() {
         $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
         $flyway_docker_run info | tail -n 10
         ## 断开数据库远程连接
-        [ -f "$script_dir/bin/ssh-port.sh" ] && bash "$script_dir/bin/ssh-port.sh" stop
+        # [ -f "$script_dir/bin/ssh-port.sh" ] && bash "$script_dir/bin/ssh-port.sh" stop
     else
         echo "Nothing to do."
     fi
