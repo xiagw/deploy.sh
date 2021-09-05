@@ -144,14 +144,13 @@ deploy_sql_flyway() {
     flyway_docker_run="docker run --rm -v ${flyway_volume_sql} -v ${flyway_volume_conf} flyway/flyway"
 
     ## 判断是否需要建立数据库远程连接
-    [ -f "$script_dir/bin/ssh-port.sh" ] && bash "$script_dir/bin/ssh-port.sh" start
+    [ -f "$script_dir/bin/special.sh" ] && bash "$script_dir/bin/special.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
         $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
         $flyway_docker_run info | tail -n 10
         ## 断开数据库远程连接
-        # [ -f "$script_dir/bin/ssh-port.sh" ] && bash "$script_dir/bin/ssh-port.sh" stop
     else
         echo "Nothing to do."
     fi
@@ -363,9 +362,7 @@ deploy_k8s_generic() {
     else
         helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
     fi
-    if [ -x "$script_dir/bin/special.sh" ]; then
-        source "$script_dir"/bin/special.sh
-    fi
+    [ -f "$script_dir/bin/special.sh" ] && bash "$script_dir/bin/special.sh" image
 }
 
 deploy_rsync() {
