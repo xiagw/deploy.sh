@@ -144,7 +144,7 @@ deploy_sql_flyway() {
     flyway_docker_run="docker run --rm -v ${flyway_volume_sql} -v ${flyway_volume_conf} flyway/flyway"
 
     ## 判断是否需要建立数据库远程连接
-    [ -f "$script_dir/bin/special.sh" ] && bash "$script_dir/bin/special.sh" port
+    [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
