@@ -343,7 +343,7 @@ docker_build_generic() {
 docker_push_generic() {
     echo_time_step "docker push only."
     docker_login 2>/dev/null
-    echo "$docker_tag"
+    # echo "$docker_tag"
     docker push -q "$docker_tag" || echo_err "error here, maybe caused by GFW."
     echo_time "end docker push."
 }
