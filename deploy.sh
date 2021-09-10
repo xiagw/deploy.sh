@@ -363,7 +363,7 @@ deploy_k8s_generic() {
     else
         helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
     fi
-    [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" image
+    [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
 }
 
 deploy_rsync() {
