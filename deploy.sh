@@ -200,13 +200,14 @@ docker_login() {
             date +%s >"$lock_file"
         fi
         ;;
-    'aliyun')
-        echo "aliyun docker login"
-        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
-        ;;
-    'qcloud')
-        echo "qcloud docker login"
-        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
+    'aliyun' | 'qcloud')
+        echo "docker login $ENV_DOCKER_LOGIN ..."
+        if [[ -f "$script_dir/.docker.login.${ENV_DOCKER_LOGIN}.lock" ]]; then
+            echo "docker login $ENV_DOCKER_LOGIN OK"
+        else
+            echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
+            echo "docker login $ENV_DOCKER_LOGIN OK" | tee "$script_dir/.docker.login.${ENV_DOCKER_LOGIN}.lock"
+        fi
         ;;
     esac
 }
