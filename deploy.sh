@@ -354,17 +354,20 @@ deploy_k8s_generic() {
     kube_create_namespace
     if [ -d "$CI_PROJECT_PATH/helm" ]; then
         path_helm="$CI_PROJECT_PATH/helm"
-    elif [ -d "$script_dir/helm/$CI_COMMIT_REF_NAME.${CI_PROJECT_DIR}" ]; then
-        path_helm="$script_dir/helm/$CI_COMMIT_REF_NAME.${CI_PROJECT_DIR}"
+    elif [ -d "$script_dir/helm/${CI_PROJECT_NAME}" ]; then
+        path_helm="$script_dir/helm/${CI_PROJECT_NAME}"
     else
         path_helm=none
     fi
+    docker_image_tag="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
     if [ "$path_helm" = none ]; then
-        echo_warn "helm not exists, nothing to do."
+        echo_warn "helm files not exists, ignore helm install."
+        [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
     else
-        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/"
+        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${CI_PROJECT_NAME}" "$path_helm/" \
+            --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
+            --set image.tag="${docker_image_tag}" >/dev/null
     fi
-    [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
 }
 
 deploy_rsync() {
