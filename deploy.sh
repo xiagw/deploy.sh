@@ -30,17 +30,17 @@ echo_time_step() {
 # https://www.cnblogs.com/lsgxeva/p/7994474.html
 # https://eslint.bootcss.com
 # http://eslint.cn/docs/user-guide/getting-started
-check_format_node() {
-    echo_time_step "[TODO] eslint format check."
+code_style_node() {
+    echo_time_step "[TODO] eslint code style check."
 }
 
-check_format_python() {
-    echo_time_step "[TODO] vsc-extension-hadolint."
+code_style_python() {
+    echo_time_step "[TODO] vsc-extension-python."
 }
 
 ## https://github.com/squizlabs/PHP_CodeSniffer
 ## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)
-check_format_php() {
+code_style_php() {
     echo_time_step "starting PHP Code Sniffer, < standard=PSR12 >."
     if ! docker images | grep 'deploy/phpcs'; then
         DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dir/docker/Dockerfile.phpcs" "$script_dir/docker" >/dev/null
@@ -52,7 +52,7 @@ check_format_php() {
                 phpcs_result=$((phpcs_result + 1))
             fi
         else
-            echo_warn "$CI_PROJECT_DIR/$i NOT EXIST."
+            echo_warn "$CI_PROJECT_DIR/$i not exists."
         fi
     done
     if [ "$phpcs_result" -ne "0" ]; then
@@ -61,25 +61,25 @@ check_format_php() {
 }
 
 # https://github.com/alibaba/p3c/wiki/FAQ
-check_format_java() {
-    echo_time_step "[TODO] Java code format check."
+code_style_java() {
+    echo_time_step "[TODO] Java code style check."
 }
 
-check_format_dockerfile() {
+code_style_dockerfile() {
     echo_time_step "[TODO] vsc-extension-hadolint."
 }
 
 check_format_code() {
-    [[ "${project_lang}" == php ]] && check_format_php
-    [[ "${project_lang}" == node ]] && check_format_node
-    [[ "${project_lang}" == java ]] && check_format_java
-    [[ "${project_lang}" == python ]] && check_format_python
-    [[ "${project_docker}" == 1 ]] && check_format_dockerfile
+    [[ "${project_lang}" == php ]] && code_style_php
+    [[ "${project_lang}" == node ]] && code_style_node
+    [[ "${project_lang}" == java ]] && code_style_java
+    [[ "${project_lang}" == python ]] && code_style_python
+    [[ "${project_docker}" == 1 ]] && code_style_dockerfile
 }
 
 ## install phpunit
 test_unit() {
-    echo_time_step "unit test."
+    echo_time_step "[TODO] unit test."
 }
 
 ## install sonar-scanner to system user: "gitlab-runner"
@@ -124,7 +124,7 @@ scan_vulmap() {
 
 ## install jdk/ant/jmeter
 test_function() {
-    echo_time_step "function test"
+    echo_time_step "[TODO] function test"
     command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
     # jmeter -load
 }
@@ -334,7 +334,7 @@ java_deploy_k8s() {
 
 docker_build_generic() {
     echo_time_step "docker build only."
-    secret_file_dir="${script_dir}/.secret.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+    secret_file_dir="${script_dir}/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
     DOCKER_BUILDKIT=1 docker build -q --tag "${docker_tag}" "${CI_PROJECT_DIR}" >/dev/null
@@ -434,7 +434,7 @@ deploy_rsync() {
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
         ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
-        secret_dir="${script_dir}/.secret.${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        secret_dir="${script_dir}/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         if [ -d "$secret_dir" ]; then
             rsync -rlcvzt "$secret_dir" "${rsync_src}"
         fi
@@ -818,15 +818,15 @@ main() {
         test_unit
     fi
 
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
-    echo "PIPELINE_CODE_FORMAT: ${PIPELINE_CODE_FORMAT:-0}"
-    if [[ 1 -eq "${PIPELINE_CODE_FORMAT:-0}" ]]; then
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
+    echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
+    if [[ 1 -eq "${PIPELINE_CODE_STYLE:-0}" ]]; then
         check_format_code
     fi
 
     case "${project_lang}" in
     'php')
-        ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_FORMAT ，1 启用[default]，0 禁用
+        ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
         php_composer_volume
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "${exec_docker_build_php:-1}" ]] && docker_build_generic
