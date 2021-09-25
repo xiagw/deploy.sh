@@ -435,9 +435,7 @@ deploy_rsync() {
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
         ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
         secret_dir="${script_dir}/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
-        if [ -d "$secret_dir" ]; then
-            rsync -rlcvzt "$secret_dir" "${rsync_src}"
-        fi
+        [ -d "$secret_dir" ] && rsync -rlcvzt "$secret_dir" "${rsync_src}"
         ## 复制文件到目标服务器的目标目录
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
     done
