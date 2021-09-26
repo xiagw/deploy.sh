@@ -154,7 +154,7 @@ deploy_sql_flyway() {
     else
         echo "Nothing to do."
     fi
-    echo_time "end flyway migrate"
+    echo_time "end flyway migrate. result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)"
 }
 
 # https://github.com/nodesource/distributions#debinstall
