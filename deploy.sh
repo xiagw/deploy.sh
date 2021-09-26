@@ -127,6 +127,7 @@ test_function() {
     echo_time_step "[TODO] function test"
     command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
     # jmeter -load
+    echo_time "end function test"
 }
 
 deploy_sql_flyway() {
@@ -175,20 +176,17 @@ node_build_volume() {
     else
         $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "yarn install; yarn run build"
     fi
+    echo_time "end node build"
 }
 
 docker_login() {
     case "$ENV_DOCKER_LOGIN" in
     'aws')
         ## 比较上一次登陆时间，超过12小时则再次登录
-        local lock_file
         lock_file="$script_dir/.aws.ecr.login.${ENV_AWS_PROFILE:?undefine}"
-        touch "$lock_file"
-        local timeSave
-        timeSave="$(cat "$lock_file")"
-        local time_compare
-        time_compare="$(date +%s -d '12 hours ago')"
-        if [ "$time_compare" -gt "${timeSave:-0}" ]; then
+        [ -f "$lock_file" ] || touch "$lock_file"
+        time_save="$(cat "$lock_file")"
+        if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
             echo_time "docker login..."
             docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
             aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $docker_login >/dev/null
@@ -219,6 +217,7 @@ php_composer_volume() {
         $docker_run -v "$PWD:/app" -w /app deploy/composer composer install -q || true
         $docker_run -v "$PWD:/app" -w /app deploy/composer composer update -q || true
     fi
+    echo_time "end php composer install"
 }
 
 kube_create_namespace() {
@@ -345,7 +344,7 @@ docker_push_generic() {
 }
 
 deploy_k8s_generic() {
-    echo_time_step "deploy k8s."
+    echo_time_step "start deploy k8s."
     kube_create_namespace
     if [ -d "$CI_PROJECT_PATH/helm" ]; then
         path_helm="$CI_PROJECT_PATH/helm"
@@ -363,6 +362,7 @@ deploy_k8s_generic() {
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${docker_image_tag}" >/dev/null
     fi
+    echo_time "end deploy k8s."
 }
 
 deploy_rsync() {
@@ -440,6 +440,7 @@ deploy_rsync() {
         ## 复制文件到目标服务器的目标目录
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
     done
+    echo_time "end rsync file."
 }
 
 get_msg_deploy() {
@@ -490,7 +491,7 @@ send_msg_chatapp() {
     elif [[ 1 -eq "${ENV_NOTIFY_EMAIL:-0}" ]]; then
         echo_warn "[TODO] send email to you."
     else
-        echo "No message send."
+        echo_warn "No message send."
     fi
 }
 
@@ -745,8 +746,9 @@ main() {
     if [[ ! -d "${script_dir}/.ssh" ]]; then
         mkdir -m 700 "${script_dir}/.ssh"
         echo "generate ssh key file for gitlab-runner: ${script_dir}/.ssh/id_ed25519"
-        echo "cat ${script_dir}/.ssh/id_ed25519 >> [dest_server]:\~/.ssh/authorized_keys"
+        echo "cat ${script_dir}/.ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "${script_dir}/.ssh/id_ed25519"
+        ln -sf "${script_dir}/.ssh" "$HOME/"
     fi
     for f in "${script_dir}/.ssh"/*; do
         if [ ! -f "$HOME/.ssh/${f##*/}" ]; then
@@ -765,7 +767,7 @@ main() {
     ## run docker with current user
     docker_run="docker run --interactive --rm -u $UID:$UID"
     ## run docker with root
-    # runDockeRoot="docker run --interactive --rm"
+    # docker_run_root="docker run --interactive --rm"
     docker_tag="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-${CI_COMMIT_SHORT_SHA}"
     git_diff="git --no-pager diff --name-only HEAD^"
 
@@ -888,6 +890,8 @@ main() {
     if [[ "${enable_send_msg:-1}" == 1 ]]; then
         get_msg_deploy
         send_msg_chatapp
+    else
+        echo_warn "disable message send."
     fi
 
     ## deploy result:  0 成功， 1 失败
