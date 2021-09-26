@@ -15,10 +15,10 @@ set -e ## 出现错误自动退出
 # install gitlab-runner, https://docs.gitlab.com/runner/install/linux-manually.html
 # http://www.ttlsa.com/auto/gitlab-cicd-variables-zh-document/
 
-echo_info() { echo -e "\033[32m$*\033[0m"; }    ## green
-echo_warn() { echo -e "\033[33m$*\033[0m"; }    ## yellow
-echo_err() { echo -e "\033[31m$*\033[0m"; }     ## red
-echo_ques() { echo -e "\033[35m$*\033[0m"; }    ## brown
+echo_info() { echo -e "\033[32m$*\033[0m"; }        ## green
+echo_warn() { echo -e "\033[33m$*\033[0m"; }        ## yellow
+echo_err() { echo -e "\033[31m$*\033[0m"; }         ## red
+echo_ques() { echo -e "\033[35m$*\033[0m"; }        ## brown
 echo_time() { echo "[$(date +%Y%m%d-%T-%u)], $*"; } ## time
 echo_time_step() {
     ## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
@@ -155,8 +155,12 @@ deploy_sql_flyway() {
     else
         echo "Nothing to do."
     fi
-    echo_time "end flyway migrate"
-    echo_warn "result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)"
+    echo_time "end flyway migrate."
+    if [ ${deploy_result:-0} = 0 ]; then
+        echo_info "Result = OK"
+    else
+        echo_err "Result = FAIL"
+    fi
 }
 
 # https://github.com/nodesource/distributions#debinstall
