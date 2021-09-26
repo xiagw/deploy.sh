@@ -160,16 +160,11 @@ deploy_sql_flyway() {
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
     echo_time_step "node yarn build."
-    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name "${CI_COMMIT_REF_NAME}.*")"
-    for file in $config_env_path; do
+    path_config_env="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${CI_COMMIT_REF_NAME}.*")"
+    for file in $path_config_env; do
         \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
     done
-    if [[ -d "${CI_PROJECT_DIR}/config" ]]; then
-        config_env_path="$(find "${CI_PROJECT_DIR}/config" -maxdepth 1 -name "${CI_COMMIT_REF_NAME}.*")"
-        for file in $config_env_path; do
-            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
-        done
-    fi
+
     rm -f package-lock.json
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node' >/dev/null; then
@@ -408,6 +403,8 @@ deploy_rsync() {
         ## 源文件夹
         if [[ "${project_lang}" == 'node' ]]; then
             rsync_src="${CI_PROJECT_DIR}/dist/"
+        elif [[ "${project_lang}" == 'react' ]]; then
+            rsync_src="${CI_PROJECT_DIR}/build/dist/"
         elif [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
             rsync_src="${CI_PROJECT_DIR}/"
         elif [[ "$rsync_src" =~ \.[jw]ar$ ]]; then
@@ -432,7 +429,8 @@ deploy_rsync() {
             # bucktName="${rsync_dest#oss://}"
             # bucktName="${bucktName%%/*}"
             aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$rsync_dest/"
-            return
+            # rclone sync "${CI_PROJECT_DIR}/" "$rsync_dest/"
+            # return
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
@@ -782,7 +780,8 @@ main() {
 
     ## 判定项目类型
     if [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]]; then
-        if [[ -d "${CI_PROJECT_DIR}/ios" || -d "${CI_PROJECT_DIR}/android" ]]; then
+        # if [[ -d "${CI_PROJECT_DIR}/ios" || -d "${CI_PROJECT_DIR}/android" ]]; then
+        if grep -i -q 'Create React' "${CI_PROJECT_DIR}/README.md" "${CI_PROJECT_DIR}/readme.md"; then
             project_lang='react'
         else
             project_lang='node'
@@ -835,7 +834,7 @@ main() {
             [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
         fi
         ;;
-    'node')
+    'node' | 'react')
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "$exec_docker_build_node" ]] && docker_build_generic
             [[ 1 -eq "$exec_docker_push_node" ]] && docker_push_generic
@@ -850,10 +849,6 @@ main() {
             [[ 1 -eq "$exec_java_docker_push" ]] && java_docker_push
             [[ 1 -eq "$exec_deploy_k8s_java" ]] && java_deploy_k8s
         fi
-        ;;
-    'react')
-        echo_err "manual package"
-        return
         ;;
     'android')
         exec_deploy_rsync=0
