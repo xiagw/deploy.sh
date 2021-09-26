@@ -19,10 +19,10 @@ echo_info() { echo -e "\033[32m$*\033[0m"; }    ## green
 echo_warn() { echo -e "\033[33m$*\033[0m"; }    ## yellow
 echo_err() { echo -e "\033[31m$*\033[0m"; }     ## red
 echo_ques() { echo -e "\033[35m$*\033[0m"; }    ## brown
-echo_time() { echo "[$(date +%F-%T-%w)], $*"; } ## time
+echo_time() { echo "[$(date +%Y%m%d-%T-%u)], $*"; } ## time
 echo_time_step() {
     ## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
-    echo -e "\033[33m[$(date +%Y%m%d-%T-%u)], step-$((STEP + 1))\033[0m, $*"
+    echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\033[0m $*"
     STEP=$((STEP + 1))
 }
 # https://zhuanlan.zhihu.com/p/48048906
@@ -31,17 +31,17 @@ echo_time_step() {
 # https://eslint.bootcss.com
 # http://eslint.cn/docs/user-guide/getting-started
 code_style_node() {
-    echo_time_step "[TODO] eslint code style check."
+    echo_time_step "[TODO] eslint code style check..."
 }
 
 code_style_python() {
-    echo_time_step "[TODO] vsc-extension-python."
+    echo_time_step "[TODO] vsc-extension-python..."
 }
 
 ## https://github.com/squizlabs/PHP_CodeSniffer
 ## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)
 code_style_php() {
-    echo_time_step "starting PHP Code Sniffer, < standard=PSR12 >."
+    echo_time_step "starting PHP Code Sniffer, < standard=PSR12 >..."
     if ! docker images | grep 'deploy/phpcs'; then
         DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dir/docker/Dockerfile.phpcs" "$script_dir/docker" >/dev/null
     fi
@@ -62,11 +62,11 @@ code_style_php() {
 
 # https://github.com/alibaba/p3c/wiki/FAQ
 code_style_java() {
-    echo_time_step "[TODO] Java code style check."
+    echo_time_step "[TODO] Java code style check..."
 }
 
 code_style_dockerfile() {
-    echo_time_step "[TODO] vsc-extension-hadolint."
+    echo_time_step "[TODO] vsc-extension-hadolint..."
 }
 
 check_format_code() {
@@ -79,12 +79,12 @@ check_format_code() {
 
 ## install phpunit
 test_unit() {
-    echo_time_step "[TODO] unit test."
+    echo_time_step "[TODO] unit test..."
 }
 
 ## install sonar-scanner to system user: "gitlab-runner"
 scan_sonarqube() {
-    echo_time_step "sonar scanner."
+    echo_time_step "sonar scanner..."
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$CI_PROJECT_DIR/sonar-project.properties"
     if ! curl "$sonar_url" >/dev/null 2>&1; then
@@ -114,20 +114,20 @@ EOF
 }
 
 scan_ZAP() {
-    echo_time_step "[TODO] ZAP scan"
+    echo_time_step "[TODO] ZAP scan..."
     # docker pull owasp/zap2docker-stable
 }
 
 scan_vulmap() {
-    echo_time_step "[TODO] vulmap scan"
+    echo_time_step "[TODO] vulmap scan..."
 }
 
 ## install jdk/ant/jmeter
 test_function() {
-    echo_time_step "[TODO] function test"
+    echo_time_step "[TODO] function test..."
     command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
     # jmeter -load
-    echo_time "end function test"
+    echo_time "end function test."
 }
 
 deploy_sql_flyway() {
@@ -155,12 +155,12 @@ deploy_sql_flyway() {
     else
         echo "Nothing to do."
     fi
-    echo_time "end flyway migrate. result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)"
+    echo_time "end flyway migrate, result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)"
 }
 
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
-    echo_time_step "node yarn build."
+    echo_time_step "node yarn build..."
     path_config_env="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${CI_COMMIT_REF_NAME}.*")"
     for file in $path_config_env; do
         \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
@@ -176,7 +176,7 @@ node_build_volume() {
     else
         $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "yarn install; yarn run build"
     fi
-    echo_time "end node build"
+    echo_time "end node build."
 }
 
 docker_login() {
@@ -217,7 +217,7 @@ php_composer_volume() {
         $docker_run -v "$PWD:/app" -w /app deploy/composer composer install -q || true
         $docker_run -v "$PWD:/app" -w /app deploy/composer composer update -q || true
     fi
-    echo_time "end php composer install"
+    echo_time "end php composer install."
 }
 
 kube_create_namespace() {
@@ -233,7 +233,7 @@ kube_create_namespace() {
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
 java_docker_build() {
-    echo_time_step "java docker build."
+    echo_time_step "java docker build..."
     ## gitlab-CI/CD setup variables MVN_DEBUG=1 enable debug message
     echo_warn "If you want to view debug msg, set MVN_DEBUG=1 on pipeline."
     [[ "${MVN_DEBUG:-0}" == 1 ]] && unset MVN_DEBUG || MVN_DEBUG='-q'
@@ -268,7 +268,7 @@ java_docker_build() {
 }
 
 java_docker_push() {
-    echo_time_step "docker push to ECR."
+    echo_time_step "docker push to ECR..."
     docker_login
     if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
         # shellcheck disable=2013
@@ -285,7 +285,7 @@ java_docker_push() {
 }
 
 java_deploy_k8s() {
-    echo_time_step "deploy to k8s."
+    echo_time_step "deploy to k8s..."
     kube_create_namespace
     helm_dir_project="$script_dir/helm/${ENV_HELM_DIR}"
     # shellcheck disable=2013
@@ -327,7 +327,7 @@ java_deploy_k8s() {
 }
 
 docker_build_generic() {
-    echo_time_step "docker build only."
+    echo_time_step "docker build only..."
     secret_file_dir="${script_dir}/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
@@ -336,7 +336,7 @@ docker_build_generic() {
 }
 
 docker_push_generic() {
-    echo_time_step "docker push only."
+    echo_time_step "docker push only..."
     docker_login 2>/dev/null
     # echo "$docker_tag"
     docker push -q "$docker_tag" || echo_err "error here, maybe caused by GFW."
@@ -344,7 +344,7 @@ docker_push_generic() {
 }
 
 deploy_k8s_generic() {
-    echo_time_step "start deploy k8s."
+    echo_time_step "start deploy k8s..."
     kube_create_namespace
     if [ -d "$CI_PROJECT_PATH/helm" ]; then
         path_helm="$CI_PROJECT_PATH/helm"
@@ -366,7 +366,7 @@ deploy_k8s_generic() {
 }
 
 deploy_rsync() {
-    echo_time_step "rsync code file to remote server."
+    echo_time_step "rsync code file to remote server..."
     ## 读取配置文件，获取 项目/分支名/war包目录
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" || {
         echo_err "if stop here, check .deploy.conf"
@@ -462,7 +462,7 @@ Result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)
 }
 
 send_msg_chatapp() {
-    echo_time_step "send message to chatApp."
+    echo_time_step "send message to chatApp..."
     if [[ 1 -eq "${ENV_NOTIFY_WEIXIN:-0}" ]]; then
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
         curl -s "$weixin_api" \
@@ -496,7 +496,7 @@ send_msg_chatapp() {
 }
 
 update_cert() {
-    echo_time_step "update ssl cert (dns api)."
+    echo_time_step "update ssl cert (dns api)..."
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/dest"
