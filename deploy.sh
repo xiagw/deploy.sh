@@ -168,7 +168,7 @@ node_build_volume() {
     echo_time_step "node yarn build..."
     path_config_env="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${CI_COMMIT_REF_NAME}.*")"
     for file in $path_config_env; do
-        \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
+        \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
     done
 
     rm -f package-lock.json
