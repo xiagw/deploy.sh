@@ -166,14 +166,16 @@ deploy_sql_flyway() {
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
     echo_time_step "node yarn build..."
+    # vue3.x项目，发布系统自动部署时会把根目录下的环境配置文件复制为.env文件
     config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name "${CI_COMMIT_REF_NAME}.*")"
     for file in $config_env_path; do
-        if [ "$project_lang" = 'react' ]; then
-            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
-        else
+        # if [ "$project_lang" = 'react' ]; then
+        #     \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
+        # else
             \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
-        fi
+        # fi
     done
+    # vue2.x项目，发布系统自动部署时会把config目录下的环境配置文件复制为env.js
     if [[ -d "${CI_PROJECT_DIR}/config" ]]; then
         config_env_path="$(find "${CI_PROJECT_DIR}/config" -maxdepth 1 -name "${CI_COMMIT_REF_NAME}.*")"
         for file in $config_env_path; do
