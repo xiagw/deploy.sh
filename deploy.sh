@@ -132,8 +132,7 @@ test_function() {
 
 deploy_sql_flyway() {
     echo_time_step "flyway migrate..."
-    ## projcet dir 不存在 docs/sql 文件夹，则返回
-    [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && return
+
     flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
 
     if [ -d "$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}" ]; then
@@ -818,6 +817,8 @@ main() {
 
     ## use flyway deploy sql file
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
+    ## projcet dir 不存在 docs/sql 文件夹，则返回
+    [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && exec_flyway=0
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
         deploy_sql_flyway
