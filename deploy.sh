@@ -124,9 +124,10 @@ scan_vulmap() {
 
 ## install jdk/ant/jmeter
 test_function() {
-    echo_time_step "[TODO] function test..."
-    command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
-    # jmeter -load
+    echo_time_step "function test..."
+    # command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
+    # jmeter -n -t "$script_dir/test/jmeter/test.jmx" -l "$script_dir/test/jmeter/test.jtl"
+    [ -f "$script_dir/tests/test_func.sh" ] && bash "$script_dir/tests/test_func.sh"
     echo_time "end function test."
 }
 
@@ -592,6 +593,13 @@ install_helm() {
     curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
+install_jmeter() {
+    ver_jmeter='5.4.1'
+    curl -LO "$script_dir"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
+    unzip jmeter.zip
+    ln -sf apache-jmeter-${ver_jmeter} jmeter
+}
+
 check_os() {
     if [[ -e /etc/debian_version ]]; then
         # shellcheck disable=SC1091
@@ -622,6 +630,7 @@ check_os() {
         id | grep -q docker || sudo usermod -aG docker "$USER"
         command -v pip3 >/dev/null || sudo apt install -y python3-pip
         command -v java >/dev/null || sudo apt install -y openjdk-8-jdk
+        command -v jmeter >/dev/null || install_jmeter
         # command -v shc >/dev/null || sudo apt install -y shc
     elif [[ "$OS" == 'centos' ]]; then
         rpm -q epel-release >/dev/null || sudo yum install -y epel-release
