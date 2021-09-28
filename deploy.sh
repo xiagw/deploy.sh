@@ -69,7 +69,7 @@ code_style_dockerfile() {
     echo_time_step "[TODO] vsc-extension-hadolint..."
 }
 
-check_format_code() {
+check_code_style() {
     [[ "${project_lang}" == php ]] && code_style_php
     [[ "${project_lang}" == node ]] && code_style_node
     [[ "${project_lang}" == java ]] && code_style_java
@@ -420,7 +420,7 @@ deploy_rsync() {
         if [[ "${project_lang}" == 'node' ]]; then
             rsync_src="${CI_PROJECT_DIR}/dist/"
         elif [[ "${project_lang}" == 'react' ]]; then
-            rsync_src="${CI_PROJECT_DIR}/build/dist/"
+            rsync_src="${CI_PROJECT_DIR}/build/"
         elif [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
             rsync_src="${CI_PROJECT_DIR}/"
         elif [[ "$rsync_src" =~ \.[jw]ar$ ]]; then
@@ -841,7 +841,7 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     if [[ 1 -eq "${PIPELINE_CODE_STYLE:-0}" ]]; then
-        check_format_code
+        check_code_style
     fi
 
     case "${project_lang}" in
