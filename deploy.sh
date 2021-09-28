@@ -825,7 +825,7 @@ main() {
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
 
     ## use flyway deploy sql file
-    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
+    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     ## projcet dir 不存在 docs/sql 文件夹，则返回
     [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && exec_flyway=0
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
