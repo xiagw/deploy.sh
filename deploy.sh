@@ -808,7 +808,7 @@ main() {
     ## 判定项目类型
     if [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]]; then
         # if [[ -d "${CI_PROJECT_DIR}/ios" || -d "${CI_PROJECT_DIR}/android" ]]; then
-        if grep -i -q 'Create React' "${CI_PROJECT_DIR}/README.md" "${CI_PROJECT_DIR}/readme.md"; then
+        if grep -i -q 'Create React' "${CI_PROJECT_DIR}/README.md" "${CI_PROJECT_DIR}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
         else
             project_lang='node'
