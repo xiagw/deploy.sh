@@ -363,10 +363,10 @@ docker_push_generic() {
 deploy_k8s_generic() {
     echo_time_step "start deploy k8s..."
     kube_create_namespace
-    if [ -d "$CI_PROJECT_PATH/helm" ]; then
-        path_helm="$CI_PROJECT_PATH/helm"
-    elif [ -d "$script_dir/helm/${CI_PROJECT_NAME}" ]; then
+    if [ -d "$script_dir/helm/${CI_PROJECT_NAME}" ]; then
         path_helm="$script_dir/helm/${CI_PROJECT_NAME}"
+    elif [ -d "$CI_PROJECT_PATH/helm" ]; then
+        path_helm="$CI_PROJECT_PATH/helm"
     else
         path_helm=none
     fi
