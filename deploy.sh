@@ -455,6 +455,7 @@ deploy_rsync() {
         secret_dir="${script_dir}/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         [ -d "$secret_dir" ] && rsync -rlcvzt "$secret_dir" "${rsync_src}"
         ## 复制文件到目标服务器的目标目录
+        echo "deploy to ${ssh_host}:${rsync_dest}"
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
     done
     echo_time "end rsync file."
