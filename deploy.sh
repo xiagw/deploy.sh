@@ -363,8 +363,10 @@ docker_push_generic() {
 deploy_k8s_generic() {
     echo_time_step "start deploy k8s..."
     kube_create_namespace
-    if [ -d "$script_dir/helm/${CI_PROJECT_NAME}" ]; then
-        path_helm="$script_dir/helm/${CI_PROJECT_NAME}"
+    prefix_remove=${CI_PROJECT_NAME#*-}
+    str_lower="${prefix_remove,,}"
+    if [ -d "$script_dir/helm/${str_lower}" ]; then
+        path_helm="$script_dir/helm/${str_lower}"
     elif [ -d "$CI_PROJECT_PATH/helm" ]; then
         path_helm="$CI_PROJECT_PATH/helm"
     else
@@ -857,11 +859,12 @@ main() {
     case "${project_lang}" in
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-        php_composer_volume
         if [[ 1 -eq "${project_docker}" ]]; then
             [[ 1 -eq "${exec_docker_build_php:-1}" ]] && docker_build_generic
             [[ 1 -eq "${exec_docker_push_php:-1}" ]] && docker_push_generic
             [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
+        else
+            php_composer_volume
         fi
         ;;
     'node' | 'react')
