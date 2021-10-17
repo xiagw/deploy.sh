@@ -134,7 +134,7 @@ test_function() {
 deploy_sql_flyway() {
     echo_time_step "flyway migrate..."
 
-    flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/flyway}"
+    flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/conf/flyway}"
 
     if [ -d "$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}" ]; then
         flyway_volume_conf="$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
@@ -172,7 +172,7 @@ node_build_volume() {
         # if [ "$project_lang" = 'react' ]; then
         #     \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
         # else
-            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
+        \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
         # fi
     done
     # vue2.x项目，发布系统自动部署时会把config目录下的环境配置文件复制为env.js
@@ -296,7 +296,7 @@ java_docker_push() {
 
 java_deploy_k8s() {
     echo_time_step "deploy to k8s..."
-    helm_dir_project="$script_dir/helm/${ENV_HELM_DIR}"
+    helm_dir_project="$script_dir/conf/helm/${ENV_HELM_DIR}"
     # shellcheck disable=2013
     for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
         if [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ]; then
@@ -337,7 +337,7 @@ java_deploy_k8s() {
 
 docker_build_generic() {
     echo_time_step "docker build only..."
-    secret_file_dir="${script_dir}/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+    secret_file_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
     DOCKER_BUILDKIT=1 docker build -q --tag "${docker_tag}" "${CI_PROJECT_DIR}" >/dev/null
@@ -356,12 +356,14 @@ deploy_k8s_generic() {
     echo_time_step "start deploy k8s..."
     prefix_remove=${CI_PROJECT_NAME#*-}
     str_lower="${prefix_remove,,}"
-    if [ -d "$script_dir/helm/${str_lower}" ]; then
-        path_helm="$script_dir/helm/${str_lower}"
-    elif [ -d "$CI_PROJECT_PATH/helm" ]; then
-        path_helm="$CI_PROJECT_PATH/helm"
+    if [ -d "$script_dir/conf/helm/${str_lower}" ]; then
+        path_helm="$script_dir/conf/helm/${str_lower}"
     else
-        path_helm=none
+        if [ -d "$CI_PROJECT_PATH/helm" ]; then
+            path_helm="$CI_PROJECT_PATH/helm"
+        else
+            path_helm=none
+        fi
     fi
     docker_image_tag="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
     if [ "$path_helm" = none ]; then
@@ -405,7 +407,7 @@ deploy_rsync() {
         if [[ -f "${CI_PROJECT_DIR}/rsync.exclude" ]]; then
             rsync_conf="${CI_PROJECT_DIR}/rsync.exclude"
         else
-            rsync_conf="${script_dir}/rsync.exclude"
+            rsync_conf="${conf_rsync_exclude}"
         fi
         ## node/java use rsync --delete
         [[ "${project_lang}" == 'node' || "${project_lang}" == 'java' ]] && rsync_delete='--delete'
@@ -446,7 +448,7 @@ deploy_rsync() {
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
         ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
-        secret_dir="${script_dir}/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        secret_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
         [ -d "$secret_dir" ] && rsync -rlcvzt "$secret_dir" "${rsync_src}"
         ## 复制文件到目标服务器的目标目录
         echo "deploy to ${ssh_host}:${rsync_dest}"
@@ -755,32 +757,39 @@ main() {
         shift
     done
     ##
-    script_log="${script_dir}/${script_name}.log"    ## 记录 deploy.sh 执行情况
-    script_conf="${script_dir}/.${script_name}.conf" ## 发布到目标服务器的配置信息
-    script_env="${script_dir}/.${script_name}.env"   ## 发布配置信息(密)
+    script_log="${script_dir}/${script_name}.log" ## 记录 deploy.sh 执行情况
+    script_conf="${script_dir}/conf/deploy.conf"  ## 发布到目标服务器的配置信息
+    script_env="${script_dir}/conf/deploy.env"    ## 发布配置信息(密)
 
-    [[ ! -f "$script_conf" && -f "${script_dir}/${script_name}.conf" ]] && cp "${script_dir}/${script_name}.conf" "$script_conf"
-    [[ ! -f "$script_env" && -f "${script_dir}/${script_name}.env" ]] && cp "${script_dir}/${script_name}.env" "$script_env"
+    [[ ! -f "$script_conf" ]] && cp "${script_dir}/conf/deploy.conf.example" "$script_conf"
+    [[ ! -f "$script_env" ]] && cp "${script_dir}/conf/deploy.env.example" "$script_env"
     [[ ! -f "$script_log" ]] && touch "$script_log"
 
-    if [[ ! -d "${script_dir}/.ssh" ]]; then
-        mkdir -m 700 "${script_dir}/.ssh"
-        echo "generate ssh key file for gitlab-runner: ${script_dir}/.ssh/id_ed25519"
-        echo "cat ${script_dir}/.ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
-        ssh-keygen -t ed25519 -N '' -f "${script_dir}/.ssh/id_ed25519"
-        ln -sf "${script_dir}/.ssh" "$HOME/"
+    conf_dir_ssh="${script_dir}/conf/.ssh"
+    if [[ ! -d "${conf_dir_ssh}" ]]; then
+        mkdir -m 700 "$conf_dir_ssh"
+        echo_warn "generate ssh key file for gitlab-runner: $conf_dir_ssh/id_ed25519"
+        echo_err "cat $conf_dir_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
+        ssh-keygen -t ed25519 -N '' -f "$conf_dir_ssh/id_ed25519"
+        ln -sf "$conf_dir_ssh" "$HOME/"
     fi
-    for f in "${script_dir}/.ssh"/*; do
+    for f in "$conf_dir_ssh"/*; do
         if [ ! -f "$HOME/.ssh/${f##*/}" ]; then
             chmod 600 "${f}"
             ln -sf "${f}" "$HOME/.ssh/"
         fi
     done
-    [[ ! -e "${HOME}/.acme.sh" && -e "${script_dir}/.acme.sh" ]] && ln -sf "${script_dir}/.acme.sh" "$HOME/"
-    [[ ! -e "${HOME}/.aws" && -e "${script_dir}/.aws" ]] && ln -sf "${script_dir}/.aws" "$HOME/"
-    [[ ! -e "${HOME}/.kube" && -e "${script_dir}/.kube" ]] && ln -sf "${script_dir}/.kube" "$HOME/"
-    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${script_dir}/etc/.python-gitlab.cfg" ]] && ln -sf "${script_dir}/etc/.python-gitlab.cfg" "$HOME/"
-    [[ ! -e "${HOME}/.cloudflare.conf" && -e "${script_dir}/etc/.cloudflare.conf" ]] && ln -sf "${script_dir}/etc/.cloudflare.conf" "$HOME/"
+    conf_dir_acme="${script_dir}/conf/.acme.sh"
+    conf_dir_aws="${script_dir}/conf/.aws"
+    conf_dir_kube="${script_dir}/conf/.kube"
+    conf_python_gitlab="${script_dir}/conf/.python-gitlab.cfg"
+    conf_cloudflare="${script_dir}/conf/.cloudflare.cfg"
+    conf_rsync_exclude="${script_dir}/conf/rsync.exclude"
+    [[ ! -e "${HOME}/.acme.sh" && -e "${conf_dir_acme}" ]] && ln -sf "${conf_dir_acme}" "$HOME/"
+    [[ ! -e "${HOME}/.aws" && -e "${conf_dir_aws}" ]] && ln -sf "${conf_dir_aws}" "$HOME/"
+    [[ ! -e "${HOME}/.kube" && -e "${conf_dir_kube}" ]] && ln -sf "${conf_dir_kube}" "$HOME/"
+    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${conf_python_gitlab}" ]] && ln -sf "${conf_python_gitlab}" "$HOME/"
+    [[ ! -e "${HOME}/.cloudflare.conf" && -e "${conf_cloudflare}" ]] && ln -sf "${conf_cloudflare}" "$HOME/"
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     # shellcheck disable=SC1090
     source "$script_env"

@@ -1,1 +1,1 @@
-docker run --rm flyway/flyway:7.8.1 $*
+docker run --rm flyway/flyway:latest $*

@@ -16,3 +16,8 @@ flyway/conf/
 .acme.sh/
 
 .ssh/
+
+conf/*
+!conf/deploy.conf.example
+!conf/deploy.env.example
+!conf/rsync.exclude
