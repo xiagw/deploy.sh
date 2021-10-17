@@ -229,7 +229,7 @@ php_composer_volume() {
     # echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
     if ! docker images | grep -q 'deploy/composer'; then
         DOCKER_BUILDKIT=1 docker build --quiet -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-        -f "$script_dir/conf/dockerfile/Dockerfile.composer" "$script_dir/conf/dockerfile"
+            -f "$script_dir/conf/dockerfile/Dockerfile.composer" "$script_dir/conf/dockerfile"
     fi
 
     if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
@@ -594,9 +594,13 @@ install_helm() {
 install_jmeter() {
     ver_jmeter='5.4.1'
     dir_temp=$(mktemp -d)
-    curl -LO "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
-    unzip "$dir_temp"/jmeter.zip
-    ln -sf apache-jmeter-${ver_jmeter} jmeter
+    curl -Lo "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
+    (
+        cd $script_data
+        unzip "$dir_temp"/jmeter.zip
+        ln -sf apache-jmeter-${ver_jmeter} jmeter
+    )
+    rm -rf "$dir_temp"
 }
 
 check_os() {
@@ -691,9 +695,10 @@ main() {
     script_name="$(basename "$0")"
     script_name="${script_name%.sh}"
     script_dir="$(cd "$(dirname "$0")" && pwd)"
+    script_data="${script_dir}/data" ## 记录 deploy.sh 的数据文件
 
     PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
-    PATH="$PATH:$script_dir/jdk/bin:$script_dir/jmeter/bin:$script_dir/ant/bin:$script_dir/maven/bin"
+    PATH="$PATH:$script_data/jdk/bin:$script_data/jmeter/bin:$script_data/ant/bin:$script_data/maven/bin"
     PATH="$PATH:$script_dir/bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
@@ -759,9 +764,10 @@ main() {
         shift
     done
     ##
+
     script_log="${script_dir}/data/${script_name}.log" ## 记录 deploy.sh 执行情况
-    script_conf="${script_dir}/conf/deploy.conf"  ## 发布到目标服务器的配置信息
-    script_env="${script_dir}/conf/deploy.env"    ## 发布配置信息(密)
+    script_conf="${script_dir}/conf/deploy.conf"       ## 发布到目标服务器的配置信息
+    script_env="${script_dir}/conf/deploy.env"         ## 发布配置信息(密)
 
     [[ ! -f "$script_conf" ]] && cp "${script_dir}/conf/deploy.conf.example" "$script_conf"
     [[ ! -f "$script_env" ]] && cp "${script_dir}/conf/deploy.env.example" "$script_env"
