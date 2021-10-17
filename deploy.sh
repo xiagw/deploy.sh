@@ -43,7 +43,7 @@ code_style_python() {
 code_style_php() {
     echo_time_step "starting PHP Code Sniffer, < standard=PSR12 >..."
     if ! docker images | grep 'deploy/phpcs'; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dir/docker/Dockerfile.phpcs" "$script_dir/docker" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dir/conf/dockerfile/Dockerfile.phpcs" "$script_dir/docker" >/dev/null
     fi
     phpcs_result=0
     for i in $($git_diff | awk '/\.php$/{if (NR>0){print $0}}'); do
@@ -127,7 +127,7 @@ test_function() {
     echo_time_step "function test..."
     # command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
     # jmeter -n -t "$script_dir/test/jmeter/test.jmx" -l "$script_dir/test/jmeter/test.jtl"
-    [ -f "$script_dir/tests/test_func.sh" ] && bash "$script_dir/tests/test_func.sh"
+    [ -f "$script_dir/data/tests/test_func.sh" ] && bash "$script_dir/data/tests/test_func.sh"
     echo_time "end function test."
 }
 
@@ -186,7 +186,7 @@ node_build_volume() {
     rm -f package-lock.json
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node' >/dev/null; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dir/dockerfile/Dockerfile.node" "$script_dir/dockerfile" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dir/conf/dockerfile/Dockerfile.node" "$script_dir/conf/dockerfile" >/dev/null
     fi
     if [[ -f "$script_dir/bin/custome.docker.build.sh" ]]; then
         source "$script_dir/bin/custome.docker.build.sh"
@@ -228,7 +228,8 @@ php_composer_volume() {
     # echo "PIPELINE_COMPOSER_UPDATE: ${PIPELINE_COMPOSER_UPDATE:-0}"
     # echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
     if ! docker images | grep -q 'deploy/composer'; then
-        DOCKER_BUILDKIT=1 docker build --quiet -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" -f "$script_dir/dockerfile/Dockerfile.composer" "$script_dir/dockerfile"
+        DOCKER_BUILDKIT=1 docker build --quiet -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+        -f "$script_dir/conf/dockerfile/Dockerfile.composer" "$script_dir/conf/dockerfile"
     fi
 
     if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
@@ -249,20 +250,20 @@ java_docker_build() {
     echo_warn "If you want to view debug msg, set MVN_DEBUG=1 on pipeline."
     [[ "${MVN_DEBUG:-0}" == 1 ]] && unset MVN_DEBUG || MVN_DEBUG='-q'
     ## if you have no apollo config center, use local .env
-    env_file="$script_dir/.env.${CI_PROJECT_NAME}.${CI_COMMIT_REF_NAME}"
+    env_file="$script_dir/conf/.env.${CI_PROJECT_NAME}.${CI_COMMIT_REF_NAME}"
     if [ ! -f "$env_file" ]; then
         ## generate mysql username/password
         # [ -x generate_env_file.sh ] && bash generate_env_file.sh
-        [ -f "$script_dir/.env.tpl" ] && generate_env_file "$env_file"
+        [ -f "$script_dir/conf/.env.tpl" ] && generate_env_file "$env_file"
     fi
     [ -f "$env_file" ] && cp -f "$env_file" "${CI_PROJECT_DIR}/.env"
 
-    cp -f "$script_dir/docker/.dockerignore" "${CI_PROJECT_DIR}/"
-    cp -f "$script_dir/docker/settings.xml" "${CI_PROJECT_DIR}/"
+    cp -f "$script_dir/conf/dockerfile/.dockerignore" "${CI_PROJECT_DIR}/"
+    cp -f "$script_dir/conf/dockerfile/settings.xml" "${CI_PROJECT_DIR}/"
     if [ -f "${CI_PROJECT_DIR}/Dockerfile.useLocal" ]; then
         mv Dockerfile.useLocal Dockerfile
     else
-        cp -f "$script_dir/docker/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
+        cp -f "$script_dir/conf/dockerfile/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
     fi
     if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
         # shellcheck disable=2013
@@ -400,7 +401,7 @@ deploy_rsync() {
         echo "${ssh_host}"
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
-            echo "if stop here, check .deploy.conf"
+            echo "if stop here, check pms/deploy.conf"
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
@@ -562,7 +563,6 @@ update_cert() {
 install_python_gitlab() {
     command -v gitlab >/dev/null && return
     python3 -m pip install --user --upgrade python-gitlab
-    [ -f "$HOME/.python-gitlab.cfg" ] || ln -sf "${script_dir}/etc/.python-gitlab.cfg" "${HOME}/"
 }
 
 install_aws() {
@@ -593,8 +593,9 @@ install_helm() {
 
 install_jmeter() {
     ver_jmeter='5.4.1'
-    curl -LO "$script_dir"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
-    unzip jmeter.zip
+    dir_temp=$(mktemp -d)
+    curl -LO "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
+    unzip "$dir_temp"/jmeter.zip
     ln -sf apache-jmeter-${ver_jmeter} jmeter
 }
 
@@ -758,7 +759,7 @@ main() {
         shift
     done
     ##
-    script_log="${script_dir}/${script_name}.log" ## 记录 deploy.sh 执行情况
+    script_log="${script_dir}/data/${script_name}.log" ## 记录 deploy.sh 执行情况
     script_conf="${script_dir}/conf/deploy.conf"  ## 发布到目标服务器的配置信息
     script_env="${script_dir}/conf/deploy.env"    ## 发布配置信息(密)
 
