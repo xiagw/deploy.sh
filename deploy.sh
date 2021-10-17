@@ -200,23 +200,24 @@ docker_login() {
     case "$ENV_DOCKER_LOGIN" in
     'aws')
         ## 比较上一次登陆时间，超过12小时则再次登录
-        lock_file="$script_dir/.aws.ecr.login.${ENV_AWS_PROFILE:?undefine}"
-        [ -f "$lock_file" ] || touch "$lock_file"
-        time_save="$(cat "$lock_file")"
+        lock_docker_login="$script_dir/conf/.aws.ecr.login.${ENV_AWS_PROFILE:?undefine}"
+        [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
+        time_save="$(cat "$lock_docker_login")"
         if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
             echo_time "docker login..."
             docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
             aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $docker_login >/dev/null
-            date +%s >"$lock_file"
+            date +%s >"$lock_docker_login"
         fi
         ;;
     'aliyun' | 'qcloud')
         echo "docker login $ENV_DOCKER_LOGIN ..."
-        if [[ -f "$script_dir/.docker.login.${ENV_DOCKER_LOGIN}.lock" ]]; then
+        lock_docker_login="$script_dir/conf/.docker.login.${ENV_DOCKER_LOGIN}.lock"
+        if [[ -f "$lock_docker_login" ]]; then
             echo "docker login $ENV_DOCKER_LOGIN OK"
         else
             echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
-            echo "docker login $ENV_DOCKER_LOGIN OK" | tee "$script_dir/.docker.login.${ENV_DOCKER_LOGIN}.lock"
+            echo "docker login $ENV_DOCKER_LOGIN OK" | tee "$lock_docker_login"
         fi
         ;;
     esac
