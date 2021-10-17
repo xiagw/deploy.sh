@@ -18,6 +18,12 @@ flyway/conf/
 .ssh/
 
 conf/*
-!conf/deploy.conf.example
-!conf/deploy.env.example
+!conf/deploy.*.example
+!conf/gitlab-ci.yml
 !conf/rsync.exclude
+!conf/dockerfile/
+!conf/flyway/
+!conf/helm/
+
+data/*
+!data/readme.md
