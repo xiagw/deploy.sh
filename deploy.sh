@@ -237,13 +237,6 @@ php_composer_volume() {
     echo_time "end php composer install."
 }
 
-kube_create_namespace() {
-    if [ ! -f "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME" ]; then
-        kubectl create namespace "$CI_COMMIT_REF_NAME" || true
-        touch "$script_dir/.lock.namespace.$CI_COMMIT_REF_NAME"
-    fi
-}
-
 # 列出所有项目
 # gitlab -v -o yaml -f path_with_namespace project list --all |awk -F': ' '{print $2}' |sort >p.txt
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
@@ -303,7 +296,6 @@ java_docker_push() {
 
 java_deploy_k8s() {
     echo_time_step "deploy to k8s..."
-    kube_create_namespace
     helm_dir_project="$script_dir/helm/${ENV_HELM_DIR}"
     # shellcheck disable=2013
     for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
@@ -314,7 +306,7 @@ java_deploy_k8s() {
             docker_tag_loop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
             work_name_loop="${CI_PROJECT_NAME}"
         fi
-        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${work_name_loop}" "$helm_dir_project/" \
+        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --create-namespace --history-max 1 "${work_name_loop}" "$helm_dir_project/" \
             --set nameOverride="$work_name_loop" \
             --set image.registry="${ENV_DOCKER_REGISTRY}" \
             --set image.repository="${ENV_DOCKER_REPO}" \
@@ -362,7 +354,6 @@ docker_push_generic() {
 
 deploy_k8s_generic() {
     echo_time_step "start deploy k8s..."
-    kube_create_namespace
     prefix_remove=${CI_PROJECT_NAME#*-}
     str_lower="${prefix_remove,,}"
     if [ -d "$script_dir/helm/${str_lower}" ]; then
@@ -377,7 +368,8 @@ deploy_k8s_generic() {
         echo_warn "helm files not exists, ignore helm install."
         [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
     else
-        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --history-max 1 "${str_lower}" "$path_helm/" \
+        helm upgrade --install --create-namespace --history-max 1 "${str_lower}" "$path_helm/" \
+            --namespace "$CI_COMMIT_REF_NAME" \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${docker_image_tag}" >/dev/null
     fi
