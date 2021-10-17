@@ -1,8 +1,6 @@
 tmp/
 python/
 deploy.log
-.deploy.conf
-.deploy.env
 
 .DS_Store
 
@@ -10,19 +8,13 @@ builds/
 cache/
 etc/
 
-.secret.*/
-
-flyway/conf/
-.acme.sh/
-
-.ssh/
-
 conf/*
 !conf/deploy.*.example
 !conf/gitlab-ci.yml
 !conf/rsync.exclude
 !conf/dockerfile/
-!conf/flyway/
+!conf/flyway/flyway.conf
+!conf/flyway/README.md
 !conf/helm/flyway/
 !conf/helm/README.md
 
