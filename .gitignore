@@ -23,7 +23,8 @@ conf/*
 !conf/rsync.exclude
 !conf/dockerfile/
 !conf/flyway/
-!conf/helm/
+!conf/helm/flyway/
+!conf/helm/README.md
 
 data/*
 !data/readme.md
