@@ -20,3 +20,7 @@ conf/*
 
 data/*
 !data/readme.md
+
+bin/*
+!bin/element-example.py
+!bin/flyway
