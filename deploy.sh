@@ -926,6 +926,7 @@ main() {
     gen_apidoc
 
     [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
+    [[ $ENV_FORCE_RSYNC == true ]] && exec_deploy_rsync=1
     if [[ "${exec_deploy_rsync:-1}" -eq 1 ]]; then
         deploy_rsync
     fi
