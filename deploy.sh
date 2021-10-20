@@ -346,9 +346,9 @@ docker_build_generic() {
     echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
     [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
     git diff --name-only HEAD~2 composer.json | grep composer.json && COMPOSER_INSTALL=true
-    echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
+    echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-true}"
     DOCKER_BUILDKIT=1 docker build -q --tag "${docker_tag}" \
-        --build-arg COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} \
+        --build-arg COMPOSER_INSTALL=${COMPOSER_INSTALL:-true} \
         --build-arg CHANGE_SOURCE="${CHANGE_SOURCE:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
