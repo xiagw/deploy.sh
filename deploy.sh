@@ -225,16 +225,17 @@ docker_login() {
 
 php_composer_volume() {
     echo_time_step "php composer install..."
-    # echo "PIPELINE_COMPOSER_UPDATE: ${PIPELINE_COMPOSER_UPDATE:-0}"
-    # echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
+    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
     if ! docker images | grep -q 'deploy/composer'; then
         DOCKER_BUILDKIT=1 docker build --quiet -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dir/conf/dockerfile/Dockerfile.composer" "$script_dir/conf/dockerfile"
     fi
-
-    if [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] || git diff --name-only HEAD~2 composer.json | grep composer.json; then
-        $docker_run -v "$PWD:/app" -w /app deploy/composer composer install -q || true
-        $docker_run -v "$PWD:/app" -w /app deploy/composer composer update -q || true
+    [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
+    git diff --name-only HEAD~2 composer.json | grep composer.json && COMPOSER_INSTALL=true
+    echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
+    if [ "${COMPOSER_INSTALL:-false}" = true ]; then
+        $docker_run -v "$PWD:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer install -q || true
+        $docker_run -v "$PWD:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer update -q || true
     fi
     echo_time "end php composer install."
 }
@@ -308,7 +309,8 @@ java_deploy_k8s() {
             docker_tag_loop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
             work_name_loop="${CI_PROJECT_NAME}"
         fi
-        helm -n "$CI_COMMIT_REF_NAME" upgrade --install --create-namespace --history-max 1 "${work_name_loop}" "$helm_dir_project/" \
+        helm upgrade "${work_name_loop}" "$helm_dir_project/" \
+            --install -n "$CI_COMMIT_REF_NAME" --create-namespace --history-max 1 \
             --set nameOverride="$work_name_loop" \
             --set image.registry="${ENV_DOCKER_REGISTRY}" \
             --set image.repository="${ENV_DOCKER_REPO}" \
@@ -341,8 +343,14 @@ docker_build_generic() {
     echo_time_step "docker build only..."
     secret_file_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
-    # DOCKER_BUILDKIT=1 docker build --tag "${docker_tag}" --build-arg CHANGE_SOURCE=true -q "${CI_PROJECT_DIR}" >/dev/null
-    DOCKER_BUILDKIT=1 docker build -q --tag "${docker_tag}" "${CI_PROJECT_DIR}" >/dev/null
+    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
+    [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
+    git diff --name-only HEAD~2 composer.json | grep composer.json && COMPOSER_INSTALL=true
+    echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
+    DOCKER_BUILDKIT=1 docker build -q --tag "${docker_tag}" \
+        --build-arg COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} \
+        --build-arg CHANGE_SOURCE="${CHANGE_SOURCE:-false}" \
+        "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
 }
 
@@ -356,10 +364,14 @@ docker_push_generic() {
 
 deploy_k8s_generic() {
     echo_time_step "start deploy k8s..."
-    prefix_remove=${CI_PROJECT_NAME#*-}
-    str_lower="${prefix_remove,,}"
-    if [ -d "$script_dir/conf/helm/${str_lower}" ]; then
-        path_helm="$script_dir/conf/helm/${str_lower}"
+    if [[ $ENV_REMOVE_PROJ_PREFIX == true ]]; then
+        name_remove_prefix=${CI_PROJECT_NAME#*-}
+    else
+        name_remove_prefix=${CI_PROJECT_NAME}
+    fi
+    helm_release="${name_remove_prefix,,}"
+    if [ -d "$script_dir/conf/helm/${helm_release}" ]; then
+        path_helm="$script_dir/conf/helm/${helm_release}"
     else
         if [ -d "$CI_PROJECT_PATH/helm" ]; then
             path_helm="$CI_PROJECT_PATH/helm"
@@ -372,8 +384,9 @@ deploy_k8s_generic() {
         echo_warn "helm files not exists, ignore helm install."
         [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
     else
-        helm upgrade --install --create-namespace --history-max 1 "${str_lower}" "$path_helm/" \
-            --namespace "$CI_COMMIT_REF_NAME" \
+        helm upgrade "${helm_release}" "$path_helm/" \
+            --install --history-max 1 \
+            --namespace "$CI_COMMIT_REF_NAME" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${docker_image_tag}" >/dev/null
     fi
@@ -572,7 +585,7 @@ install_aws() {
     sudo ./aws/install
     ## install eksctl
     curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    sudo mv /tmp/eksctl /usr/local/bin
+    sudo mv /tmp/eksctl /usr/local/bin/
 }
 
 install_kubectl() {
@@ -585,6 +598,7 @@ install_kubectl() {
         curl -x "$ENV_HTTP_PROXY" -Lo "${script_dir}/bin/kubectl" "$kube_url"
     fi
     chmod +x "${script_dir}/bin/kubectl"
+    sudo cp -af "${script_dir}/bin/kubectl" /usr/local/bin/kubectl
 }
 
 install_helm() {
@@ -596,7 +610,7 @@ install_jmeter() {
     dir_temp=$(mktemp -d)
     curl -Lo "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
-        cd $script_data
+        cd "$script_data"
         unzip "$dir_temp"/jmeter.zip
         ln -sf apache-jmeter-${ver_jmeter} jmeter
     )
