@@ -343,12 +343,7 @@ docker_build_generic() {
     echo_time_step "docker build only..."
     secret_file_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
-    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
-    [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
-    git diff --name-only HEAD~2 composer.json | grep composer.json && COMPOSER_INSTALL=true
-    echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
     DOCKER_BUILDKIT=1 docker build -q --tag "${docker_tag}" \
-        --build-arg COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} \
         --build-arg CHANGE_SOURCE="${CHANGE_SOURCE:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
