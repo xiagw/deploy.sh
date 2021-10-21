@@ -359,14 +359,14 @@ docker_push_generic() {
 
 deploy_k8s_generic() {
     echo_time_step "start deploy k8s..."
-    if [[ $ENV_REMOVE_PROJ_PREFIX == true ]]; then
-        name_remove_prefix=${CI_PROJECT_NAME#*-}
+    if [[ ${ENV_REMOVE_PROJ_PREFIX:-false} == true ]]; then
+        helm_release=${CI_PROJECT_NAME#*-}
     else
-        name_remove_prefix=${CI_PROJECT_NAME}
+        helm_release=${CI_PROJECT_NAME}
     fi
-    helm_release="${name_remove_prefix,,}"
-    if [ -d "$script_dir/conf/helm/${helm_release}" ]; then
-        path_helm="$script_dir/conf/helm/${helm_release}"
+    helm_release="${helm_release,,}"
+    if [ -d "$script_dir/conf/helm/${CI_PROJECT_NAME}" ]; then
+        path_helm="$script_dir/conf/helm/${CI_PROJECT_NAME}"
     else
         if [ -d "$CI_PROJECT_PATH/helm" ]; then
             path_helm="$CI_PROJECT_PATH/helm"
