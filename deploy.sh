@@ -205,8 +205,8 @@ docker_login() {
         time_save="$(cat "$lock_docker_login")"
         if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
             echo_time "docker login..."
-            docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
-            aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $docker_login >/dev/null
+            str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
+            aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
             date +%s >"$lock_docker_login"
         fi
         ;;
@@ -269,12 +269,12 @@ java_docker_build() {
     if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
         # shellcheck disable=2013
         for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
-            [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${docker_tag}-$target" || docker_tag_loop="${docker_tag}"
+            [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${image_registry}-$target" || docker_tag_loop="${image_registry}"
             DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${docker_tag_loop}" \
                 --target "$target" --build-arg GIT_BRANCH="${CI_COMMIT_REF_NAME}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
         done
     else
-        DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${docker_tag}" \
+        DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${image_registry}" \
             --build-arg GIT_BRANCH="${CI_COMMIT_REF_NAME}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
     fi
     echo_time "end docker build."
@@ -286,13 +286,13 @@ java_docker_push() {
     if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
         # shellcheck disable=2013
         for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
-            [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${docker_tag}-$target" || docker_tag_loop="${docker_tag}"
+            [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${image_registry}-$target" || docker_tag_loop="${image_registry}"
             docker images "${docker_tag_loop}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
             docker push -q "${docker_tag_loop}" || echo_err "error here, maybe caused by GFW."
         done
     else
-        docker images "${docker_tag}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-        docker push -q "${docker_tag}" || echo_err "error here, maybe caused by GFW."
+        docker images "${image_registry}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+        docker push -q "${image_registry}" || echo_err "error here, maybe caused by GFW."
     fi
     echo_time "end docker push."
 }
@@ -343,7 +343,7 @@ docker_build_generic() {
     echo_time_step "docker build only..."
     secret_file_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
-    DOCKER_BUILDKIT=1 docker build -q --tag "${docker_tag}" \
+    DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
         --build-arg CHANGE_SOURCE="${CHANGE_SOURCE:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
@@ -351,9 +351,9 @@ docker_build_generic() {
 
 docker_push_generic() {
     echo_time_step "docker push only..."
-    docker_login 2>/dev/null
-    # echo "$docker_tag"
-    docker push -q "$docker_tag" || echo_err "error here, maybe caused by GFW."
+    docker_login
+    # echo "$image_registry"
+    docker push -q "$image_registry" || echo_err "error here, maybe caused by GFW."
     echo_time "end docker push."
 }
 
@@ -374,7 +374,7 @@ deploy_k8s_generic() {
             path_helm=none
         fi
     fi
-    docker_image_tag="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
+    image_tag="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
         [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
@@ -383,7 +383,7 @@ deploy_k8s_generic() {
             --install --history-max 1 \
             --namespace "$CI_COMMIT_REF_NAME" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
-            --set image.tag="${docker_image_tag}" >/dev/null
+            --set image.tag="${image_tag}" >/dev/null
     fi
     echo_time "end deploy k8s."
 }
@@ -814,7 +814,7 @@ main() {
     docker_run="docker run --interactive --rm -u $UID:$UID"
     ## run docker with root
     # docker_run_root="docker run --interactive --rm"
-    docker_tag="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-${CI_COMMIT_SHORT_SHA}"
+    image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-${CI_COMMIT_SHORT_SHA}"
     git_diff="git --no-pager diff --name-only HEAD^"
 
     ## 清理磁盘空间
