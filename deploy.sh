@@ -200,7 +200,7 @@ docker_login() {
     case "$ENV_DOCKER_LOGIN" in
     'aws')
         ## 比较上一次登陆时间，超过12小时则再次登录
-        lock_docker_login="$script_dir/conf/.aws.ecr.login.${ENV_AWS_PROFILE:?undefine}"
+        lock_docker_login="$script_dir/conf/.lock.docker.login.aws.${ENV_AWS_PROFILE:?undefine}"
         [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
         time_save="$(cat "$lock_docker_login")"
         if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
@@ -212,7 +212,7 @@ docker_login() {
         ;;
     'aliyun' | 'qcloud')
         echo "docker login $ENV_DOCKER_LOGIN ..."
-        lock_docker_login="$script_dir/conf/.docker.login.${ENV_DOCKER_LOGIN}.lock"
+        lock_docker_login="$script_dir/conf/.lock.docker.login.${ENV_DOCKER_LOGIN}"
         if [[ -f "$lock_docker_login" ]]; then
             echo "docker login $ENV_DOCKER_LOGIN OK"
         else
