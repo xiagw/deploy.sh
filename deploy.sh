@@ -234,8 +234,9 @@ php_composer_volume() {
     git diff --name-only HEAD~2 composer.json | grep composer.json && COMPOSER_INSTALL=true
     echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
     if [ "${COMPOSER_INSTALL:-false}" = true ]; then
-        $docker_run -v "$PWD:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer install -q || true
-        $docker_run -v "$PWD:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer update -q || true
+        rm -f "${CI_PROJECT_DIR}"/composer.lock
+        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer install -q || true
+        # $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer update -q || true
     fi
     echo_time "end php composer install."
 }
