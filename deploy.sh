@@ -197,6 +197,7 @@ node_build_volume() {
 }
 
 docker_login() {
+    source "$script_env"
     case "$ENV_DOCKER_LOGIN" in
     'aws')
         ## 比较上一次登陆时间，超过12小时则再次登录
@@ -303,6 +304,7 @@ java_deploy_k8s() {
     helm_dir_project="$script_dir/conf/helm/${ENV_HELM_DIR}"
     # shellcheck disable=2013
     for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
+        source "$script_env"
         if [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ]; then
             docker_tag_loop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-$target"
             work_name_loop="${CI_PROJECT_NAME}-$target"
@@ -376,6 +378,7 @@ deploy_k8s_generic() {
         fi
     fi
     image_tag="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
+    source "$script_env"
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
         [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
