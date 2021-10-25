@@ -231,13 +231,14 @@ php_composer_volume() {
         DOCKER_BUILDKIT=1 docker build --quiet -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dir/conf/dockerfile/Dockerfile.composer" "$script_dir/conf/dockerfile"
     fi
+
     [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
     git diff --name-only HEAD~2 composer.json | grep composer.json && COMPOSER_INSTALL=true
     echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
     if [ "${COMPOSER_INSTALL:-false}" = true ]; then
         rm -f "${CI_PROJECT_DIR}"/composer.lock
         $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer install -q || true
-        # $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer update -q || true
+        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer update -q || true
     fi
     echo_time "end php composer install."
 }
@@ -885,6 +886,10 @@ main() {
             [[ 1 -eq "${exec_docker_build_php:-1}" ]] && docker_build_generic
             [[ 1 -eq "${exec_docker_push_php:-1}" ]] && docker_push_generic
             [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
+            if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
+                echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
+                php_composer_volume
+            fi
         else
             php_composer_volume
         fi
