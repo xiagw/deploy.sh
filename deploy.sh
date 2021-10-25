@@ -348,7 +348,7 @@ docker_build_generic() {
     secret_file_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
-        --build-arg CHANGE_SOURCE="${CHANGE_SOURCE:-false}" \
+        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
 }
