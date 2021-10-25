@@ -396,7 +396,7 @@ deploy_rsync() {
     echo_time_step "rsync code file to remote server..."
     ## 读取配置文件，获取 项目/分支名/war包目录
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" || {
-        echo_err "if stop here, check pms/conf/deploy.conf"
+        echo_err "if stop here, check GIT repository: pms/runner/conf/deploy.conf"
         return 1
     }
     grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
