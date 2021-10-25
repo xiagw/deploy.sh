@@ -390,6 +390,8 @@ deploy_k8s_generic() {
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" >/dev/null
     fi
+    ## 临时启用
+    [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
     echo_time "end deploy k8s."
 }
 
