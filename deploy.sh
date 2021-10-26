@@ -714,6 +714,7 @@ gen_apidoc() {
 }
 
 main() {
+    [ -f ~/ci_debug ] && set -x
     script_name="$(basename "$0")"
     script_name="${script_name%.sh}"
     script_dir="$(cd "$(dirname "$0")" && pwd)"
