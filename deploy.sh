@@ -226,19 +226,30 @@ docker_login() {
 
 php_composer_volume() {
     echo_time_step "php composer install..."
-    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
-    if ! docker images | grep -q 'deploy/composer'; then
-        DOCKER_BUILDKIT=1 docker build --quiet -t deploy/composer --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+    if [ "${ENV_IMAGE_COMPOSER}" = 'Dockerfile' ]; then
+        image_composer=$(awk '/FROM/ {print $2}' | tail -n 1)
+    else
+        image_composer="deploy/composer"
+    fi
+    if ! docker images | grep -q "deploy/composer"; then
+        DOCKER_BUILDKIT=1 docker build --quiet -t "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dir/conf/dockerfile/Dockerfile.composer" "$script_dir/conf/dockerfile"
     fi
 
+    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
+    echo "PIPELINE_COMPOSER_UPDATE: ${PIPELINE_COMPOSER_UPDATE:-0}"
     [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
-    git diff --name-only HEAD~2 composer.json | grep composer.json && COMPOSER_INSTALL=true
+    [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] && COMPOSER_UPDATE=true
+    git diff --name-only HEAD^ composer.json | grep composer.json && COMPOSER_INSTALL=true
     echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
+    echo "COMPOSER_UPDATE=${COMPOSER_UPDATE:-false}"
     if [ "${COMPOSER_INSTALL:-false}" = true ]; then
         rm -f "${CI_PROJECT_DIR}"/composer.lock
-        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer install -q || true
-        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app deploy/composer composer update -q || true
+        # rm -rf "${CI_PROJECT_DIR}"/vendor
+        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app "$image_composer" composer install -q --no-dev -o || true
+    fi
+    if [ "${COMPOSER_UPDATE:-false}" = true ]; then
+        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_UPDATE=${COMPOSER_UPDATE:-false} -w /app "$image_composer" composer update -q || true
     fi
     echo_time "end php composer install."
 }
