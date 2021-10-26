@@ -218,7 +218,7 @@ docker_login() {
             echo "docker login $ENV_DOCKER_LOGIN OK"
         else
             echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
-            echo "docker login $ENV_DOCKER_LOGIN OK" | tee "$lock_docker_login"
+            # echo "docker login $ENV_DOCKER_LOGIN OK" | tee "$lock_docker_login"
         fi
         ;;
     esac
@@ -581,6 +581,11 @@ install_python_gitlab() {
     python3 -m pip install --user --upgrade python-gitlab
 }
 
+install_python_element() {
+    # command -v gitlab >/dev/null && return
+    python3 -m pip install --user --upgrade matrix-nio
+}
+
 install_aws() {
     command -v aws >/dev/null && return
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -726,6 +731,7 @@ main() {
     [[ "${ENV_INSTALL_AWS}" == true ]] && install_aws
     [[ "${ENV_INSTALL_KUBECTL}" == true ]] && install_kubectl
     [[ "${ENV_INSTALL_HELM}" == true ]] && install_helm
+    [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == true ]] && install_python_element
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == true ]] && install_python_gitlab
 
     ## 处理传入的参数
