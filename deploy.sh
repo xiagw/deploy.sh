@@ -345,6 +345,7 @@ java_deploy_k8s() {
 
 docker_build_generic() {
     echo_time_step "docker build only..."
+    docker_login
     secret_file_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
