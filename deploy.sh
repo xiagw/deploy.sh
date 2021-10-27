@@ -325,7 +325,7 @@ java_deploy_k8s() {
             work_name_loop="${CI_PROJECT_NAME}"
         fi
         helm upgrade "${work_name_loop}" "$helm_dir_project/" \
-            --install -n "$CI_COMMIT_REF_NAME" --create-namespace --history-max 1 \
+            --install -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" --create-namespace --history-max 1 \
             --set nameOverride="$work_name_loop" \
             --set image.registry="${ENV_DOCKER_REGISTRY}" \
             --set image.repository="${ENV_DOCKER_REPO}" \
@@ -340,18 +340,18 @@ java_deploy_k8s() {
             --set replicaCount="${ENV_HELM_REPLICS:-1}" \
             --set livenessProbe="${ENV_PROBE_URL:?undefine}" >/dev/null
         ## 等待就绪
-        if ! kubectl -n "$CI_COMMIT_REF_NAME" rollout status deployment "${work_name_loop}"; then
-            errPod="$(kubectl -n "$CI_COMMIT_REF_NAME" get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
+        if ! kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" rollout status deployment "${work_name_loop}"; then
+            errPod="$(kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
             echo_err "---------------cut---------------"
-            kubectl -n "$CI_COMMIT_REF_NAME" describe "pod/${errPod}" | tail
+            kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" describe "pod/${errPod}" | tail
             echo_err "---------------cut---------------"
-            kubectl -n "$CI_COMMIT_REF_NAME" logs "pod/${errPod}" | tail -n 100
+            kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" logs "pod/${errPod}" | tail -n 100
             echo_err "---------------cut---------------"
             deploy_result=1
         fi
     done
 
-    kubectl -n "$CI_COMMIT_REF_NAME" get replicasets.apps | grep '0         0         0' | awk '{print $1}' | xargs kubectl -n "$CI_COMMIT_REF_NAME" delete replicasets.apps >/dev/null 2>&1 || true
+    kubectl -n "$k8s_namespace:-$CI_COMMIT_REF_NAME" get replicasets.apps | awk '/repicasets.apps.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "$k8s_namespace:-$CI_COMMIT_REF_NAME" delete replicasets.apps >/dev/null 2>&1 || true
 }
 
 docker_build_generic() {
@@ -390,6 +390,7 @@ deploy_k8s_generic() {
             path_helm=none
         fi
     fi
+
     image_tag="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
     source "$script_env"
     if [ "$path_helm" = none ]; then
@@ -398,12 +399,13 @@ deploy_k8s_generic() {
     else
         helm upgrade "${helm_release}" "$path_helm/" \
             --install --history-max 1 \
-            --namespace "$CI_COMMIT_REF_NAME" --create-namespace \
+            --namespace "${k8s_namespace:-$CI_COMMIT_REF_NAME}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" >/dev/null
     fi
     ## 临时启用
     [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
+    kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" get replicasets.apps | awk '/replicasets.apps.*0\s+0\s+0/{print $1}' | xargs kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" delete replicasets.apps >/dev/null 2>&1 || true
     echo_time "end deploy k8s."
 }
 
