@@ -406,7 +406,7 @@ deploy_k8s_generic() {
             --set envNamespace="${k8s_namespace:-$CI_COMMIT_REF_NAME}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" get replicasets.apps | awk '/replicasets.apps.*0\s+0\s+0/{print $1}' | xargs kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" delete replicasets.apps >/dev/null 2>&1 || true
+    kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" get replicaset.apps | awk '/replicaset.apps.*0\s+0\s+0/{print $1}' | xargs kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" delete replicaset.apps >/dev/null 2>&1 || true
     echo_time "end deploy k8s."
 }
 
