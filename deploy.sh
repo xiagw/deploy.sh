@@ -402,6 +402,7 @@ deploy_k8s_generic() {
             --namespace "${k8s_namespace:-$CI_COMMIT_REF_NAME}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
+            --set nfsServer="${ENV_NFS_SERVER:?undefine}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
     kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" get replicasets.apps | awk '/replicasets.apps.*0\s+0\s+0/{print $1}' | xargs kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" delete replicasets.apps >/dev/null 2>&1 || true
