@@ -226,7 +226,7 @@ docker_login() {
 
 php_composer_volume() {
     echo_time_step "php composer install..."
-    if [ "${ENV_IMAGE_COMPOSER}" = 'Dockerfile' ]; then
+    if [ "${ENV_IMAGE_FROM_DOCKERFILE}" = 'Dockerfile' ]; then
         image_composer=$(awk '/FROM/ {print $2}' | tail -n 1)
     else
         image_composer="deploy/composer"
