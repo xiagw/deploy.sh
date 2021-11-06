@@ -136,8 +136,8 @@ deploy_sql_flyway() {
 
     flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/conf/flyway}"
 
-    if [ -d "$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}" ]; then
-        flyway_volume_conf="$flyway_home/conf/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}:/flyway/conf"
+    if [ -d "$flyway_home/conf/${branch_name}.${CI_PROJECT_NAME}" ]; then
+        flyway_volume_conf="$flyway_home/conf/${branch_name}.${CI_PROJECT_NAME}:/flyway/conf"
     else
         flyway_volume_conf="$flyway_home/conf:/flyway/conf"
     fi
@@ -166,22 +166,16 @@ deploy_sql_flyway() {
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
     echo_time_step "node yarn build..."
-    # vue3.x项目，发布系统自动部署时会把根目录下的环境配置文件复制为.env文件
-    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 1 -name "${CI_COMMIT_REF_NAME}.*")"
+    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
     for file in $config_env_path; do
-        # if [ "$project_lang" = 'react' ]; then
-        #     \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
-        # else
-        \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}/}"
-        # fi
+        if [[ "$file" =~ 'config' ]]; then
+            # vue2.x项目，发布系统自动部署时会把config目录下的环境配置文件复制为env.js
+            \cp -vf "$file" "${file/${branch_name}./}"
+        else
+            # vue3.x项目，发布系统自动部署时会把根目录下的环境配置文件复制为.env文件
+            \cp -vf "$file" "${file/${branch_name}/}"
+        fi
     done
-    # vue2.x项目，发布系统自动部署时会把config目录下的环境配置文件复制为env.js
-    if [[ -d "${CI_PROJECT_DIR}/config" ]]; then
-        config_env_path="$(find "${CI_PROJECT_DIR}/config" -maxdepth 1 -name "${CI_COMMIT_REF_NAME}.*")"
-        for file in $config_env_path; do
-            \cp -vf "$file" "${file/${CI_COMMIT_REF_NAME}./}"
-        done
-    fi
 
     rm -f package-lock.json
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
@@ -198,13 +192,12 @@ node_build_volume() {
 
 docker_login() {
     source "$script_env"
-    echo "docker login $ENV_DOCKER_LOGIN ..."
     ## 比较上一次登陆时间，超过12小时则再次登录
     lock_docker_login="$script_dir/conf/.lock.docker.login.${ENV_DOCKER_LOGIN}"
     [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
     time_save="$(cat "$lock_docker_login")"
     if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
-        echo_time "docker login..."
+        echo_time "docker login $ENV_DOCKER_LOGIN ..."
         if [[ "$ENV_DOCKER_LOGIN" == 'aws' ]]; then
             str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
             aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
@@ -257,7 +250,7 @@ java_docker_build() {
     echo_warn "If you want to view debug msg, set MVN_DEBUG=1 on pipeline."
     [[ "${MVN_DEBUG:-0}" == 1 ]] && unset MVN_DEBUG || MVN_DEBUG='-q'
     ## if you have no apollo config center, use local .env
-    env_file="$script_dir/conf/.env.${CI_PROJECT_NAME}.${CI_COMMIT_REF_NAME}"
+    env_file="$script_dir/conf/.env.${CI_PROJECT_NAME}.${branch_name}"
     if [ ! -f "$env_file" ]; then
         ## generate mysql username/password
         # [ -x generate_env_file.sh ] && bash generate_env_file.sh
@@ -277,11 +270,11 @@ java_docker_build() {
         for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
             [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${image_registry}-$target" || docker_tag_loop="${image_registry}"
             DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${docker_tag_loop}" \
-                --target "$target" --build-arg GIT_BRANCH="${CI_COMMIT_REF_NAME}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
+                --target "$target" --build-arg GIT_BRANCH="${branch_name}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
         done
     else
         DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${image_registry}" \
-            --build-arg GIT_BRANCH="${CI_COMMIT_REF_NAME}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
+            --build-arg GIT_BRANCH="${branch_name}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
     fi
     echo_time "end docker build."
 }
@@ -317,7 +310,7 @@ java_deploy_k8s() {
             work_name_loop="${CI_PROJECT_NAME}"
         fi
         helm upgrade "${work_name_loop}" "$helm_dir_project/" \
-            --install -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" --create-namespace --history-max 1 \
+            --install -n "${branch_name}" --create-namespace --history-max 1 \
             --set nameOverride="$work_name_loop" \
             --set image.registry="${ENV_DOCKER_REGISTRY}" \
             --set image.repository="${ENV_DOCKER_REPO}" \
@@ -332,24 +325,24 @@ java_deploy_k8s() {
             --set replicaCount="${ENV_HELM_REPLICS:-1}" \
             --set livenessProbe="${ENV_PROBE_URL:?undefine}" >/dev/null
         ## 等待就绪
-        if ! kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" rollout status deployment "${work_name_loop}"; then
-            errPod="$(kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
+        if ! kubectl -n "${branch_name}" rollout status deployment "${work_name_loop}"; then
+            errPod="$(kubectl -n "${branch_name}" get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
             echo_err "---------------cut---------------"
-            kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" describe "pod/${errPod}" | tail
+            kubectl -n "${branch_name}" describe "pod/${errPod}" | tail
             echo_err "---------------cut---------------"
-            kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" logs "pod/${errPod}" | tail -n 100
+            kubectl -n "${branch_name}" logs "pod/${errPod}" | tail -n 100
             echo_err "---------------cut---------------"
             deploy_result=1
         fi
     done
 
-    kubectl -n "$k8s_namespace:-$CI_COMMIT_REF_NAME" get replicasets.apps | awk '/repicasets.apps.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "$k8s_namespace:-$CI_COMMIT_REF_NAME" delete replicasets.apps >/dev/null 2>&1 || true
+    kubectl -n "$branch_name" get replicasets.apps | awk '/repicasets.apps.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "$branch_name" delete replicasets.apps >/dev/null 2>&1 || true
 }
 
 docker_build_generic() {
     echo_time_step "docker build only..."
     docker_login
-    secret_file_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+    secret_file_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
@@ -387,30 +380,30 @@ deploy_k8s_generic() {
     source "$script_env"
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
-        [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$CI_COMMIT_REF_NAME"
+        [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$branch_name"
     else
         helm upgrade "${helm_release}" "$path_helm/" \
             --install --history-max 1 \
-            --namespace "${k8s_namespace:-$CI_COMMIT_REF_NAME}" --create-namespace \
+            --namespace "${branch_name}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set nfsServer="${ENV_NFS_SERVER:?undefine}" \
-            --set envNamespace="${k8s_namespace:-$CI_COMMIT_REF_NAME}" \
+            --set envNamespace="${branch_name}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" get replicaset.apps | awk '/.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "${k8s_namespace:-$CI_COMMIT_REF_NAME}" delete replicaset.apps >/dev/null 2>&1 || true
+    kubectl -n "${branch_name}" get replicaset.apps | awk '/.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "${branch_name}" delete replicaset.apps >/dev/null 2>&1 || true
     echo_time "end deploy k8s."
 }
 
 deploy_rsync() {
     echo_time_step "rsync code file to remote server..."
     ## 读取配置文件，获取 项目/分支名/war包目录
-    grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" || {
+    grep "^${CI_PROJECT_PATH}\s\+${branch_name}" "$script_conf" || {
         echo_err "if stop here, check GIT repository: pms/runner/conf/deploy.conf"
         return 1
     }
-    grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf" | while read -r line; do
-        # for line in $(grep "^${CI_PROJECT_PATH}\s\+${CI_COMMIT_REF_NAME}" "$script_conf"); do
+    grep "^${CI_PROJECT_PATH}\s\+${branch_name}" "$script_conf" | while read -r line; do
+        # for line in $(grep "^${CI_PROJECT_PATH}\s\+${branch_name}" "$script_conf"); do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
         ssh_host=${array[2]}
@@ -458,7 +451,7 @@ deploy_rsync() {
         fi
         ## 目标文件夹
         if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
-            rsync_dest="${ENV_PATH_DEST_PRE}/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+            rsync_dest="${ENV_PATH_DEST_PRE}/${branch_name}.${CI_PROJECT_NAME}/"
         fi
         ## 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ '^oss://' ]]; then
@@ -472,7 +465,7 @@ deploy_rsync() {
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
         ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
-        secret_dir="${script_dir}/conf/.secret/${CI_COMMIT_REF_NAME}.${CI_PROJECT_NAME}/"
+        secret_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
         [ -d "$secret_dir" ] && rsync -rlcvzt "$secret_dir" "${rsync_src}"
         ## 复制文件到目标服务器的目标目录
         echo "deploy to ${ssh_host}:${rsync_dest}"
@@ -491,7 +484,7 @@ get_msg_deploy() {
     msg_body="
 [Gitlab Deploy]
 Project = ${CI_PROJECT_PATH}
-Branche = ${CI_COMMIT_REF_NAME}
+Branche = ${branch_name}
 Pipeline = ${CI_PIPELINE_ID}/JobID-$CI_JOB_ID
 Describe = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}
 Who = ${GITLAB_USER_ID}/${git_username}
@@ -831,6 +824,7 @@ main() {
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     # shellcheck disable=SC1090
     source "$script_env"
+    [ -z "${branch_name}" ] && branch_name=$CI_COMMIT_REF_NAME
     ## run docker with current user
     docker_run="docker run --interactive --rm -u $UID:$UID"
     ## run docker with root
@@ -961,7 +955,7 @@ main() {
     ## 发送消息到群组, enable_send_msg， 0 不发， 1 发.
     [[ "${deploy_result}" -eq 1 ]] && enable_send_msg=1
     [[ "$ENV_DISABLE_MSG" = 1 ]] && enable_send_msg=0
-    [[ "$ENV_DISABLE_MSG_BRANCH" =~ $CI_COMMIT_REF_NAME ]] && enable_send_msg=0
+    [[ "$ENV_DISABLE_MSG_BRANCH" =~ $branch_name ]] && enable_send_msg=0
     if [[ "${enable_send_msg:-1}" == 1 ]]; then
         get_msg_deploy
         send_msg_chatapp
