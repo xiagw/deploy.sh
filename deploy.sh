@@ -484,7 +484,7 @@ get_msg_deploy() {
     msg_body="
 [Gitlab Deploy]
 Project = ${CI_PROJECT_PATH}
-Branche = ${branch_name}
+Branche = ${CI_COMMIT_REF_NAME}
 Pipeline = ${CI_PIPELINE_ID}/JobID-$CI_JOB_ID
 Describe = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}
 Who = ${GITLAB_USER_ID}/${git_username}
@@ -955,7 +955,7 @@ main() {
     ## 发送消息到群组, enable_send_msg， 0 不发， 1 发.
     [[ "${deploy_result}" -eq 1 ]] && enable_send_msg=1
     [[ "$ENV_DISABLE_MSG" = 1 ]] && enable_send_msg=0
-    [[ "$ENV_DISABLE_MSG_BRANCH" =~ $branch_name ]] && enable_send_msg=0
+    [[ "$ENV_DISABLE_MSG_BRANCH" =~ $CI_COMMIT_REF_NAME ]] && enable_send_msg=0
     if [[ "${enable_send_msg:-1}" == 1 ]]; then
         get_msg_deploy
         send_msg_chatapp

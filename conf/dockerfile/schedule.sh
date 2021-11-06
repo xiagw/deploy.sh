@@ -2,7 +2,7 @@
 # shellcheck disable=SC1090,SC1091
 
 main() {
-    for d in /var/www/*; do
+    for d in /app/* /var/www/*; do
         if [ ! -d "$d" ]; then
             continue
         fi
