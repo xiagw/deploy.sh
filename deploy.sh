@@ -198,30 +198,22 @@ node_build_volume() {
 
 docker_login() {
     source "$script_env"
-    case "$ENV_DOCKER_LOGIN" in
-    'aws')
-        ## 比较上一次登陆时间，超过12小时则再次登录
-        lock_docker_login="$script_dir/conf/.lock.docker.login.aws.${ENV_AWS_PROFILE:?undefine}"
-        [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
-        time_save="$(cat "$lock_docker_login")"
-        if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
-            echo_time "docker login..."
+    echo "docker login $ENV_DOCKER_LOGIN ..."
+    ## 比较上一次登陆时间，超过12小时则再次登录
+    lock_docker_login="$script_dir/conf/.lock.docker.login.${ENV_DOCKER_LOGIN}"
+    [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
+    time_save="$(cat "$lock_docker_login")"
+    if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
+        echo_time "docker login..."
+        if [[ "$ENV_DOCKER_LOGIN" == 'aws' ]]; then
             str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
             aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
-            date +%s >"$lock_docker_login"
-        fi
-        ;;
-    'aliyun' | 'qcloud')
-        echo "docker login $ENV_DOCKER_LOGIN ..."
-        lock_docker_login="$script_dir/conf/.lock.docker.login.${ENV_DOCKER_LOGIN}"
-        if [[ -f "$lock_docker_login" ]]; then
-            echo "docker login $ENV_DOCKER_LOGIN OK"
         else
             echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
-            # echo "docker login $ENV_DOCKER_LOGIN OK" | tee "$lock_docker_login"
         fi
-        ;;
-    esac
+        date +%s >"$lock_docker_login"
+    fi
+
 }
 
 php_composer_volume() {
