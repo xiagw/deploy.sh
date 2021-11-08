@@ -767,7 +767,7 @@ main() {
             exec_docker_push_node=1
             ;;
         --deploy-k8s-node)
-            exec_node_deploy_k8s=1
+            exec_deploy_k8s_node=1
             ;;
         --disable-rsync)
             exec_deploy_rsync=0
@@ -781,6 +781,9 @@ main() {
             exec_deploy_k8s_java=1
             exec_deploy_k8s_php=1
             # gitlabSingleJob=0
+            exec_docker_build_node=1
+            exec_docker_push_node=1
+            exec_deploy_k8s_node=1
             break
             ;;
         esac
@@ -872,7 +875,7 @@ main() {
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
-    if [[ 1 -eq "${PIPELINE_SONAR:-0}" ]]; then
+    if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
         scan_sonarqube
         return $?
     fi
@@ -885,17 +888,17 @@ main() {
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    if [[ 1 -eq "${PIPELINE_CODE_STYLE:-0}" ]]; then
+    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]]; then
         check_code_style
     fi
 
     case "${project_lang}" in
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-        if [[ 1 -eq "${project_docker}" ]]; then
-            [[ 1 -eq "${exec_docker_build_php:-1}" ]] && docker_build_generic
-            [[ 1 -eq "${exec_docker_push_php:-1}" ]] && docker_push_generic
-            [[ 1 -eq "$exec_deploy_k8s_php" ]] && deploy_k8s_generic
+        if [[ "${project_docker}" -eq 1 ]]; then
+            [[ "${exec_docker_build_php:-1}" -eq 1 ]] && docker_build_generic
+            [[ "${exec_docker_push_php:-1}" -eq 1 ]] && docker_push_generic
+            [[ "$exec_deploy_k8s_php" -eq 1 ]] && deploy_k8s_generic
             if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
                 echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
                 php_composer_volume
@@ -905,19 +908,19 @@ main() {
         fi
         ;;
     'node' | 'react')
-        if [[ 1 -eq "${project_docker}" ]]; then
-            [[ 1 -eq "$exec_docker_build_node" ]] && docker_build_generic
-            [[ 1 -eq "$exec_docker_push_node" ]] && docker_push_generic
-            [[ 1 -eq "$exec_node_deploy_k8s" ]] && deploy_k8s_generic
+        if [[ "${project_docker}" -eq 1 ]]; then
+            [[ "$exec_docker_build_node" -eq 1 ]] && docker_build_generic
+            [[ "$exec_docker_push_node" -eq 1 ]] && docker_push_generic
+            [[ "$exec_deploy_k8s_node" -eq 1 ]] && deploy_k8s_generic
         else
             node_build_volume
         fi
         ;;
     'java')
-        if [[ 1 -eq "${project_docker}" ]]; then
-            [[ 1 -eq "$exec_java_docker_build" ]] && java_docker_build
-            [[ 1 -eq "$exec_java_docker_push" ]] && java_docker_push
-            [[ 1 -eq "$exec_deploy_k8s_java" ]] && java_deploy_k8s
+        if [[ "${project_docker}" -eq 1 ]]; then
+            [[ "$exec_java_docker_build" -eq 1 ]] && java_docker_build
+            [[ "$exec_java_docker_push" -eq 1 ]] && java_docker_push
+            [[ "$exec_deploy_k8s_java" -eq 1 ]] && java_deploy_k8s
         fi
         ;;
     'android')
