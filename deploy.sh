@@ -342,6 +342,14 @@ java_deploy_k8s() {
 docker_build_generic() {
     echo_time_step "docker build only..."
     docker_login
+    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
+    for file in $config_env_path; do
+        if [[ "$file" =~ 'config' ]]; then
+            \cp -vf "$file" "${file/${branch_name}./}"
+        else
+            \cp -vf "$file" "${file/${branch_name}/}"
+        fi
+    done
     secret_file_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
