@@ -10,6 +10,7 @@ etc/
 
 conf/*
 !conf/deploy.*.example
+!conf/.dockerignore
 !conf/gitlab-ci.yml
 !conf/rsync.exclude
 !conf/dockerfile/
