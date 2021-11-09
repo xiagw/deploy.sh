@@ -368,7 +368,7 @@ docker_push_generic() {
 }
 
 deploy_k8s_generic() {
-    echo_time_step "start deploy k8s..."
+    echo_time_step "deploy k8s..."
     if [[ ${ENV_REMOVE_PROJ_PREFIX:-false} == true ]]; then
         helm_release=${CI_PROJECT_NAME#*-}
     else
