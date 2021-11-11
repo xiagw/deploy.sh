@@ -258,7 +258,7 @@ java_docker_build() {
     fi
     [ -f "$env_file" ] && cp -f "$env_file" "${CI_PROJECT_DIR}/.env"
 
-    cp -f "$script_dir/conf/dockerfile/.dockerignore" "${CI_PROJECT_DIR}/"
+    cp -f "$script_dir/conf/.dockerignore" "${CI_PROJECT_DIR}/"
     cp -f "$script_dir/conf/dockerfile/settings.xml" "${CI_PROJECT_DIR}/"
     if [ -f "${CI_PROJECT_DIR}/Dockerfile.useLocal" ]; then
         mv Dockerfile.useLocal Dockerfile

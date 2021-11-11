@@ -4,6 +4,7 @@
 .dockerignore
 
 docs/
+!docs/nginx
 doc/
 
 npm-debug.log
