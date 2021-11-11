@@ -391,6 +391,7 @@ deploy_k8s_generic() {
         echo_warn "helm files not exists, ignore helm install."
         [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$branch_name"
     else
+        set -x
         helm upgrade "${helm_release}" "$path_helm/" \
             --install --history-max 1 \
             --namespace "${branch_name}" --create-namespace \
@@ -399,6 +400,7 @@ deploy_k8s_generic() {
             --set nfsServer="${ENV_NFS_SERVER:?undefine}" \
             --set envNamespace="${branch_name}" \
             --set image.pullPolicy='Always' >/dev/null
+        set +x
     fi
     kubectl -n "${branch_name}" get replicaset.apps | awk '/.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "${branch_name}" delete replicaset.apps >/dev/null 2>&1 || true
     echo_time "end deploy k8s."
