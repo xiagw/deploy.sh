@@ -554,9 +554,9 @@ update_cert() {
 
     ## 根据多个不同的账号文件，循环处理 renew
     for account in "${acme_home}/"account.conf.*; do
-        if [ -f "$HOME/.cloudflare.conf" ]; then
+        if [ -f "$conf_cloudflare" ]; then
             command -v flarectl || return 1
-            source "$HOME/.cloudflare.conf" "${account##*.}"
+            source "$conf_cloudflare" "${account##*.}"
             domain_name="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
         elif [ -f "$HOME/.aliyun.dnsapi.conf" ]; then
@@ -834,7 +834,6 @@ main() {
     [[ ! -e "${HOME}/.aws" && -e "${conf_dir_aws}" ]] && ln -sf "${conf_dir_aws}" "$HOME/"
     [[ ! -e "${HOME}/.kube" && -e "${conf_dir_kube}" ]] && ln -sf "${conf_dir_kube}" "$HOME/"
     [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${conf_python_gitlab}" ]] && ln -sf "${conf_python_gitlab}" "$HOME/"
-    [[ ! -e "${HOME}/.cloudflare.conf" && -e "${conf_cloudflare}" ]] && ln -sf "${conf_cloudflare}" "$HOME/"
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     # shellcheck disable=SC1090
     source "$script_env"
