@@ -922,6 +922,10 @@ main() {
             [[ "$exec_docker_build_node" -eq 1 ]] && docker_build_generic
             [[ "$exec_docker_push_node" -eq 1 ]] && docker_push_generic
             [[ "$exec_deploy_k8s_node" -eq 1 ]] && deploy_k8s_generic
+            if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
+                echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
+                node_build_volume
+            fi
         else
             node_build_volume
         fi
