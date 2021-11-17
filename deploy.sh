@@ -827,12 +827,14 @@ main() {
     conf_dir_acme="${script_dir}/conf/.acme.sh"
     conf_dir_aws="${script_dir}/conf/.aws"
     conf_dir_kube="${script_dir}/conf/.kube"
+    conf_dir_aliyun="${script_dir}/conf/.aliyun"
     conf_python_gitlab="${script_dir}/conf/.python-gitlab.cfg"
     conf_cloudflare="${script_dir}/conf/.cloudflare.cfg"
     conf_rsync_exclude="${script_dir}/conf/rsync.exclude"
     [[ ! -e "${HOME}/.acme.sh" && -e "${conf_dir_acme}" ]] && ln -sf "${conf_dir_acme}" "$HOME/"
     [[ ! -e "${HOME}/.aws" && -e "${conf_dir_aws}" ]] && ln -sf "${conf_dir_aws}" "$HOME/"
     [[ ! -e "${HOME}/.kube" && -e "${conf_dir_kube}" ]] && ln -sf "${conf_dir_kube}" "$HOME/"
+    [[ ! -e "${HOME}/.aliyun" && -e "${conf_dir_aliyun}" ]] && ln -sf "${conf_dir_aliyun}" "$HOME/"
     [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${conf_python_gitlab}" ]] && ln -sf "${conf_python_gitlab}" "$HOME/"
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     # shellcheck disable=SC1090
