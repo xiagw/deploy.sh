@@ -464,19 +464,19 @@ deploy_rsync() {
         if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${branch_name}.${CI_PROJECT_NAME}/"
         fi
+        ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
+        secret_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
         ## 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ '^oss://' ]]; then
             command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
             # bucktName="${rsync_dest#oss://}"
             # bucktName="${bucktName%%/*}"
-            aliyun oss cp -rf "${CI_PROJECT_DIR}/" "$rsync_dest/"
+            aliyun oss cp -rf "${rsync_src}/" "$rsync_dest/"
             # rclone sync "${CI_PROJECT_DIR}/" "$rsync_dest/"
-            # return
+            return
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
-        ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
-        secret_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
         [ -d "$secret_dir" ] && rsync -rlcvzt "$secret_dir" "${rsync_src}"
         ## 复制文件到目标服务器的目标目录
         echo "deploy to ${ssh_host}:${rsync_dest}"
