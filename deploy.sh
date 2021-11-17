@@ -467,7 +467,7 @@ deploy_rsync() {
         ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
         secret_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
         ## 发布到 aliyun oss 存储
-        if [[ "${rsync_dest}" =~ '^oss://' ]]; then
+        if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
             # bucktName="${rsync_dest#oss://}"
             # bucktName="${bucktName%%/*}"
