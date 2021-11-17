@@ -471,7 +471,7 @@ deploy_rsync() {
             command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
             # bucktName="${rsync_dest#oss://}"
             # bucktName="${bucktName%%/*}"
-            aliyun oss cp -rf "${rsync_src}/" "$rsync_dest/"
+            aliyun oss cp "${rsync_src}/" "$rsync_dest/" --recursive --force
             # rclone sync "${CI_PROJECT_DIR}/" "$rsync_dest/"
             return
         fi
