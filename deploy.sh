@@ -17,7 +17,7 @@ set -e ## 出现错误自动退出
 
 echo_info() { echo -e "\033[32m$*\033[0m"; }        ## green
 echo_warn() { echo -e "\033[33m$*\033[0m"; }        ## yellow
-echo_err() { echo -e "\033[31m$*\033[0m"; }         ## red
+echo_erro() { echo -e "\033[31m$*\033[0m"; }        ## red
 echo_ques() { echo -e "\033[35m$*\033[0m"; }        ## brown
 echo_time() { echo "[$(date +%Y%m%d-%T-%u)], $*"; } ## time
 echo_time_step() {
@@ -125,8 +125,6 @@ scan_vulmap() {
 ## install jdk/ant/jmeter
 test_function() {
     echo_time_step "function test..."
-    # command -v jmeter >/dev/null || echo_warn "command not exists: jmeter"
-    # jmeter -n -t "$script_dir/test/jmeter/test.jmx" -l "$script_dir/test/jmeter/test.jtl"
     [ -f "$script_dir/data/tests/test_func.sh" ] && bash "$script_dir/data/tests/test_func.sh"
     echo_time "end function test."
 }
@@ -159,7 +157,7 @@ deploy_sql_flyway() {
     if [ ${deploy_result:-0} = 0 ]; then
         echo_info "Result = OK"
     else
-        echo_err "Result = FAIL"
+        echo_erro "Result = FAIL"
     fi
 }
 
@@ -287,11 +285,11 @@ java_docker_push() {
         for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
             [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${image_registry}-$target" || docker_tag_loop="${image_registry}"
             docker images "${docker_tag_loop}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-            docker push -q "${docker_tag_loop}" || echo_err "error here, maybe caused by GFW."
+            docker push -q "${docker_tag_loop}" || echo_erro "error here, maybe caused by GFW."
         done
     else
         docker images "${image_registry}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-        docker push -q "${image_registry}" || echo_err "error here, maybe caused by GFW."
+        docker push -q "${image_registry}" || echo_erro "error here, maybe caused by GFW."
     fi
     echo_time "end docker push."
 }
@@ -327,11 +325,11 @@ java_deploy_k8s() {
         ## 等待就绪
         if ! kubectl -n "${branch_name}" rollout status deployment "${work_name_loop}"; then
             errPod="$(kubectl -n "${branch_name}" get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
-            echo_err "---------------cut---------------"
+            echo_erro "---------------cut---------------"
             kubectl -n "${branch_name}" describe "pod/${errPod}" | tail
-            echo_err "---------------cut---------------"
+            echo_erro "---------------cut---------------"
             kubectl -n "${branch_name}" logs "pod/${errPod}" | tail -n 100
-            echo_err "---------------cut---------------"
+            echo_erro "---------------cut---------------"
             deploy_result=1
         fi
     done
@@ -342,6 +340,7 @@ java_deploy_k8s() {
 docker_build_generic() {
     echo_time_step "docker build only..."
     docker_login
+    ## frontend (VUE) .env
     config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
     for file in $config_env_path; do
         if [[ "$file" =~ 'config' ]]; then
@@ -350,9 +349,11 @@ docker_build_generic() {
             \cp -vf "$file" "${file/${branch_name}/}"
         fi
     done
+    ## backend (PHP) .env
     secret_file_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
+    ## docker build
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
@@ -363,7 +364,7 @@ docker_push_generic() {
     echo_time_step "docker push only..."
     docker_login
     # echo "$image_registry"
-    docker push -q "$image_registry" || echo_err "error here, maybe caused by GFW."
+    docker push -q "$image_registry" || echo_erro "error here, maybe caused by GFW."
     echo_time "end docker push."
 }
 
@@ -402,7 +403,8 @@ deploy_k8s_generic() {
             --set image.pullPolicy='Always' >/dev/null
         set +x
     fi
-    kubectl -n "${branch_name}" get replicaset.apps | awk '/.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "${branch_name}" delete replicaset.apps >/dev/null 2>&1 || true
+    kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
+        xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
     echo_time "end deploy k8s."
 }
 
@@ -410,7 +412,7 @@ deploy_rsync() {
     echo_time_step "rsync code file to remote server..."
     ## 读取配置文件，获取 项目/分支名/war包目录
     grep "^${CI_PROJECT_PATH}\s\+${branch_name}" "$script_conf" || {
-        echo_err "if stop here, check GIT repository: pms/runner/conf/deploy.conf"
+        echo_erro "if stop here, check GIT repository: pms/runner/conf/deploy.conf"
         return 1
     }
     grep "^${CI_PROJECT_PATH}\s\+${branch_name}" "$script_conf" | while read -r line; do
@@ -427,7 +429,7 @@ deploy_rsync() {
         echo "${ssh_host}"
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
-            echo "if stop here, check pms/deploy.conf"
+            echo "if stop here, check pms/runner/conf/deploy.conf"
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
@@ -469,8 +471,6 @@ deploy_rsync() {
         ## 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
-            # bucktName="${rsync_dest#oss://}"
-            # bucktName="${bucktName%%/*}"
             aliyun oss cp "${rsync_src}/" "$rsync_dest/" --recursive --force
             # rclone sync "${CI_PROJECT_DIR}/" "$rsync_dest/"
             return
@@ -485,7 +485,7 @@ deploy_rsync() {
     echo_time "end rsync file."
 }
 
-get_msg_deploy() {
+deploy_notify_msg() {
     # mr_iid="$(gitlab project-merge-request list --project-id "$CI_PROJECT_ID" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
     ## sudo -H python3 -m pip install PyYaml
     # [ -z "$msg_describe" ] && msg_describe="$(gitlab -v project-merge-request get --project-id "$CI_PROJECT_ID" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')"
@@ -499,11 +499,12 @@ Branche = ${CI_COMMIT_REF_NAME}
 Pipeline = ${CI_PIPELINE_ID}/JobID-$CI_JOB_ID
 Describe = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}
 Who = ${GITLAB_USER_ID}/${git_username}
-Result = $([ 0 = "${deploy_result:-0}" ] && echo OK || echo FAIL)
+Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
+$([[ -n "${test_result}" ]] && echo "Test: ${test_result}")
 "
 }
 
-send_msg_chatapp() {
+deploy_notify() {
     echo_time_step "send message to chatApp..."
     if [[ 1 -eq "${ENV_NOTIFY_WEIXIN:-0}" ]]; then
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
@@ -814,7 +815,7 @@ main() {
     if [[ ! -d "${conf_dir_ssh}" ]]; then
         mkdir -m 700 "$conf_dir_ssh"
         echo_warn "generate ssh key file for gitlab-runner: $conf_dir_ssh/id_ed25519"
-        echo_err "cat $conf_dir_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
+        echo_erro "cat $conf_dir_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "$conf_dir_ssh/id_ed25519"
         ln -sf "$conf_dir_ssh" "$HOME/"
     fi
@@ -858,21 +859,34 @@ main() {
 
     ## 判定项目类型
     if [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]]; then
-        # if [[ -d "${CI_PROJECT_DIR}/ios" || -d "${CI_PROJECT_DIR}/android" ]]; then
         if grep -i -q 'Create React' "${CI_PROJECT_DIR}/README.md" "${CI_PROJECT_DIR}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
         else
             project_lang='node'
         fi
     fi
-    [[ -f "${CI_PROJECT_DIR}/composer.json" ]] && project_lang='php'
-    [[ -f "${CI_PROJECT_DIR}/pom.xml" ]] && project_lang='java'
-    [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]] && project_lang='python'
-    grep '^## android' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null && project_lang='android'
-    grep '^## ios' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null && project_lang='ios'
-    [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]] && project_docker=1
+    if [[ -f "${CI_PROJECT_DIR}/composer.json" ]]; then
+        project_lang='php'
+    fi
+    if [[ -f "${CI_PROJECT_DIR}/pom.xml" ]]; then
+        project_lang='java'
+    fi
+    if [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]]; then
+        project_lang='python'
+    fi
+    if grep '^## android' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null; then
+        project_lang='android'
+    fi
+    if grep '^## ios' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null; then
+        project_lang='ios'
+    fi
+    if [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]]; then
+        project_docker=1
+    fi
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
-    [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]] && project_docker=0
+    if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
+        project_docker=0
+    fi
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
 
     ## use flyway deploy sql file
@@ -976,10 +990,10 @@ main() {
     [[ "$ENV_DISABLE_MSG" = 1 ]] && enable_send_msg=0
     [[ "$ENV_DISABLE_MSG_BRANCH" =~ $CI_COMMIT_REF_NAME ]] && enable_send_msg=0
     if [[ "${enable_send_msg:-1}" == 1 ]]; then
-        get_msg_deploy
-        send_msg_chatapp
+        deploy_notify_msg
+        deploy_notify
     else
-        echo_warn "disable message send."
+        echo_warn "disable notify."
     fi
 
     ## deploy result:  0 成功， 1 失败
