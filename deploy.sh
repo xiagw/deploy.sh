@@ -401,7 +401,7 @@ deploy_k8s_generic() {
             --set nfsServer="${ENV_NFS_SERVER:?undefine}" \
             --set envNamespace="${branch_name}" \
             --set image.pullPolicy='Always' >/dev/null
-        set +x
+        [ ! -f ~/ci_debug ] && set +x
     fi
     kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
         xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
