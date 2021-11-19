@@ -500,7 +500,7 @@ Pipeline = ${CI_PIPELINE_ID}/JobID-$CI_JOB_ID
 Describe = [${CI_COMMIT_SHORT_SHA}]/${msg_describe}
 Who = ${GITLAB_USER_ID}/${git_username}
 Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
-$([[ -n "${test_result}" ]] && echo "Test: ${test_result}")
+$(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi)
 "
 }
 
