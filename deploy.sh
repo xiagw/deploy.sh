@@ -360,7 +360,7 @@ docker_build_generic() {
         [ -f composer.json ] && $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
         if [[ "$build_trig" -gt 0 ]]; then
             DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-                -f "Dockerfile.${image_from##*:}" "${path_dockerfile}"
+                -f "${path_dockerfile}/Dockerfile.${image_from##*:}" "${path_dockerfile}"
         fi
     fi
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
