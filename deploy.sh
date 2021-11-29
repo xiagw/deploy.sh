@@ -43,7 +43,7 @@ code_style_python() {
 code_style_php() {
     echo_time_step "starting PHP Code Sniffer, < standard=PSR12 >..."
     if ! docker images | grep 'deploy/phpcs'; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dir/conf/dockerfile/Dockerfile.phpcs" "$script_dir/docker" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$path_dockerfile/Dockerfile.phpcs" "$path_dockerfile" >/dev/null
     fi
     phpcs_result=0
     for i in $($git_diff | awk '/\.php$/{if (NR>0){print $0}}'); do
@@ -178,7 +178,7 @@ node_build_volume() {
     rm -f package-lock.json
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node' >/dev/null; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dir/conf/dockerfile/Dockerfile.node" "$script_dir/conf/dockerfile" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$path_dockerfile/Dockerfile.node" "$path_dockerfile" >/dev/null
     fi
     if [[ -f "$script_dir/bin/custome.docker.build.sh" ]]; then
         source "$script_dir/bin/custome.docker.build.sh"
@@ -216,7 +216,7 @@ php_composer_volume() {
     fi
     if ! docker images | grep -q "deploy/composer"; then
         DOCKER_BUILDKIT=1 docker build --quiet -t "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-            -f "$script_dir/conf/dockerfile/Dockerfile.composer" "$script_dir/conf/dockerfile"
+            -f "$path_dockerfile/Dockerfile.composer" "$path_dockerfile"
     fi
 
     echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
@@ -257,11 +257,11 @@ java_docker_build() {
     [ -f "$env_file" ] && cp -f "$env_file" "${CI_PROJECT_DIR}/.env"
 
     cp -f "$script_dir/conf/.dockerignore" "${CI_PROJECT_DIR}/"
-    cp -f "$script_dir/conf/dockerfile/settings.xml" "${CI_PROJECT_DIR}/"
+    cp -f "$path_dockerfile/settings.xml" "${CI_PROJECT_DIR}/"
     if [ -f "${CI_PROJECT_DIR}/Dockerfile.useLocal" ]; then
         mv Dockerfile.useLocal Dockerfile
     else
-        cp -f "$script_dir/conf/dockerfile/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
+        cp -f "$path_dockerfile/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
     fi
     if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
         # shellcheck disable=2013
@@ -352,11 +352,16 @@ docker_build_generic() {
     ## backend (PHP) .env
     secret_file_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
     ## Docker build from
-    if [ -f Dockerfile.mom ] && $git_diff package.json | grep package.json; then
-        image_from=$(awk '/^FROM/ {print $2}' Dockerfile)
-        DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" \
-        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
-        "${CI_PROJECT_DIR}"
+    image_from=$(awk '/^FROM/ {print $2}' Dockerfile | head -n 1)
+    if [ -n "$image_from" ]; then
+        build_trig=0
+        docker images | grep -q "${image_from}" || build_trig=$((build_trig + 1))
+        $git_diff package.json | grep 'package.json' && build_trig=$((build_trig + 1))
+        $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
+        if [[ "$build_trig" -gt 0 ]]; then
+            DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+                -f "Dockerfile.${image_from##*:}" "${path_dockerfile}"
+        fi
     fi
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
@@ -813,6 +818,7 @@ main() {
     script_log="${script_dir}/data/${script_name}.log" ## 记录 deploy.sh 执行情况
     script_conf="${script_dir}/conf/deploy.conf"       ## 发布到目标服务器的配置信息
     script_env="${script_dir}/conf/deploy.env"         ## 发布配置信息(密)
+    path_dockerfile="${script_dir}/conf/dockerfile"    ## dockerfile
 
     [[ ! -f "$script_conf" ]] && cp "${script_dir}/conf/deploy.conf.example" "$script_conf"
     [[ ! -f "$script_env" ]] && cp "${script_dir}/conf/deploy.env.example" "$script_env"
