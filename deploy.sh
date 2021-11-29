@@ -352,7 +352,7 @@ docker_build_generic() {
     ## backend (PHP) .env
     secret_file_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
     ## Docker build from
-    image_from=$(awk '/^FROM/ {print $2}' Dockerfile | head -n 1)
+    image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
     if [ -n "$image_from" ]; then
         build_trig=0
         docker images | grep -q "${image_from%%:*}.*${image_from##*:}" || build_trig=$((build_trig + 1))
