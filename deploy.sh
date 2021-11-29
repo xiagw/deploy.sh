@@ -356,9 +356,14 @@ docker_build_generic() {
     if [ -n "$image_from" ]; then
         build_trig=0
         docker images | grep -q "${image_from%%:*}.*${image_from##*:}" || build_trig=$((build_trig + 1))
-        [ -f package.json ] && $git_diff package.json | grep 'package.json' && build_trig=$((build_trig + 1))
-        [ -f composer.json ] && $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
-        if [[ "$build_trig" -gt 0 ]]; then
+        [[ $project_lang == node ]] && $git_diff package.json | grep 'package.json' && build_trig=$((build_trig + 1))
+        [[ $project_lang == php ]] && $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
+        if [[ "$build_trig" -gt 0 && $project_lang == node ]]; then
+            cp -f "${path_dockerfile}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}/"
+            DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+                -f "${CI_PROJECT_DIR}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}"
+        fi
+        if [[ "$build_trig" -gt 0 && $project_lang == php ]]; then
             DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${path_dockerfile}/Dockerfile.${image_from##*:}" "${path_dockerfile}"
         fi
@@ -366,8 +371,7 @@ docker_build_generic() {
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
     ## docker build
-    DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
-        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
+    DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
 }
