@@ -356,8 +356,8 @@ docker_build_generic() {
     if [ -n "$image_from" ]; then
         build_trig=0
         docker images | grep -q "${image_from}" || build_trig=$((build_trig + 1))
-        $git_diff package.json | grep 'package.json' && build_trig=$((build_trig + 1))
-        $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
+        [ -f package.json ] && $git_diff package.json | grep 'package.json' && build_trig=$((build_trig + 1))
+        [ -f composer.json ] && $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
         if [[ "$build_trig" -gt 0 ]]; then
             DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "Dockerfile.${image_from##*:}" "${path_dockerfile}"
