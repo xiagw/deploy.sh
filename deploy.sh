@@ -351,6 +351,13 @@ docker_build_generic() {
     done
     ## backend (PHP) .env
     secret_file_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
+    ## Docker build from
+    if [ -f Dockerfile.mom ] && $git_diff package.json | grep package.json; then
+        image_from=$(awk '/^FROM/ {print $2}' Dockerfile)
+        DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" \
+        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
+        "${CI_PROJECT_DIR}"
+    fi
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
     ## docker build
