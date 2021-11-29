@@ -355,7 +355,7 @@ docker_build_generic() {
     image_from=$(awk '/^FROM/ {print $2}' Dockerfile | head -n 1)
     if [ -n "$image_from" ]; then
         build_trig=0
-        docker images | grep -q "${image_from}" || build_trig=$((build_trig + 1))
+        docker images | grep -q "${image_from%%:*}.*${image_from##*:}" || build_trig=$((build_trig + 1))
         [ -f package.json ] && $git_diff package.json | grep 'package.json' && build_trig=$((build_trig + 1))
         [ -f composer.json ] && $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
         if [[ "$build_trig" -gt 0 ]]; then
