@@ -370,6 +370,9 @@ docker_build_generic() {
     fi
     [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
     [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
+    if [[ "${CI_PROJECT_NAME}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
+        rsync -av "$HOME/.acme.sh/dest/" "${CI_PROJECT_DIR}/etc/nginx/conf.d/ssl/"
+    fi
     ## docker build
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
