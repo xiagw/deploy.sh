@@ -69,7 +69,7 @@ code_style_dockerfile() {
     echo_time_step "[TODO] vsc-extension-hadolint..."
 }
 
-check_code_style() {
+code_style() {
     [[ "${project_lang}" == php ]] && code_style_php
     [[ "${project_lang}" == node ]] && code_style_node
     [[ "${project_lang}" == java ]] && code_style_java
@@ -83,7 +83,7 @@ test_unit() {
 }
 
 ## install sonar-scanner to system user: "gitlab-runner"
-scan_sonarqube() {
+code_quality_sonar() {
     echo_time_step "sonar scanner..."
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$CI_PROJECT_DIR/sonar-project.properties"
@@ -228,7 +228,6 @@ php_composer_volume() {
     echo "COMPOSER_UPDATE=${COMPOSER_UPDATE:-false}"
     if [ "${COMPOSER_INSTALL:-false}" = true ]; then
         rm -f "${CI_PROJECT_DIR}"/composer.lock
-        # rm -rf "${CI_PROJECT_DIR}"/vendor
         $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app "$image_composer" composer install -q --no-dev -o || true
     fi
     if [ "${COMPOSER_UPDATE:-false}" = true ]; then
@@ -242,7 +241,7 @@ php_composer_volume() {
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
-java_docker_build() {
+docker_build_java() {
     echo_time_step "java docker build..."
     ## gitlab-CI/CD setup variables MVN_DEBUG=1 enable debug message
     echo_warn "If you want to view debug msg, set MVN_DEBUG=1 on pipeline."
@@ -277,7 +276,7 @@ java_docker_build() {
     echo_time "end docker build."
 }
 
-java_docker_push() {
+docker_push_java() {
     echo_time_step "docker push to ECR..."
     docker_login
     if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
@@ -294,7 +293,7 @@ java_docker_push() {
     echo_time "end docker push."
 }
 
-java_deploy_k8s() {
+deploy_k8s_java() {
     echo_time_step "deploy to k8s..."
     helm_dir_project="$script_dir/conf/helm/${ENV_HELM_DIR}"
     # shellcheck disable=2013
@@ -334,7 +333,8 @@ java_deploy_k8s() {
         fi
     done
 
-    kubectl -n "$branch_name" get replicasets.apps | awk '/repicasets.apps.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "$branch_name" delete replicasets.apps >/dev/null 2>&1 || true
+    kubectl -n "$branch_name" get replicasets.apps | awk '/repicasets.apps.*0\s+0\s+0/ {print $1}' |
+        xargs kubectl -n "$branch_name" delete replicasets.apps >/dev/null 2>&1 || true
 }
 
 docker_build_generic() {
@@ -508,8 +508,7 @@ deploy_notify() {
     echo_time_step "send message to chatApp..."
     if [[ 1 -eq "${ENV_NOTIFY_WEIXIN:-0}" ]]; then
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
-        curl -s "$weixin_api" \
-            -H 'Content-Type: application/json' \
+        curl -s "$weixin_api" -H 'Content-Type: application/json' \
             -d "
         {
             \"msgtype\": \"text\",
@@ -532,13 +531,24 @@ deploy_notify() {
     elif [[ 1 -eq "${ENV_NOTIFY_ELEMENT:-0}" && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         python3 "$script_dir/bin/element.py" "$msg_body"
     elif [[ 1 -eq "${ENV_NOTIFY_EMAIL:-0}" ]]; then
-        echo_warn "[TODO] send email to you."
+        # mogaal/sendemail: lightweight, command line SMTP email client
+        # https://github.com/mogaal/sendemail
+        "$script_dir/bin/sendEmail" \
+            -s "$ENV_EMAIL_SERVER" \
+            -f "$ENV_EMAIL_FROM" \
+            -xu "$ENV_EMAIL_USERNAME" \
+            -xp "$ENV_EMAIL_PASSWORD" \
+            -t "$ENV_EMAIL_TO" \
+            -o message-content-type=text/html \
+            -o message-charset=utf-8 \
+            -u "[Gitlab Deploy] ${CI_PROJECT_PATH} ${CI_COMMIT_REF_NAME} ${CI_PIPELINE_ID}/${CI_JOB_ID}" \
+            -m "$msg_body"
     else
         echo_warn "No message send."
     fi
 }
 
-update_cert() {
+renew_cert() {
     echo_time_step "update ssl cert (dns api)..."
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
@@ -755,10 +765,10 @@ main() {
             PIPELINE_UPDATE_SSL=1
             ;;
         --docker-build-java)
-            exec_java_docker_build=1
+            exec_docker_build_java=1
             ;;
         --docker-push-java)
-            exec_java_docker_push=1
+            exec_docker_push_java=1
             ;;
         --deploy-k8s-java)
             exec_deploy_k8s_java=1
@@ -788,14 +798,25 @@ main() {
             exec_flyway=0
             ;;
         *)
-            exec_java_docker_build=1
-            exec_java_docker_push=1
-            exec_deploy_k8s_java=1
-            exec_deploy_k8s_php=1
-            # gitlabSingleJob=0
-            exec_docker_build_node=1
-            exec_docker_push_node=1
-            exec_deploy_k8s_node=1
+            # gitlabSingleJob=1
+            ## java
+            exec_docker_build_java=0
+            exec_docker_push_java=0
+            exec_deploy_k8s_java=0
+            ## php
+            exec_docker_build_php=0
+            exec_docker_push_php=0
+            exec_deploy_k8s_php=0
+            ## node
+            exec_docker_build_node=0
+            exec_docker_push_node=0
+            exec_deploy_k8s_node=0
+            ## php composer
+            exec_php_composer_volume=1
+            ## node build
+            exec_node_build_volume=1
+            ## rsync
+            exec_deploy_rsync=1
             break
             ;;
         esac
@@ -853,7 +874,7 @@ main() {
 
     ## acme.sh 更新证书
     if [[ "$PIPELINE_UPDATE_SSL" -eq 1 ]]; then
-        update_cert
+        renew_cert
         return
     fi
 
@@ -902,7 +923,7 @@ main() {
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
-        scan_sonarqube
+        code_quality_sonar
         return $?
     fi
 
@@ -915,43 +936,50 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]]; then
-        check_code_style
+        code_style
     fi
 
+    if [[ "${project_docker}" -eq 1 ]]; then
+        exec_docker_build_java=1
+        exec_docker_push_java=1
+        exec_deploy_k8s_java=1
+        exec_docker_build_node=1
+        exec_docker_push_node=1
+        exec_deploy_k8s_node=1
+        exec_docker_build_php=1
+        exec_docker_push_php=1
+        exec_deploy_k8s_php=1
+        ## php composer
+        exec_php_composer_volume=0
+        ## node build
+        exec_node_build_volume=0
+        ## rsync
+        exec_deploy_rsync=0
+        if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
+            echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
+            exec_php_composer_volume=1
+            exec_node_build_volume=1
+            exec_deploy_rsync=1
+        fi
+    fi
     case "${project_lang}" in
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-        if [[ "${project_docker}" -eq 1 ]]; then
-            [[ "${exec_docker_build_php:-1}" -eq 1 ]] && docker_build_generic
-            [[ "${exec_docker_push_php:-1}" -eq 1 ]] && docker_push_generic
-            [[ "$exec_deploy_k8s_php" -eq 1 ]] && deploy_k8s_generic
-            if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
-                echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
-                php_composer_volume
-            fi
-        else
-            php_composer_volume
-        fi
+        [[ "${exec_docker_build_php}" -eq 1 ]] && docker_build_generic
+        [[ "${exec_docker_push_php}" -eq 1 ]] && docker_push_generic
+        [[ "${exec_deploy_k8s_php}" -eq 1 ]] && deploy_k8s_generic
+        [[ "${exec_php_composer_volume}" -eq 1 ]] && php_composer_volume
         ;;
     'node' | 'react')
-        if [[ "${project_docker}" -eq 1 ]]; then
-            [[ "$exec_docker_build_node" -eq 1 ]] && docker_build_generic
-            [[ "$exec_docker_push_node" -eq 1 ]] && docker_push_generic
-            [[ "$exec_deploy_k8s_node" -eq 1 ]] && deploy_k8s_generic
-            if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
-                echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
-                node_build_volume
-            fi
-        else
-            node_build_volume
-        fi
+        [[ "${exec_docker_build_node}" -eq 1 ]] && docker_build_generic
+        [[ "${exec_docker_push_node}" -eq 1 ]] && docker_push_generic
+        [[ "${exec_deploy_k8s_node}" -eq 1 ]] && deploy_k8s_generic
+        [[ "$exec_node_build_volume" -eq 1 ]] && node_build_volume
         ;;
     'java')
-        if [[ "${project_docker}" -eq 1 ]]; then
-            [[ "$exec_java_docker_build" -eq 1 ]] && java_docker_build
-            [[ "$exec_java_docker_push" -eq 1 ]] && java_docker_push
-            [[ "$exec_deploy_k8s_java" -eq 1 ]] && java_deploy_k8s
-        fi
+        [[ "${exec_docker_build_java}" -eq 1 ]] && docker_build_java
+        [[ "${exec_docker_push_java}" -eq 1 ]] && docker_push_java
+        [[ "${exec_deploy_k8s_java}" -eq 1 ]] && deploy_k8s_java
         ;;
     'android')
         exec_deploy_rsync=0
@@ -972,8 +1000,6 @@ main() {
     ## generate api docs
     # gen_apidoc
 
-    [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
-    [[ $ENV_FORCE_RSYNC == true ]] && exec_deploy_rsync=1
     if [[ "${exec_deploy_rsync:-1}" -eq 1 ]]; then
         deploy_rsync
     fi
