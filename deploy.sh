@@ -344,14 +344,16 @@ docker_build_generic() {
     config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
     for file in $config_env_path; do
         if [[ "$file" =~ 'config' ]]; then
+            # vue2.x
             \cp -vf "$file" "${file/${branch_name}./}"
         else
+            # vue3.x
             \cp -vf "$file" "${file/${branch_name}/}"
         fi
     done
     ## backend (PHP) .env
     secret_file_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
-    ## Docker build from
+    ## Docker build from, 从模板构建
     image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
     if [ -n "$image_from" ]; then
         build_trig=0
@@ -359,6 +361,7 @@ docker_build_generic() {
         [[ $project_lang == node ]] && $git_diff package.json | grep 'package.json' && build_trig=$((build_trig + 1))
         [[ $project_lang == php ]] && $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
         if [[ "$build_trig" -gt 0 && $project_lang == node ]]; then
+            # 从模板构建
             cp -f "${path_dockerfile}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}/"
             DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${CI_PROJECT_DIR}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}"
