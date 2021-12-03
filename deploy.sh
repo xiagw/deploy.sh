@@ -383,7 +383,7 @@ docker_build_generic() {
         image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-flyway"
         path_flyway_conf="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
         [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
-        [[ ! -d "${CI_PROJECT_DIR}/docs/flyway_conf" && -d "$path_flyway_conf" ]] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
+        [[ ! -d "${CI_PROJECT_DIR}/docs/flyway_conf" && -d "$path_flyway_conf" ]] && rsync -rlctv "$path_flyway_conf" "${CI_PROJECT_DIR}/"
         DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
         docker_push_flyway=1
     fi
