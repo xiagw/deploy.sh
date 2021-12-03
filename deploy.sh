@@ -385,6 +385,7 @@ docker_build_generic() {
         [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
         [[ ! -d "${CI_PROJECT_DIR}/docs/flyway_conf" && -d "$path_flyway_conf" ]] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
         DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
+        docker_push_flyway=1
     fi
     echo_time "end docker build."
 }
@@ -394,6 +395,9 @@ docker_push_generic() {
     docker_login
     # echo "$image_registry"
     docker push -q "$image_registry" || echo_erro "error here, maybe caused by GFW."
+    if [[ $docker_push_flyway == 1 ]]; then
+        docker push -q "$image_tag_flyway"
+    fi
     echo_time "end docker push."
 }
 
@@ -422,18 +426,23 @@ deploy_k8s_generic() {
         [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$branch_name"
     else
         set -x
-        helm upgrade "${helm_release}" "$path_helm/" \
-            --install --history-max 1 \
+        helm upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
             --namespace "${branch_name}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
-            --set nfsServer="${ENV_NFS_SERVER:?undefine}" \
-            --set envNamespace="${branch_name}" \
             --set image.pullPolicy='Always' >/dev/null
         [ ! -f ~/ci_debug ] && set +x
     fi
+    if [[ $docker_push_flyway == 1 && $ENV_FLYWAY_JOB == 1 ]]; then
+        helm upgrade flyway "$script_dir/conf/helm/flyway/" --install --history-max 1 \
+            --namespace "${branch_name}" --create-namespace \
+            --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
+            --set image.tag="${CI_PROJECT_NAME}-flyway" \
+            --set image.pullPolicy='Always' >/dev/null
+    fi
     kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
         xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
+
     echo_time "end deploy k8s."
 }
 
