@@ -375,7 +375,10 @@ docker_build_generic() {
         rsync -av "$HOME/.acme.sh/dest/" "${CI_PROJECT_DIR}/etc/nginx/conf.d/ssl/"
     fi
     ## docker build
-    DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
+    echo "PIPELINE_YARN_INSTALL: ${PIPELINE_YARN_INSTALL:-false}"
+    DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
+        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
+        --build-arg YARN_INSTALL="${PIPELINE_YARN_INSTALL:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
 
     ## docker build with flyway
