@@ -379,13 +379,12 @@ docker_build_generic() {
         "${CI_PROJECT_DIR}" >/dev/null
 
     ## docker build with flyway
-    if [[ -d "$CI_PROJECT_DIR/docs/sql" ]]; then
+    if [[ -d "$CI_PROJECT_DIR/docs/sql" && $ENV_FLYWAY_JOB == 1 ]]; then
         image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-flyway"
         path_flyway_conf="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
         [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
-        [[ ! -d "${CI_PROJECT_DIR}/docs/flyway_conf" && -d "$path_flyway_conf" ]] && rsync -rlctv "$path_flyway_conf" "${CI_PROJECT_DIR}/"
+        [[ ! -d "${CI_PROJECT_DIR}/docs/flyway_conf" && -d "$path_flyway_conf" ]] && rsync -rlctv "$path_flyway_conf" "${CI_PROJECT_DIR}/docs/flyway_conf/"
         DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
-        docker_push_flyway=1
     fi
     echo_time "end docker build."
 }
@@ -395,7 +394,7 @@ docker_push_generic() {
     docker_login
     # echo "$image_registry"
     docker push -q "$image_registry" || echo_erro "error here, maybe caused by GFW."
-    if [[ $docker_push_flyway == 1 ]]; then
+    if [[ $ENV_FLYWAY_JOB == 1 ]]; then
         docker push -q "$image_tag_flyway"
     fi
     echo_time "end docker push."
@@ -433,7 +432,7 @@ deploy_k8s_generic() {
             --set image.pullPolicy='Always' >/dev/null
         [ ! -f ~/ci_debug ] && set +x
     fi
-    if [[ $docker_push_flyway == 1 && $ENV_FLYWAY_JOB == 1 ]]; then
+    if [[ $ENV_FLYWAY_JOB == 1 ]]; then
         helm upgrade flyway "$script_dir/conf/helm/flyway/" --install --history-max 1 \
             --namespace "${branch_name}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
