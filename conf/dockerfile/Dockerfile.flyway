@@ -1,4 +1,4 @@
 FROM flyway/flyway
 
-COPY docs/sql/ /flyway/sql/
+COPY docs/flyway_sql/ /flyway/sql/
 COPY docs/flyway_conf/ /flyway/conf/

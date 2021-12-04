@@ -340,39 +340,52 @@ java_deploy_k8s() {
 docker_build_generic() {
     echo_time_step "docker build only..."
     docker_login
-    ## frontend (VUE) .env
-    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
-    for file in $config_env_path; do
-        if [[ "$file" =~ 'config/' ]]; then
-            \cp -vf "$file" "${file/${branch_name}./}" # vue2.x
-        else
-            \cp -vf "$file" "${file/${branch_name}/}" # vue3.x
-        fi
-    done
-    ## backend (PHP) .env
-    secret_file_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
-    ## Docker build from, 从模板构建
+    ## frontend (VUE) .env file
+    if [[ $project_lang == "vue" ]]; then
+        config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
+        for file in $config_env_path; do
+            if [[ "$file" =~ 'config/' ]]; then
+                \cp -vf "$file" "${file/${branch_name}./}" # vue2.x
+            else
+                \cp -vf "$file" "${file/${branch_name}/}" # vue3.x
+            fi
+        done
+    fi
+    ## backend (PHP) .env file
+    path_secret="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
+    [ -d "$path_secret" ] && rsync -rlctv "$path_secret" "${CI_PROJECT_DIR}/"
+    ## docker ignore file
+    [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
+    ## cert file for nginx
+    if [[ "${CI_PROJECT_NAME}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
+        rsync -av "$HOME/.acme.sh/dest/" "${CI_PROJECT_DIR}/etc/nginx/conf.d/ssl/"
+    fi
+    ## Docker build from, 是否从模板构建
     image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
     if [ -n "$image_from" ]; then
-        build_trig=0
-        docker images | grep -q "${image_from%%:*}.*${image_from##*:}" || build_trig=$((build_trig + 1))
-        [[ $project_lang == node ]] && $git_diff package.json | grep 'package.json' && build_trig=$((build_trig + 1))
-        [[ $project_lang == php ]] && $git_diff composer.json | grep 'composer.json' && build_trig=$((build_trig + 1))
-        if [[ "$build_trig" -gt 0 && $project_lang == node ]]; then
-            # 从模板构建
+        docker_build_tmpl=0
+        ## 判断模版是否存在
+        docker images | grep -q "${image_from%%:*}.*${image_from##*:}" || docker_build_tmpl=$((docker_build_tmpl + 1))
+        if [[ "$docker_build_tmpl" -gt 0 ]]; then
+            # 模版不存在，构建模板
             cp -f "${path_dockerfile}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}/"
             DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${CI_PROJECT_DIR}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}"
         fi
-        if [[ "$build_trig" -gt 0 && $project_lang == php ]]; then
-            DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-                -f "${path_dockerfile}/Dockerfile.${image_from##*:}" "${path_dockerfile}"
-        fi
     fi
-    [ -d "$secret_file_dir" ] && rsync -rlctv "$secret_file_dir" "${CI_PROJECT_DIR}/"
-    [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
-    if [[ "${CI_PROJECT_NAME}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
-        rsync -av "$HOME/.acme.sh/dest/" "${CI_PROJECT_DIR}/etc/nginx/conf.d/ssl/"
+
+    ## docker build flyway
+    if [[ $ENV_HELM_FLYWAY == 1 ]]; then
+        image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-flyway"
+        path_flyway_conf_proj="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
+        path_flyway_conf="$CI_PROJECT_DIR/docs/flyway_conf"
+        path_flyway_sql="$CI_PROJECT_DIR/docs/flyway_sql"
+        [[ -d "$CI_PROJECT_DIR/docs/sql" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/docs/sql" "$path_flyway_sql"
+        [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
+        [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
+        [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
+        [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
+        DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
     fi
     ## docker build
     echo "PIPELINE_YARN_INSTALL: ${PIPELINE_YARN_INSTALL:-false}"
@@ -380,15 +393,6 @@ docker_build_generic() {
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         --build-arg YARN_INSTALL="${PIPELINE_YARN_INSTALL:-false}" \
         "${CI_PROJECT_DIR}" >/dev/null
-
-    ## docker build with flyway
-    if [[ -d "$CI_PROJECT_DIR/docs/sql" && $ENV_FLYWAY_JOB == 1 ]]; then
-        image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-flyway"
-        path_flyway_conf="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
-        [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
-        [[ ! -d "${CI_PROJECT_DIR}/docs/flyway_conf" && -d "$path_flyway_conf" ]] && rsync -rlctv "$path_flyway_conf" "${CI_PROJECT_DIR}/docs/flyway_conf/"
-        DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
-    fi
     echo_time "end docker build."
 }
 
@@ -397,7 +401,7 @@ docker_push_generic() {
     docker_login
     # echo "$image_registry"
     docker push -q "$image_registry" || echo_erro "error here, maybe caused by GFW."
-    if [[ $ENV_FLYWAY_JOB == 1 ]]; then
+    if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         docker push -q "$image_tag_flyway"
     fi
     echo_time "end docker push."
@@ -435,7 +439,7 @@ deploy_k8s_generic() {
             --set image.pullPolicy='Always' >/dev/null
         [[ $PIPELINE_DEBUG != 'true' ]] && set +x
     fi
-    if [[ $ENV_FLYWAY_JOB == 1 ]]; then
+    if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         helm upgrade flyway "$script_dir/conf/helm/flyway/" --install --history-max 1 \
             --namespace "${branch_name}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
