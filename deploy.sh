@@ -69,7 +69,7 @@ code_style_dockerfile() {
     echo_time_step "[TODO] vsc-extension-hadolint..."
 }
 
-check_code_style() {
+code_style() {
     [[ "${project_lang}" == php ]] && code_style_php
     [[ "${project_lang}" == node ]] && code_style_node
     [[ "${project_lang}" == java ]] && code_style_java
@@ -83,7 +83,7 @@ test_unit() {
 }
 
 ## install sonar-scanner to system user: "gitlab-runner"
-scan_sonarqube() {
+code_quality_sonar() {
     echo_time_step "sonar scanner..."
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$CI_PROJECT_DIR/sonar-project.properties"
@@ -207,7 +207,7 @@ docker_login() {
 
 }
 
-php_composer_volume() {
+php_build_volume() {
     echo_time_step "php composer install..."
     if [ "${ENV_IMAGE_FROM_DOCKERFILE}" = 'Dockerfile' ]; then
         image_composer=$(awk '/FROM/ {print $2}' | tail -n 1)
@@ -235,102 +235,38 @@ php_composer_volume() {
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
-java_docker_build() {
-    echo_time_step "java docker build..."
-    ## gitlab-CI/CD setup variables MVN_DEBUG=1 enable debug message
-    echo_warn "If you want to view debug msg, set MVN_DEBUG=1 on pipeline."
-    [[ "${MVN_DEBUG:-0}" == 1 ]] && unset MVN_DEBUG || MVN_DEBUG='-q'
-    ## if you have no apollo config center, use local .env
-    env_file="$script_dir/conf/.env.${CI_PROJECT_NAME}.${branch_name}"
-    if [ ! -f "$env_file" ]; then
-        ## generate mysql username/password
-        # [ -x generate_env_file.sh ] && bash generate_env_file.sh
-        [ -f "$script_dir/conf/.env.tpl" ] && generate_env_file "$env_file"
-    fi
-    [ -f "$env_file" ] && cp -f "$env_file" "${CI_PROJECT_DIR}/.env"
+deploy_k8s_java() {
+    echo disabled
 
-    cp -f "$script_dir/conf/.dockerignore" "${CI_PROJECT_DIR}/"
-    cp -f "$path_dockerfile/settings.xml" "${CI_PROJECT_DIR}/"
-    if [ -f "${CI_PROJECT_DIR}/Dockerfile.useLocal" ]; then
-        mv Dockerfile.useLocal Dockerfile
-    else
-        cp -f "$path_dockerfile/Dockerfile.bitnami.tomcat" "${CI_PROJECT_DIR}/Dockerfile"
-    fi
-    if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
-        # shellcheck disable=2013
-        for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
-            [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${image_registry}-$target" || docker_tag_loop="${image_registry}"
-            DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${docker_tag_loop}" \
-                --target "$target" --build-arg GIT_BRANCH="${branch_name}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
-        done
-    else
-        DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" --quiet --add-host="$ENV_MYNEXUS" -t "${image_registry}" \
-            --build-arg GIT_BRANCH="${branch_name}" --build-arg MVN_DEBUG="${MVN_DEBUG}" >/dev/null
-    fi
-    echo_time "end docker build."
+    # helm upgrade "${work_name_loop}" "$helm_dir_project/" \
+    #     --install -n "${branch_name}" --create-namespace --history-max 1 \
+    #     --set nameOverride="$work_name_loop" \
+    #     --set image.registry="${ENV_DOCKER_REGISTRY}" \
+    #     --set image.repository="${ENV_DOCKER_REPO}" \
+    #     --set image.tag="${docker_tag_loop}" \
+    #     --set resources.requests.cpu=200m \
+    #     --set resources.requests.memory=512Mi \
+    #     --set persistence.enabled=false \
+    #     --set persistence.nfsServer="${ENV_NFS_SERVER:?undefine var}" \
+    #     --set service.port=8080 \
+    #     --set service.externalTrafficPolicy=Local \
+    #     --set service.type=ClusterIP \
+    #     --set replicaCount="${ENV_HELM_REPLICS:-1}" \
+    #     --set livenessProbe="${ENV_PROBE_URL:?undefine}" >/dev/null
+    # ## 等待就绪
+    # if ! kubectl -n "${branch_name}" rollout status deployment "${work_name_loop}"; then
+    #     errPod="$(kubectl -n "${branch_name}" get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
+    #     echo_erro "---------------cut---------------"
+    #     kubectl -n "${branch_name}" describe "pod/${errPod}" | tail
+    #     echo_erro "---------------cut---------------"
+    #     kubectl -n "${branch_name}" logs "pod/${errPod}" | tail -n 100
+    #     echo_erro "---------------cut---------------"
+    #     deploy_result=1
+    # fi
+
 }
 
-java_docker_push() {
-    echo_time_step "docker push to ECR..."
-    docker_login
-    if [[ "$(grep -c '^FROM.*' Dockerfile || true)" -ge 2 ]]; then
-        # shellcheck disable=2013
-        for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
-            [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ] && docker_tag_loop="${image_registry}-$target" || docker_tag_loop="${image_registry}"
-            docker images "${docker_tag_loop}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-            docker push -q "${docker_tag_loop}" || echo_erro "error here, maybe caused by GFW."
-        done
-    else
-        docker images "${image_registry}" --format "table {{.ID}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-        docker push -q "${image_registry}" || echo_erro "error here, maybe caused by GFW."
-    fi
-    echo_time "end docker push."
-}
-
-java_deploy_k8s() {
-    echo_time_step "deploy to k8s..."
-    helm_dir_project="$script_dir/conf/helm/${ENV_HELM_DIR}"
-    # shellcheck disable=2013
-    for target in $(awk '/^FROM\s/ {print $4}' Dockerfile | grep -v 'BUILDER'); do
-        source "$script_env"
-        if [ "${ENV_DOCKER_TAG_ADD:-0}" = 1 ]; then
-            docker_tag_loop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-$target"
-            work_name_loop="${CI_PROJECT_NAME}-$target"
-        else
-            docker_tag_loop="${CI_PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}"
-            work_name_loop="${CI_PROJECT_NAME}"
-        fi
-        helm upgrade "${work_name_loop}" "$helm_dir_project/" \
-            --install -n "${branch_name}" --create-namespace --history-max 1 \
-            --set nameOverride="$work_name_loop" \
-            --set image.registry="${ENV_DOCKER_REGISTRY}" \
-            --set image.repository="${ENV_DOCKER_REPO}" \
-            --set image.tag="${docker_tag_loop}" \
-            --set resources.requests.cpu=200m \
-            --set resources.requests.memory=512Mi \
-            --set persistence.enabled=false \
-            --set persistence.nfsServer="${ENV_NFS_SERVER:?undefine var}" \
-            --set service.port=8080 \
-            --set service.externalTrafficPolicy=Local \
-            --set service.type=ClusterIP \
-            --set replicaCount="${ENV_HELM_REPLICS:-1}" \
-            --set livenessProbe="${ENV_PROBE_URL:?undefine}" >/dev/null
-        ## 等待就绪
-        if ! kubectl -n "${branch_name}" rollout status deployment "${work_name_loop}"; then
-            errPod="$(kubectl -n "${branch_name}" get pods -l app="${CI_PROJECT_NAME}" | awk '/'"${CI_PROJECT_NAME}"'.*0\/1/ {print $1}')"
-            echo_erro "---------------cut---------------"
-            kubectl -n "${branch_name}" describe "pod/${errPod}" | tail
-            echo_erro "---------------cut---------------"
-            kubectl -n "${branch_name}" logs "pod/${errPod}" | tail -n 100
-            echo_erro "---------------cut---------------"
-            deploy_result=1
-        fi
-    done
-
-    kubectl -n "$branch_name" get replicasets.apps | awk '/repicasets.apps.*0\s+0\s+0/ {print $1}' | xargs kubectl -n "$branch_name" delete replicasets.apps >/dev/null 2>&1 || true
-}
-
-docker_build_generic() {
+docker_build() {
     echo_time_step "docker build only..."
     docker_login
     ## frontend (VUE) .env file
@@ -391,7 +327,7 @@ docker_build_generic() {
     echo_time "end docker build."
 }
 
-docker_push_generic() {
+docker_push() {
     echo_time_step "docker push only..."
     docker_login
     # echo "$image_registry"
@@ -402,7 +338,7 @@ docker_push_generic() {
     echo_time "end docker push."
 }
 
-deploy_k8s_generic() {
+deploy_k8s() {
     echo_time_step "deploy k8s..."
     if [[ ${ENV_REMOVE_PROJ_PREFIX:-false} == true ]]; then
         helm_release=${CI_PROJECT_NAME#*-}
@@ -547,8 +483,7 @@ deploy_notify() {
     echo_time_step "send message to chatApp..."
     if [[ 1 -eq "${ENV_NOTIFY_WEIXIN:-0}" ]]; then
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
-        curl -s "$weixin_api" \
-            -H 'Content-Type: application/json' \
+        curl -s "$weixin_api" -H 'Content-Type: application/json' \
             -d "
         {
             \"msgtype\": \"text\",
@@ -571,13 +506,24 @@ deploy_notify() {
     elif [[ 1 -eq "${ENV_NOTIFY_ELEMENT:-0}" && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         python3 "$script_dir/bin/element.py" "$msg_body"
     elif [[ 1 -eq "${ENV_NOTIFY_EMAIL:-0}" ]]; then
-        echo_warn "[TODO] send email to you."
+        # mogaal/sendemail: lightweight, command line SMTP email client
+        # https://github.com/mogaal/sendemail
+        "$script_dir/bin/sendEmail" \
+            -s "$ENV_EMAIL_SERVER" \
+            -f "$ENV_EMAIL_FROM" \
+            -xu "$ENV_EMAIL_USERNAME" \
+            -xp "$ENV_EMAIL_PASSWORD" \
+            -t "$ENV_EMAIL_TO" \
+            -o message-content-type=text/html \
+            -o message-charset=utf-8 \
+            -u "[Gitlab Deploy] ${CI_PROJECT_PATH} ${CI_COMMIT_REF_NAME} ${CI_PIPELINE_ID}/${CI_JOB_ID}" \
+            -m "$msg_body"
     else
         echo_warn "No message send."
     fi
 }
 
-update_cert() {
+renew_cert() {
     echo_time_step "update ssl cert (dns api)..."
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
@@ -791,35 +737,17 @@ main() {
     ## 2，如果传入参数，则通过传递入参执行单个任务。适用于单独的gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
         case $1 in
-        --update-ssl)
-            PIPELINE_UPDATE_SSL=1
+        --renwe-ssl)
+            PIPELINE_RENEW_SSL=1
             ;;
-        --docker-build-java)
-            exec_java_docker_build=1
+        --docker-build)
+            exec_docker_build=1
             ;;
-        --docker-push-java)
-            exec_java_docker_push=1
+        --docker-push)
+            exec_docker_push=1
             ;;
-        --deploy-k8s-java)
-            exec_deploy_k8s_java=1
-            ;;
-        --docker-build-php)
-            exec_docker_build_php=1
-            ;;
-        --docker-push-php)
-            exec_docker_push_php=1
-            ;;
-        --deploy-k8s-php)
-            exec_deploy_k8s_php=1
-            ;;
-        --docker-build-node)
-            exec_docker_build_node=1
-            ;;
-        --docker-push-node)
-            exec_docker_push_node=1
-            ;;
-        --deploy-k8s-node)
-            exec_deploy_k8s_node=1
+        --deploy-k8s)
+            exec_deploy_k8s=1
             ;;
         --disable-rsync)
             exec_deploy_rsync=0
@@ -828,14 +756,13 @@ main() {
             exec_flyway=0
             ;;
         *)
-            exec_java_docker_build=1
-            exec_java_docker_push=1
-            exec_deploy_k8s_java=1
-            exec_deploy_k8s_php=1
-            # gitlabSingleJob=0
-            exec_docker_build_node=1
-            exec_docker_push_node=1
-            exec_deploy_k8s_node=1
+            # gitlabSingleJob=1
+            ## php composer
+            # exec_php_build_volume=1
+            ## node build
+            # exec_node_build_volume=1
+            ## rsync
+            exec_deploy_rsync=1
             break
             ;;
         esac
@@ -893,8 +820,8 @@ main() {
     clean_disk
 
     ## acme.sh 更新证书
-    if [[ "$PIPELINE_UPDATE_SSL" -eq 1 ]]; then
-        update_cert
+    if [[ "$PIPELINE_RENEW_SSL" -eq 1 ]]; then
+        renew_cert
         return
     fi
 
@@ -951,7 +878,7 @@ main() {
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
-        scan_sonarqube
+        code_quality_sonar
         return $?
     fi
 
@@ -964,29 +891,29 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]]; then
-        check_code_style
+        code_style
     fi
 
     case "${project_lang}" in
     'php')
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-        if [[ "${project_docker}" -eq 1 ]]; then
-            [[ "${exec_docker_build_php:-1}" -eq 1 ]] && docker_build_generic
-            [[ "${exec_docker_push_php:-1}" -eq 1 ]] && docker_push_generic
-            [[ "$exec_deploy_k8s_php" -eq 1 ]] && deploy_k8s_generic
+        if [[ "$project_docker" -eq 1 ]]; then
+            exec_docker_build=1
+            exec_docker_push=1
+            exec_deploy_k8s=1
             if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
                 echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
-                php_composer_volume
+                php_build_volume
             fi
         else
-            php_composer_volume
+            php_build_volume
         fi
         ;;
     'node' | 'react')
-        if [[ "${project_docker}" -eq 1 ]]; then
-            [[ "$exec_docker_build_node" -eq 1 ]] && docker_build_generic
-            [[ "$exec_docker_push_node" -eq 1 ]] && docker_push_generic
-            [[ "$exec_deploy_k8s_node" -eq 1 ]] && deploy_k8s_generic
+        if [[ "$project_docker" -eq 1 ]]; then
+            exec_docker_build=1
+            exec_docker_push=1
+            exec_deploy_k8s=1
             if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
                 echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
                 node_build_volume
@@ -996,10 +923,10 @@ main() {
         fi
         ;;
     'java')
-        if [[ "${project_docker}" -eq 1 ]]; then
-            [[ "$exec_java_docker_build" -eq 1 ]] && java_docker_build
-            [[ "$exec_java_docker_push" -eq 1 ]] && java_docker_push
-            [[ "$exec_deploy_k8s_java" -eq 1 ]] && java_deploy_k8s
+        if [[ "$project_docker" -eq 1 ]]; then
+            exec_docker_build=1
+            exec_docker_push=1
+            exec_deploy_k8s=1
         fi
         ;;
     'android')
@@ -1011,12 +938,17 @@ main() {
     *)
         ## 各种Build， npm/composer/mvn/docker
         if [[ "$project_docker" -eq 1 ]]; then
-            docker_build_generic
-            docker_push_generic
-            deploy_k8s_generic
+            exec_docker_build=1
+            exec_docker_push=1
+            exec_deploy_k8s=1
         fi
         ;;
     esac
+
+    ## docker build
+    [[ "${exec_docker_build}" -eq 1 ]] && docker_build
+    [[ "${exec_docker_push}" -eq 1 ]] && docker_push
+    [[ "${exec_deploy_k8s}" -eq 1 ]] && deploy_k8s
 
     ## generate api docs
     # gen_apidoc
