@@ -343,7 +343,7 @@ docker_build_generic() {
     ## frontend (VUE) .env
     config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
     for file in $config_env_path; do
-        if [[ "$file" =~ 'config' ]]; then
+        if [[ "$file" =~ 'config/' ]]; then
             \cp -vf "$file" "${file/${branch_name}./}" # vue2.x
         else
             \cp -vf "$file" "${file/${branch_name}/}" # vue3.x
@@ -433,7 +433,7 @@ deploy_k8s_generic() {
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
-        [ ! -f ~/ci_debug ] && set +x
+        [[ $PIPELINE_DEBUG != true ]] && set +x
     fi
     if [[ $ENV_FLYWAY_JOB == 1 ]]; then
         helm upgrade flyway "$script_dir/conf/helm/flyway/" --install --history-max 1 \
@@ -765,7 +765,7 @@ gen_apidoc() {
 }
 
 main() {
-    [ -f ~/ci_debug ] && set -x
+    [[ $PIPELINE_DEBUG == true ]] && set -x
     script_name="$(basename "$0")"
     script_name="${script_name%.sh}"
     script_dir="$(cd "$(dirname "$0")" && pwd)"
