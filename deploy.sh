@@ -433,7 +433,7 @@ deploy_k8s_generic() {
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
-        [[ $PIPELINE_DEBUG != true ]] && set +x
+        [[ $PIPELINE_DEBUG != 'true' ]] && set +x
     fi
     if [[ $ENV_FLYWAY_JOB == 1 ]]; then
         helm upgrade flyway "$script_dir/conf/helm/flyway/" --install --history-max 1 \
@@ -765,7 +765,7 @@ gen_apidoc() {
 }
 
 main() {
-    [[ $PIPELINE_DEBUG == true ]] && set -x
+    [[ $PIPELINE_DEBUG == 'true' ]] && set -x
     script_name="$(basename "$0")"
     script_name="${script_name%.sh}"
     script_dir="$(cd "$(dirname "$0")" && pwd)"
