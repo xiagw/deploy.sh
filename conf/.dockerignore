@@ -1,21 +1,64 @@
+######################### COMMON ###############################################
+# https://raw.githubusercontent.com/erdaltsksn/dockerignore/main/templates/Common.dockerignore
+################################################################################
+# Git
 .git/
 .gitignore
+.gitattributes
+.github
 .gitlab-ci.yml
+.gitlab-ci.yaml
+
+# Docker
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
 .dockerignore
 
-docs/
-!docs/nginx
-doc/
-
-npm-debug.log
-node_modules/
-package-lock.json
-
-vendor/
-Dockerfile*
-docker-compose*
-
+# Documentation
 README.md
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+docs/
+doc/
+!docs/nginx
 LICENSE
 
+# macOS (optional)
+.DS_Store
+
+# Visual Studio Code (optional)
 .vscode
+
+# Hugo
+# /public/
+# /resources/_gen/
+
+# Directory-based project format
+.idea
+
+# File-based (Legacy) project format
+*.ipr
+*.iml
+*.iws
+
+# Laravel
+bootstrap/cache
+storage/framework
+storage/logs
+vendor/
+
+## Node
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+npm-debug.log
+package-lock.json
+## Dependency directories
+node_modules/
+
+core
