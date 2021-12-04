@@ -219,20 +219,13 @@ php_composer_volume() {
             -f "$path_dockerfile/Dockerfile.composer" "$path_dockerfile"
     fi
 
-    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
-    echo "PIPELINE_COMPOSER_UPDATE: ${PIPELINE_COMPOSER_UPDATE:-0}"
     [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
-    [[ "${PIPELINE_COMPOSER_UPDATE:-0}" -eq 1 ]] && COMPOSER_UPDATE=true
-    git diff --name-only HEAD^ composer.json | grep composer.json && COMPOSER_INSTALL=true
+    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
     echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
-    echo "COMPOSER_UPDATE=${COMPOSER_UPDATE:-false}"
     if [ "${COMPOSER_INSTALL:-false}" = true ]; then
         rm -f "${CI_PROJECT_DIR}"/composer.lock
         # rm -rf "${CI_PROJECT_DIR}"/vendor
-        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL:-false} -w /app "$image_composer" composer install -q --no-dev -o || true
-    fi
-    if [ "${COMPOSER_UPDATE:-false}" = true ]; then
-        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_UPDATE=${COMPOSER_UPDATE:-false} -w /app "$image_composer" composer update -q || true
+        $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL} -w /app "$image_composer" composer install -q || true
     fi
     echo_time "end php composer install."
 }
@@ -388,10 +381,12 @@ docker_build_generic() {
         DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
     fi
     ## docker build
-    echo "PIPELINE_YARN_INSTALL: ${PIPELINE_YARN_INSTALL:-false}"
+    [[ "${PIPELINE_YARN_INSTALL:-0}" -eq 1 ]] && YARN_INSTALL=true
+    echo "PIPELINE_YARN_INSTALL: ${PIPELINE_YARN_INSTALL:-0}"
+    echo "YARN_INSTALL: ${YARN_INSTALL:-false}"
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
-        --build-arg YARN_INSTALL="${PIPELINE_YARN_INSTALL:-false}" \
+        --build-arg YARN_INSTALL="${YARN_INSTALL}" \
         "${CI_PROJECT_DIR}" >/dev/null
     echo_time "end docker build."
 }
@@ -903,15 +898,23 @@ main() {
     fi
 
     ## 判定项目类型
-    if [[ -f "${CI_PROJECT_DIR:?undefine var}/package.json" ]]; then
+    if [[ -f "${CI_PROJECT_DIR}/package.json" ]]; then
         if grep -i -q 'Create React' "${CI_PROJECT_DIR}/README.md" "${CI_PROJECT_DIR}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
         else
             project_lang='node'
         fi
+        if ! grep -q "$(md5sum "${CI_PROJECT_DIR}/package.json" | awk '{print $1}')" "${script_log}"; then
+            echo "$CI_PROJECT_PATH $branch_name $(md5sum "${CI_PROJECT_DIR}/package.json")" >>"${script_log}"
+            YARN_INSTALL=true
+        fi
     fi
     if [[ -f "${CI_PROJECT_DIR}/composer.json" ]]; then
         project_lang='php'
+        if ! grep -q "$(md5sum "${CI_PROJECT_DIR}/composer.json" | awk '{print $1}')" "${script_log}"; then
+            echo "$CI_PROJECT_PATH $branch_name $(md5sum "${CI_PROJECT_DIR}/composer.json")" >>"${script_log}"
+            COMPOSER_INSTALL=true
+        fi
     fi
     if [[ -f "${CI_PROJECT_DIR}/pom.xml" ]]; then
         project_lang='java'
