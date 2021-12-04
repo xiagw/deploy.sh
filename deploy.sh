@@ -270,7 +270,7 @@ docker_build() {
     echo_time_step "docker build only..."
     docker_login
     ## frontend (VUE) .env file
-    if [[ $project_lang == "vue" ]]; then
+    if [[ $project_lang =~ (node|react) ]]; then
         config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
         for file in $config_env_path; do
             if [[ "$file" =~ 'config/' ]]; then
