@@ -129,7 +129,7 @@ test_function() {
     echo_time "end function test."
 }
 
-deploy_sql_flyway() {
+deploy_flyway() {
     echo_time_step "flyway migrate..."
 
     flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/conf/flyway}"
@@ -139,7 +139,7 @@ deploy_sql_flyway() {
     else
         flyway_volume_conf="$flyway_home/conf:/flyway/conf"
     fi
-    flyway_volume_sql="${CI_PROJECT_DIR}/docs/sql:/flyway/sql"
+    flyway_volume_sql="${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_volume_sql} -v ${flyway_volume_conf} flyway/flyway"
 
     ## 判断是否需要建立数据库远程连接
@@ -161,17 +161,41 @@ deploy_sql_flyway() {
     fi
 }
 
+deploy_flyway_docker() {
+    ## docker build flyway
+    image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-flyway"
+    path_flyway_conf_proj="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
+    path_flyway_conf="$CI_PROJECT_DIR/docs/flyway_conf"
+    path_flyway_sql="$CI_PROJECT_DIR/docs/flyway_sql"
+    [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" "$path_flyway_sql"
+    [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
+    [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
+    [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
+    [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
+
+    DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
+
+    flyway_docker_run="docker run --rm flyway/flyway"
+    if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
+        $flyway_docker_run repair
+        $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
+        $flyway_docker_run info | tail -n 10
+        ## 断开数据库远程连接
+    else
+        echo "Nothing to do."
+    fi
+}
+
 # https://github.com/nodesource/distributions#debinstall
 node_build_volume() {
     echo_time_step "node yarn build..."
     config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
+    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
     for file in $config_env_path; do
-        if [[ "$file" =~ 'config' ]]; then
-            # vue2.x项目，发布系统自动部署时会把config目录下的环境配置文件复制为env.js
-            \cp -vf "$file" "${file/${branch_name}./}"
+        if [[ "$file" =~ 'config/' ]]; then
+            \cp -vf "$file" "${file/${branch_name}./}" # vue2.x
         else
-            # vue3.x项目，发布系统自动部署时会把根目录下的环境配置文件复制为.env文件
-            \cp -vf "$file" "${file/${branch_name}/}"
+            \cp -vf "$file" "${file/${branch_name}/}" # vue3.x
         fi
     done
 
@@ -237,7 +261,6 @@ php_build_volume() {
 
 deploy_k8s_java() {
     echo disabled
-
     # helm upgrade "${work_name_loop}" "$helm_dir_project/" \
     #     --install -n "${branch_name}" --create-namespace --history-max 1 \
     #     --set nameOverride="$work_name_loop" \
@@ -309,7 +332,7 @@ docker_build() {
         path_flyway_conf_proj="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
         path_flyway_conf="$CI_PROJECT_DIR/docs/flyway_conf"
         path_flyway_sql="$CI_PROJECT_DIR/docs/flyway_sql"
-        [[ -d "$CI_PROJECT_DIR/docs/sql" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/docs/sql" "$path_flyway_sql"
+        [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" "$path_flyway_sql"
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
         [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
@@ -867,11 +890,10 @@ main() {
 
     ## use flyway deploy sql file
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
-    ## projcet dir 不存在 docs/sql 文件夹，则返回
-    [[ ! -d "${CI_PROJECT_DIR}/docs/sql" ]] && exec_flyway=0
+    [[ ! -d "${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && exec_flyway=0
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
-        deploy_sql_flyway
+        deploy_flyway
     fi
 
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
