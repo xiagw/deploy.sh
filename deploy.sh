@@ -764,6 +764,7 @@ gen_apidoc() {
 }
 
 main() {
+    [ -f "ci_debug" ] && PIPELINE_DEBUG=true
     [[ $PIPELINE_DEBUG == 'true' ]] && set -x
     script_name="$(basename "$0")"
     script_name="${script_name%.sh}"
