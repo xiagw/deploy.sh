@@ -897,8 +897,10 @@ main() {
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
     [[ ! -d "${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && exec_flyway=0
     [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
+    [[ ${ENV_HELM_FLYWAY:-0} -eq 1 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
         deploy_flyway
+        # deploy_flyway_docker
     fi
 
     ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
