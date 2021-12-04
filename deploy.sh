@@ -167,10 +167,10 @@ deploy_flyway_docker() {
     path_flyway_conf_proj="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
     path_flyway_conf="$CI_PROJECT_DIR/docs/flyway_conf"
     path_flyway_sql="$CI_PROJECT_DIR/docs/flyway_sql"
-    [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" "$path_flyway_sql"
+    [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && rsync -a "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}/" "$path_flyway_sql/"
+    [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
     [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
     [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
-    [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
     [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
 
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
