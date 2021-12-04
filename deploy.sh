@@ -175,7 +175,7 @@ deploy_flyway_docker() {
 
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
 
-    flyway_docker_run="docker run --rm flyway/flyway"
+    flyway_docker_run="docker run --rm $image_tag_flyway"
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
         $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
@@ -183,6 +183,11 @@ deploy_flyway_docker() {
         ## 断开数据库远程连接
     else
         echo "Nothing to do."
+    fi
+    if [ ${deploy_result:-0} = 0 ]; then
+        echo_info "Result = OK"
+    else
+        echo_erro "Result = FAIL"
     fi
 }
 
