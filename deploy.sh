@@ -169,15 +169,6 @@ deploy_flyway_docker() {
 # https://github.com/nodesource/distributions#debinstall
 node_build_yarn() {
     echo_time_step "node yarn build..."
-    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
-    config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
-    for file in $config_env_path; do
-        if [[ "$file" =~ 'config/' ]]; then
-            \cp -vf "$file" "${file/${branch_name}./}" # vue2.x
-        else
-            \cp -vf "$file" "${file/${branch_name}/}" # vue3.x
-        fi
-    done
 
     rm -f package-lock.json
     # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
@@ -190,25 +181,6 @@ node_build_yarn() {
         $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "yarn install; yarn run build"
     fi
     echo_time "end node build."
-}
-
-docker_login() {
-    source "$script_env"
-    ## 比较上一次登陆时间，超过12小时则再次登录
-    lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN}"
-    [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
-    time_save="$(cat "$lock_docker_login")"
-    if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
-        echo_time "docker login $ENV_DOCKER_LOGIN ..."
-        if [[ "$ENV_DOCKER_LOGIN" == 'aws' ]]; then
-            str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
-            aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
-        else
-            echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
-        fi
-        date +%s >"$lock_docker_login"
-    fi
-
 }
 
 php_build_composer() {
@@ -273,7 +245,25 @@ deploy_k8s_java() {
     #     echo_erro "---------------cut---------------"
     #     deploy_result=1
     # fi
+}
 
+docker_login() {
+    source "$script_env"
+    ## 比较上一次登陆时间，超过12小时则再次登录
+    lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE}"
+    [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
+    time_save="$(cat "$lock_docker_login")"
+    if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
+        return 0
+    fi
+    echo_time "docker login $ENV_DOCKER_LOGIN_TYPE ..."
+    if [[ "$ENV_DOCKER_LOGIN_TYPE" == 'aws' ]]; then
+        str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
+        aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
+    else
+        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
+    fi
+    date +%s >"$lock_docker_login"
 }
 
 docker_build() {
@@ -288,7 +278,6 @@ docker_build() {
         docker images | grep -q "${image_from%%:*}.*${image_from##*:}" || docker_build_tmpl=$((docker_build_tmpl + 1))
         if [[ "$docker_build_tmpl" -gt 0 ]]; then
             # 模版不存在，构建模板
-            cp -vf "${path_dockerfile}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}/"
             DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${CI_PROJECT_DIR}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}"
         fi
@@ -297,14 +286,6 @@ docker_build() {
     ## docker build flyway
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-flyway"
-        path_flyway_conf_proj="${script_path}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
-        path_flyway_conf="$CI_PROJECT_DIR/docs/flyway_conf"
-        path_flyway_sql="$CI_PROJECT_DIR/docs/flyway_sql"
-        [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" "$path_flyway_sql"
-        [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
-        [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
-        [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
-        [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
         DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
     fi
     ## docker build
@@ -370,7 +351,10 @@ deploy_k8s() {
     fi
     kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
         xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
-
+    sleep 3
+    if ! kubectl -n "${branch_name}" rollout status deployment "${helm_release}"; then
+        deploy_result=1
+    fi
     echo_time "end deploy k8s."
 }
 
@@ -395,7 +379,7 @@ deploy_rsync() {
         echo "${ssh_host}"
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
-            echo "if stop here, check pms/runner/conf/deploy.conf"
+            echo "if stop here, check conf/deploy.conf"
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
