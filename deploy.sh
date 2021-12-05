@@ -167,7 +167,7 @@ deploy_flyway_docker() {
 }
 
 # https://github.com/nodesource/distributions#debinstall
-node_build_yarn() {
+build_node_yarn() {
     echo_time_step "node yarn build..."
 
     rm -f package-lock.json
@@ -183,7 +183,7 @@ node_build_yarn() {
     echo_time "end node build."
 }
 
-php_build_composer() {
+build_php_composer() {
     echo_time_step "php composer install..."
     if [ "${ENV_IMAGE_FROM_DOCKERFILE}" = 'Dockerfile' ]; then
         image_composer=$(awk '/FROM/ {print $2}' | tail -n 1)
@@ -206,11 +206,11 @@ php_build_composer() {
     echo_time "end php composer install."
 }
 
-java_build_maven() {
+build_java_maven() {
     echo_time_step "java maven build..."
 }
 
-python_build_pip() {
+build_python_pip() {
     echo_time_step "python install..."
 }
 # 列出所有项目
@@ -266,7 +266,7 @@ docker_login() {
     date +%s >"$lock_docker_login"
 }
 
-docker_build() {
+build_docker() {
     echo_time_step "docker build only..."
     docker_login
 
@@ -569,12 +569,13 @@ install_kubectl() {
     kube_ver="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
     if [ -z "$ENV_HTTP_PROXY" ]; then
-        curl -Lo "${script_path}/bin/kubectl" "$kube_url"
+        curl_opt="curl -Lo"
     else
-        curl -x "$ENV_HTTP_PROXY" -Lo "${script_path}/bin/kubectl" "$kube_url"
+        curl_opt="curl -x$ENV_HTTP_PROXY -Lo"
     fi
+    $curl_opt "${script_path}/bin/kubectl" "$kube_url"
     chmod +x "${script_path}/bin/kubectl"
-    sudo cp -af "${script_path}/bin/kubectl" /usr/local/bin/kubectl
+    # sudo cp -af "${script_path}/bin/kubectl" /usr/local/bin/kubectl
 }
 
 install_helm() {
@@ -747,29 +748,38 @@ main() {
     ## 1，默认情况执行所有任务，
     ## 2，如果传入参数，则通过传递入参执行单个任务。适用于单独的gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
-        if [[ "${#}" -gt 0 ]]; then
-            gitlab_single_job=1
-        else
-            gitlab_single_job=0
-        fi
         case $1 in
         --renwe-ssl)
-            PIPELINE_RENEW_SSL=1
+            PIPELINE_RENEW_CERT=1
+            single_job_renew_ssl=1
             ;;
-        --docker-build)
-            exec_docker_build=1
+        --build-docker)
+            exec_build_docker=1
+            single_job_build_docker=1
             ;;
         --docker-push)
             exec_docker_push=1
+            single_job_docker_push=1
             ;;
         --deploy-k8s)
             exec_deploy_k8s=1
+            single_job_deploy_k8s=1
             ;;
-        --disable-rsync)
-            exec_deploy_rsync=0
+        --build-php)
+            exec_build_php=1
+            single_job_build_php=1
             ;;
-        --diable-flyway)
-            exec_flyway=0
+        --build-node)
+            exec_build_node=1
+            single_job_build_node=1
+            ;;
+        --build-java)
+            exec_build_java=1
+            single_job_build_java=1
+            ;;
+        --build-python)
+            exec_build_python=1
+            single_job_build_python=1
             ;;
         *)
             exec_deploy_rsync=1
@@ -830,7 +840,7 @@ main() {
     clean_disk
 
     ## acme.sh 更新证书
-    if [[ "$PIPELINE_RENEW_SSL" -eq 1 ]]; then
+    if [[ "$PIPELINE_RENEW_CERT" -eq 1 ]]; then
         renew_cert
         return
     fi
@@ -840,12 +850,12 @@ main() {
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]]; then
         project_docker=1
-        exec_docker_build=1
+        exec_build_docker=1
         exec_docker_push=1
         exec_deploy_k8s=1
         if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
             project_docker=0
-            exec_docker_build=0
+            exec_build_docker=0
             exec_docker_push=0
             exec_deploy_k8s=0
         fi
@@ -861,7 +871,7 @@ main() {
             YARN_INSTALL=true
         fi
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_node_build_yarn=1
+            exec_build_node=1
         fi
     fi
     if [[ -f "${CI_PROJECT_DIR}/composer.json" ]]; then
@@ -871,19 +881,19 @@ main() {
             COMPOSER_INSTALL=true
         fi
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_php_build_composer=1
+            exec_build_php=1
         fi
     fi
     if [[ -f "${CI_PROJECT_DIR}/pom.xml" ]]; then
         project_lang='java'
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_java_build_maven=1
+            exec_build_java=1
         fi
     fi
     if [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]]; then
         project_lang='python'
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_python_build_pip=1
+            exec_build_python=1
         fi
     fi
     if grep '^## android' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null; then
@@ -929,13 +939,13 @@ main() {
     fi
 
     ## build/deploy
-    [[ "${exec_docker_build}" -eq 1 ]] && docker_build
+    [[ "${exec_build_docker}" -eq 1 ]] && build_docker
     [[ "${exec_docker_push}" -eq 1 ]] && docker_push
     [[ "${exec_deploy_k8s}" -eq 1 ]] && deploy_k8s
-    [[ "${exec_php_build_composer}" -eq 1 ]] && php_build_composer
-    [[ "${exec_node_build_yarn}" -eq 1 ]] && node_build_yarn
-    [[ "${exec_java_build_maven}" -eq 1 ]] && java_build_maven
-    [[ "${exec_python_build_pip}" -eq 1 ]] && python_build_pip
+    [[ "${exec_build_php}" -eq 1 ]] && build_php_composer
+    [[ "${exec_build_node}" -eq 1 ]] && build_node_yarn
+    [[ "${exec_build_java}" -eq 1 ]] && build_java_maven
+    [[ "${exec_build_python}" -eq 1 ]] && build_python_pip
 
     ## generate api docs
     # gen_apidoc
