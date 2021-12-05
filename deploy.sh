@@ -259,6 +259,13 @@ php_build_composer() {
     echo_time "end php composer install."
 }
 
+java_build_maven() {
+    echo_time_step "java maven build..."
+}
+
+python_build() {
+    echo_time_step "python install..."
+}
 # 列出所有项目
 # gitlab -v -o yaml -f path_with_namespace project list --all |awk -F': ' '{print $2}' |sort >p.txt
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
@@ -760,7 +767,6 @@ main() {
     [ -f "ci_debug" ] && PIPELINE_DEBUG=true
     [[ $PIPELINE_DEBUG == 'true' ]] && set -x
     script_name="$(basename "$0")"
-    script_name="${script_name%.sh}"
     script_dir="$(cd "$(dirname "$0")" && pwd)"
     script_data="${script_dir}/data" ## 记录 deploy.sh 的数据文件
 
@@ -783,6 +789,11 @@ main() {
     ## 1，默认情况执行所有任务，
     ## 2，如果传入参数，则通过传递入参执行单个任务。适用于单独的gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
+        if [[ "${#}" -gt 0 ]]; then
+            gitlab_single_job=1
+        else
+            gitlab_single_job=0
+        fi
         case $1 in
         --renwe-ssl)
             PIPELINE_RENEW_SSL=1
@@ -803,12 +814,6 @@ main() {
             exec_flyway=0
             ;;
         *)
-            # gitlabSingleJob=1
-            ## php composer
-            # exec_php_build_composer=1
-            ## node build
-            # exec_node_build_yarn=1
-            ## rsync
             exec_deploy_rsync=1
             break
             ;;
