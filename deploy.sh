@@ -131,16 +131,9 @@ test_function() {
 
 deploy_flyway() {
     echo_time_step "flyway migrate..."
-
-    flyway_home="${ENV_FLYWAY_PATH:-${script_dir}/conf/flyway}"
-
-    if [ -d "$flyway_home/conf/${branch_name}.${CI_PROJECT_NAME}" ]; then
-        flyway_volume_conf="$flyway_home/conf/${branch_name}.${CI_PROJECT_NAME}:/flyway/conf"
-    else
-        flyway_volume_conf="$flyway_home/conf:/flyway/conf"
-    fi
-    flyway_volume_sql="${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}:/flyway/sql"
-    flyway_docker_run="docker run --rm -v ${flyway_volume_sql} -v ${flyway_volume_conf} flyway/flyway"
+    flyway_conf_volume="${CI_PROJECT_DIR}/flyway_conf:/flyway/conf"
+    flyway_sql_volume="${CI_PROJECT_DIR}/flyway_sql:/flyway/sql"
+    flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
     ## 判断是否需要建立数据库远程连接
     [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" port
@@ -164,26 +157,8 @@ deploy_flyway() {
 deploy_flyway_docker() {
     ## docker build flyway
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-flyway"
-    path_flyway_conf_proj="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
-    path_flyway_conf="$CI_PROJECT_DIR/docs/flyway_conf"
-    path_flyway_sql="$CI_PROJECT_DIR/docs/flyway_sql"
-    [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && rsync -a "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}/" "$path_flyway_sql/"
-    [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
-    [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
-    [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
-    [ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ] || cp -f "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
-
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${CI_PROJECT_DIR}/Dockerfile.flyway" "${CI_PROJECT_DIR}/" >/dev/null
-
-    flyway_docker_run="docker run --rm $image_tag_flyway"
-    if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
-        $flyway_docker_run repair
-        $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
-        $flyway_docker_run info | tail -n 10
-        ## 断开数据库远程连接
-    else
-        echo "Nothing to do."
-    fi
+    docker run --rm "$image_tag_flyway"
     if [ ${deploy_result:-0} = 0 ]; then
         echo_info "Result = OK"
     else
@@ -738,7 +713,7 @@ file_preprocessing() {
     fi
     ## backend (PHP) project_conf files
     path_project_conf="${script_dir}/conf/project_conf/${branch_name}.${CI_PROJECT_NAME}/"
-    [ -d "$path_project_conf" ] && rsync -rlctv "$path_project_conf" "${CI_PROJECT_DIR}/"
+    [ -d "$path_project_conf" ] && rsync -av "$path_project_conf" "${CI_PROJECT_DIR}/"
     ## docker ignore file
     [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
     ## cert file for nginx
@@ -752,12 +727,9 @@ file_preprocessing() {
     ## flyway sql/conf files
     [[ ! -d "${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && copy_flyway_file=0
     if [[ "${copy_flyway_file:-1}" -eq 1 ]]; then
-        path_flyway_conf_proj="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
         path_flyway_conf="$CI_PROJECT_DIR/flyway_conf"
         path_flyway_sql="$CI_PROJECT_DIR/flyway_sql"
         [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
-        [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
-        [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && rsync -a "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}/" "$path_flyway_sql/"
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ]] || cp -vf "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
     fi
