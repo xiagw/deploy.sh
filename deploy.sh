@@ -125,7 +125,7 @@ scan_vulmap() {
 ## install jdk/ant/jmeter
 test_function() {
     echo_time_step "function test..."
-    [ -f "$script_dir/data/tests/test_func.sh" ] && bash "$script_dir/data/tests/test_func.sh"
+    [ -f "$script_path/data/tests/test_func.sh" ] && bash "$script_path/data/tests/test_func.sh"
     echo_time "end function test."
 }
 
@@ -136,7 +136,7 @@ deploy_flyway() {
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
     ## 判断是否需要建立数据库远程连接
-    [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" port
+    [ -f "$script_path/bin/special.sh" ] && source "$script_path/bin/special.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
@@ -184,8 +184,8 @@ node_build_yarn() {
     if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$path_dockerfile/Dockerfile.node" "$path_dockerfile" >/dev/null
     fi
-    if [[ -f "$script_dir/bin/custome.docker.build.sh" ]]; then
-        source "$script_dir/bin/custome.docker.build.sh"
+    if [[ -f "$script_path/bin/custome.docker.build.sh" ]]; then
+        source "$script_path/bin/custome.docker.build.sh"
     else
         $docker_run -v "${CI_PROJECT_DIR}":/app -w /app deploy/node bash -c "yarn install; yarn run build"
     fi
@@ -195,7 +195,7 @@ node_build_yarn() {
 docker_login() {
     source "$script_env"
     ## 比较上一次登陆时间，超过12小时则再次登录
-    lock_docker_login="$script_dir/conf/.lock.docker.login.${ENV_DOCKER_LOGIN}"
+    lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN}"
     [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
     time_save="$(cat "$lock_docker_login")"
     if [ "$(date +%s -d '12 hours ago')" -gt "${time_save:-0}" ]; then
@@ -238,7 +238,7 @@ java_build_maven() {
     echo_time_step "java maven build..."
 }
 
-python_build() {
+python_build_pip() {
     echo_time_step "python install..."
 }
 # 列出所有项目
@@ -297,7 +297,7 @@ docker_build() {
     ## docker build flyway
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${CI_PROJECT_NAME:?undefine var}-flyway"
-        path_flyway_conf_proj="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
+        path_flyway_conf_proj="${script_path}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
         path_flyway_conf="$CI_PROJECT_DIR/docs/flyway_conf"
         path_flyway_sql="$CI_PROJECT_DIR/docs/flyway_sql"
         [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" "$path_flyway_sql"
@@ -337,8 +337,8 @@ deploy_k8s() {
         helm_release=${CI_PROJECT_NAME}
     fi
     helm_release="${helm_release,,}"
-    if [ -d "$script_dir/conf/helm/${CI_PROJECT_NAME}" ]; then
-        path_helm="$script_dir/conf/helm/${CI_PROJECT_NAME}"
+    if [ -d "$script_path/conf/helm/${CI_PROJECT_NAME}" ]; then
+        path_helm="$script_path/conf/helm/${CI_PROJECT_NAME}"
     else
         if [ -d "$CI_PROJECT_PATH/helm" ]; then
             path_helm="$CI_PROJECT_PATH/helm"
@@ -351,7 +351,7 @@ deploy_k8s() {
     source "$script_env"
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
-        [ -f "$script_dir/bin/special.sh" ] && source "$script_dir/bin/special.sh" "$branch_name"
+        [ -f "$script_path/bin/special.sh" ] && source "$script_path/bin/special.sh" "$branch_name"
     else
         set -x
         helm upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
@@ -362,7 +362,7 @@ deploy_k8s() {
         [[ $PIPELINE_DEBUG != 'true' ]] && set +x
     fi
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
-        helm upgrade flyway "$script_dir/conf/helm/flyway/" --install --history-max 1 \
+        helm upgrade flyway "$script_path/conf/helm/flyway/" --install --history-max 1 \
             --namespace "${branch_name}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${CI_PROJECT_NAME}-flyway" \
@@ -490,13 +490,13 @@ deploy_notify() {
         fi
         $curl_opt -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$tgApiMsg"
     elif [[ 1 -eq "${PIPELINE_TEMP_PASS:-0}" ]]; then
-        python3 "$script_dir/bin/element-up.py" "$msg_body"
+        python3 "$script_path/bin/element-up.py" "$msg_body"
     elif [[ 1 -eq "${ENV_NOTIFY_ELEMENT:-0}" && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
-        python3 "$script_dir/bin/element.py" "$msg_body"
+        python3 "$script_path/bin/element.py" "$msg_body"
     elif [[ 1 -eq "${ENV_NOTIFY_EMAIL:-0}" ]]; then
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
-        "$script_dir/bin/sendEmail" \
+        "$script_path/bin/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
             -xu "$ENV_EMAIL_USERNAME" \
@@ -528,9 +528,9 @@ renew_cert() {
 
     ## 根据多个不同的账号文件，循环处理 renew
     for account in "${acme_home}/"account.conf.*; do
-        if [ -f "$conf_cloudflare" ]; then
+        if [ -f "$path_conf_cloudflare" ]; then
             command -v flarectl || return 1
-            source "$conf_cloudflare" "${account##*.}"
+            source "$path_conf_cloudflare" "${account##*.}"
             domain_name="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
         elif [ -f "$HOME/.aliyun.dnsapi.conf" ]; then
@@ -585,12 +585,12 @@ install_kubectl() {
     kube_ver="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
     if [ -z "$ENV_HTTP_PROXY" ]; then
-        curl -Lo "${script_dir}/bin/kubectl" "$kube_url"
+        curl -Lo "${script_path}/bin/kubectl" "$kube_url"
     else
-        curl -x "$ENV_HTTP_PROXY" -Lo "${script_dir}/bin/kubectl" "$kube_url"
+        curl -x "$ENV_HTTP_PROXY" -Lo "${script_path}/bin/kubectl" "$kube_url"
     fi
-    chmod +x "${script_dir}/bin/kubectl"
-    sudo cp -af "${script_dir}/bin/kubectl" /usr/local/bin/kubectl
+    chmod +x "${script_path}/bin/kubectl"
+    sudo cp -af "${script_path}/bin/kubectl" /usr/local/bin/kubectl
 }
 
 install_helm() {
@@ -635,7 +635,7 @@ check_os() {
         git lfs version >/dev/null || sudo apt install -y git-lfs
         command -v unzip >/dev/null || sudo apt install -y unzip
         command -v rsync >/dev/null || sudo apt install -y rsync
-        # command -v docker >/dev/null || bash "$script_dir/bin/get-docker.sh"
+        # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
         id | grep -q docker || sudo usermod -aG docker "$USER"
         command -v pip3 >/dev/null || sudo apt install -y python3-pip
         command -v java >/dev/null || sudo apt install -y openjdk-8-jdk
@@ -646,7 +646,7 @@ check_os() {
         command -v git >/dev/null || sudo yum install -y git2u
         git lfs version >/dev/null || sudo yum install -y git-lfs
         command -v rsync >/dev/null || sudo yum install -y rsync
-        # command -v docker >/dev/null || sh "$script_dir/bin/get-docker.sh"
+        # command -v docker >/dev/null || sh "$script_path/bin/get-docker.sh"
         id | grep -q docker || sudo usermod -aG docker "$USER"
     elif [[ "$OS" == 'amzn' ]]; then
         rpm -q epel-release >/dev/null || sudo amazon-linux-extras install -y epel
@@ -712,10 +712,10 @@ file_preprocessing() {
         copy_flyway_file=0
     fi
     ## backend (PHP) project_conf files
-    path_project_conf="${script_dir}/conf/project_conf/${branch_name}.${CI_PROJECT_NAME}/"
+    path_project_conf="${script_path}/conf/project_conf/${branch_name}.${CI_PROJECT_NAME}/"
     [ -d "$path_project_conf" ] && rsync -av "$path_project_conf" "${CI_PROJECT_DIR}/"
     ## docker ignore file
-    [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
+    [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_path}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
     ## cert file for nginx
     if [[ "${CI_PROJECT_NAME}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
         rsync -av "$HOME/.acme.sh/dest/" "${CI_PROJECT_DIR}/etc/nginx/conf.d/ssl/"
@@ -739,12 +739,12 @@ main() {
     [ -f "ci_debug" ] && PIPELINE_DEBUG=true
     [[ $PIPELINE_DEBUG == 'true' ]] && set -x
     script_name="$(basename "$0")"
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    script_data="${script_dir}/data" ## 记录 deploy.sh 的数据文件
+    script_path="$(cd "$(dirname "$0")" && pwd)"
+    script_data="${script_path}/data" ## 记录 deploy.sh 的数据文件
 
     PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
     PATH="$PATH:$script_data/jdk/bin:$script_data/jmeter/bin:$script_data/ant/bin:$script_data/maven/bin"
-    PATH="$PATH:$script_dir/bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
+    PATH="$PATH:$script_path/bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
     ## 检查OS 类型和版本，安装相应命令和软件包
@@ -794,41 +794,41 @@ main() {
     done
     ##
 
-    script_log="${script_dir}/data/${script_name}.log" ## 记录 deploy.sh 执行情况
-    script_conf="${script_dir}/conf/deploy.conf"       ## 发布到目标服务器的配置信息
-    script_env="${script_dir}/conf/deploy.env"         ## 发布配置信息(密)
-    path_dockerfile="${script_dir}/conf/dockerfile"    ## dockerfile
+    script_log="${script_path}/data/${script_name}.log" ## 记录 deploy.sh 执行情况
+    script_conf="${script_path}/conf/deploy.conf"       ## 发布到目标服务器的配置信息
+    script_env="${script_path}/conf/deploy.env"         ## 发布配置信息(密)
+    path_dockerfile="${script_path}/conf/dockerfile"    ## dockerfile
 
-    [[ ! -f "$script_conf" ]] && cp "${script_dir}/conf/deploy.conf.example" "$script_conf"
-    [[ ! -f "$script_env" ]] && cp "${script_dir}/conf/deploy.env.example" "$script_env"
+    [[ ! -f "$script_conf" ]] && cp "${script_path}/conf/deploy.conf.example" "$script_conf"
+    [[ ! -f "$script_env" ]] && cp "${script_path}/conf/deploy.env.example" "$script_env"
     [[ ! -f "$script_log" ]] && touch "$script_log"
 
-    conf_dir_ssh="${script_dir}/conf/.ssh"
-    if [[ ! -d "${conf_dir_ssh}" ]]; then
-        mkdir -m 700 "$conf_dir_ssh"
-        echo_warn "generate ssh key file for gitlab-runner: $conf_dir_ssh/id_ed25519"
-        echo_erro "cat $conf_dir_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
-        ssh-keygen -t ed25519 -N '' -f "$conf_dir_ssh/id_ed25519"
-        ln -sf "$conf_dir_ssh" "$HOME/"
+    path_conf_ssh="${script_path}/conf/.ssh"
+    if [[ ! -d "${path_conf_ssh}" ]]; then
+        mkdir -m 700 "$path_conf_ssh"
+        echo_warn "generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
+        echo_erro "cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
+        ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
+        ln -sf "$path_conf_ssh" "$HOME/"
     fi
-    for f in "$conf_dir_ssh"/*; do
+    for f in "$path_conf_ssh"/*; do
         if [ ! -f "$HOME/.ssh/${f##*/}" ]; then
             chmod 600 "${f}"
             ln -sf "${f}" "$HOME/.ssh/"
         fi
     done
-    conf_dir_acme="${script_dir}/conf/.acme.sh"
-    conf_dir_aws="${script_dir}/conf/.aws"
-    conf_dir_kube="${script_dir}/conf/.kube"
-    conf_dir_aliyun="${script_dir}/conf/.aliyun"
-    conf_python_gitlab="${script_dir}/conf/.python-gitlab.cfg"
-    conf_cloudflare="${script_dir}/conf/.cloudflare.cfg"
-    conf_rsync_exclude="${script_dir}/conf/rsync.exclude"
-    [[ ! -e "${HOME}/.acme.sh" && -e "${conf_dir_acme}" ]] && ln -sf "${conf_dir_acme}" "$HOME/"
-    [[ ! -e "${HOME}/.aws" && -e "${conf_dir_aws}" ]] && ln -sf "${conf_dir_aws}" "$HOME/"
-    [[ ! -e "${HOME}/.kube" && -e "${conf_dir_kube}" ]] && ln -sf "${conf_dir_kube}" "$HOME/"
-    [[ ! -e "${HOME}/.aliyun" && -e "${conf_dir_aliyun}" ]] && ln -sf "${conf_dir_aliyun}" "$HOME/"
-    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${conf_python_gitlab}" ]] && ln -sf "${conf_python_gitlab}" "$HOME/"
+    path_conf_acme="${script_path}/conf/.acme.sh"
+    path_conf_aws="${script_path}/conf/.aws"
+    path_conf_kube="${script_path}/conf/.kube"
+    path_conf_aliyun="${script_path}/conf/.aliyun"
+    path_conf_gitlab="${script_path}/conf/.python-gitlab.cfg"
+    path_conf_cloudflare="${script_path}/conf/.cloudflare.cfg"
+    conf_rsync_exclude="${script_path}/conf/rsync.exclude"
+    [[ ! -e "${HOME}/.acme.sh" && -e "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
+    [[ ! -e "${HOME}/.aws" && -e "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
+    [[ ! -e "${HOME}/.kube" && -e "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
+    [[ ! -e "${HOME}/.aliyun" && -e "${path_conf_aliyun}" ]] && ln -sf "${path_conf_aliyun}" "$HOME/"
+    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${path_conf_gitlab}" ]] && ln -sf "${path_conf_gitlab}" "$HOME/"
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     # shellcheck disable=SC1090
     source "$script_env"
@@ -850,6 +850,20 @@ main() {
     fi
 
     ## 判定项目类型
+    echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
+    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
+    if [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]]; then
+        project_docker=1
+        exec_docker_build=1
+        exec_docker_push=1
+        exec_deploy_k8s=1
+        if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
+            project_docker=0
+            exec_docker_build=0
+            exec_docker_push=0
+            exec_deploy_k8s=0
+        fi
+    fi
     if [[ -f "${CI_PROJECT_DIR}/package.json" ]]; then
         if grep -i -q 'Create React' "${CI_PROJECT_DIR}/README.md" "${CI_PROJECT_DIR}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
@@ -860,6 +874,9 @@ main() {
             echo "$CI_PROJECT_PATH $branch_name $(md5sum "${CI_PROJECT_DIR}/package.json")" >>"${script_log}"
             YARN_INSTALL=true
         fi
+        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+            exec_node_build_yarn=1
+        fi
     fi
     if [[ -f "${CI_PROJECT_DIR}/composer.json" ]]; then
         project_lang='php'
@@ -867,27 +884,30 @@ main() {
             echo "$CI_PROJECT_PATH $branch_name $(md5sum "${CI_PROJECT_DIR}/composer.json")" >>"${script_log}"
             COMPOSER_INSTALL=true
         fi
+        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+            exec_php_build_composer=1
+        fi
     fi
     if [[ -f "${CI_PROJECT_DIR}/pom.xml" ]]; then
         project_lang='java'
+        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+            exec_java_build_maven=1
+        fi
     fi
     if [[ -f "${CI_PROJECT_DIR}/requirements.txt" ]]; then
         project_lang='python'
+        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+            exec_python_build_pip=1
+        fi
     fi
     if grep '^## android' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null; then
         project_lang='android'
+        exec_deploy_rsync=0
     fi
     if grep '^## ios' "${CI_PROJECT_DIR}/.gitlab-ci.yml" >/dev/null; then
         project_lang='ios'
+        exec_deploy_rsync=0
     fi
-    if [[ -f "${CI_PROJECT_DIR}/Dockerfile" ]]; then
-        project_docker=1
-    fi
-    echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
-    if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
-        project_docker=0
-    fi
-    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
 
     ## 文件预处理
     file_preprocessing
@@ -900,7 +920,7 @@ main() {
 
     ## use flyway deploy sql file
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
-    [[ ! -d "${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && exec_flyway=0
+    [[ -d "${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}" ]] || exec_flyway=0
     [[ "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
     [[ "${ENV_HELM_FLYWAY:-0}" -eq 1 ]] && exec_flyway=0
     if [[ ${exec_flyway:-1} -eq 1 ]]; then
@@ -923,43 +943,13 @@ main() {
     fi
 
     ## build/deploy
-    if [[ "$project_docker" -eq 1 ]]; then
-        exec_docker_build=1
-        exec_docker_push=1
-        exec_deploy_k8s=1
-    fi
-    if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-        case "${project_lang}" in
-        'php')
-            exec_php_build_composer=1
-            ;;
-        'node' | 'react')
-            exec_node_build_yarn=1
-            ;;
-        'java')
-            exec_java_build_maven=1
-            ;;
-        'python')
-            exec_python_build=1
-            ;;
-        'android')
-            exec_deploy_rsync=0
-            ;;
-        'ios')
-            exec_deploy_rsync=0
-            ;;
-        *)
-            echo "Nothing."
-            ;;
-        esac
-    fi
     [[ "${exec_docker_build}" -eq 1 ]] && docker_build
     [[ "${exec_docker_push}" -eq 1 ]] && docker_push
     [[ "${exec_deploy_k8s}" -eq 1 ]] && deploy_k8s
     [[ "${exec_php_build_composer}" -eq 1 ]] && php_build_composer
     [[ "${exec_node_build_yarn}" -eq 1 ]] && node_build_yarn
     [[ "${exec_java_build_maven}" -eq 1 ]] && java_build_maven
-    [[ "${exec_python_build}" -eq 1 ]] && python_build
+    [[ "${exec_python_build_pip}" -eq 1 ]] && python_build_pip
 
     ## generate api docs
     # gen_apidoc
