@@ -757,7 +757,7 @@ file_preprocessing() {
         path_flyway_sql="$CI_PROJECT_DIR/flyway_sql"
         [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
         [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
-        [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" "$path_flyway_sql"
+        [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && rsync -a "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}/" "$path_flyway_sql/"
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ]] || cp -vf "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
     fi
