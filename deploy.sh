@@ -192,7 +192,7 @@ deploy_flyway_docker() {
 }
 
 # https://github.com/nodesource/distributions#debinstall
-node_build_volume() {
+node_build_yarn() {
     echo_time_step "node yarn build..."
     config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
     config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
@@ -236,7 +236,7 @@ docker_login() {
 
 }
 
-php_build_volume() {
+php_build_composer() {
     echo_time_step "php composer install..."
     if [ "${ENV_IMAGE_FROM_DOCKERFILE}" = 'Dockerfile' ]; then
         image_composer=$(awk '/FROM/ {print $2}' | tail -n 1)
@@ -251,7 +251,7 @@ php_build_volume() {
     [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
     echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
     echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
-    if [ "${COMPOSER_INSTALL:-false}" = true ]; then
+    if [[ "${COMPOSER_INSTALL:-false}" == 'true' ]]; then
         rm -f "${CI_PROJECT_DIR}"/composer.lock
         # rm -rf "${CI_PROJECT_DIR}"/vendor
         $docker_run -v "$CI_PROJECT_DIR:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL} -w /app "$image_composer" composer install -q || true
@@ -297,26 +297,7 @@ deploy_k8s_java() {
 docker_build() {
     echo_time_step "docker build only..."
     docker_login
-    ## frontend (VUE) .env file
-    if [[ $project_lang =~ (node|react) ]]; then
-        config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
-        for file in $config_env_path; do
-            if [[ "$file" =~ 'config/' ]]; then
-                \cp -vf "$file" "${file/${branch_name}./}" # vue2.x
-            else
-                \cp -vf "$file" "${file/${branch_name}/}" # vue3.x
-            fi
-        done
-    fi
-    ## backend (PHP) .env file
-    path_secret="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
-    [ -d "$path_secret" ] && rsync -rlctv "$path_secret" "${CI_PROJECT_DIR}/"
-    ## docker ignore file
-    [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
-    ## cert file for nginx
-    if [[ "${CI_PROJECT_NAME}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
-        rsync -av "$HOME/.acme.sh/dest/" "${CI_PROJECT_DIR}/etc/nginx/conf.d/ssl/"
-    fi
+
     ## Docker build from, 是否从模板构建
     image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
     if [ -n "$image_from" ]; then
@@ -325,7 +306,7 @@ docker_build() {
         docker images | grep -q "${image_from%%:*}.*${image_from##*:}" || docker_build_tmpl=$((docker_build_tmpl + 1))
         if [[ "$docker_build_tmpl" -gt 0 ]]; then
             # 模版不存在，构建模板
-            cp -f "${path_dockerfile}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}/"
+            cp -vf "${path_dockerfile}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}/"
             DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${CI_PROJECT_DIR}/Dockerfile.${image_from##*:}" "${CI_PROJECT_DIR}"
         fi
@@ -368,7 +349,7 @@ docker_push() {
 
 deploy_k8s() {
     echo_time_step "deploy k8s..."
-    if [[ ${ENV_REMOVE_PROJ_PREFIX:-false} == true ]]; then
+    if [[ ${ENV_REMOVE_PROJ_PREFIX:-false} == 'true' ]]; then
         helm_release=${CI_PROJECT_NAME#*-}
     else
         helm_release=${CI_PROJECT_NAME}
@@ -469,8 +450,6 @@ deploy_rsync() {
         if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${branch_name}.${CI_PROJECT_NAME}/"
         fi
-        ## 复制项目密码/密钥等配置文件，例如数据库配置，密钥文件等
-        secret_dir="${script_dir}/conf/.secret/${branch_name}.${CI_PROJECT_NAME}/"
         ## 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
@@ -480,7 +459,6 @@ deploy_rsync() {
         fi
         ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
-        [ -d "$secret_dir" ] && rsync -rlcvzt "$secret_dir" "${rsync_src}"
         ## 复制文件到目标服务器的目标目录
         echo "deploy to ${ssh_host}:${rsync_dest}"
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
@@ -737,6 +715,47 @@ gen_apidoc() {
     fi
 }
 
+file_preprocessing() {
+    echo_time_step "preprocessing file."
+    ## frontend (VUE) .env file
+    if [[ $project_lang =~ (node|react) ]]; then
+        config_env_path="$(find "${CI_PROJECT_DIR}" -maxdepth 2 -name "${branch_name}.*")"
+        for file in $config_env_path; do
+            if [[ "$file" =~ 'config/' ]]; then
+                \cp -vf "$file" "${file/${branch_name}./}" # vue2.x
+            else
+                \cp -vf "$file" "${file/${branch_name}/}" # vue3.x
+            fi
+        done
+        copy_flyway_file=0
+    fi
+    ## backend (PHP) project_conf files
+    path_project_conf="${script_dir}/conf/project_conf/${branch_name}.${CI_PROJECT_NAME}/"
+    [ -d "$path_project_conf" ] && rsync -rlctv "$path_project_conf" "${CI_PROJECT_DIR}/"
+    ## docker ignore file
+    [ -f "${CI_PROJECT_DIR}/.dockerignore" ] || cp -v "${script_dir}/conf/.dockerignore" "${CI_PROJECT_DIR}/"
+    ## cert file for nginx
+    if [[ "${CI_PROJECT_NAME}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
+        rsync -av "$HOME/.acme.sh/dest/" "${CI_PROJECT_DIR}/etc/nginx/conf.d/ssl/"
+    fi
+    ## Docker build from, 是否从模板构建
+    image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
+    file_docker_tmpl="${path_dockerfile}/Dockerfile.${image_from##*:}"
+    [ -f "${file_docker_tmpl}" ] && cp -vf "${file_docker_tmpl}" "${CI_PROJECT_DIR}/"
+    ## flyway sql/conf files
+    [[ ! -d "${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && copy_flyway_file=0
+    if [[ "${copy_flyway_file:-1}" -eq 1 ]]; then
+        path_flyway_conf_proj="${script_dir}/conf/flyway/conf/${branch_name}.${CI_PROJECT_NAME}/"
+        path_flyway_conf="$CI_PROJECT_DIR/flyway_conf"
+        path_flyway_sql="$CI_PROJECT_DIR/flyway_sql"
+        [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
+        [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
+        [[ -d "$path_flyway_conf_proj" ]] && rsync -rlctv "$path_flyway_conf_proj" "${path_flyway_conf}/"
+        [[ -d "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" && ! -d "$path_flyway_sql" ]] && mv "$CI_PROJECT_DIR/${ENV_FLYWAY_SQL:-docs/sql}" "$path_flyway_sql"
+        [[ -f "${CI_PROJECT_DIR}/Dockerfile.flyway" ]] || cp -vf "${path_dockerfile}/Dockerfile.flyway" "${CI_PROJECT_DIR}/"
+    fi
+}
+
 main() {
     [ -f "ci_debug" ] && PIPELINE_DEBUG=true
     [[ $PIPELINE_DEBUG == 'true' ]] && set -x
@@ -754,11 +773,11 @@ main() {
     check_os
 
     ## 安装依赖命令/工具
-    [[ "${ENV_INSTALL_AWS}" == true ]] && install_aws
-    [[ "${ENV_INSTALL_KUBECTL}" == true ]] && install_kubectl
-    [[ "${ENV_INSTALL_HELM}" == true ]] && install_helm
-    [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == true ]] && install_python_element
-    [[ "${ENV_INSTALL_PYTHON_GITLAB}" == true ]] && install_python_gitlab
+    [[ "${ENV_INSTALL_AWS}" == 'true' ]] && install_aws
+    [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && install_kubectl
+    [[ "${ENV_INSTALL_HELM}" == 'true' ]] && install_helm
+    [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && install_python_element
+    [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
 
     ## 处理传入的参数
     ## 1，默认情况执行所有任务，
@@ -786,9 +805,9 @@ main() {
         *)
             # gitlabSingleJob=1
             ## php composer
-            # exec_php_build_volume=1
+            # exec_php_build_composer=1
             ## node build
-            # exec_node_build_volume=1
+            # exec_node_build_yarn=1
             ## rsync
             exec_deploy_rsync=1
             break
@@ -893,23 +912,26 @@ main() {
     fi
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
 
-    ## use flyway deploy sql file
-    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
-    [[ ! -d "${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && exec_flyway=0
-    [[ "${PIPELINE_SONAR:-0}" -eq 1 || "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
-    [[ ${ENV_HELM_FLYWAY:-0} -eq 1 ]] && exec_flyway=0
-    if [[ ${exec_flyway:-1} -eq 1 ]]; then
-        deploy_flyway
-        # deploy_flyway_docker
-    fi
-
-    ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
+    ## 文件预处理
+    file_preprocessing
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
         code_quality_sonar
         return $?
     fi
+
+    ## use flyway deploy sql file
+    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
+    [[ ! -d "${CI_PROJECT_DIR}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && exec_flyway=0
+    [[ "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_flyway=0
+    [[ "${ENV_HELM_FLYWAY:-0}" -eq 1 ]] && exec_flyway=0
+    if [[ ${exec_flyway:-1} -eq 1 ]]; then
+        deploy_flyway
+        # deploy_flyway_docker
+    fi
+
+    ## 蓝绿发布，灰度发布，金丝雀发布的k8s配置文件
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-1}"
@@ -923,67 +945,50 @@ main() {
         code_style
     fi
 
-    case "${project_lang}" in
-    'php')
-        ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-        if [[ "$project_docker" -eq 1 ]]; then
-            exec_docker_build=1
-            exec_docker_push=1
-            exec_deploy_k8s=1
-            if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
-                echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
-                php_build_volume
-            fi
-        else
-            php_build_volume
-        fi
-        ;;
-    'node' | 'react')
-        if [[ "$project_docker" -eq 1 ]]; then
-            exec_docker_build=1
-            exec_docker_push=1
-            exec_deploy_k8s=1
-            if [[ ${ENV_FORCE_RSYNC:-false} == true ]]; then
-                echo "ENV_FORCE_RSYNC: ${ENV_FORCE_RSYNC:-false}"
-                node_build_volume
-            fi
-        else
-            node_build_volume
-        fi
-        ;;
-    'java')
-        if [[ "$project_docker" -eq 1 ]]; then
-            exec_docker_build=1
-            exec_docker_push=1
-            exec_deploy_k8s=1
-        fi
-        ;;
-    'android')
-        exec_deploy_rsync=0
-        ;;
-    'ios')
-        exec_deploy_rsync=0
-        ;;
-    *)
-        ## 各种Build， npm/composer/mvn/docker
-        if [[ "$project_docker" -eq 1 ]]; then
-            exec_docker_build=1
-            exec_docker_push=1
-            exec_deploy_k8s=1
-        fi
-        ;;
-    esac
-
-    ## docker build
+    ## build/deploy
+    if [[ "$project_docker" -eq 1 ]]; then
+        exec_docker_build=1
+        exec_docker_push=1
+        exec_deploy_k8s=1
+    fi
+    if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+        case "${project_lang}" in
+        'php')
+            exec_php_build_composer=1
+            ;;
+        'node' | 'react')
+            exec_node_build_yarn=1
+            ;;
+        'java')
+            exec_java_build_maven=1
+            ;;
+        'python')
+            exec_python_build=1
+            ;;
+        'android')
+            exec_deploy_rsync=0
+            ;;
+        'ios')
+            exec_deploy_rsync=0
+            ;;
+        *)
+            echo "Nothing."
+            ;;
+        esac
+    fi
     [[ "${exec_docker_build}" -eq 1 ]] && docker_build
     [[ "${exec_docker_push}" -eq 1 ]] && docker_push
     [[ "${exec_deploy_k8s}" -eq 1 ]] && deploy_k8s
+    [[ "${exec_php_build_composer}" -eq 1 ]] && php_build_composer
+    [[ "${exec_node_build_yarn}" -eq 1 ]] && node_build_yarn
+    [[ "${exec_java_build_maven}" -eq 1 ]] && java_build_maven
+    [[ "${exec_python_build}" -eq 1 ]] && python_build
 
     ## generate api docs
     # gen_apidoc
 
     [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
-    [[ $ENV_FORCE_RSYNC == true ]] && exec_deploy_rsync=1
+    [[ $ENV_FORCE_RSYNC == 'true' ]] && exec_deploy_rsync=1
     if [[ "${exec_deploy_rsync:-1}" -eq 1 ]]; then
         deploy_rsync
     fi
