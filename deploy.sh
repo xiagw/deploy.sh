@@ -479,6 +479,10 @@ func_renew_cert() {
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/dest"
+    conf_dns_cloudflare="${script_path}/conf/.cloudflare.cfg"
+    conf_dns_aliyun="${script_path}/conf/.aliyun.dnsapi.conf"
+    conf_dns_qcloud="${script_path}/conf/.qcloud.dnspod.conf"
+
     ## install acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
         curl https://get.acme.sh | sh
@@ -491,18 +495,18 @@ func_renew_cert() {
 
     ## 根据多个不同的账号文件，循环处理 renew
     for account in "${acme_home}/"account.conf.*; do
-        if [ -f "$conf_cloudflare" ]; then
+        if [ -f "$conf_dns_cloudflare" ]; then
             command -v flarectl || return 1
-            source "$conf_cloudflare" "${account##*.}"
+            source "$conf_dns_cloudflare" "${account##*.}"
             domain_name="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
-        elif [ -f "$HOME/.aliyun.dnsapi.conf" ]; then
+        elif [ -f "$conf_dns_aliyun" ]; then
             command -v aliyun || return 1
-            source "$HOME/.aliyun.dnsapi.conf" "${account##*.}"
+            source "$conf_dns_aliyun" "${account##*.}"
             aliyun configure set --profile "deploy${account##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
             domain_name="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
             dnsType='dns_ali'
-        elif [ -f "$HOME/.qcloud.dnspod.conf" ]; then
+        elif [ -f "$conf_dns_qcloud" ]; then
             echo_warn "[TODO] use dnspod api."
         fi
         \cp -vf "$account" "${acme_home}/account.conf"
@@ -516,7 +520,8 @@ func_renew_cert() {
             "${acme_cmd}" --install-cert -d "$domain" --key-file "$acme_cert/$domain".key --fullchain-file "$acme_cert/$domain".crt
         done
     done
-    ## 如果有特殊处理的程序则执行
+
+    ## 如果有自定义的程序需要执行
     if [ -f "${acme_home}"/custom.acme.sh ]; then
         bash "${acme_home}"/custom.acme.sh
     fi
@@ -718,7 +723,6 @@ func_setup_config() {
     path_conf_kube="${script_path}/conf/.kube"
     path_conf_aliyun="${script_path}/conf/.aliyun"
     conf_python_gitlab="${script_path}/conf/.python-gitlab.cfg"
-    conf_cloudflare="${script_path}/conf/.cloudflare.cfg"
     conf_rsync_exclude="${script_path}/conf/rsync.exclude"
     [[ ! -d "${HOME}/.acme.sh" && -d "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
     [[ ! -d "${HOME}/.aws" && -d "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
