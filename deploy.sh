@@ -433,9 +433,9 @@ func_deploy_rsync() {
 }
 
 func_deploy_notify_msg() {
-    # mr_iid="$(gitlab project-merge-request list --project-id "$CI_PROJECT_ID" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
+    # mr_iid="$(gitlab project-merge-request list --project-id "$gitlab_project_id" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
     ## sudo -H python3 -m pip install PyYaml
-    # [ -z "$msg_describe" ] && msg_describe="$(gitlab -v project-merge-request get --project-id "$CI_PROJECT_ID" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')"
+    # [ -z "$msg_describe" ] && msg_describe="$(gitlab -v project-merge-request get --project-id "$gitlab_project_id" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')"
     [ -z "$msg_describe" ] && msg_describe="$(git --no-pager log --no-merges --oneline -1)"
     git_username="$(gitlab -v user get --id "${GITLAB_USER_ID}" | awk '/^name:/ {print $2}')"
 
@@ -443,7 +443,7 @@ func_deploy_notify_msg() {
 [Gitlab Deploy]
 Project = ${gitlab_project_path}
 Branche = ${gitlab_project_branch}
-Pipeline = ${CI_PIPELINE_ID}/JobID-$CI_JOB_ID
+Pipeline = ${gitlab_pipeline_id}/JobID-$gitlab_job_id
 Describe = [${gitlab_commit_short_sha}]/${msg_describe}
 Who = ${GITLAB_USER_ID}/${git_username}
 Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
@@ -489,7 +489,7 @@ func_deploy_notify() {
             -t "$ENV_EMAIL_TO" \
             -o message-content-type=text/html \
             -o message-charset=utf-8 \
-            -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${CI_PIPELINE_ID}/${CI_JOB_ID}" \
+            -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
         echo_warn "No message send."
@@ -513,9 +513,9 @@ func_renew_cert() {
 
     ## 根据多个不同的账号文件，循环处理 renew
     for account in "${acme_home}/"account.conf.*; do
-        if [ -f "$path_conf_cloudflare" ]; then
+        if [ -f "$conf_cloudflare" ]; then
             command -v flarectl || return 1
-            source "$path_conf_cloudflare" "${account##*.}"
+            source "$conf_cloudflare" "${account##*.}"
             domain_name="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
         elif [ -f "$HOME/.aliyun.dnsapi.conf" ]; then
@@ -738,43 +738,67 @@ func_setup_config() {
     path_conf_kube="${script_path}/conf/.kube"
     path_conf_aliyun="${script_path}/conf/.aliyun"
     path_conf_gitlab="${script_path}/conf/.python-gitlab.cfg"
-    path_conf_cloudflare="${script_path}/conf/.cloudflare.cfg"
+    conf_cloudflare="${script_path}/conf/.cloudflare.cfg"
     conf_rsync_exclude="${script_path}/conf/rsync.exclude"
-    [[ ! -e "${HOME}/.acme.sh" && -e "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
-    [[ ! -e "${HOME}/.aws" && -e "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
-    [[ ! -e "${HOME}/.kube" && -e "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
-    [[ ! -e "${HOME}/.aliyun" && -e "${path_conf_aliyun}" ]] && ln -sf "${path_conf_aliyun}" "$HOME/"
-    [[ ! -e "${HOME}/.python-gitlab.cfg" && -e "${path_conf_gitlab}" ]] && ln -sf "${path_conf_gitlab}" "$HOME/"
+    [[ ! -d "${HOME}/.acme.sh" && -e "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
+    [[ ! -d "${HOME}/.aws" && -e "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
+    [[ ! -d "${HOME}/.kube" && -e "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
+    [[ ! -d "${HOME}/.aliyun" && -e "${path_conf_aliyun}" ]] && ln -sf "${path_conf_aliyun}" "$HOME/"
+    [[ ! -f "${HOME}/.python-gitlab.cfg" && -e "${path_conf_gitlab}" ]] && ln -sf "${path_conf_gitlab}" "$HOME/"
+    return 0
 }
 
 func_setup_var_gitlab() {
-    if [ -z "$CI_PROJECT_DIR" ]; then gitlab_project_dir=.; else gitlab_project_dir=$CI_PROJECT_DIR; fi
-    if [ -z "$CI_PROJECT_NAME" ]; then gitlab_project_name=${PWD##*/}; else gitlab_project_name=$CI_PROJECT_NAME; fi
+    if [ -z "$CI_PROJECT_DIR" ]; then
+        gitlab_project_dir=.
+    else
+        gitlab_project_dir=$CI_PROJECT_DIR
+    fi
+    if [ -z "$CI_PROJECT_NAME" ]; then
+        gitlab_project_name=${PWD##*/}
+    else
+        gitlab_project_name=$CI_PROJECT_NAME
+    fi
     if [ -z "$CI_PROJECT_NAMESPACE" ]; then
-        read -rp "Enter gitlab project namespace: " gitlab_project_namespace
+        read -rp "Enter gitlab project namespace: " -e -i 'root' gitlab_project_namespace
     else
         gitlab_project_namespace=$CI_PROJECT_NAMESPACE
     fi
     if [ -z "$CI_PROJECT_PATH" ]; then
-        read -rp "Enter gitlab project path: [root/git-name] " gitlab_project_path
+        read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
     else
         gitlab_project_path=$CI_PROJECT_PATH
     fi
     if [ -z "$CI_COMMIT_REF_NAME" ]; then
-        read -rp "Enter branch name: " gitlab_project_branch
+        read -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     else
         gitlab_project_branch=$CI_COMMIT_REF_NAME
     fi
     if [ -z "$CI_COMMIT_SHORT_SHA" ]; then
-        read -rp "Enter commit short hash: " gitlab_commit_short_sha
+        read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
     else
         gitlab_commit_short_sha=$CI_COMMIT_SHORT_SHA
     fi
+    # if [ -z "$CI_PROJECT_ID" ]; then
+    #     read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
+    # else
+    #     gitlab_project_id=$CI_PROJECT_ID
+    # fi
+    if [ -z "$CI_PIPELINE_ID" ]; then
+        read -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
+    else
+        gitlab_pipeline_id=$CI_PIPELINE_ID
+    fi
+    if [ -z "$CI_JOB_ID" ]; then
+        read -rp "Enter gitlab job id: " -e -i '5678' gitlab_job_id
+    else
+        gitlab_job_id=$CI_JOB_ID
+    fi
+
     branch_name=$gitlab_project_branch
-    ## run docker with current user
+    ## run docker with current/root user
     docker_run="docker run --interactive --rm -u $UID:$UID"
-    ## run docker with root
-    # docker_run_root="docker run --interactive --rm"
+    # docker_run_root="docker run --interactive --rm -u 0:0"
     image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
     git_diff="git --no-pager diff --name-only HEAD^"
 }
@@ -938,7 +962,7 @@ main() {
             func_code_style
             exec_auto=0
             ;;
-        --quality)
+        --code-quality)
             func_code_quality
             exec_auto=0
             ;;
