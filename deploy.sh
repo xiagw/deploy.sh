@@ -730,6 +730,7 @@ func_setup_var_gitlab() {
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-develop}
     # read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD)}
+    gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
     # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
     # gitlab_project_id=${CI_PROJECT_ID:-1234}
     # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
