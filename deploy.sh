@@ -731,7 +731,8 @@ func_setup_var_gitlab() {
         gitlab_project_name=$CI_PROJECT_NAME
     fi
     if [ -z "$CI_PROJECT_NAMESPACE" ]; then
-        read -rp "Enter gitlab project namespace: " -e -i 'root' gitlab_project_namespace
+        # read -rp "Enter gitlab project namespace: " -e -i 'root' gitlab_project_namespace
+        gitlab_project_namespace=root
     else
         gitlab_project_namespace=$CI_PROJECT_NAMESPACE
     fi
@@ -742,7 +743,8 @@ func_setup_var_gitlab() {
         gitlab_project_path=$CI_PROJECT_PATH
     fi
     if [ -z "$CI_COMMIT_REF_NAME" ]; then
-        read -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
+        read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
+        # gitlab_project_branch=develop
     else
         gitlab_project_branch=$CI_COMMIT_REF_NAME
     fi
@@ -758,12 +760,14 @@ func_setup_var_gitlab() {
     #     gitlab_project_id=$CI_PROJECT_ID
     # fi
     if [ -z "$CI_PIPELINE_ID" ]; then
-        read -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
+        # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
+        gitlab_pipeline_id=3456
     else
         gitlab_pipeline_id=$CI_PIPELINE_ID
     fi
     if [ -z "$CI_JOB_ID" ]; then
-        read -rp "Enter gitlab job id: " -e -i '5678' gitlab_job_id
+        # read -rp "Enter gitlab job id: " -e -i '5678' gitlab_job_id
+        gitlab_job_id=5678
     else
         gitlab_job_id=$CI_JOB_ID
     fi
