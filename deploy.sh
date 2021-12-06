@@ -220,39 +220,11 @@ build_java_maven() {
 build_python_pip() {
     echo_time_step "python install..."
 }
+
 # 列出所有项目
 # gitlab -v -o yaml -f path_with_namespace project list --all |awk -F': ' '{print $2}' |sort >p.txt
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
-
-deploy_k8s_java() {
-    echo disabled
-    # helm upgrade "${work_name_loop}" "$helm_dir_project/" \
-    #     --install -n "${branch_name}" --create-namespace --history-max 1 \
-    #     --set nameOverride="$work_name_loop" \
-    #     --set image.registry="${ENV_DOCKER_REGISTRY}" \
-    #     --set image.repository="${ENV_DOCKER_REPO}" \
-    #     --set image.tag="${docker_tag_loop}" \
-    #     --set resources.requests.cpu=200m \
-    #     --set resources.requests.memory=512Mi \
-    #     --set persistence.enabled=false \
-    #     --set persistence.nfsServer="${ENV_NFS_SERVER:?undefine var}" \
-    #     --set service.port=8080 \
-    #     --set service.externalTrafficPolicy=Local \
-    #     --set service.type=ClusterIP \
-    #     --set replicaCount="${ENV_HELM_REPLICS:-1}" \
-    #     --set livenessProbe="${ENV_PROBE_URL:?undefine}" >/dev/null
-    # ## 等待就绪
-    # if ! kubectl -n "${branch_name}" rollout status deployment "${work_name_loop}"; then
-    #     errPod="$(kubectl -n "${branch_name}" get pods -l app="${gitlab_project_name}" | awk '/'"${gitlab_project_name}"'.*0\/1/ {print $1}')"
-    #     echo_erro "---------------cut---------------"
-    #     kubectl -n "${branch_name}" describe "pod/${errPod}" | tail
-    #     echo_erro "---------------cut---------------"
-    #     kubectl -n "${branch_name}" logs "pod/${errPod}" | tail -n 100
-    #     echo_erro "---------------cut---------------"
-    #     deploy_result=1
-    # fi
-}
 
 docker_login() {
     source "$script_env"
@@ -346,7 +318,7 @@ deploy_k8s() {
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
-        [[ $PIPELINE_DEBUG != 'true' ]] && set +x
+        [[ "$debug_on" -ne 1 ]] && set +x
     fi
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         helm upgrade flyway "$script_path/conf/helm/flyway/" --install --history-max 1 \
@@ -773,7 +745,8 @@ func_setup_var_gitlab() {
         gitlab_project_namespace=$CI_PROJECT_NAMESPACE
     fi
     if [ -z "$CI_PROJECT_PATH" ]; then
-        read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
+        # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
+        gitlab_project_path=root/$gitlab_project_name
     else
         gitlab_project_path=$CI_PROJECT_PATH
     fi
@@ -783,7 +756,8 @@ func_setup_var_gitlab() {
         gitlab_project_branch=$CI_COMMIT_REF_NAME
     fi
     if [ -z "$CI_COMMIT_SHORT_SHA" ]; then
-        read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
+        # read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
+        gitlab_commit_short_sha="$(git rev-parse --short HEAD)"
     else
         gitlab_commit_short_sha=$CI_COMMIT_SHORT_SHA
     fi
@@ -872,7 +846,9 @@ func_detect_project_type() {
 }
 
 main() {
-    [[ -f ~/ci_debug || $PIPELINE_DEBUG == 'true' ]] && set -x
+    [[ -f ~/ci_debug || $PIPELINE_DEBUG == 'true' ]] && debug_on=1
+    [[ "$1" == '--debug' ]] && debug_on=1
+    [[ "$debug_on" -eq 1 ]] && set -x
     script_name="$(basename "$0")"
     script_path="$(cd "$(dirname "$0")" && pwd)"
     script_data="${script_path}/data"                   ## 记录 deploy.sh 的数据文件
