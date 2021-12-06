@@ -800,7 +800,6 @@ func_setup_var_gitlab() {
     ## run docker with current/root user
     docker_run="docker run --interactive --rm -u $UID:$UID"
     # docker_run_root="docker run --interactive --rm -u 0:0"
-    image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
     git_diff="git --no-pager diff --name-only HEAD^"
 }
 
@@ -899,6 +898,8 @@ main() {
 
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$script_env"
+
+    image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
 
     ## setup ssh config
     func_config_ssh
