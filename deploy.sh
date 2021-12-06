@@ -327,6 +327,7 @@ deploy_k8s() {
     fi
     kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
         xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
+    kubectl -n "${branch_name}" get pod | grep Evicted | awk '{print $1}' | xargs kubectl delete pod || true
     sleep 3
     if ! kubectl -n "${branch_name}" rollout status deployment "${helm_release}"; then
         deploy_result=1
