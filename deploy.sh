@@ -271,7 +271,6 @@ build_docker() {
     docker_login
 
     ## Docker build from, 是否从模板构建
-    image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
     if [ -n "$image_from" ]; then
         docker_build_tmpl=0
         ## 判断模版是否存在
@@ -700,8 +699,10 @@ func_file_preprocessing() {
     fi
     ## Docker build from, 是否从模板构建
     image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
-    file_docker_tmpl="${path_dockerfile}/Dockerfile.${image_from##*:}"
-    [ -f "${file_docker_tmpl}" ] && cp -vf "${file_docker_tmpl}" "${gitlab_project_dir}/"
+    if [ -n "$image_from" ]; then
+        file_docker_tmpl="${path_dockerfile}/Dockerfile.${image_from##*:}"
+        [ -f "${file_docker_tmpl}" ] && cp -vf "${file_docker_tmpl}" "${gitlab_project_dir}/"
+    fi
     ## flyway sql/conf files
     [[ ! -d "${gitlab_project_dir}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && copy_flyway_file=0
     if [[ "${copy_flyway_file:-1}" -eq 1 ]]; then
@@ -750,7 +751,7 @@ func_setup_config() {
 
 func_setup_var_gitlab() {
     if [ -z "$CI_PROJECT_DIR" ]; then
-        gitlab_project_dir=.
+        gitlab_project_dir="$PWD"
     else
         gitlab_project_dir=$CI_PROJECT_DIR
     fi
@@ -893,6 +894,9 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && install_python_element
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
 
+    ## 人工/手动/执行/定义参数
+    func_setup_var_gitlab
+
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$script_env"
 
@@ -901,9 +905,6 @@ main() {
 
     ## setup acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     func_setup_config
-
-    ## 人工/手动/执行/定义参数
-    func_setup_var_gitlab
 
     ## 清理磁盘空间
     func_clean_disk
