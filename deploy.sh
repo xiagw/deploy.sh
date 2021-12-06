@@ -79,7 +79,10 @@ func_code_style() {
 
 ## install phpunit
 func_test_unit() {
-    echo_time_step "[TODO] unit test..."
+    echo_time_step "unit test..."
+    if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
+        bash "$gitlab_project_dir"/tests/unit_test.sh
+    fi
 }
 
 ## install sonar-scanner to system user: "gitlab-runner"
