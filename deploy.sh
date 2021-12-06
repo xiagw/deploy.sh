@@ -85,6 +85,17 @@ func_test_unit() {
     fi
 }
 
+## install jdk/ant/jmeter
+func_test_function() {
+    echo_time_step "function test..."
+    if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
+        bash "$script_path/data/tests/test_func.sh"
+    elif [ -f "$script_path/data/tests/test_func.sh" ]; then
+        bash "$gitlab_project_dir"/tests/func_test.sh
+    fi
+    echo_time "end function test."
+}
+
 ## install sonar-scanner to system user: "gitlab-runner"
 func_code_quality() {
     echo_time_step "sonar scanner..."
@@ -123,13 +134,6 @@ scan_ZAP() {
 
 scan_vulmap() {
     echo_time_step "[TODO] vulmap scan..."
-}
-
-## install jdk/ant/jmeter
-func_test_function() {
-    echo_time_step "function test..."
-    [ -f "$script_path/data/tests/test_func.sh" ] && bash "$script_path/data/tests/test_func.sh"
-    echo_time "end function test."
 }
 
 func_deploy_flyway() {
