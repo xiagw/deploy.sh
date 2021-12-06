@@ -603,7 +603,7 @@ check_os() {
         command -v unzip >/dev/null || $exec_sudo apt-get install -y unzip
         command -v rsync >/dev/null || $exec_sudo apt-get install -y rsync
         # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
-        id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
+        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
         command -v pip3 >/dev/null || $exec_sudo apt-get install -y python3-pip
         command -v java >/dev/null || $exec_sudo apt-get install -y openjdk-8-jdk
         command -v jmeter >/dev/null || install_jmeter
@@ -614,14 +614,14 @@ check_os() {
         git lfs version >/dev/null || $exec_sudo yum install -y git-lfs
         command -v rsync >/dev/null || $exec_sudo yum install -y rsync
         # command -v docker >/dev/null || sh "$script_path/bin/get-docker.sh"
-        id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
+        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
     elif [[ "$OS" == 'amzn' ]]; then
         rpm -q epel-release >/dev/null || $exec_sudo amazon-linux-extras install -y epel
         command -v git >/dev/null || $exec_sudo yum install -y git2u
         git lfs version >/dev/null || $exec_sudo yum install -y git-lfs
         command -v rsync >/dev/null || $exec_sudo yum install -y rsync
         # command -v docker >/dev/null || $exec_sudo amazon-linux-extras install -y docker
-        id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
+        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
     fi
 }
 
