@@ -663,9 +663,9 @@ func_file_preprocessing() {
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${branch_name}.*")"
         for file in $config_env_path; do
             if [[ "$file" =~ 'config/' ]]; then
-                \cp -vf "$file" "${file/${branch_name}./}" # vue2.x
+                rsync -av "$file" "${file/${branch_name}./}" # vue2.x
             else
-                \cp -vf "$file" "${file/${branch_name}/}" # vue3.x
+                rsync -av "$file" "${file/${branch_name}/}" # vue3.x
             fi
         done
         copy_flyway_file=0
@@ -674,7 +674,7 @@ func_file_preprocessing() {
     path_project_conf="${script_path}/conf/project_conf/${branch_name}.${gitlab_project_name}/"
     [ -d "$path_project_conf" ] && rsync -av "$path_project_conf" "${gitlab_project_dir}/"
     ## docker ignore file
-    [ -f "${gitlab_project_dir}/.dockerignore" ] || cp -v "${script_path}/conf/.dockerignore" "${gitlab_project_dir}/"
+    [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path}/conf/.dockerignore" "${gitlab_project_dir}/"
     ## cert file for nginx
     if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
         rsync -av "$HOME/.acme.sh/dest/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
@@ -683,7 +683,7 @@ func_file_preprocessing() {
     image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
     if [ -n "$image_from" ]; then
         file_docker_tmpl="${path_dockerfile}/Dockerfile.${image_from##*:}"
-        [ -f "${file_docker_tmpl}" ] && cp -vf "${file_docker_tmpl}" "${gitlab_project_dir}/"
+        [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
     fi
     ## flyway sql/conf files
     [[ ! -d "${gitlab_project_dir}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && copy_flyway_file=0
@@ -694,7 +694,7 @@ func_file_preprocessing() {
         [[ -d "$path_flyway_sql_proj" && ! -d "$path_flyway_sql" ]] && rsync -a "$path_flyway_sql_proj/" "$path_flyway_sql/"
         [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
-        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || cp -vf "${path_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${path_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
 }
 
