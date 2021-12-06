@@ -597,16 +597,17 @@ check_os() {
         if [[ -e "$HOME"/.bash_logout ]]; then
             mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         fi
-        command -v git >/dev/null || $exec_sudo apt install -y git
-        git lfs version >/dev/null || $exec_sudo apt install -y git-lfs
-        command -v unzip >/dev/null || $exec_sudo apt install -y unzip
-        command -v rsync >/dev/null || $exec_sudo apt install -y rsync
+        $exec_sudo apt-get update
+        command -v git >/dev/null || $exec_sudo apt-get install -y git
+        git lfs version >/dev/null || $exec_sudo apt-get install -y git-lfs
+        command -v unzip >/dev/null || $exec_sudo apt-get install -y unzip
+        command -v rsync >/dev/null || $exec_sudo apt-get install -y rsync
         # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
         id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
-        command -v pip3 >/dev/null || $exec_sudo apt install -y python3-pip
-        command -v java >/dev/null || $exec_sudo apt install -y openjdk-8-jdk
+        command -v pip3 >/dev/null || $exec_sudo apt-get install -y python3-pip
+        command -v java >/dev/null || $exec_sudo apt-get install -y openjdk-8-jdk
         command -v jmeter >/dev/null || install_jmeter
-        # command -v shc >/dev/null || $exec_sudo apt install -y shc
+        # command -v shc >/dev/null || $exec_sudo apt-get install -y shc
     elif [[ "$OS" == 'centos' ]]; then
         rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release
         command -v git >/dev/null || $exec_sudo yum install -y git2u
