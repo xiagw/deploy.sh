@@ -737,14 +737,14 @@ func_setup_config() {
     path_conf_aws="${script_path}/conf/.aws"
     path_conf_kube="${script_path}/conf/.kube"
     path_conf_aliyun="${script_path}/conf/.aliyun"
-    path_conf_gitlab="${script_path}/conf/.python-gitlab.cfg"
+    conf_python_gitlab="${script_path}/conf/.python-gitlab.cfg"
     conf_cloudflare="${script_path}/conf/.cloudflare.cfg"
     conf_rsync_exclude="${script_path}/conf/rsync.exclude"
-    [[ ! -d "${HOME}/.acme.sh" && -e "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
-    [[ ! -d "${HOME}/.aws" && -e "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
-    [[ ! -d "${HOME}/.kube" && -e "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
-    [[ ! -d "${HOME}/.aliyun" && -e "${path_conf_aliyun}" ]] && ln -sf "${path_conf_aliyun}" "$HOME/"
-    [[ ! -f "${HOME}/.python-gitlab.cfg" && -e "${path_conf_gitlab}" ]] && ln -sf "${path_conf_gitlab}" "$HOME/"
+    [[ ! -d "${HOME}/.acme.sh" && -d "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
+    [[ ! -d "${HOME}/.aws" && -d "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
+    [[ ! -d "${HOME}/.kube" && -d "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
+    [[ ! -d "${HOME}/.aliyun" && -d "${path_conf_aliyun}" ]] && ln -sf "${path_conf_aliyun}" "$HOME/"
+    [[ ! -f "${HOME}/.python-gitlab.cfg" && -f "${conf_python_gitlab}" ]] && ln -sf "${conf_python_gitlab}" "$HOME/"
     return 0
 }
 
@@ -865,7 +865,7 @@ func_detect_project_type() {
 }
 
 main() {
-    [[ -f "ci_debug" || $PIPELINE_DEBUG == 'true' ]] && set -x
+    [[ -f ~/ci_debug || $PIPELINE_DEBUG == 'true' ]] && set -x
     script_name="$(basename "$0")"
     script_path="$(cd "$(dirname "$0")" && pwd)"
     script_data="${script_path}/data"                   ## 记录 deploy.sh 的数据文件
