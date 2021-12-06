@@ -398,8 +398,8 @@ func_deploy_rsync() {
 func_deploy_notify_msg() {
     # mr_iid="$(gitlab project-merge-request list --project-id "$gitlab_project_id" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
     ## $exec_sudo -H python3 -m pip install PyYaml
-    # [ -z "$msg_describe" ] && msg_describe="$(gitlab -v project-merge-request get --project-id "$gitlab_project_id" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')"
-    [ -z "$msg_describe" ] && msg_describe="$(git --no-pager log --no-merges --oneline -1)"
+    # msg_describe="${msg_describe:-$(gitlab -v project-merge-request get --project-id "$gitlab_project_id" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')}"
+    msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1)}"
     git_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}')"
 
     msg_body="
@@ -720,81 +720,38 @@ func_setup_config() {
 }
 
 func_setup_var_gitlab() {
-    if [ -z "$CI_PROJECT_DIR" ]; then
-        gitlab_project_dir="$PWD"
-    else
-        gitlab_project_dir=$CI_PROJECT_DIR
-    fi
-    if [ -z "$CI_PROJECT_NAME" ]; then
-        gitlab_project_name=${PWD##*/}
-    else
-        gitlab_project_name=$CI_PROJECT_NAME
-    fi
-    if [ -z "$CI_PROJECT_NAMESPACE" ]; then
-        # read -rp "Enter gitlab project namespace: " -e -i 'root' gitlab_project_namespace
-        gitlab_project_namespace=root
-    else
-        gitlab_project_namespace=$CI_PROJECT_NAMESPACE
-    fi
-    if [ -z "$CI_PROJECT_PATH" ]; then
-        # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
-        gitlab_project_path=root/$gitlab_project_name
-    else
-        gitlab_project_path=$CI_PROJECT_PATH
-    fi
-    if [ -z "$CI_COMMIT_REF_NAME" ]; then
-        read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
-        # gitlab_project_branch=develop
-    else
-        gitlab_project_branch=$CI_COMMIT_REF_NAME
-    fi
-    if [ -z "$CI_COMMIT_SHORT_SHA" ]; then
-        # read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
-        gitlab_commit_short_sha="$(git rev-parse --short HEAD)"
-    else
-        gitlab_commit_short_sha=$CI_COMMIT_SHORT_SHA
-    fi
-    # if [ -z "$CI_PROJECT_ID" ]; then
-    #     read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
-    # else
-    #     gitlab_project_id=$CI_PROJECT_ID
-    # fi
-    if [ -z "$CI_PIPELINE_ID" ]; then
-        # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
-        gitlab_pipeline_id=3456
-    else
-        gitlab_pipeline_id=$CI_PIPELINE_ID
-    fi
-    if [ -z "$CI_JOB_ID" ]; then
-        # read -rp "Enter gitlab job id: " -e -i '5678' gitlab_job_id
-        gitlab_job_id=5678
-    else
-        gitlab_job_id=$CI_JOB_ID
-    fi
-    if [ -z "$GITLAB_USER_ID" ]; then
-        # read -rp "Enter gitlab user id: " -e -i '1' gitlab_user_id
-        gitlab_user_id=1
-    else
-        gitlab_user_id=$GITLAB_USER_ID
-    fi
-
+    gitlab_project_dir=${CI_PROJECT_DIR:-$PWD}
+    gitlab_project_name=${CI_PROJECT_NAME:-${gitlab_project_dir##*/}}
+    # read -rp "Enter gitlab project namespace: " -e -i 'root' gitlab_project_namespace
+    gitlab_project_namespace=${CI_PROJECT_NAMESPACE:-root}
+    # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
+    gitlab_project_path=${CI_PROJECT_PATH:-root/$gitlab_project_name}
+    # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
+    gitlab_project_branch=${CI_COMMIT_REF_NAME:-develop}
+    # read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
+    gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD)}
+    # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
+    # gitlab_project_id=${CI_PROJECT_ID:-1234}
+    # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
+    gitlab_pipeline_id=${CI_PIPELINE_ID:-3456}
+    # read -rp "Enter gitlab job id: " -e -i '5678' gitlab_job_id
+    gitlab_job_id=${CI_JOB_ID:-5678}
+    # read -rp "Enter gitlab user id: " -e -i '1' gitlab_user_id
+    gitlab_user_id=${GITLAB_USER_ID:-1}
     branch_name=$gitlab_project_branch
 }
 
 func_detect_project_type() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    if [[ -f "${gitlab_project_dir}/Dockerfile" ]]; then
+    if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
+        disable_docker=1
+    fi
+    if [[ -f "${gitlab_project_dir}/Dockerfile" && $disable_docker -ne 1 ]]; then
         project_docker=1
         exec_build_docker=1
         exec_docker_push=1
         exec_deploy_k8s=1
-        if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
-            project_docker=0
-            exec_build_docker=0
-            exec_docker_push=0
-            exec_deploy_k8s=0
-        fi
     fi
     if [[ -f "${gitlab_project_dir}/package.json" ]]; then
         if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
@@ -849,7 +806,7 @@ func_detect_project_type() {
 
 main() {
     [[ -f ~/ci_debug || $PIPELINE_DEBUG == 'true' ]] && debug_on=1
-    [[ "$1" == '--debug' ]] && debug_on=1
+    [[ "$1" =~ (--debug|--github) ]] && debug_on=1
     [[ "$debug_on" -eq 1 ]] && set -x
     script_name="$(basename "$0")"
     script_path="$(cd "$(dirname "$0")" && pwd)"
@@ -979,7 +936,7 @@ main() {
             exec_auto=0
             ;;
         *)
-            [ -z "$exec_auto" ] && exec_auto=1
+            exec_auto=${exec_auto:-1}
             break
             ;;
         esac
