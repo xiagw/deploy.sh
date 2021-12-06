@@ -174,9 +174,7 @@ func_deploy_flyway_docker() {
 # https://github.com/nodesource/distributions#debinstall
 build_node_yarn() {
     echo_time_step "node yarn build..."
-
     rm -f package-lock.json
-    # if [[ ! -d node_modules ]] || git diff --name-only HEAD~1 package.json | grep package.json; then
     if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$path_dockerfile/Dockerfile.node" "$path_dockerfile" >/dev/null
     fi
@@ -338,10 +336,6 @@ deploy_k8s() {
 func_deploy_rsync() {
     echo_time_step "rsync code file to remote server..."
     ## 读取配置文件，获取 项目/分支名/war包目录
-    grep "^${gitlab_project_path}\s\+${branch_name}" "$script_conf" || {
-        echo_erro "if stop here, check GIT repository: pms/runner/conf/deploy.conf"
-        return 1
-    }
     grep "^${gitlab_project_path}\s\+${branch_name}" "$script_conf" | while read -r line; do
         # for line in $(grep "^${gitlab_project_path}\s\+${branch_name}" "$script_conf"); do
         # shellcheck disable=2116
@@ -353,10 +347,9 @@ func_deploy_rsync() {
         # db_user=${array[6]}
         # db_host=${array[7]}
         # db_name=${array[8]}
-        echo "${ssh_host}"
         ## 防止出现空变量（若有空变量则自动退出）
         if [[ -z ${ssh_host} ]]; then
-            echo "if stop here, check conf/deploy.conf"
+            echo "if stop here, check runner/conf/deploy.conf"
             return 1
         fi
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
@@ -371,21 +364,14 @@ func_deploy_rsync() {
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsync_conf} $rsync_delete"
 
         ## 源文件夹
-        if [[ "${project_lang}" == 'node' ]]; then
-            rsync_src="${gitlab_project_dir}/dist/"
-        elif [[ "${project_lang}" == 'react' ]]; then
-            rsync_src="${gitlab_project_dir}/build/"
-        elif [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
-            rsync_src="${gitlab_project_dir}/"
+        if [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
+            rsync_src="${gitlab_project_dir}/$file_for_rsync"
         elif [[ "$rsync_src" =~ \.[jw]ar$ ]]; then
             find_file="$(find "${gitlab_project_dir}" -name "$rsync_src" -print0 | head -n 1)"
-            if [ -z "$find_file" ]; then
-                echo "file not found: ${find_file}"
-                return 1
-            elif [[ "$find_file" =~ \.[jw]ar$ ]]; then
+            if [[ "$find_file" =~ \.[jw]ar$ ]]; then
                 rsync_src="$find_file"
             else
-                echo "file type error:${find_file}"
+                echo "file not found: ${find_file}"
                 return 1
             fi
         fi
@@ -414,7 +400,7 @@ func_deploy_notify_msg() {
     ## $exec_sudo -H python3 -m pip install PyYaml
     # [ -z "$msg_describe" ] && msg_describe="$(gitlab -v project-merge-request get --project-id "$gitlab_project_id" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')"
     [ -z "$msg_describe" ] && msg_describe="$(git --no-pager log --no-merges --oneline -1)"
-    git_username="$(gitlab -v user get --id "${GITLAB_USER_ID}" | awk '/^name:/ {print $2}')"
+    git_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}')"
 
     msg_body="
 [Gitlab Deploy]
@@ -422,7 +408,7 @@ Project = ${gitlab_project_path}
 Branche = ${gitlab_project_branch}
 Pipeline = ${gitlab_pipeline_id}/JobID-$gitlab_job_id
 Describe = [${gitlab_commit_short_sha}]/${msg_describe}
-Who = ${GITLAB_USER_ID}/${git_username}
+Who = ${gitlab_user_id}/${git_username}
 Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
 $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi)
 "
@@ -431,7 +417,7 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 func_deploy_notify() {
     echo_time_step "send message to chatApp..."
     func_deploy_notify_msg
-    if [[ 1 -eq "${ENV_NOTIFY_WEIXIN:-0}" ]]; then
+    if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
         curl -s "$weixin_api" -H 'Content-Type: application/json' \
             -d "
@@ -441,21 +427,16 @@ func_deploy_notify() {
                 \"content\": \"$msg_body\"
             }
         }"
-    elif [[ 1 -eq "${ENV_NOTIFY_TELEGRAM:-0}" ]]; then
+    elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
         tgApiMsg="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendMessage"
         # tgApiUrlDoc="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
-        if [ -n "$ENV_HTTP_PROXY" ]; then
-            curl_opt="curl -x$ENV_HTTP_PROXY -sS -o /dev/null -X POST"
-        else
-            curl_opt="curl -sS -o /dev/null -X POST"
-        fi
-        $curl_opt -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$tgApiMsg"
-    elif [[ 1 -eq "${PIPELINE_TEMP_PASS:-0}" ]]; then
+        $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$tgApiMsg"
+    elif [[ "${PIPELINE_TEMP_PASS:-0}" -eq 1 ]]; then
         python3 "$script_path/bin/element-up.py" "$msg_body"
-    elif [[ 1 -eq "${ENV_NOTIFY_ELEMENT:-0}" && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
+    elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         python3 "$script_path/bin/element.py" "$msg_body"
-    elif [[ 1 -eq "${ENV_NOTIFY_EMAIL:-0}" ]]; then
+    elif [[ "${ENV_NOTIFY_EMAIL:-0}" -eq 1 ]]; then
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
         "$script_path/bin/sendEmail" \
@@ -484,7 +465,7 @@ func_renew_cert() {
 
     ## install acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
-        curl https://get.acme.sh | sh
+        $curl_opt https://get.acme.sh | sh
     fi
     [ -d "$acme_cert" ] || mkdir "$acme_cert"
     ## 支持多份 account.conf.[x] 配置。只有一个 account 则 copy 成 1
@@ -537,34 +518,30 @@ install_python_element() {
 
 install_aws() {
     command -v aws >/dev/null && return
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
-    $exec_sudo ./aws/install
-    curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    $exec_sudo mv /tmp/eksctl /usr/local/bin/
+    ./aws/install --bin-dir "${script_path}/bin" --install-dir "${script_data}" --update
+    ## install eksctl
+    $curl_opt --silent "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+    mv /tmp/eksctl "${script_path}/bin/"
 }
 
 install_kubectl() {
     command -v kubectl >/dev/null && return
-    kube_ver="$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
+    kube_ver="$($curl_opt -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    if [ -z "$ENV_HTTP_PROXY" ]; then
-        curl_opt="curl -Lo"
-    else
-        curl_opt="curl -x$ENV_HTTP_PROXY -Lo"
-    fi
-    $curl_opt "${script_path}/bin/kubectl" "$kube_url"
+    $curl_opt -o "${script_path}/bin/kubectl" "$kube_url"
     chmod +x "${script_path}/bin/kubectl"
 }
 
 install_helm() {
-    curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+    $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
 install_jmeter() {
     ver_jmeter='5.4.1'
     dir_temp=$(mktemp -d)
-    curl -Lo "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
+    $curl_opt -o "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
         unzip "$dir_temp"/jmeter.zip
@@ -573,7 +550,18 @@ install_jmeter() {
     rm -rf "$dir_temp"
 }
 
-check_os() {
+func_check_os() {
+
+    if [[ $UID == 0 ]]; then
+        exec_sudo=
+    else
+        exec_sudo=sudo
+    fi
+    if [ -z "$ENV_HTTP_PROXY" ]; then
+        curl_opt="curl -L"
+    else
+        curl_opt="curl -x$ENV_HTTP_PROXY -L"
+    fi
     if [[ -e /etc/debian_version ]]; then
         # shellcheck disable=SC1091
         source /etc/os-release
@@ -643,8 +631,8 @@ get_maxmind_ip() {
     t="$(mktemp -d)"
     t1="$t/maxmind-Country.dat.gz"
     t2="$t/maxmind-City.dat.gz"
-    curl -qs -Lo "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
-    curl -qs -Lo "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
+    $curl_opt -qso "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
+    $curl_opt -qso "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
     gunzip "$t1" "$t2"
     for i in ${ENV_NGINX_IPS:?undefine var}; do
         echo "$i"
@@ -781,6 +769,12 @@ func_setup_var_gitlab() {
     else
         gitlab_job_id=$CI_JOB_ID
     fi
+    if [ -z "$GITLAB_USER_ID" ]; then
+        # read -rp "Enter gitlab user id: " -e -i '1' gitlab_user_id
+        gitlab_user_id=1
+    else
+        gitlab_user_id=$GITLAB_USER_ID
+    fi
 
     branch_name=$gitlab_project_branch
 }
@@ -803,8 +797,10 @@ func_detect_project_type() {
     if [[ -f "${gitlab_project_dir}/package.json" ]]; then
         if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
+            file_for_rsync='build/'
         else
             project_lang='node'
+            file_for_rsync='dist/'
         fi
         if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
@@ -816,6 +812,7 @@ func_detect_project_type() {
     fi
     if [[ -f "${gitlab_project_dir}/composer.json" ]]; then
         project_lang='php'
+        file_for_rsync=
         if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
             COMPOSER_INSTALL=true
@@ -826,12 +823,14 @@ func_detect_project_type() {
     fi
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
         project_lang='java'
+        file_for_rsync=
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_java=1
         fi
     fi
     if [[ -f "${gitlab_project_dir}/requirements.txt" ]]; then
         project_lang='python'
+        file_for_rsync=
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_python=1
         fi
@@ -867,14 +866,8 @@ main() {
     PATH="$PATH:$script_path/bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
-    if [[ $UID == 0 ]]; then
-        exec_sudo=
-    else
-        exec_sudo=sudo
-    fi
-
     ## 检查OS 类型和版本，安装相应命令和软件包
-    check_os
+    func_check_os
 
     ## 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && install_aws
