@@ -4,10 +4,10 @@
 # and parameters, see https://github.com/anchore/scan-action. For more
 # information on Anchore's container image scanning tool Grype, see
 # https://github.com/anchore/grype
-name: Anchore Container Scan
+name: Gitlab runner deploy
 on: push
 jobs:
-  Anchore-Build-Scan:
+  Gitlab-runner-deploy:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout the code
