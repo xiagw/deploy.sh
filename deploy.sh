@@ -411,7 +411,7 @@ func_deploy_rsync() {
 
 func_deploy_notify_msg() {
     # mr_iid="$(gitlab project-merge-request list --project-id "$gitlab_project_id" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
-    ## sudo -H python3 -m pip install PyYaml
+    ## $exec_sudo -H python3 -m pip install PyYaml
     # [ -z "$msg_describe" ] && msg_describe="$(gitlab -v project-merge-request get --project-id "$gitlab_project_id" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')"
     [ -z "$msg_describe" ] && msg_describe="$(git --no-pager log --no-merges --oneline -1)"
     git_username="$(gitlab -v user get --id "${GITLAB_USER_ID}" | awk '/^name:/ {print $2}')"
@@ -539,9 +539,9 @@ install_aws() {
     command -v aws >/dev/null && return
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -qq awscliv2.zip
-    sudo ./aws/install
+    $exec_sudo ./aws/install
     curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    sudo mv /tmp/eksctl /usr/local/bin/
+    $exec_sudo mv /tmp/eksctl /usr/local/bin/
 }
 
 install_kubectl() {
@@ -591,35 +591,37 @@ check_os() {
         echo "Not support. exit."
         exit 1
     fi
+
     if [[ "$OS" =~ (debian|ubuntu) ]]; then
         ## fix gitlab-runner exit error.
         if [[ -e "$HOME"/.bash_logout ]]; then
             mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         fi
-        command -v git >/dev/null || sudo apt install -y git
-        git lfs version >/dev/null || sudo apt install -y git-lfs
-        command -v unzip >/dev/null || sudo apt install -y unzip
-        command -v rsync >/dev/null || sudo apt install -y rsync
+        $exec_sudo apt-get update
+        command -v git >/dev/null || $exec_sudo apt-get install -y git
+        git lfs version >/dev/null || $exec_sudo apt-get install -y git-lfs
+        command -v unzip >/dev/null || $exec_sudo apt-get install -y unzip
+        command -v rsync >/dev/null || $exec_sudo apt-get install -y rsync
         # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
-        id | grep -q docker || sudo usermod -aG docker "$USER"
-        command -v pip3 >/dev/null || sudo apt install -y python3-pip
-        command -v java >/dev/null || sudo apt install -y openjdk-8-jdk
+        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
+        command -v pip3 >/dev/null || $exec_sudo apt-get install -y python3-pip
+        command -v java >/dev/null || $exec_sudo apt-get install -y openjdk-8-jdk
         command -v jmeter >/dev/null || install_jmeter
-        # command -v shc >/dev/null || sudo apt install -y shc
+        # command -v shc >/dev/null || $exec_sudo apt-get install -y shc
     elif [[ "$OS" == 'centos' ]]; then
-        rpm -q epel-release >/dev/null || sudo yum install -y epel-release
-        command -v git >/dev/null || sudo yum install -y git2u
-        git lfs version >/dev/null || sudo yum install -y git-lfs
-        command -v rsync >/dev/null || sudo yum install -y rsync
+        rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release
+        command -v git >/dev/null || $exec_sudo yum install -y git2u
+        git lfs version >/dev/null || $exec_sudo yum install -y git-lfs
+        command -v rsync >/dev/null || $exec_sudo yum install -y rsync
         # command -v docker >/dev/null || sh "$script_path/bin/get-docker.sh"
-        id | grep -q docker || sudo usermod -aG docker "$USER"
+        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
     elif [[ "$OS" == 'amzn' ]]; then
-        rpm -q epel-release >/dev/null || sudo amazon-linux-extras install -y epel
-        command -v git >/dev/null || sudo yum install -y git2u
-        git lfs version >/dev/null || sudo yum install -y git-lfs
-        command -v rsync >/dev/null || sudo yum install -y rsync
-        # command -v docker >/dev/null || sudo amazon-linux-extras install -y docker
-        id | grep -q docker || sudo usermod -aG docker "$USER"
+        rpm -q epel-release >/dev/null || $exec_sudo amazon-linux-extras install -y epel
+        command -v git >/dev/null || $exec_sudo yum install -y git2u
+        git lfs version >/dev/null || $exec_sudo yum install -y git-lfs
+        command -v rsync >/dev/null || $exec_sudo yum install -y rsync
+        # command -v docker >/dev/null || $exec_sudo amazon-linux-extras install -y docker
+        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
     fi
 }
 
@@ -864,6 +866,12 @@ main() {
     PATH="$PATH:$script_data/jdk/bin:$script_data/jmeter/bin:$script_data/ant/bin:$script_data/maven/bin"
     PATH="$PATH:$script_path/bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
+
+    if [[ $UID == 0 ]]; then
+        exec_sudo=
+    else
+        exec_sudo=sudo
+    fi
 
     ## 检查OS 类型和版本，安装相应命令和软件包
     check_os
