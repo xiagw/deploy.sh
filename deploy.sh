@@ -89,8 +89,6 @@ func_test_unit() {
 func_test_function() {
     echo_time_step "function test..."
     if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
-        bash "$script_path/data/tests/test_func.sh"
-    elif [ -f "$script_path/data/tests/test_func.sh" ]; then
         bash "$gitlab_project_dir"/tests/func_test.sh
     fi
     echo_time "end function test."
