@@ -541,6 +541,7 @@ install_helm() {
 install_jmeter() {
     ver_jmeter='5.4.1'
     dir_temp=$(mktemp -d)
+    command -v java >/dev/null || $exec_sudo apt-get install -y openjdk-8-jdk
     $curl_opt -o "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
@@ -551,7 +552,6 @@ install_jmeter() {
 }
 
 func_check_os() {
-
     if [[ $UID == 0 ]]; then
         exec_sudo=
     else
@@ -593,8 +593,6 @@ func_check_os() {
         # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
         command -v pip3 >/dev/null || $exec_sudo apt-get install -y python3-pip
-        command -v java >/dev/null || $exec_sudo apt-get install -y openjdk-8-jdk
-        command -v jmeter >/dev/null || install_jmeter
         # command -v shc >/dev/null || $exec_sudo apt-get install -y shc
     elif [[ "$OS" == 'centos' ]]; then
         rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release
@@ -875,6 +873,7 @@ main() {
     [[ "${ENV_INSTALL_HELM}" == 'true' ]] && install_helm
     [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && install_python_element
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
+    [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
 
     ## 人工/手动/执行/定义参数
     func_setup_var_gitlab
