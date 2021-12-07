@@ -504,12 +504,11 @@ func_renew_cert() {
 }
 
 install_python_gitlab() {
-    command -v gitlab >/dev/null && return
-    python3 -m pip install --user --upgrade python-gitlab
+    python3 -m pip list | grep -q python-gitlab || python3 -m pip install --user --upgrade python-gitlab
 }
 
 install_python_element() {
-    python3 -m pip install --user --upgrade matrix-nio
+    python3 -m pip list | grep -q matrix-nio || python3 -m pip install --user --upgrade matrix-nio
 }
 
 install_aws() {
@@ -531,7 +530,7 @@ install_kubectl() {
 }
 
 install_helm() {
-    $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+    command -v helm >/dev/null || $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
 install_jmeter() {
