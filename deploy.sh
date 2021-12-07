@@ -577,6 +577,7 @@ func_check_os() {
         test -f "$HOME"/.bash_logout && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         command -v git >/dev/null || install_pkg="git"
         git lfs version >/dev/null || install_pkg="$install_pkg git-lfs"
+        command -v curl >/dev/null || install_pkg="$install_pkg curl"
         command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
         command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
         command -v pip3 >/dev/null || install_pkg="$install_pkg python3-pip"
