@@ -399,7 +399,7 @@ func_deploy_notify_msg() {
     # mr_iid="$(gitlab project-merge-request list --project-id "$gitlab_project_id" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
     ## $exec_sudo -H python3 -m pip install PyYaml
     # msg_describe="${msg_describe:-$(gitlab -v project-merge-request get --project-id "$gitlab_project_id" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')}"
-    msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1)}"
+    msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
     git_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}')"
 
     msg_body="
@@ -541,7 +541,7 @@ install_helm() {
 install_jmeter() {
     ver_jmeter='5.4.1'
     dir_temp=$(mktemp -d)
-    command -v java >/dev/null || $exec_sudo apt-get install -y openjdk-8-jdk
+    command -v java >/dev/null || $exec_sudo apt-get install -q -y openjdk-8-jdk
     $curl_opt -o "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
@@ -586,14 +586,14 @@ func_check_os() {
             mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         fi
         $exec_sudo apt-get update
-        command -v git >/dev/null || $exec_sudo apt-get install -y git
-        git lfs version >/dev/null || $exec_sudo apt-get install -y git-lfs
-        command -v unzip >/dev/null || $exec_sudo apt-get install -y unzip
-        command -v rsync >/dev/null || $exec_sudo apt-get install -y rsync
+        command -v git >/dev/null || $exec_sudo apt-get install -q -y git
+        git lfs version >/dev/null || $exec_sudo apt-get install -q -y git-lfs
+        command -v unzip >/dev/null || $exec_sudo apt-get install -q -y unzip
+        command -v rsync >/dev/null || $exec_sudo apt-get install -q -y rsync
         # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
-        command -v pip3 >/dev/null || $exec_sudo apt-get install -y python3-pip
-        # command -v shc >/dev/null || $exec_sudo apt-get install -y shc
+        command -v pip3 >/dev/null || $exec_sudo apt-get install -q -y python3-pip
+        # command -v shc >/dev/null || $exec_sudo apt-get install -q -y shc
     elif [[ "$OS" == 'centos' ]]; then
         rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release
         command -v git >/dev/null || $exec_sudo yum install -y git2u
