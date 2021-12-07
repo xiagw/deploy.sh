@@ -20,11 +20,8 @@ echo_warn() { echo -e "\033[33m$*\033[0m"; }        ## yellow
 echo_erro() { echo -e "\033[31m$*\033[0m"; }        ## red
 echo_ques() { echo -e "\033[35m$*\033[0m"; }        ## brown
 echo_time() { echo "[$(date +%Y%m%d-%T-%u)], $*"; } ## time
-echo_time_step() {
-    ## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
-    echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\033[0m $*"
-    STEP=$((STEP + 1))
-}
+## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
+echo_time_step() { echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\033[0m $*" && STEP=$((STEP + 1)); }
 # https://zhuanlan.zhihu.com/p/48048906
 # https://www.jianshu.com/p/bf0ffe8e615a
 # https://www.cnblogs.com/lsgxeva/p/7994474.html
@@ -41,18 +38,18 @@ code_style_python() {
 ## https://github.com/squizlabs/PHP_CodeSniffer
 ## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)
 code_style_php() {
-    echo_time_step "starting PHP Code Sniffer, < standard=PSR12 >..."
+    echo_time_step 'starting PHP Code Sniffer, < standard=PSR12 >...'
     if ! docker images | grep 'deploy/phpcs'; then
         DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$path_dockerfile/Dockerfile.phpcs" "$path_dockerfile" >/dev/null
     fi
     phpcs_result=0
     for i in $($git_diff | awk '/\.php$/{if (NR>0){print $0}}'); do
-        if [ -f "$gitlab_project_dir/$i" ]; then
-            if ! $docker_run -v "$gitlab_project_dir":/project deploy/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcs_report:-full}" "/project/$i"; then
-                phpcs_result=$((phpcs_result + 1))
-            fi
-        else
+        if [ ! -f "$gitlab_project_dir/$i" ]; then
             echo_warn "$gitlab_project_dir/$i not exists."
+            continue
+        fi
+        if ! $docker_run -v "$gitlab_project_dir":/project deploy/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcs_report:-full}" "/project/$i"; then
+            phpcs_result=$((phpcs_result + 1))
         fi
     done
     if [ "$phpcs_result" -ne "0" ]; then
@@ -94,8 +91,7 @@ func_test_function() {
     echo_time "end function test."
 }
 
-## install sonar-scanner to system user: "gitlab-runner"
-func_code_quality() {
+func_code_quality_sonar() {
     echo_time_step "sonar scanner..."
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$gitlab_project_dir/sonar-project.properties"
@@ -226,8 +222,7 @@ docker_login() {
     source "$script_env"
     ## 比较上一次登陆时间，超过12小时则再次登录
     lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE}"
-    [ -f "$lock_docker_login" ] || touch "$lock_docker_login"
-    time_save="$(cat "$lock_docker_login")"
+    time_save="$(test -f "$lock_docker_login" && cat "$lock_docker_login")"
     if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
         return 0
     fi
@@ -247,14 +242,10 @@ build_docker() {
 
     ## Docker build from, 是否从模板构建
     if [ -n "$image_from" ]; then
-        docker_build_tmpl=0
-        ## 判断模版是否存在
-        docker images | grep -q "${image_from%%:*}.*${image_from##*:}" || docker_build_tmpl=$((docker_build_tmpl + 1))
-        if [[ "$docker_build_tmpl" -gt 0 ]]; then
-            # 模版不存在，构建模板
+        ## 判断模版是否存在,模版不存在，构建模板
+        docker images | grep -q "${image_from%%:*}.*${image_from##*:}" ||
             DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${gitlab_project_dir}/Dockerfile.${image_from##*:}" "${gitlab_project_dir}"
-        fi
     fi
 
     ## docker build flyway
@@ -269,6 +260,7 @@ build_docker() {
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         --build-arg YARN_INSTALL="${YARN_INSTALL}" \
+        --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL}" \
         "${gitlab_project_dir}" >/dev/null
     echo_time "end docker build."
 }
@@ -291,6 +283,7 @@ deploy_k8s() {
     else
         helm_release=${gitlab_project_name}
     fi
+    ## 转换为小写， Convert to lower case
     helm_release="${helm_release,,}"
     if [ -d "$script_path/conf/helm/${gitlab_project_name}" ]; then
         path_helm="$script_path/conf/helm/${gitlab_project_name}"
@@ -306,6 +299,7 @@ deploy_k8s() {
     source "$script_env"
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
+        ## Custom deployment method
         [ -f "$script_path/bin/special.sh" ] && source "$script_path/bin/special.sh" "$branch_name"
     else
         set -x
@@ -316,6 +310,7 @@ deploy_k8s() {
             --set image.pullPolicy='Always' >/dev/null
         [[ "$debug_on" -ne 1 ]] && set +x
     fi
+    ## helm install flyway jobs
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         helm upgrade flyway "$script_path/conf/helm/flyway/" --install --history-max 1 \
             --namespace "${branch_name}" --create-namespace \
@@ -323,10 +318,12 @@ deploy_k8s() {
             --set image.tag="${gitlab_project_name}-flyway" \
             --set image.pullPolicy='Always' >/dev/null
     fi
+    ## Clean up
     kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
         xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
     kubectl -n "${branch_name}" get pod | grep Evicted | awk '{print $1}' | xargs kubectl delete pod || true
     sleep 3
+    ## Get deployment results and set var: deploy_result
     if ! kubectl -n "${branch_name}" rollout status deployment "${helm_release}"; then
         deploy_result=1
     fi
@@ -336,10 +333,11 @@ deploy_k8s() {
 func_deploy_rsync() {
     echo_time_step "rsync code file to remote server..."
     ## 读取配置文件，获取 项目/分支名/war包目录
+    # for line in $(grep "^${gitlab_project_path}\s\+${branch_name}" "$script_conf"); do
     grep "^${gitlab_project_path}\s\+${branch_name}" "$script_conf" | while read -r line; do
-        # for line in $(grep "^${gitlab_project_path}\s\+${branch_name}" "$script_conf"); do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
+        # git_branch=${array[1]}
         ssh_host=${array[2]}
         ssh_port=${array[3]}
         rsync_src=${array[4]}
@@ -347,17 +345,15 @@ func_deploy_rsync() {
         # db_user=${array[6]}
         # db_host=${array[7]}
         # db_name=${array[8]}
+
         ## 防止出现空变量（若有空变量则自动退出）
-        if [[ -z ${ssh_host} ]]; then
-            echo "if stop here, check runner/conf/deploy.conf"
-            return 1
-        fi
+        echo "${ssh_host:?if stop here, check runner/conf/deploy.conf}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
         ## rsync exclude some files
         if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
             rsync_conf="${gitlab_project_dir}/rsync.exclude"
         else
-            rsync_conf="${conf_rsync_exclude}"
+            rsync_conf="${script_path}/conf/rsync.exclude"
         fi
         ## node/java use rsync --delete
         [[ "${project_lang}" =~ (node|react|java|other) ]] && rsync_delete='--delete'
@@ -501,7 +497,7 @@ func_renew_cert() {
         done
     done
 
-    ## 如果有自定义的程序需要执行
+    ## Custom deployment method
     if [ -f "${acme_home}"/custom.acme.sh ]; then
         bash "${acme_home}"/custom.acme.sh
     fi
@@ -582,18 +578,18 @@ func_check_os() {
 
     if [[ "$OS" =~ (debian|ubuntu) ]]; then
         ## fix gitlab-runner exit error.
-        if [[ -e "$HOME"/.bash_logout ]]; then
-            mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
-        fi
-        $exec_sudo apt-get update
-        command -v git >/dev/null || $exec_sudo apt-get install -qq -y git >/dev/null
-        git lfs version >/dev/null || $exec_sudo apt-get install -qq -y git-lfs >/dev/null
-        command -v unzip >/dev/null || $exec_sudo apt-get install -qq -y unzip >/dev/null
-        command -v rsync >/dev/null || $exec_sudo apt-get install -qq -y rsync >/dev/null
-        # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
-        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
-        command -v pip3 >/dev/null || $exec_sudo apt-get install -qq -y python3-pip >/dev/null
+        test -f "$HOME"/.bash_logout && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
+        command -v git >/dev/null || install_pkg="git"
+        git lfs version >/dev/null || install_pkg="$install_pkg git-lfs"
+        command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
+        command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
+        command -v pip3 >/dev/null || install_pkg="$install_pkg python3-pip"
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
+        # command -v docker >/dev/null || ( bash "$script_path/bin/get-docker.sh"; id | grep -q docker || $exec_sudo usermod -aG docker "$USER")
+        [ -n "$install_pkg" ] && (
+            $exec_sudo apt-get update -qq
+            $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
+        )
     elif [[ "$OS" == 'centos' ]]; then
         rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release >/dev/null
         command -v git >/dev/null || $exec_sudo yum install -y git2u >/dev/null
@@ -710,7 +706,6 @@ func_setup_config() {
     path_conf_kube="${script_path}/conf/.kube"
     path_conf_aliyun="${script_path}/conf/.aliyun"
     conf_python_gitlab="${script_path}/conf/.python-gitlab.cfg"
-    conf_rsync_exclude="${script_path}/conf/rsync.exclude"
     [[ ! -d "${HOME}/.acme.sh" && -d "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
     [[ ! -d "${HOME}/.aws" && -d "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
     [[ ! -d "${HOME}/.kube" && -d "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
@@ -728,9 +723,9 @@ func_setup_var_gitlab() {
     gitlab_project_path=${CI_PROJECT_PATH:-root/$gitlab_project_name}
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-develop}
-    # read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
-    gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
+    [[ -z "$gitlab_commit_short_sha" && "$1" =~ (--github) ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
+    [[ -z "$gitlab_commit_short_sha" && "$1" =~ (--debug) ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
     # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
     # gitlab_project_id=${CI_PROJECT_ID:-1234}
     # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
@@ -839,7 +834,7 @@ main() {
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
 
     ## 人工/手动/执行/定义参数
-    func_setup_var_gitlab
+    func_setup_var_gitlab "$@"
 
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$script_env"
@@ -914,7 +909,7 @@ main() {
             exec_auto=0
             ;;
         --code-quality)
-            func_code_quality
+            func_code_quality_sonar
             exec_auto=0
             ;;
         --deploy-flyway)
@@ -953,7 +948,7 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
-        func_code_quality
+        func_code_quality_sonar
         return $?
     fi
 
