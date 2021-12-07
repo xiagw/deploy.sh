@@ -586,10 +586,10 @@ func_check_os() {
         command -v pip3 >/dev/null || install_pkg="$install_pkg python3-pip"
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
         # command -v docker >/dev/null || ( bash "$script_path/bin/get-docker.sh"; id | grep -q docker || $exec_sudo usermod -aG docker "$USER")
-        [ -n "$install_pkg" ] && (
+        if [[ -n "$install_pkg" ]]; then
             $exec_sudo apt-get update -qq
             $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
-        )
+        fi
     elif [[ "$OS" == 'centos' ]]; then
         rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release >/dev/null
         command -v git >/dev/null || $exec_sudo yum install -y git2u >/dev/null
