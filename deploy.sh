@@ -321,7 +321,7 @@ deploy_k8s() {
     ## Clean up
     kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
         xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
-    kubectl -n "${branch_name}" get pod | grep Evicted | awk '{print $1}' | xargs kubectl delete pod || true
+    kubectl -n "${branch_name}" get pod | grep Evicted | awk '{print $1}' | xargs kubectl delete pod 2>/dev/null || true
     sleep 3
     ## Get deployment results and set var: deploy_result
     if ! kubectl -n "${branch_name}" rollout status deployment "${helm_release}"; then
@@ -411,7 +411,7 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 }
 
 func_deploy_notify() {
-    echo_time_step "send message to chatApp..."
+    echo_time_step "deploy notify message..."
     func_deploy_notify_msg
     if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
@@ -504,11 +504,11 @@ func_renew_cert() {
 }
 
 install_python_gitlab() {
-    python3 -m pip list | grep -q python-gitlab || python3 -m pip install --user --upgrade python-gitlab
+    python3 -m pip list 2>/dev/null | grep -q python-gitlab || python3 -m pip install --user --upgrade python-gitlab
 }
 
 install_python_element() {
-    python3 -m pip list | grep -q matrix-nio || python3 -m pip install --user --upgrade matrix-nio
+    python3 -m pip list 2>/dev/null | grep -q matrix-nio || python3 -m pip install --user --upgrade matrix-nio
 }
 
 install_aws() {
