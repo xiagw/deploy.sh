@@ -553,11 +553,7 @@ func_check_os() {
     else
         exec_sudo=sudo
     fi
-    if [ -z "$ENV_HTTP_PROXY" ]; then
-        curl_opt="curl -L"
-    else
-        curl_opt="curl -x$ENV_HTTP_PROXY -L"
-    fi
+
     if [[ -e /etc/debian_version ]]; then
         # shellcheck disable=SC1091
         source /etc/os-release
@@ -825,6 +821,14 @@ main() {
     ## 检查OS 类型和版本，安装相应命令和软件包
     func_check_os
 
+    ## source ENV, 获取 ENV_ 开头的所有全局变量
+    source "$script_env"
+    if [ -z "$ENV_HTTP_PROXY" ]; then
+        curl_opt="curl -L"
+    else
+        curl_opt="curl -x$ENV_HTTP_PROXY -L"
+    fi
+
     ## 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && install_aws
     [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && install_kubectl
@@ -835,9 +839,6 @@ main() {
 
     ## 人工/手动/执行/定义参数
     func_setup_var_gitlab "$@"
-
-    ## source ENV, 获取 ENV_ 开头的所有全局变量
-    source "$script_env"
 
     ## run docker with current/root user
     docker_run="docker run --interactive --rm -u $UID:$UID"
