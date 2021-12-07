@@ -222,7 +222,7 @@ docker_login() {
     source "$script_env"
     ## 比较上一次登陆时间，超过12小时则再次登录
     lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE}"
-    time_save="$(test -f "$lock_docker_login" && cat "$lock_docker_login")"
+    time_save="$(if test -f "$lock_docker_login"; then cat "$lock_docker_login"; else :; fi)"
     if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
         return 0
     fi
