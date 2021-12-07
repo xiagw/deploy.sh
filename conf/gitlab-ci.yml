@@ -54,16 +54,18 @@ k8s:
   #     - target/
   #     - dist/
   script:
-    - bash -x deploy.sh
+    - bash deploy.sh --github
   environment:
     name: ENV-${CI_COMMIT_REF_NAME}
-    url: https://git.example.com/root/pms/wikis/rules-domain
+    # url: https://git.example.com/root/pms/wikis/rules-domain
   only:
-    - develop
-    - testing
-    - master
     - dev
+    - develop
     - test
+    - sit
+    - testing
+    - uat
+    - master
     - main
   interruptible: true
 # dockerBuildStage:

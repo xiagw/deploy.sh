@@ -18,7 +18,8 @@ conf/**
 !conf/flyway/README.md
 !conf/helm/flyway/
 !conf/helm/README.md
-!conf/project_conf/README.md
+!conf/.gitattributes
+!conf/.gitmodules
 
 data/*
 !data/readme.md

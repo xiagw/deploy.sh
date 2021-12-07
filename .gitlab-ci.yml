@@ -6,7 +6,7 @@
 
 ## use current repo folder
 include:
-  - local: '/templates/gitlab-ci.yml'
+  - local: '/conf/gitlab-ci.yml'
 
 ## use remote file
 # include:

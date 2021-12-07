@@ -538,7 +538,10 @@ install_jmeter() {
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
-    command -v java >/dev/null || { echo 6; echo 70; } | $exec_sudo apt-get install -qq -y openjdk-16-jdk
+    command -v java >/dev/null || {
+        echo 6
+        echo 70
+    } | $exec_sudo apt-get install -qq -y openjdk-16-jdk
     $curl_opt -o "$path_temp"/jmeter.zip https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
@@ -663,10 +666,12 @@ func_file_preprocessing() {
         rsync -av "$HOME/.acme.sh/dest/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## Docker build from, 是否从模板构建
-    image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
-    if [ -n "$image_from" ]; then
-        file_docker_tmpl="${path_dockerfile}/Dockerfile.${image_from##*:}"
-        [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
+    if [ -f "${gitlab_project_dir}"/Dockerfile ]; then
+        image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
+        if [ -n "$image_from" ]; then
+            file_docker_tmpl="${path_dockerfile}/Dockerfile.${image_from##*:}"
+            [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
+        fi
     fi
     ## flyway sql/conf files
     [[ ! -d "${gitlab_project_dir}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && copy_flyway_file=0
@@ -772,6 +777,7 @@ func_detect_project_type() {
         fi
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_php=1
+            exec_build_node=0
         fi
     fi
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
@@ -786,15 +792,18 @@ func_detect_project_type() {
         file_for_rsync=
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_python=1
+            exec_build_node=0
         fi
     fi
     if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
         project_lang='android'
         exec_deploy_rsync=0
+        exec_build_node=0
     fi
     if grep '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
         project_lang='ios'
         exec_deploy_rsync=0
+        exec_build_node=0
     fi
     project_lang=${project_lang:-other}
 }
