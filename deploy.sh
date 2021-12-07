@@ -259,8 +259,8 @@ build_docker() {
     echo "YARN_INSTALL: ${YARN_INSTALL:-false}"
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
-        --build-arg YARN_INSTALL="${YARN_INSTALL}" \
-        --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL}" \
+        --build-arg YARN_INSTALL="${YARN_INSTALL:-true}" \
+        --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
         "${gitlab_project_dir}" >/dev/null
     echo_time "end docker build."
 }
