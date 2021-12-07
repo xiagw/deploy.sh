@@ -360,7 +360,7 @@ func_deploy_rsync() {
             rsync_conf="${conf_rsync_exclude}"
         fi
         ## node/java use rsync --delete
-        [[ "${project_lang}" == 'node' || "${project_lang}" == 'java' ]] && rsync_delete='--delete'
+        [[ "${project_lang}" =~ (node|react|java|other) ]] && rsync_delete='--delete'
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsync_conf} $rsync_delete"
 
         ## 源文件夹
@@ -541,7 +541,7 @@ install_helm() {
 install_jmeter() {
     ver_jmeter='5.4.1'
     dir_temp=$(mktemp -d)
-    command -v java >/dev/null || $exec_sudo apt-get install -q -y openjdk-8-jdk
+    command -v java >/dev/null || $exec_sudo apt-get install -qq -y openjdk-8-jdk
     $curl_opt -o "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
@@ -586,14 +586,14 @@ func_check_os() {
             mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         fi
         $exec_sudo apt-get update
-        command -v git >/dev/null || $exec_sudo apt-get install -q -y git
-        git lfs version >/dev/null || $exec_sudo apt-get install -q -y git-lfs
-        command -v unzip >/dev/null || $exec_sudo apt-get install -q -y unzip
-        command -v rsync >/dev/null || $exec_sudo apt-get install -q -y rsync
+        command -v git >/dev/null || $exec_sudo apt-get install -qq -y git
+        git lfs version >/dev/null || $exec_sudo apt-get install -qq -y git-lfs
+        command -v unzip >/dev/null || $exec_sudo apt-get install -qq -y unzip
+        command -v rsync >/dev/null || $exec_sudo apt-get install -qq -y rsync
         # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
-        command -v pip3 >/dev/null || $exec_sudo apt-get install -q -y python3-pip
-        # command -v shc >/dev/null || $exec_sudo apt-get install -q -y shc
+        command -v pip3 >/dev/null || $exec_sudo apt-get install -qq -y python3-pip
+        # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
     elif [[ "$OS" == 'centos' ]]; then
         rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release
         command -v git >/dev/null || $exec_sudo yum install -y git2u
@@ -803,6 +803,7 @@ func_detect_project_type() {
         project_lang='ios'
         exec_deploy_rsync=0
     fi
+    project_lang=${project_lang:-other}
 }
 
 main() {
