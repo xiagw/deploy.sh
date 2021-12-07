@@ -850,6 +850,7 @@ main() {
 
     ## 人工/手动/执行/定义参数
     func_setup_var_gitlab "$@"
+    source "$script_env"
 
     ## run docker with current/root user
     docker_run="docker run --interactive --rm -u $UID:$UID"
