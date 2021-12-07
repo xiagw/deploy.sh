@@ -807,6 +807,72 @@ func_detect_project_type() {
     project_lang=${project_lang:-other}
 }
 
+func_detect_project_type2() {
+    test -f Dockerfile && project_docker=1
+    test -f package.json && project_lang=node
+    test -f composer.json && project_lang=php
+    test -f pom.xml && project_lang=java
+    test -f requirements.txt && project_lang=python
+    project_lang=${project_lang:-other}
+    case $project_lang in
+    dock)
+        project_docker=1
+        exec_build_docker=1
+        exec_docker_push=1
+        exec_deploy_k8s=1
+        ;;
+    node)
+        if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
+            project_lang='react'
+            file_for_rsync='build/'
+        else
+            project_lang='node'
+            file_for_rsync='dist/'
+        fi
+        if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
+            echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
+            YARN_INSTALL=true
+        fi
+        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+            exec_build_node=1
+        fi
+        ;;
+    php)
+        project_lang='php'
+        file_for_rsync=
+        if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
+            echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
+            COMPOSER_INSTALL=true
+        fi
+        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+            exec_build_php=1
+            exec_build_node=0
+        fi
+        ;;
+    java)
+        project_lang='java'
+        file_for_rsync=
+        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+            exec_build_java=1
+        fi
+        ;;
+    python)
+        project_lang='python'
+        file_for_rsync=
+        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
+            exec_build_python=1
+            exec_build_node=0
+        fi
+        ;;
+    *)
+        # if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
+        project_lang='other'
+        exec_deploy_rsync=0
+        exec_build_node=0
+        ;;
+    esac
+}
+
 main() {
     [[ -f ~/ci_debug || $PIPELINE_DEBUG == 'true' ]] && debug_on=1
     [[ "$1" =~ (--debug|--github) ]] && debug_on=1

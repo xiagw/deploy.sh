@@ -45,9 +45,9 @@ LICENSE
 *.iws
 
 # Laravel
-bootstrap/cache
-storage/framework
-storage/logs
+# bootstrap/cache
+# storage/framework
+# storage/logs
 vendor/
 
 ## Node
