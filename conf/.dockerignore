@@ -14,6 +14,9 @@ Dockerfile
 docker-compose.yml
 docker-compose.yaml
 .dockerignore
+Dockerfile.flyway
+flyway_conf/
+flyway_sql/
 
 # Documentation
 README.md
@@ -45,9 +48,9 @@ LICENSE
 *.iws
 
 # Laravel
-# bootstrap/cache
-# storage/framework
-# storage/logs
+bootstrap/cache/*
+storage/framework/*
+storage/logs/*
 vendor/
 
 ## Node
@@ -62,3 +65,4 @@ package-lock.json
 node_modules/
 
 core
+core.*
