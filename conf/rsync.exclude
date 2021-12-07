@@ -1,3 +1,4 @@
+
 .git/
 .svn/
 .swp
@@ -9,6 +10,7 @@
 .dockerignore
 .gitattributes
 Dockerfile
+Dockerfile.*
 
 .deploy.env
 .deploy.conf
@@ -22,3 +24,8 @@ doc/
 *.css.map
 
 .scannerwork/
+
+flyway_conf/
+flyway_sql/
+
+node_modules/
