@@ -536,15 +536,16 @@ install_helm() {
 
 install_jmeter() {
     ver_jmeter='5.4.1'
-    dir_temp=$(mktemp -d)
-    command -v java >/dev/null || $exec_sudo apt-get install -qq -y openjdk-8-jdk
-    $curl_opt -o "$dir_temp"/jmeter.zip https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
+    path_temp=$(mktemp -d)
+    ## 6. Asia, 31. Hong_Kong, 70. Shanghai
+    command -v java >/dev/null || { echo 6; echo 70; } | $exec_sudo apt-get install -qq -y openjdk-16-jdk
+    $curl_opt -o "$path_temp"/jmeter.zip https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
-        unzip "$dir_temp"/jmeter.zip
+        unzip "$path_temp"/jmeter.zip
         ln -sf apache-jmeter-${ver_jmeter} jmeter
     )
-    rm -rf "$dir_temp"
+    rm -rf "$path_temp"
 }
 
 func_check_os() {
