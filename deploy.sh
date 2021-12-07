@@ -586,26 +586,26 @@ func_check_os() {
             mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         fi
         $exec_sudo apt-get update
-        command -v git >/dev/null || $exec_sudo apt-get install -qq -y git
-        git lfs version >/dev/null || $exec_sudo apt-get install -qq -y git-lfs
-        command -v unzip >/dev/null || $exec_sudo apt-get install -qq -y unzip
-        command -v rsync >/dev/null || $exec_sudo apt-get install -qq -y rsync
+        command -v git >/dev/null || $exec_sudo apt-get install -qq -y git >/dev/null
+        git lfs version >/dev/null || $exec_sudo apt-get install -qq -y git-lfs >/dev/null
+        command -v unzip >/dev/null || $exec_sudo apt-get install -qq -y unzip >/dev/null
+        command -v rsync >/dev/null || $exec_sudo apt-get install -qq -y rsync >/dev/null
         # command -v docker >/dev/null || bash "$script_path/bin/get-docker.sh"
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
-        command -v pip3 >/dev/null || $exec_sudo apt-get install -qq -y python3-pip
+        command -v pip3 >/dev/null || $exec_sudo apt-get install -qq -y python3-pip >/dev/null
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
     elif [[ "$OS" == 'centos' ]]; then
-        rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release
-        command -v git >/dev/null || $exec_sudo yum install -y git2u
-        git lfs version >/dev/null || $exec_sudo yum install -y git-lfs
-        command -v rsync >/dev/null || $exec_sudo yum install -y rsync
+        rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release >/dev/null
+        command -v git >/dev/null || $exec_sudo yum install -y git2u >/dev/null
+        git lfs version >/dev/null || $exec_sudo yum install -y git-lfs >/dev/null
+        command -v rsync >/dev/null || $exec_sudo yum install -y rsync >/dev/null
         # command -v docker >/dev/null || sh "$script_path/bin/get-docker.sh"
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
     elif [[ "$OS" == 'amzn' ]]; then
-        rpm -q epel-release >/dev/null || $exec_sudo amazon-linux-extras install -y epel
-        command -v git >/dev/null || $exec_sudo yum install -y git2u
-        git lfs version >/dev/null || $exec_sudo yum install -y git-lfs
-        command -v rsync >/dev/null || $exec_sudo yum install -y rsync
+        rpm -q epel-release >/dev/null || $exec_sudo amazon-linux-extras install -y epel >/dev/null
+        command -v git >/dev/null || $exec_sudo yum install -y git2u >/dev/null
+        git lfs version >/dev/null || $exec_sudo yum install -y git-lfs >/dev/null
+        command -v rsync >/dev/null || $exec_sudo yum install -y rsync >/dev/null
         # command -v docker >/dev/null || $exec_sudo amazon-linux-extras install -y docker
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
     fi
