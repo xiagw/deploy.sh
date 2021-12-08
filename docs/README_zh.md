@@ -1,7 +1,7 @@
 deploy.sh for GitLab CI/CD：
 
 - 支持 阿里云，腾讯云，AWS，
-- 支持 直接拷代码文件，
+- 支持 直接拷贝代码文件，rsync
 - 支持 docker build image，
 - 支持 PHP，Java，Vue，Dockerfile 代码格式化检查，
 - 支持 调用acme.sh更新ssl证书
@@ -22,25 +22,28 @@ deploy.sh for GitLab CI/CD：
 - 支持 普通文件模式部署
 - 支持 结果的消息提醒，企业微信，Telegram，Element(Matrix)
 
-# Quick Start
+# 快速开始
 1. 安装 gitlab-runner 并且 register it 并且启动 gitlab-runner
 1. cd $HOME
 1. git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
-1. 拷贝 deploy.conf 为 .deploy.conf （修改为你的配置）
-1. 拷贝 deploy.env 为 .deploy.env（修改为你的配置）
+1. 拷贝 conf/deploy.conf.example 为 conf/deploy.conf （修改为你的配置）
+1. 拷贝 conf/deploy.env.example 为 conf/deploy.env（修改为你的配置）
 1. 参看本项目 .gitlab-ci.yaml 设置于目标git仓库
-1. 目标git仓库提交/push代码
+1. 目标git仓库提交/push代码，gitlab-runner 自动发布
 
-# 实例：
-1. 已有一台服务器 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) 用 docker-compose up -d gitlab 启动一台）
-1. 已有一台服务器已经安装好 gitlab-runner，并且是默认安装（executer 为 shell）
+# 实际案例：
+1. 已有一台服务器安装启动了 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) 用 docker-compose up -d gitlab 启动一台）
+1. 已有一台服务器已经安装启动/注册 gitlab-runner，并且是默认安装（executer 为 shell）
 1. 已经准备好 ssh key file，从 gitlab-runner 服务器可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/.ssh/ 目录）
 1. 登录到 gitlab-runner 服务器，执行
 `git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
-1. 参照 deploy.conf, deploy.env 例子修改好文件
- `cd runner && cp deploy.conf .deploy.conf && cp deploy.env .deploy.env
+1. 参照 conf/deploy.conf.example, conf/deploy.env.example 例子修改好文件
 `
-1. 例如 gitlab 已经建立 projectA 在 root 账号下面
+ cd $HOME/runner
+ cp conf/deploy.conf.example conf/deploy.conf
+ cp conf/deploy.env.example conf/deploy.env
+`
+1. 例如 gitlab 已经在 root 账号下面建立 projectA
 1. 在 projectA 修改代码，
 1. 并创建 .gitlab-ci.yml ，（同样可以参照本项目的.gitlab-ci.yml）
 1. 提交并push代码即可自动 CI/CD
