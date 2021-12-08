@@ -172,12 +172,17 @@ build_node_yarn() {
     echo_time_step "node yarn build..."
     rm -f package-lock.json
     if ! docker images | grep 'deploy/node' >/dev/null; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$path_dockerfile/Dockerfile.node" "$path_dockerfile" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$path_dockerfile/Dockerfile.nodebuild" "$path_dockerfile" >/dev/null
     fi
+    echo "PIPELINE_YARN_INSTALL: ${PIPELINE_YARN_INSTALL:-0}"
+    echo "YARN_INSTALL=${YARN_INSTALL:-false}"
     if [[ -f "$script_path/bin/custome.docker.build.sh" ]]; then
         source "$script_path/bin/custome.docker.build.sh"
     else
-        $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install; yarn run build"
+        if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
+            $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install"
+        fi
+        $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn run build"
     fi
     echo_time "end node build."
 }
@@ -259,10 +264,10 @@ build_docker() {
     echo "YARN_INSTALL: ${YARN_INSTALL:-false}"
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
-        --build-arg YARN_INSTALL="${YARN_INSTALL:-true}" \
-        --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
         "${gitlab_project_dir}" >/dev/null
     echo_time "end docker build."
+    # --build-arg YARN_INSTALL="${YARN_INSTALL:-true}" \
+    # --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
 }
 
 docker_push() {
@@ -274,6 +279,18 @@ docker_push() {
         docker push -q "$image_tag_flyway"
     fi
     echo_time "end docker push."
+}
+
+deploy_gitops_helm() {
+    ## setup helm files
+    if [ -d "$script_conf"/gitops/helm ]; then
+        echo_time_step "config helm files..."
+        file_values="$script_conf"/gitops/helm/${gitlab_project_name}/values.yml
+        sed -i \
+            -e "/repository:.*/s//repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"/" \
+            -e "/tag:.*/s//tag:\ \"${image_tag}\"/" \
+            "$file_values"
+    fi
 }
 
 deploy_k8s() {
@@ -297,6 +314,8 @@ deploy_k8s() {
 
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}"
     source "$script_env"
+    ## setup helm file for argocd
+    deploy_gitops_helm
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
         ## Custom deployment method
@@ -310,6 +329,7 @@ deploy_k8s() {
             --set image.pullPolicy='Always' >/dev/null
         [[ "${debug_on:-0}" -ne 1 ]] && set +x
     fi
+
     ## helm install flyway jobs
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         helm upgrade flyway "$script_path/conf/helm/flyway/" --install --history-max 1 \
@@ -361,7 +381,7 @@ func_deploy_rsync() {
 
         ## 源文件夹
         if [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
-            rsync_src="${gitlab_project_dir}/$file_for_rsync"
+            rsync_src="${gitlab_project_dir}/$path_for_rsync"
         elif [[ "$rsync_src" =~ \.[jw]ar$ ]]; then
             find_file="$(find "${gitlab_project_dir}" -name "$rsync_src" -print0 | head -n 1)"
             if [[ "$find_file" =~ \.[jw]ar$ ]]; then
@@ -517,13 +537,13 @@ install_aws() {
     unzip -qq awscliv2.zip
     ./aws/install --bin-dir "${script_path}/bin" --install-dir "${script_data}" --update
     ## install eksctl
-    $curl_opt --silent "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+    $curl_opt "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
     mv /tmp/eksctl "${script_path}/bin/"
 }
 
 install_kubectl() {
     command -v kubectl >/dev/null && return
-    kube_ver="$($curl_opt -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
+    kube_ver="$($curl_opt --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
     $curl_opt -o "${script_path}/bin/kubectl" "$kube_url"
     chmod +x "${script_path}/bin/kubectl"
@@ -537,7 +557,11 @@ install_jmeter() {
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
-    command -v java >/dev/null || { echo y; echo 6; echo 70; } | $exec_sudo apt-get install openjdk-16-jdk
+    command -v java >/dev/null || {
+        echo y
+        echo 6
+        echo 70
+    } | $exec_sudo apt-get install openjdk-16-jdk
     $curl_opt -o "$path_temp"/jmeter.zip https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
@@ -622,8 +646,8 @@ get_maxmind_ip() {
     t="$(mktemp -d)"
     t1="$t/maxmind-Country.dat.gz"
     t2="$t/maxmind-City.dat.gz"
-    $curl_opt -qso "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
-    $curl_opt -qso "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
+    $curl_opt -qs -o "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
+    $curl_opt -qs -o "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
     gunzip "$t1" "$t2"
     for i in ${ENV_NGINX_IPS:?undefine var}; do
         echo "$i"
@@ -682,7 +706,8 @@ func_file_preprocessing() {
     fi
 }
 
-func_config_ssh() {
+func_config_files() {
+    ## ssh config and key
     path_conf_ssh="${script_path}/conf/.ssh"
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
@@ -697,9 +722,7 @@ func_config_ssh() {
             ln -sf "${f}" "$HOME/.ssh/"
         fi
     done
-}
-
-func_setup_config() {
+    ## acme.sh/aws/kube/aliyun/python-gitlab
     path_conf_acme="${script_path}/conf/.acme.sh"
     path_conf_aws="${script_path}/conf/.aws"
     path_conf_kube="${script_path}/conf/.kube"
@@ -742,7 +765,7 @@ func_detect_project_type() {
     if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
         disable_docker=1
     fi
-    if [[ -f "${gitlab_project_dir}/Dockerfile" && $disable_docker -ne 1 ]]; then
+    if [[ -f "${gitlab_project_dir}/Dockerfile" && "$disable_docker" -ne 1 ]]; then
         project_docker=1
         exec_build_docker=1
         exec_docker_push=1
@@ -751,26 +774,28 @@ func_detect_project_type() {
     if [[ -f "${gitlab_project_dir}/package.json" ]]; then
         if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
-            file_for_rsync='build/'
+            path_for_rsync='build/'
         else
             project_lang='node'
-            file_for_rsync='dist/'
+            path_for_rsync='dist/'
         fi
         if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
             YARN_INSTALL=true
         fi
+        [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_node=1
         fi
     fi
     if [[ -f "${gitlab_project_dir}/composer.json" ]]; then
         project_lang='php'
-        file_for_rsync=
+        path_for_rsync=
         if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
             COMPOSER_INSTALL=true
         fi
+        [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=true
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_php=1
             exec_build_node=0
@@ -778,17 +803,16 @@ func_detect_project_type() {
     fi
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
         project_lang='java'
-        file_for_rsync=
+        path_for_rsync=
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_java=1
         fi
     fi
     if [[ -f "${gitlab_project_dir}/requirements.txt" ]]; then
         project_lang='python'
-        file_for_rsync=
+        path_for_rsync=
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_python=1
-            exec_build_node=0
         fi
     fi
     if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
@@ -805,42 +829,49 @@ func_detect_project_type() {
 }
 
 func_detect_project_type2() {
-    test -f Dockerfile && project_docker=1
-    test -f package.json && project_lang=node
-    test -f composer.json && project_lang=php
-    test -f pom.xml && project_lang=java
-    test -f requirements.txt && project_lang=python
-    project_lang=${project_lang:-other}
-    case $project_lang in
-    dock)
+    echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
+    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
+    if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
+        disable_docker=1
+    fi
+    if [[ -f "${gitlab_project_dir}"/Dockerfile && "$disable_docker" -ne 1 ]]; then
         project_docker=1
         exec_build_docker=1
         exec_docker_push=1
         exec_deploy_k8s=1
-        ;;
+    fi
+    test -f "${gitlab_project_dir}"/package.json && project_lang=node
+    test -f "${gitlab_project_dir}"/composer.json && project_lang=php
+    test -f "${gitlab_project_dir}"/pom.xml && project_lang=java
+    test -f "${gitlab_project_dir}"/requirements.txt && project_lang=python
+    project_lang=${project_lang:-other}
+
+    case $project_lang in
     node)
         if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
-            file_for_rsync='build/'
+            path_for_rsync='build/'
         else
             project_lang='node'
-            file_for_rsync='dist/'
+            path_for_rsync='dist/'
         fi
         if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
             YARN_INSTALL=true
         fi
+        [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_node=1
         fi
         ;;
     php)
         project_lang='php'
-        file_for_rsync=
+        path_for_rsync=
         if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
             COMPOSER_INSTALL=true
         fi
+        [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=true
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_php=1
             exec_build_node=0
@@ -848,30 +879,28 @@ func_detect_project_type2() {
         ;;
     java)
         project_lang='java'
-        file_for_rsync=
+        path_for_rsync=
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_java=1
         fi
         ;;
     python)
         project_lang='python'
-        file_for_rsync=
+        path_for_rsync=
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_python=1
-            exec_build_node=0
         fi
         ;;
     *)
         # if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
         project_lang='other'
         exec_deploy_rsync=0
-        exec_build_node=0
         ;;
     esac
 }
 
 main() {
-    [[ -f ~/ci_debug || $PIPELINE_DEBUG == 'true' ]] && debug_on=1
+    [[ -f ~/ci_debug || $PIPELINE_DEBUG -eq 1 ]] && debug_on=1
     [[ "$1" =~ (--debug|--github) ]] && debug_on=1
     [[ "$debug_on" -eq 1 ]] && set -x
     script_name="$(basename "$0")"
@@ -921,10 +950,8 @@ main() {
     image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
 
     ## setup ssh config
-    func_config_ssh
-
     ## setup acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
-    func_setup_config
+    func_config_files
 
     ## 清理磁盘空间
     func_clean_disk
