@@ -221,13 +221,13 @@ build_python_pip() {
 docker_login() {
     source "$script_env"
     ## 比较上一次登陆时间，超过12小时则再次登录
-    lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE}"
+    lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     time_save="$(if test -f "$lock_docker_login"; then cat "$lock_docker_login"; else :; fi)"
     if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
         return 0
     fi
-    echo_time "docker login $ENV_DOCKER_LOGIN_TYPE ..."
-    if [[ "$ENV_DOCKER_LOGIN_TYPE" == 'aws' ]]; then
+    echo_time "docker login ${ENV_DOCKER_LOGIN_TYPE:-none} ..."
+    if [[ "${ENV_DOCKER_LOGIN_TYPE:-none}" == 'aws' ]]; then
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
@@ -308,7 +308,7 @@ deploy_k8s() {
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
-        [[ "$debug_on" -ne 1 ]] && set +x
+        [[ "${debug_on:-0}" -ne 1 ]] && set +x
     fi
     ## helm install flyway jobs
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
