@@ -303,7 +303,7 @@ deploy_k8s() {
         [ -f "$script_path/bin/special.sh" ] && source "$script_path/bin/special.sh" "$branch_name"
     else
         set -x
-        helm upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
+        $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
             --namespace "${branch_name}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
@@ -312,19 +312,19 @@ deploy_k8s() {
     fi
     ## helm install flyway jobs
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
-        helm upgrade flyway "$script_path/conf/helm/flyway/" --install --history-max 1 \
+        $helm_opt upgrade flyway "$script_path/conf/helm/flyway/" --install --history-max 1 \
             --namespace "${branch_name}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${gitlab_project_name}-flyway" \
             --set image.pullPolicy='Always' >/dev/null
     fi
     ## Clean up
-    kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
-        xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
-    kubectl -n "${branch_name}" get pod | grep Evicted | awk '{print $1}' | xargs kubectl delete pod 2>/dev/null || true
+    $kubectl_opt -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
+        xargs $kubectl_opt -n "${branch_name}" delete rs >/dev/null 2>&1 || true
+    $kubectl_opt -n "${branch_name}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt delete pod 2>/dev/null || true
     sleep 3
     ## Get deployment results and set var: deploy_result
-    if ! kubectl -n "${branch_name}" rollout status deployment "${helm_release}"; then
+    if ! $kubectl_opt -n "${branch_name}" rollout status deployment "${helm_release}"; then
         deploy_result=1
     fi
     echo_time "end deploy k8s."
@@ -537,7 +537,11 @@ install_jmeter() {
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
-    command -v java >/dev/null || { echo y; echo 6; echo 70; } | $exec_sudo apt-get install openjdk-16-jdk
+    command -v java >/dev/null || {
+        echo y
+        echo 6
+        echo 70
+    } | $exec_sudo apt-get install openjdk-16-jdk
     $curl_opt -o "$path_temp"/jmeter.zip https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
@@ -910,14 +914,17 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
 
-    ## 人工/手动/执行/定义参数
-    func_setup_var_gitlab "$@"
-    source "$script_env"
-
     ## run docker with current/root user
     docker_run="docker run --interactive --rm -u $UID:$UID"
     # docker_run_root="docker run --interactive --rm -u 0:0"
     git_diff="git --no-pager diff --name-only HEAD^"
+    kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
+    helm_opt="helm --kubeconfig $HOME/.kube/config"
+
+    ## 人工/手动/执行/定义参数
+    func_setup_var_gitlab "$@"
+    source "$script_env"
+
     image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
 
     ## setup ssh config
