@@ -230,6 +230,7 @@ docker_login() {
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
+        [[ "${github_action:-0}" -eq 1 ]] && return 0
         echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
     fi
     date +%s >"$lock_docker_login"
@@ -535,11 +536,12 @@ install_jmeter() {
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
-    command -v java >/dev/null || {
-        echo y
-        echo 6
-        echo 70
-    } | $exec_sudo apt-get install openjdk-16-jdk
+    if ! command -v java >/dev/null; then
+        {
+            echo 6
+            echo 70
+        } | $exec_sudo apt-get install -y openjdk-16-jdk
+    fi
     $curl_opt -o "$path_temp"/jmeter.zip https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
@@ -574,11 +576,12 @@ func_check_os() {
         exit 1
     fi
 
-    if [[ "$OS" =~ (debian|ubuntu) ]]; then
+    case "$OS" in
+    debian | ubuntu)
         ## fix gitlab-runner exit error.
         test -f "$HOME"/.bash_logout && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         command -v git >/dev/null || install_pkg="git"
-        git lfs version >/dev/null || install_pkg="$install_pkg git-lfs"
+        git lfs version >/dev/null 2>&1 || install_pkg="$install_pkg git-lfs"
         command -v curl >/dev/null || install_pkg="$install_pkg curl"
         command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
         command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
@@ -587,23 +590,31 @@ func_check_os() {
         # command -v docker >/dev/null || ( bash "$script_path/bin/get-docker.sh"; id | grep -q docker || $exec_sudo usermod -aG docker "$USER")
         if [[ -n "$install_pkg" ]]; then
             $exec_sudo apt-get update -qq
+            $exec_sudo apt-get install -qq -y apt-utils >/dev/null
             $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
         fi
-    elif [[ "$OS" == 'centos' ]]; then
-        rpm -q epel-release >/dev/null || $exec_sudo yum install -y epel-release >/dev/null
+        ;;
+    centos | amzn | rhel | fedora)
+        rpm -q epel-release >/dev/null || {
+            if [ "$OS" = amzn ]; then
+                $exec_sudo amazon-linux-extras install -y epel >/dev/null
+            else
+                $exec_sudo yum install -y epel-release >/dev/null
+            fi
+        }
         command -v git >/dev/null || $exec_sudo yum install -y git2u >/dev/null
-        git lfs version >/dev/null || $exec_sudo yum install -y git-lfs >/dev/null
+        git lfs version >/dev/null 2>&1 || $exec_sudo yum install -y git-lfs >/dev/null
+        command -v curl >/dev/null || $exec_sudo yum install -y curl >/dev/null
         command -v rsync >/dev/null || $exec_sudo yum install -y rsync >/dev/null
         # command -v docker >/dev/null || sh "$script_path/bin/get-docker.sh"
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
-    elif [[ "$OS" == 'amzn' ]]; then
-        rpm -q epel-release >/dev/null || $exec_sudo amazon-linux-extras install -y epel >/dev/null
-        command -v git >/dev/null || $exec_sudo yum install -y git2u >/dev/null
-        git lfs version >/dev/null || $exec_sudo yum install -y git-lfs >/dev/null
-        command -v rsync >/dev/null || $exec_sudo yum install -y rsync >/dev/null
-        # command -v docker >/dev/null || $exec_sudo amazon-linux-extras install -y docker
-        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
-    fi
+        ;;
+    *)
+        echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
+        echo "Not support. exit."
+        exit 1
+        ;;
+    esac
 }
 
 func_clean_disk() {
@@ -876,6 +887,7 @@ main() {
     [[ -f ~/ci_debug || $PIPELINE_DEBUG == 'true' ]] && debug_on=1
     [[ "$1" =~ (--debug|--github) ]] && debug_on=1
     [[ "$debug_on" -eq 1 ]] && set -x
+    [[ "$1" =~ (--github) ]] && github_action=1
     script_name="$(basename "$0")"
     script_path="$(cd "$(dirname "$0")" && pwd)"
     script_data="${script_path}/data"                   ## 记录 deploy.sh 的数据文件
