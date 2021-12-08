@@ -537,7 +537,7 @@ install_jmeter() {
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
-    command -v java >/dev/null || { echo 6; echo 70; } | $exec_sudo apt-get install -qq -y openjdk-16-jdk
+    command -v java >/dev/null || { echo y; echo 6; echo 70; } | $exec_sudo apt-get install openjdk-16-jdk
     $curl_opt -o "$path_temp"/jmeter.zip https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
         cd "$script_data"
