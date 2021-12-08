@@ -4,20 +4,22 @@
 # poljar/matrix-nio: A Python Matrix client library, designed according to sans I/O (http://sans-io.readthedocs.io/) principles
 # https://github.com/poljar/matrix-nio
 
-# pip install matrix-nio
+# python3 -m pip install matrix-nio
 
 # sudo apt install -y libolm-dev
-# pip install "matrix-nio[e2e]"
+# python3 -m pip install "matrix-nio[e2e]"
 
 import sys
 import asyncio
 from nio import AsyncClient, MatrixRoom, RoomMessageText
 
 async def main(*args):
+    ## change these to your own domain
     client = AsyncClient("https://matrix.example.com", "@bot:example.com")
-
+    ## change these to your own password
     await client.login("your_password")
     await client.room_send(
+        ## change this to your own room id
         room_id="!xXxXxXxXxXxXxXxXxX:example.com",
         message_type="m.room.message",
         content={
