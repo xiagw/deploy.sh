@@ -219,7 +219,6 @@ build_python_pip() {
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
 docker_login() {
-    source "$script_env"
     ## 比较上一次登陆时间，超过12小时则再次登录
     lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     time_save="$(if test -f "$lock_docker_login"; then cat "$lock_docker_login"; else :; fi)"
@@ -296,7 +295,6 @@ deploy_k8s() {
     fi
 
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}"
-    source "$script_env"
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
         ## Custom deployment method
