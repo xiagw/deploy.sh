@@ -319,11 +319,11 @@ deploy_k8s() {
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
         ## Custom deployment method
-        [ -f "$script_path/bin/special.sh" ] && source "$script_path/bin/special.sh" "$branch_name"
+        [ -f "$script_path/bin/special.sh" ] && source "$script_path/bin/special.sh" "$env_namespace"
     else
         set -x
         helm upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
-            --namespace "${branch_name}" --create-namespace \
+            --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
@@ -333,18 +333,18 @@ deploy_k8s() {
     ## helm install flyway jobs
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         helm upgrade flyway "$script_path/conf/helm/flyway/" --install --history-max 1 \
-            --namespace "${branch_name}" --create-namespace \
+            --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${gitlab_project_name}-flyway" \
             --set image.pullPolicy='Always' >/dev/null
     fi
     ## Clean up
-    kubectl -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
-        xargs kubectl -n "${branch_name}" delete rs >/dev/null 2>&1 || true
-    kubectl -n "${branch_name}" get pod | grep Evicted | awk '{print $1}' | xargs kubectl delete pod 2>/dev/null || true
+    kubectl -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
+        xargs kubectl -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
+    kubectl -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs kubectl delete pod 2>/dev/null || true
     sleep 3
     ## Get deployment results and set var: deploy_result
-    if ! kubectl -n "${branch_name}" rollout status deployment "${helm_release}"; then
+    if ! kubectl -n "${env_namespace}" rollout status deployment "${helm_release}"; then
         deploy_result=1
     fi
     echo_time "end deploy k8s."
@@ -353,8 +353,8 @@ deploy_k8s() {
 func_deploy_rsync() {
     echo_time_step "rsync code file to remote server..."
     ## 读取配置文件，获取 项目/分支名/war包目录
-    # for line in $(grep "^${gitlab_project_path}\s\+${branch_name}" "$script_conf"); do
-    grep "^${gitlab_project_path}\s\+${branch_name}" "$script_conf" | while read -r line; do
+    # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf"); do
+    grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf" | while read -r line; do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
         # git_branch=${array[1]}
@@ -393,7 +393,7 @@ func_deploy_rsync() {
         fi
         ## 目标文件夹
         if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
-            rsync_dest="${ENV_PATH_DEST_PRE}/${branch_name}.${gitlab_project_name}/"
+            rsync_dest="${ENV_PATH_DEST_PRE}/${env_namespace}.${gitlab_project_name}/"
         fi
         ## 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
@@ -666,18 +666,18 @@ func_file_preprocessing() {
     echo_time "preprocessing file."
     ## frontend (VUE) .env file
     if [[ $project_lang =~ (node|react) ]]; then
-        config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${branch_name}.*")"
+        config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
         for file in $config_env_path; do
             if [[ "$file" =~ 'config/' ]]; then
-                rsync -av "$file" "${file/${branch_name}./}" # vue2.x
+                rsync -av "$file" "${file/${env_namespace}./}" # vue2.x
             else
-                rsync -av "$file" "${file/${branch_name}/}" # vue3.x
+                rsync -av "$file" "${file/${env_namespace}/}" # vue3.x
             fi
         done
         copy_flyway_file=0
     fi
     ## backend (PHP) project_conf files
-    path_project_conf="${script_path}/conf/project_conf/${branch_name}.${gitlab_project_name}/"
+    path_project_conf="${script_path}/conf/project_conf/${env_namespace}.${gitlab_project_name}/"
     [ -d "$path_project_conf" ] && rsync -av "$path_project_conf" "${gitlab_project_dir}/"
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path}/conf/.dockerignore" "${gitlab_project_dir}/"
@@ -756,7 +756,7 @@ func_setup_var_gitlab() {
     gitlab_job_id=${CI_JOB_ID:-5678}
     # read -rp "Enter gitlab user id: " -e -i '1' gitlab_user_id
     gitlab_user_id=${GITLAB_USER_ID:-1}
-    branch_name=$gitlab_project_branch
+    env_namespace=$gitlab_project_branch
 }
 
 func_detect_project_type() {
@@ -780,7 +780,7 @@ func_detect_project_type() {
             path_for_rsync='dist/'
         fi
         if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
+            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
             YARN_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
@@ -792,7 +792,7 @@ func_detect_project_type() {
         project_lang='php'
         path_for_rsync=
         if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
+            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
             COMPOSER_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=true
@@ -856,7 +856,7 @@ func_detect_project_type2() {
             path_for_rsync='dist/'
         fi
         if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
+            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
             YARN_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
@@ -868,7 +868,7 @@ func_detect_project_type2() {
         project_lang='php'
         path_for_rsync=
         if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $branch_name $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
+            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
             COMPOSER_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=true
