@@ -11,9 +11,9 @@ RUN set -x \
     npm config set registry https://registry.npm.taobao.org \
     ;fi \
     && mkdir /.cache \
-    && chown -R node:node /.cache \
-    && npm install -g rnpm@1.9.0 \
-    && npm install -g apidoc
+    && chown -R node:node /.cache
+    # && npm install -g rnpm@1.9.0 \
+    # && npm install -g apidoc
 
 USER node
 RUN set -x \
