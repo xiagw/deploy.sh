@@ -973,7 +973,7 @@ main() {
 
     ## acme.sh 更新证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-    if [[ "$PIPELINE_RENEW_CERT" -eq 1 ]]; then
+    if [[ "$PIPELINE_RENEW_CERT" -eq 1 || "$1" =~ (--renwe-cert) ]]; then
         func_renew_cert
         return
     fi
