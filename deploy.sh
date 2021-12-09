@@ -291,14 +291,14 @@ docker_push() {
     echo_time "end docker push."
 }
 
-deploy_gitops_helm() {
+update_gitops_helm() {
     ## setup helm files
     if [ -d "$script_path_conf"/gitops/helm ]; then
         echo_time_step "update helm files..."
         file_values="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yml
         sed -i \
-            -e "@repository:.*@s@@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
-            -e "@tag:.*@s@@tag:\ \"${image_tag}\"@" \
+            -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
+            -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
             "$file_values"
     fi
     echo_time "end update helm files."
@@ -325,9 +325,6 @@ deploy_k8s() {
 
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}"
 
-    ## setup helm file for argocd
-    deploy_gitops_helm
-
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
         ## Custom deployment method
@@ -350,6 +347,9 @@ deploy_k8s() {
             --set image.tag="${gitlab_project_name}-flyway" \
             --set image.pullPolicy='Always' >/dev/null
     fi
+    ## setup helm file for argocd
+    update_gitops_helm
+
     ## Clean up
     $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
         xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
@@ -359,6 +359,7 @@ deploy_k8s() {
     if ! $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}"; then
         deploy_result=1
     fi
+
     echo_time "end deploy k8s."
 }
 
