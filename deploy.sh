@@ -329,7 +329,7 @@ deploy_k8s() {
     fi
 
     ## update helm file for argocd
-    file_helm_values="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yml
+    file_helm_values="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yaml
     if [ -f "$file_helm_values" ]; then
         echo_time_step "update helm files..."
         sed -i \
