@@ -476,7 +476,7 @@ func_renew_cert() {
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/dest"
-    conf_dns_cloudflare="${script_path_conf}/.cloudflare.cfg"
+    conf_dns_cloudflare="${script_path_conf}/.cloudflare.conf"
     conf_dns_aliyun="${script_path_conf}/.aliyun.dnsapi.conf"
     conf_dns_qcloud="${script_path_conf}/.qcloud.dnspod.conf"
 
