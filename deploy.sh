@@ -609,12 +609,12 @@ func_check_os() {
         command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
         command -v pip3 >/dev/null || install_pkg="$install_pkg python3-pip"
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
-        command -v docker >/dev/null || ( curl -fsSL https://get.docker.com -o get-docker.sh; bash get-docker.sh)
         if [[ -n "$install_pkg" ]]; then
             $exec_sudo apt-get update -qq
             $exec_sudo apt-get install -qq -y apt-utils >/dev/null
             $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
         fi
+        command -v docker >/dev/null || ( curl -fsSL https://get.docker.com -o get-docker.sh; bash get-docker.sh)
         ;;
     centos | amzn | rhel | fedora)
         rpm -q epel-release >/dev/null || {
