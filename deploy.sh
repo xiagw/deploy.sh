@@ -40,7 +40,7 @@ code_style_python() {
 code_style_php() {
     echo_time_step 'starting PHP Code Sniffer, < standard=PSR12 >...'
     if ! docker images | grep 'deploy/phpcs'; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$path_dockerfile/Dockerfile.phpcs" "$path_dockerfile" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dockerfile/Dockerfile.phpcs" "$script_dockerfile" >/dev/null
     fi
     phpcs_result=0
     for i in $($git_diff | awk '/\.php$/{if (NR>0){print $0}}'); do
@@ -137,7 +137,7 @@ func_deploy_flyway() {
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
     ## 判断是否需要建立数据库远程连接
-    [ -f "$script_path/bin/special.sh" ] && source "$script_path/bin/special.sh" port
+    [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
@@ -172,12 +172,12 @@ build_node_yarn() {
     echo_time_step "node yarn build..."
     rm -f package-lock.json
     if ! docker images | grep 'deploy/node' >/dev/null; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$path_dockerfile/Dockerfile.nodebuild" "$path_dockerfile" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
     fi
     echo "PIPELINE_YARN_INSTALL: ${PIPELINE_YARN_INSTALL:-0}"
     echo "YARN_INSTALL=${YARN_INSTALL:-false}"
-    if [[ -f "$script_path/bin/custome.docker.build.sh" ]]; then
-        source "$script_path/bin/custome.docker.build.sh"
+    if [[ -f "$script_path_bin/custome.docker.build.sh" ]]; then
+        source "$script_path_bin/custome.docker.build.sh"
     else
         if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
             $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install"
@@ -196,7 +196,7 @@ build_php_composer() {
     fi
     if ! docker images | grep -q "deploy/composer"; then
         DOCKER_BUILDKIT=1 docker build --quiet -t "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-            -f "$path_dockerfile/Dockerfile.composer" "$path_dockerfile"
+            -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile"
     fi
 
     [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
@@ -225,7 +225,7 @@ build_python_pip() {
 
 docker_login() {
     ## 比较上一次登陆时间，超过12小时则再次登录
-    lock_docker_login="$script_path/conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
+    lock_docker_login="$script_path_conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     time_save="$(if test -f "$lock_docker_login"; then cat "$lock_docker_login"; else :; fi)"
     if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
         return 0
@@ -302,8 +302,8 @@ deploy_k8s() {
     fi
     ## 转换为小写， Convert to lower case
     helm_release="${helm_release,,}"
-    if [ -d "$script_path/conf/helm/${gitlab_project_name}" ]; then
-        path_helm="$script_path/conf/helm/${gitlab_project_name}"
+    if [ -d "${script_path_conf}/helm/${gitlab_project_name}" ]; then
+        path_helm="${script_path_conf}/helm/${gitlab_project_name}"
     else
         if [ -d "$gitlab_project_dir/helm" ]; then
             path_helm="$gitlab_project_dir/helm"
@@ -313,16 +313,18 @@ deploy_k8s() {
     fi
 
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}"
+
     ## setup helm file for argocd
     deploy_gitops_helm
+
     if [ "$path_helm" = none ]; then
         echo_warn "helm files not exists, ignore helm install."
         ## Custom deployment method
-        [ -f "$script_path/bin/special.sh" ] && source "$script_path/bin/special.sh" "$env_namespace"
+        [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" "$env_namespace"
     else
         set -x
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
-            --namespace "${branch_name}" --create-namespace \
+            --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
@@ -331,19 +333,19 @@ deploy_k8s() {
 
     ## helm install flyway jobs
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
-        $helm_opt upgrade flyway "$script_path/conf/helm/flyway/" --install --history-max 1 \
-            --namespace "${branch_name}" --create-namespace \
+        $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
+            --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${gitlab_project_name}-flyway" \
             --set image.pullPolicy='Always' >/dev/null
     fi
     ## Clean up
-    $kubectl_opt -n "${branch_name}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
-        xargs $kubectl_opt -n "${branch_name}" delete rs >/dev/null 2>&1 || true
-    $kubectl_opt -n "${branch_name}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt delete pod 2>/dev/null || true
+    $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
+        xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
+    $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt delete pod 2>/dev/null || true
     sleep 3
     ## Get deployment results and set var: deploy_result
-    if ! $kubectl_opt -n "${branch_name}" rollout status deployment "${helm_release}"; then
+    if ! $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}"; then
         deploy_result=1
     fi
     echo_time "end deploy k8s."
@@ -372,7 +374,7 @@ func_deploy_rsync() {
         if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
             rsync_conf="${gitlab_project_dir}/rsync.exclude"
         else
-            rsync_conf="${script_path}/conf/rsync.exclude"
+            rsync_conf="${script_path_conf}/rsync.exclude"
         fi
         ## node/java use rsync --delete
         [[ "${project_lang}" =~ (node|react|java|other) ]] && rsync_delete='--delete'
@@ -448,13 +450,13 @@ func_deploy_notify() {
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
         $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$tgApiMsg"
     elif [[ "${PIPELINE_TEMP_PASS:-0}" -eq 1 ]]; then
-        python3 "$script_path/bin/element-up.py" "$msg_body"
+        python3 "$script_path_bin/element-up.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
-        python3 "$script_path/bin/element.py" "$msg_body"
+        python3 "$script_path_bin/element.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_EMAIL:-0}" -eq 1 ]]; then
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
-        "$script_path/bin/sendEmail" \
+        "$script_path_bin/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
             -xu "$ENV_EMAIL_USERNAME" \
@@ -474,9 +476,9 @@ func_renew_cert() {
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/dest"
-    conf_dns_cloudflare="${script_path}/conf/.cloudflare.cfg"
-    conf_dns_aliyun="${script_path}/conf/.aliyun.dnsapi.conf"
-    conf_dns_qcloud="${script_path}/conf/.qcloud.dnspod.conf"
+    conf_dns_cloudflare="${script_path_conf}/.cloudflare.cfg"
+    conf_dns_aliyun="${script_path_conf}/.aliyun.dnsapi.conf"
+    conf_dns_qcloud="${script_path_conf}/.qcloud.dnspod.conf"
 
     ## install acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
@@ -534,18 +536,18 @@ install_aws() {
     command -v aws >/dev/null && return
     $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
-    ./aws/install --bin-dir "${script_path}/bin" --install-dir "${script_data}" --update
+    ./aws/install --bin-dir "${script_path_bin}" --install-dir "${script_data}" --update
     ## install eksctl
     $curl_opt "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    mv /tmp/eksctl "${script_path}/bin/"
+    mv /tmp/eksctl "${script_path_bin}/"
 }
 
 install_kubectl() {
     command -v kubectl >/dev/null && return
     kube_ver="$($curl_opt --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    $curl_opt -o "${script_path}/bin/kubectl" "$kube_url"
-    chmod +x "${script_path}/bin/kubectl"
+    $curl_opt -o "${script_path_bin}/kubectl" "$kube_url"
+    chmod +x "${script_path_bin}/kubectl"
 }
 
 install_helm() {
@@ -607,7 +609,7 @@ func_check_os() {
         command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
         command -v pip3 >/dev/null || install_pkg="$install_pkg python3-pip"
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
-        # command -v docker >/dev/null || ( bash "$script_path/bin/get-docker.sh"; id | grep -q docker || $exec_sudo usermod -aG docker "$USER")
+        # command -v docker >/dev/null || ( bash "$script_path_bin/get-docker.sh"; id | grep -q docker || $exec_sudo usermod -aG docker "$USER")
         if [[ -n "$install_pkg" ]]; then
             $exec_sudo apt-get update -qq
             $exec_sudo apt-get install -qq -y apt-utils >/dev/null
@@ -626,7 +628,7 @@ func_check_os() {
         git lfs version >/dev/null 2>&1 || $exec_sudo yum install -y git-lfs >/dev/null
         command -v curl >/dev/null || $exec_sudo yum install -y curl >/dev/null
         command -v rsync >/dev/null || $exec_sudo yum install -y rsync >/dev/null
-        # command -v docker >/dev/null || sh "$script_path/bin/get-docker.sh"
+        # command -v docker >/dev/null || sh "$script_path_bin/get-docker.sh"
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
         ;;
     *)
@@ -686,10 +688,10 @@ func_file_preprocessing() {
         copy_flyway_file=0
     fi
     ## backend (PHP) project_conf files
-    path_project_conf="${script_path}/conf/project_conf/${env_namespace}.${gitlab_project_name}/"
+    path_project_conf="${script_path_conf}/project_conf/${env_namespace}.${gitlab_project_name}/"
     [ -d "$path_project_conf" ] && rsync -av "$path_project_conf" "${gitlab_project_dir}/"
     ## docker ignore file
-    [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path}/conf/.dockerignore" "${gitlab_project_dir}/"
+    [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## cert file for nginx
     if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
         rsync -av "$HOME/.acme.sh/dest/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
@@ -698,7 +700,7 @@ func_file_preprocessing() {
     if [ -f "${gitlab_project_dir}"/Dockerfile ]; then
         image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
         if [ -n "$image_from" ]; then
-            file_docker_tmpl="${path_dockerfile}/Dockerfile.${image_from##*:}"
+            file_docker_tmpl="${script_dockerfile}/Dockerfile.${image_from##*:}"
             [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
         fi
     fi
@@ -711,19 +713,19 @@ func_file_preprocessing() {
         [[ -d "$path_flyway_sql_proj" && ! -d "$path_flyway_sql" ]] && rsync -a "$path_flyway_sql_proj/" "$path_flyway_sql/"
         [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
-        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${path_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${script_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
 }
 
 func_config_files() {
     ## ssh config and key
-    path_conf_ssh="${script_path}/conf/.ssh"
+    path_conf_ssh="${script_path_conf}/.ssh"
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
-        echo_warn "generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
-        echo_erro "cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
+        echo_warn "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
+        echo_erro "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
-        ln -sf "$path_conf_ssh" "$HOME/"
+        [ -d "$HOME/.ssh" ] || ln -sf "$path_conf_ssh" "$HOME/"
     fi
     for f in "$path_conf_ssh"/*; do
         if [ ! -f "$HOME/.ssh/${f##*/}" ]; then
@@ -732,11 +734,11 @@ func_config_files() {
         fi
     done
     ## acme.sh/aws/kube/aliyun/python-gitlab
-    path_conf_acme="${script_path}/conf/.acme.sh"
-    path_conf_aws="${script_path}/conf/.aws"
-    path_conf_kube="${script_path}/conf/.kube"
-    path_conf_aliyun="${script_path}/conf/.aliyun"
-    conf_python_gitlab="${script_path}/conf/.python-gitlab.cfg"
+    path_conf_acme="${script_path_conf}/.acme.sh"
+    path_conf_aws="${script_path_conf}/.aws"
+    path_conf_kube="${script_path_conf}/.kube"
+    path_conf_aliyun="${script_path_conf}/.aliyun"
+    conf_python_gitlab="${script_path_conf}/.python-gitlab.cfg"
     [[ ! -d "${HOME}/.acme.sh" && -d "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
     [[ ! -d "${HOME}/.aws" && -d "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
     [[ ! -d "${HOME}/.kube" && -d "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
@@ -909,30 +911,41 @@ func_detect_project_type2() {
 }
 
 main() {
-    [[ -f ~/ci_debug || $PIPELINE_DEBUG -eq 1 ]] && debug_on=1
+    [[ -f ~/ci_debug || "${PIPELINE_DEBUG:-0}" -eq 1 ]] && debug_on=1
     [[ "$1" =~ (--debug|--github) ]] && debug_on=1
     [[ "$debug_on" -eq 1 ]] && set -x
     [[ "$1" =~ (--github) ]] && github_action=1
     script_name="$(basename "$0")"
     script_path="$(cd "$(dirname "$0")" && pwd)"
-    script_data="${script_path}/data"                   ## 记录 deploy.sh 的数据文件
-    script_log="${script_path}/data/${script_name}.log" ## 记录 deploy.sh 执行情况
-    script_conf="${script_path}/conf/deploy.conf"       ## 发布到目标服务器的配置信息
-    script_env="${script_path}/conf/deploy.env"         ## 发布配置信息(密)
-    path_dockerfile="${script_path}/conf/dockerfile"    ## dockerfile
+    script_path_conf="${script_path}/conf"
+    script_path_bin="${script_path}/bin"
+    script_conf="${script_path_conf}/deploy.conf"      ## 发布到目标服务器的配置信息
+    script_env="${script_path_conf}/deploy.env"        ## 发布配置信息(密)
+    script_data="${script_path}/data"                  ## 记录 deploy.sh 的数据文件
+    script_log="${script_data}/${script_name}.log"     ## 记录 deploy.sh 执行情况
+    script_dockerfile="${script_path_conf}/dockerfile" ## dockerfile
 
-    [[ ! -f "$script_conf" ]] && cp "${script_path}/conf/deploy.conf.example" "$script_conf"
-    [[ ! -f "$script_env" ]] && cp "${script_path}/conf/deploy.env.example" "$script_env"
+    [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/deploy.conf.example" "$script_conf"
+    [[ ! -f "$script_env" ]] && cp "${script_path_conf}/deploy.env.example" "$script_env"
     [[ ! -f "$script_log" ]] && touch "$script_log"
 
     PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
     PATH="$PATH:$script_data/jdk/bin:$script_data/jmeter/bin:$script_data/ant/bin:$script_data/maven/bin"
-    PATH="$PATH:$script_path/bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
+    PATH="$PATH:$script_path_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
-    ## 检查OS 类型和版本，安装相应命令和软件包
+    ## run docker with current/root user
+    docker_run="docker run --interactive --rm -u $UID:$UID"
+    # docker_run_root="docker run --interactive --rm -u 0:0"
+    git_diff="git --no-pager diff --name-only HEAD^"
+    kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
+    helm_opt="helm --kubeconfig $HOME/.kube/config"
+
+    ## 检查OS 类型和版本，安装基础命令和软件包
     func_check_os
 
+    ## 人工/手动/执行/定义参数
+    func_setup_var_gitlab "$@"
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$script_env"
     if [ -z "$ENV_HTTP_PROXY" ]; then
@@ -948,17 +961,6 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && install_python_element
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
-
-    ## run docker with current/root user
-    docker_run="docker run --interactive --rm -u $UID:$UID"
-    # docker_run_root="docker run --interactive --rm -u 0:0"
-    git_diff="git --no-pager diff --name-only HEAD^"
-    kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
-    helm_opt="helm --kubeconfig $HOME/.kube/config"
-
-    ## 人工/手动/执行/定义参数
-    func_setup_var_gitlab "$@"
-    source "$script_env"
 
     image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
 
