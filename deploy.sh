@@ -293,9 +293,9 @@ docker_push() {
 
 deploy_gitops_helm() {
     ## setup helm files
-    if [ -d "$script_conf"/gitops/helm ]; then
+    if [ -d "$script_path_conf"/gitops/helm ]; then
         echo_time_step "update helm files..."
-        file_values="$script_conf"/gitops/helm/${gitlab_project_name}/values.yml
+        file_values="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yml
         sed -i \
             -e "/repository:.*/s//repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"/" \
             -e "/tag:.*/s//tag:\ \"${image_tag}\"/" \
