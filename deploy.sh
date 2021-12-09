@@ -291,21 +291,10 @@ docker_push() {
     echo_time "end docker push."
 }
 
-update_gitops_helm() {
-    ## setup helm files
-    if [ -d "$script_path_conf"/gitops/helm ]; then
-        echo_time_step "update helm files..."
-        file_values="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yml
-        sed -i \
-            -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
-            -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
-            "$file_values"
-    fi
-    echo_time "end update helm files."
-}
-
 deploy_k8s() {
     echo_time_step "deploy k8s..."
+    kubectl_opt="$kubectl_opt --namespace ${env_namespace}"
+    helm_opt="$helm_opt --namespace ${env_namespace} --create-namespace"
     if [[ ${ENV_REMOVE_PROJ_PREFIX:-false} == 'true' ]]; then
         helm_release=${gitlab_project_name#*-}
     else
@@ -313,53 +302,50 @@ deploy_k8s() {
     fi
     ## 转换为小写， Convert to lower case
     helm_release="${helm_release,,}"
+    ## helm files folder
     if [ -d "${script_path_conf}/helm/${gitlab_project_name}" ]; then
         path_helm="${script_path_conf}/helm/${gitlab_project_name}"
     else
-        if [ -d "$gitlab_project_dir/helm" ]; then
-            path_helm="$gitlab_project_dir/helm"
-        else
-            path_helm=none
-        fi
+        [ -d "$gitlab_project_dir/helm" ] && path_helm="$gitlab_project_dir/helm"
     fi
 
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}"
-
-    if [ "$path_helm" = none ]; then
-        echo_warn "helm files not exists, ignore helm install."
+    if [ -z "$path_helm" ]; then
+        echo_warn "helm files not found."
         ## Custom deployment method
         [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" "$env_namespace"
     else
         set -x
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
-            --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
         [[ "${debug_on:-0}" -ne 1 ]] && set +x
+        ## Clean up
+        $kubectl_opt get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt delete rs >/dev/null 2>&1 || true
+        $kubectl_opt get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt delete pod 2>/dev/null || true
+        sleep 3
+        ## Get deployment results and set var: deploy_result
+        $kubectl_opt rollout status deployment "${helm_release}" || deploy_result=1
+    fi
+
+    ## update helm file for argocd
+    file_helm_values="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yml
+    if [ -f "$file_helm_values" ]; then
+        echo_time_step "update helm files..."
+        sed -i \
+            -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
+            -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
+            "$file_helm_values"
     fi
 
     ## helm install flyway jobs
-    if [[ $ENV_HELM_FLYWAY == 1 ]]; then
+    if [[ $ENV_HELM_FLYWAY == 1 && -d "${script_path_conf}/helm/flyway/" ]]; then
         $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
-            --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${gitlab_project_name}-flyway" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    ## setup helm file for argocd
-    update_gitops_helm
-
-    ## Clean up
-    $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' |
-        xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
-    $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt delete pod 2>/dev/null || true
-    sleep 3
-    ## Get deployment results and set var: deploy_result
-    if ! $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}"; then
-        deploy_result=1
-    fi
-
     echo_time "end deploy k8s."
 }
 
