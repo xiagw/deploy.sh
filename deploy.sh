@@ -80,6 +80,7 @@ func_test_unit() {
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
         bash "$gitlab_project_dir"/tests/unit_test.sh
     fi
+    echo_time "end unit test."
 }
 
 ## install jdk/ant/jmeter
@@ -119,6 +120,7 @@ EOF
     $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
+    echo_time "end sonar scanner."
 }
 
 scan_ZAP() {
@@ -147,12 +149,12 @@ func_deploy_flyway() {
     else
         echo "Nothing to do."
     fi
-    echo_time "end flyway migrate."
     if [ ${deploy_result:-0} = 0 ]; then
         echo_info "Result = OK"
     else
         echo_erro "Result = FAIL"
     fi
+    echo_time "end flyway migrate."
 }
 
 func_deploy_flyway_docker() {
@@ -522,6 +524,7 @@ func_renew_cert() {
     if [ -f "${acme_home}"/custom.acme.sh ]; then
         bash "${acme_home}"/custom.acme.sh
     fi
+    echo_time "end renew cert."
 }
 
 install_python_gitlab() {
@@ -674,7 +677,7 @@ func_generate_apidoc() {
 }
 
 func_file_preprocessing() {
-    echo_time "preprocessing file."
+    echo_time "preprocessing file..."
     ## frontend (VUE) .env file
     if [[ $project_lang =~ (node|react) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -715,6 +718,7 @@ func_file_preprocessing() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${script_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
+    echo_time "end preprocessing file."
 }
 
 func_config_files() {
