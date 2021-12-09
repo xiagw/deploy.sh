@@ -39,6 +39,7 @@ code_style_python() {
 ## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)
 code_style_php() {
     echo_time_step 'starting PHP Code Sniffer, < standard=PSR12 >...'
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep 'deploy/phpcs'; then
         DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dockerfile/Dockerfile.phpcs" "$script_dockerfile" >/dev/null
     fi
@@ -117,6 +118,7 @@ sonar.projectVersion=1.0
 sonar.import_unknown_files=true
 EOF
     fi
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
@@ -160,6 +162,7 @@ func_deploy_flyway() {
 func_deploy_flyway_docker() {
     ## docker build flyway
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/" >/dev/null
     docker run --rm "$image_tag_flyway"
     if [ ${deploy_result:-0} = 0 ]; then
@@ -173,6 +176,7 @@ func_deploy_flyway_docker() {
 build_node_yarn() {
     echo_time_step "node yarn build..."
     rm -f package-lock.json
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
     fi
@@ -196,6 +200,7 @@ build_php_composer() {
     else
         image_composer="deploy/composer"
     fi
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep -q "deploy/composer"; then
         DOCKER_BUILDKIT=1 docker build --quiet -t "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile"
@@ -233,6 +238,7 @@ docker_login() {
         return 0
     fi
     echo_time "docker login ${ENV_DOCKER_LOGIN_TYPE:-none} ..."
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "${ENV_DOCKER_LOGIN_TYPE:-none}" == 'aws' ]]; then
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
@@ -248,6 +254,7 @@ build_docker() {
     docker_login
 
     ## Docker build from, 是否从模板构建
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [ -n "$image_from" ]; then
         ## 判断模版是否存在,模版不存在，构建模板
         docker images | grep -q "${image_from%%:*}.*${image_from##*:}" ||
@@ -276,6 +283,7 @@ docker_push() {
     echo_time_step "docker push only..."
     docker_login
     # echo "$image_registry"
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     docker push -q "$image_registry" || echo_erro "error here, maybe caused by GFW."
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         docker push -q "$image_tag_flyway"
@@ -617,7 +625,10 @@ func_check_os() {
             $exec_sudo apt-get install -qq -y apt-utils >/dev/null
             $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
         fi
-        command -v docker >/dev/null || ( curl -fsSL https://get.docker.com -o get-docker.sh; bash get-docker.sh)
+        command -v docker >/dev/null || (
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            bash get-docker.sh
+        )
         ;;
     centos | amzn | rhel | fedora)
         rpm -q epel-release >/dev/null || {
@@ -1129,6 +1140,7 @@ main() {
     fi
 
     ## deploy result:  0 成功， 1 失败
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     return $deploy_result
 }
 
