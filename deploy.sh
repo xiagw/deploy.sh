@@ -314,7 +314,9 @@ deploy_k8s() {
         [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" "$env_namespace"
     else
         set -x
-        $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 --namespace "${env_namespace}" --create-namespace \
+        $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
+            --namespace "${env_namespace}" --create-namespace \
+            --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
         [[ "${debug_on:-0}" -ne 1 ]] && set +x
