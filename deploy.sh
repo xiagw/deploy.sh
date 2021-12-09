@@ -1133,6 +1133,7 @@ main() {
 
     ## notify
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
+    [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
     [[ "$ENV_DISABLE_MSG" = 1 ]] && exec_deploy_notify=0
     [[ "$ENV_DISABLE_MSG_BRANCH" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
@@ -1141,7 +1142,6 @@ main() {
     fi
 
     ## deploy result:  0 成功， 1 失败
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
     return $deploy_result
 }
 
