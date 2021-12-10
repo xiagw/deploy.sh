@@ -676,8 +676,8 @@ func_file_preprocessing() {
     fi
     ## Docker build from, 是否从模板构建
     if [[ "${project_docker}" -eq 1 && -n "$build_image_from" ]]; then
-            file_docker_tmpl="${script_dockerfile}/Dockerfile.${build_image_from##*:}"
-            [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
+        file_docker_tmpl="${script_dockerfile}/Dockerfile.${build_image_from##*:}"
+        [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
     fi
     ## flyway sql/conf files
     [[ ! -d "${gitlab_project_dir}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && copy_flyway_file=0
@@ -774,7 +774,6 @@ func_detect_project_type() {
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         exec_build_node=1
-
     fi
 
     if [[ -f "${gitlab_project_dir}/composer.json" ]]; then
@@ -793,17 +792,20 @@ func_detect_project_type() {
         path_for_rsync=
         [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]] && exec_build_java=1
     fi
+
     if [[ -f "${gitlab_project_dir}/requirements.txt" ]]; then
         project_lang='python'
         path_for_rsync=
         [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]] && exec_build_python=1
     fi
-    if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
+
+    if grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml"; then
         project_lang='android'
         exec_deploy_rsync=0
         exec_build_node=0
     fi
-    if grep '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
+
+    if grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml"; then
         project_lang='ios'
         exec_deploy_rsync=0
         exec_build_node=0
@@ -827,6 +829,12 @@ func_detect_project_type2() {
     test -f "${gitlab_project_dir}"/composer.json && project_lang=php
     test -f "${gitlab_project_dir}"/pom.xml && project_lang=java
     test -f "${gitlab_project_dir}"/requirements.txt && project_lang=python
+    if grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml"; then
+        project_lang='android'
+    fi
+    if grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml"; then
+        project_lang='ios'
+    fi
     project_lang=${project_lang:-other}
 
     case $project_lang in
@@ -843,18 +851,16 @@ func_detect_project_type2() {
             YARN_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
-        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_build_node=1
-        fi
+        [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]] && exec_build_node=1
         ;;
     php)
         project_lang='php'
         path_for_rsync=
         if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
-            COMPOSER_INSTALL=true
+            exec_build_php=1
         fi
-        [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=true
+        [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
         if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
             exec_build_php=1
             exec_build_node=0
@@ -1031,7 +1037,7 @@ main() {
     [[ "$PIPELINE_RENEW_CERT" -eq 1 ]] && func_renew_cert
 
     ## 判定项目类型
-    func_detect_project_type
+    func_detect_project_type2
 
     ## 文件预处理
     func_file_preprocessing
