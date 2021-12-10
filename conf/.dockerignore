@@ -8,6 +8,7 @@
 .github
 .gitlab-ci.yml
 .gitlab-ci.yaml
+.composer/
 
 # Docker
 .dockerignore
