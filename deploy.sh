@@ -700,8 +700,8 @@ func_file_preprocessing() {
         rsync -av "$HOME/.acme.sh/dest/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## Docker build from, 是否从模板构建
-    if [ -f "${gitlab_project_dir}"/Dockerfile ]; then
-        image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
+    if [ "${project_docker}" -eq 1 ]; then
+        image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep "${image_registry%%:*}" | head -n 1)
         if [ -n "$image_from" ]; then
             file_docker_tmpl="${script_dockerfile}/Dockerfile.${image_from##*:}"
             [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
