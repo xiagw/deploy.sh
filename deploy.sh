@@ -177,7 +177,7 @@ func_deploy_flyway_docker() {
 build_node_yarn() {
     echo_time_step "node yarn build..."
     rm -f package-lock.json
-    build_image_from=${build_image_from:-deploy/node}
+    build_image_from='deploy/node'
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
@@ -770,9 +770,8 @@ func_detect_project_type() {
             exec_build_php=1
         fi
         [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
-        exec_build_node=0
     fi
-    if [[ -f "${gitlab_project_dir}/package.json" && exec_build_node -ne 1 ]]; then
+    if [[ -f "${gitlab_project_dir}/package.json" ]]; then
         if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
             path_for_rsync='build/'
@@ -786,6 +785,7 @@ func_detect_project_type() {
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         exec_build_node=1
+        [[ "$exec_build_php" -eq 1 ]] && exec_build_node=1
     fi
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
         project_lang='java'
