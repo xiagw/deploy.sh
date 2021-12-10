@@ -123,6 +123,7 @@ EOF
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
     echo_time "end sonar scanner."
+    exit
 }
 
 scan_ZAP() {
@@ -243,7 +244,6 @@ docker_login() {
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
-        [[ "${github_action:-0}" -eq 1 ]] && return 0
         echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
     fi
     date +%s >"$lock_docker_login"
@@ -521,6 +521,7 @@ func_renew_cert() {
         bash "${acme_home}"/custom.acme.sh
     fi
     echo_time "end renew cert."
+    exit
 }
 
 install_python_gitlab() {
@@ -760,8 +761,8 @@ func_setup_var_gitlab() {
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-develop}
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
-    [[ -z "$gitlab_commit_short_sha" && "$1" =~ (--github) ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
-    [[ -z "$gitlab_commit_short_sha" && "$1" =~ (--debug) ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
+    [[ -z "$gitlab_commit_short_sha" && "$github_action" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
+    [[ -z "$gitlab_commit_short_sha" && "$debug_on" -eq 1 ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
     # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
     # gitlab_project_id=${CI_PROJECT_ID:-1234}
     # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
@@ -913,85 +914,20 @@ func_detect_project_type2() {
     esac
 }
 
-main() {
-    [[ -f ~/ci_debug || "${PIPELINE_DEBUG:-0}" -eq 1 ]] && debug_on=1
-    [[ "$1" =~ (--debug|--github) ]] && debug_on=1
+func_process_args() {
+    [[ "${PIPELINE_DEBUG:-0}" -eq 1 || "$1" =~ (--debug|--github) ]] && debug_on=1
     [[ "$debug_on" -eq 1 ]] && set -x
-    [[ "$1" =~ (--github) ]] && github_action=1
-    script_name="$(basename "$0")"
-    script_path="$(cd "$(dirname "$0")" && pwd)"
-    script_path_conf="${script_path}/conf"
-    script_path_bin="${script_path}/bin"
-    script_conf="${script_path_conf}/deploy.conf"      ## 发布到目标服务器的配置信息
-    script_env="${script_path_conf}/deploy.env"        ## 发布配置信息(密)
-    script_data="${script_path}/data"                  ## 记录 deploy.sh 的数据文件
-    script_log="${script_data}/${script_name}.log"     ## 记录 deploy.sh 执行情况
-    script_dockerfile="${script_path_conf}/dockerfile" ## dockerfile
-
-    [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/deploy.conf.example" "$script_conf"
-    [[ ! -f "$script_env" ]] && cp "${script_path_conf}/deploy.env.example" "$script_env"
-    [[ ! -f "$script_log" ]] && touch "$script_log"
-
-    PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
-    PATH="$PATH:$script_data/jdk/bin:$script_data/jmeter/bin:$script_data/ant/bin:$script_data/maven/bin"
-    PATH="$PATH:$script_path_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
-    export PATH
-
-    ## run docker with current/root user
-    docker_run="docker run --interactive --rm -u $UID:$UID"
-    # docker_run_root="docker run --interactive --rm -u 0:0"
-    git_diff="git --no-pager diff --name-only HEAD^"
-    kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
-    helm_opt="helm --kubeconfig $HOME/.kube/config"
-
-    ## 检查OS 类型和版本，安装基础命令和软件包
-    func_check_os
-
-    ## 人工/手动/执行/定义参数
-    func_setup_var_gitlab "$@"
-    ## source ENV, 获取 ENV_ 开头的所有全局变量
-    source "$script_env"
-    if [ -z "$ENV_HTTP_PROXY" ]; then
-        curl_opt="curl -L"
-    else
-        curl_opt="curl -x$ENV_HTTP_PROXY -L"
-    fi
-
-    ## 安装依赖命令/工具
-    [[ "${ENV_INSTALL_AWS}" == 'true' ]] && install_aws
-    [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && install_kubectl
-    [[ "${ENV_INSTALL_HELM}" == 'true' ]] && install_helm
-    [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && install_python_element
-    [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
-    [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
-
-    image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
-
-    ## setup ssh config
-    ## setup acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
-    func_config_files
-
-    ## 清理磁盘空间
-    func_clean_disk
-
-    ## acme.sh 更新证书
-    echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-    if [[ "$PIPELINE_RENEW_CERT" -eq 1 || "$1" =~ (--renwe-cert) ]]; then
-        func_renew_cert
-        return
-    fi
-
-    ## 判定项目类型
-    func_detect_project_type
-
-    ## 文件预处理
-    func_file_preprocessing
-
-    ## 处理传入的参数
     ## 1，默认情况执行所有任务，
     ## 2，如果传入参数，则通过传递入参执行单个任务。适用于单独的gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
         case $1 in
+        --debug)
+            debug_on=1
+            ;;
+        --github-action)
+            debug_on=1
+            github_action=1
+            ;;
         --renwe-cert)
             func_renew_cert
             exec_auto=0
@@ -1053,6 +989,7 @@ main() {
             exec_auto=0
             ;;
         *)
+            ## 1，默认情况执行所有任务，
             exec_auto=${exec_auto:-1}
             break
             ;;
@@ -1060,39 +997,99 @@ main() {
         shift
     done
 
-    ## 全自动执行所有步骤
-    if [[ "$exec_auto" -ne 1 ]]; then
-        return
+}
+
+main() {
+    ## 处理传入的参数
+    func_process_args "$@"
+
+    script_name="$(basename "$0")"
+    script_path="$(cd "$(dirname "$0")" && pwd)"
+    script_path_conf="${script_path}/conf"
+    script_path_bin="${script_path}/bin"
+    script_conf="${script_path_conf}/deploy.conf"      ## 发布到目标服务器的配置信息
+    script_env="${script_path_conf}/deploy.env"        ## 发布配置信息(密)
+    script_data="${script_path}/data"                  ## 记录 deploy.sh 的数据文件
+    script_log="${script_data}/${script_name}.log"     ## 记录 deploy.sh 执行情况
+    script_dockerfile="${script_path_conf}/dockerfile" ## dockerfile
+
+    [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/deploy.conf.example" "$script_conf"
+    [[ ! -f "$script_env" ]] && cp "${script_path_conf}/deploy.env.example" "$script_env"
+    [[ ! -f "$script_log" ]] && touch "$script_log"
+
+    PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
+    PATH="$PATH:$script_data/jdk/bin:$script_data/jmeter/bin:$script_data/ant/bin:$script_data/maven/bin"
+    PATH="$PATH:$script_path_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
+    export PATH
+
+    ## run docker with current/root user
+    docker_run="docker run --interactive --rm -u $UID:$UID"
+    # docker_run_root="docker run --interactive --rm -u 0:0"
+    git_diff="git --no-pager diff --name-only HEAD^"
+    kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
+    helm_opt="helm --kubeconfig $HOME/.kube/config"
+
+    ## 检查OS 类型和版本，安装基础命令和软件包
+    func_check_os
+
+    ## 人工/手动/执行/定义参数
+    func_setup_var_gitlab
+    ## source ENV, 获取 ENV_ 开头的所有全局变量
+    source "$script_env"
+    if [ -z "$ENV_HTTP_PROXY" ]; then
+        curl_opt="curl -L"
+    else
+        curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
+
+    ## 安装依赖命令/工具
+    [[ "${ENV_INSTALL_AWS}" == 'true' ]] && install_aws
+    [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && install_kubectl
+    [[ "${ENV_INSTALL_HELM}" == 'true' ]] && install_helm
+    [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && install_python_element
+    [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
+    [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
+
+    image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
+
+    ## 清理磁盘空间
+    func_clean_disk
+
+    ## setup ssh config/ acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
+    func_config_files
+
+    ## acme.sh 更新证书
+    echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
+    [[ "$PIPELINE_RENEW_CERT" -eq 1 ]] && func_renew_cert
+
+    ## 判定项目类型
+    func_detect_project_type
+
+    ## 文件预处理
+    func_file_preprocessing
+
+    ## 全自动执行所有步骤
+    [[ "$exec_auto" -ne 1 ]] && return
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
-        func_code_quality_sonar
-        return $?
-    fi
+    [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && func_code_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]]; then
-        func_code_style
-    fi
+    [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && func_code_style
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-1}"
-    if [[ "${PIPELINE_UNIT_TEST:-1}" -eq 1 ]]; then
-        func_test_unit
-    fi
+    [[ "${PIPELINE_UNIT_TEST:-1}" -eq 1 ]] && func_test_unit
 
     ## use flyway deploy sql file
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
     [[ -d "${gitlab_project_dir}/${ENV_FLYWAY_SQL:-docs/sql}" ]] || exec_deploy_flyway=0
     [[ "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_deploy_flyway=0
     [[ "${ENV_HELM_FLYWAY:-0}" -eq 1 ]] && exec_deploy_flyway=0
-    if [[ ${exec_deploy_flyway:-1} -eq 1 ]]; then
-        func_deploy_flyway
-        # func_deploy_flyway_docker
-    fi
+    [[ ${exec_deploy_flyway:-1} -eq 1 ]] && func_deploy_flyway
+    # [[ ${exec_deploy_flyway:-1} -eq 1 ]] && func_deploy_flyway_docker
 
     ## generate api docs
     # func_generate_apidoc
@@ -1108,15 +1105,11 @@ main() {
 
     [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
     [[ $ENV_FORCE_RSYNC == 'true' ]] && exec_deploy_rsync=1
-    if [[ "${exec_deploy_rsync:-1}" -eq 1 ]]; then
-        func_deploy_rsync
-    fi
+    [[ "${exec_deploy_rsync:-1}" -eq 1 ]] && func_deploy_rsync
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
-    if [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 1 ]]; then
-        func_test_function
-    fi
+    [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 1 ]] && func_test_function
 
     ## notify
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
@@ -1124,9 +1117,7 @@ main() {
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
     [[ "$ENV_DISABLE_MSG" = 1 ]] && exec_deploy_notify=0
     [[ "$ENV_DISABLE_MSG_BRANCH" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
-    if [[ "${exec_deploy_notify:-1}" == 1 ]]; then
-        func_deploy_notify
-    fi
+    [[ "${exec_deploy_notify:-1}" == 1 ]] && func_deploy_notify
 
     ## deploy result:  0 成功， 1 失败
     return $deploy_result

@@ -9,4 +9,4 @@ RUN set -xe \
     && sed -i -e '/=false/s/false/true/g' conf/deploy.env.example \
     && sed -i -e '/ENV_INSTALL_JMETER=/s/true/false/' conf/deploy.env.example \
     && chmod +x ./deploy.sh \
-    && ./deploy.sh --github
+    && ./deploy.sh --github-action
