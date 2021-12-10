@@ -177,25 +177,23 @@ func_deploy_flyway_docker() {
 build_node_yarn() {
     echo_time_step "node yarn build..."
     rm -f package-lock.json
-    build_node_from='deploy/node'
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if ! docker images | grep "$build_node_from" >/dev/null; then
+    if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
     fi
-    $docker_run -v "${gitlab_project_dir}":/app -w /app "$build_node_from" bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
+    $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
     echo_time "end node yarn build."
 }
 
 build_php_composer() {
     echo_time_step "php composer install..."
-    build_image_from=${build_image_from:-deploy/composer}
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep -q "deploy/composer"; then
         DOCKER_BUILDKIT=1 docker build --quiet --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile"
     fi
     rm -rf "${gitlab_project_dir}"/vendor
-    $docker_run -v "$gitlab_project_dir:/app" -w /app "$build_image_from" bash -c "composer install -q" || true
+    $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install -q" || true
     echo_time "end php composer install."
 }
 
