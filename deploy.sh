@@ -182,6 +182,10 @@ build_node_yarn() {
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
     fi
     $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
+    [ -d "${gitlab_project_dir}"/build ] && {
+        rm -rf "${gitlab_project_dir}"/dist
+        mv "${gitlab_project_dir}"/build "${gitlab_project_dir}"/dist
+    }
     echo_time "end node yarn build."
 }
 
@@ -784,13 +788,13 @@ func_detect_project_type() {
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
         project_lang='java'
         path_for_rsync=
-        [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]] && exec_build_java=1
+        exec_build_java=1
     fi
 
     if [[ -f "${gitlab_project_dir}/requirements.txt" ]]; then
         project_lang='python'
         path_for_rsync=
-        [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]] && exec_build_python=1
+        exec_build_python=1
     fi
 
     if grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml"; then
@@ -824,12 +828,8 @@ func_detect_project_sigle() {
     test -f "${gitlab_project_dir}"/composer.json && project_lang=php
     test -f "${gitlab_project_dir}"/pom.xml && project_lang=java
     test -f "${gitlab_project_dir}"/requirements.txt && project_lang=python
-    if grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml"; then
-        project_lang='android'
-    fi
-    if grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml"; then
-        project_lang='ios'
-    fi
+    grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=android
+    grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=ios
     project_lang=${project_lang:-other}
 
     case "$project_lang" in
@@ -853,22 +853,15 @@ func_detect_project_sigle() {
             exec_build_php=1
         fi
         [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
-        if [[ "$project_docker" -ne 1 || "$ENV_FORCE_RSYNC" == 'true' ]]; then
-            exec_build_php=1
-            exec_build_node=0
-        fi
+        # COMPOSER_INSTALL=true
         ;;
     java)
         path_for_rsync=''
-        if [[ "$project_docker" -ne 1 || "$ENV_FORCE_RSYNC" == 'true' ]]; then
-            exec_build_java=1
-        fi
+        exec_build_java=1
         ;;
     python)
         path_for_rsync=''
-        if [[ "$project_docker" -ne 1 || "$ENV_FORCE_RSYNC" == 'true' ]]; then
-            exec_build_python=1
-        fi
+        exec_build_python=1
         ;;
     *)
         # if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
