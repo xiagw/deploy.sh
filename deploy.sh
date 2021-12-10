@@ -164,7 +164,7 @@ func_deploy_flyway_docker() {
     ## docker build flyway
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/" >/dev/null
+    DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     docker run --rm "$image_tag_flyway"
     if [ ${deploy_result:-0} = 0 ]; then
         echo_info "Result = OK"
@@ -179,7 +179,8 @@ build_node_yarn() {
     rm -f package-lock.json
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep 'deploy/node' >/dev/null; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -q -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+            -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
     fi
     $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
     [ -d "${gitlab_project_dir}"/build ] && {
@@ -194,9 +195,9 @@ build_php_composer() {
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep -q "deploy/composer"; then
         DOCKER_BUILDKIT=1 docker build --quiet --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-            -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile"
+            -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile" >/dev/null
     fi
-    rm -rf "${gitlab_project_dir}"/vendor
+    # rm -rf "${gitlab_project_dir}"/vendor
     $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install -q" || true
     echo_time "end php composer install."
 }
@@ -238,20 +239,21 @@ build_docker() {
 
     ## Docker build from, 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
+    ## 判断模版是否存在,模版不存在，构建模板
     if [ -n "$build_image_from" ]; then
-        ## 判断模版是否存在,模版不存在，构建模板
         docker images | grep -q "${build_image_from%%:*}.*${build_image_from##*:}" ||
             DOCKER_BUILDKIT=1 docker build -q --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${gitlab_project_dir}/Dockerfile.${build_image_from##*:}" "${gitlab_project_dir}"
     fi
 
     ## docker build flyway
-    if [[ $ENV_HELM_FLYWAY == 1 ]]; then
+    if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
         image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
-        DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/" >/dev/null
+        DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
-    DOCKER_BUILDKIT=1 docker build -q --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}" >/dev/null
+    DOCKER_BUILDKIT=1 docker build -q --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" \
+        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
     echo_time "end docker build."
     # --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
 }
@@ -261,7 +263,7 @@ docker_push() {
     docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     docker push -q "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" || echo_erro "error here, maybe caused by GFW."
-    if [[ $ENV_HELM_FLYWAY == 1 ]]; then
+    if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
         docker push -q "$image_tag_flyway"
     fi
     echo_time "end docker push."
@@ -269,7 +271,7 @@ docker_push() {
 
 deploy_k8s() {
     echo_time_step "deploy k8s..."
-    if [[ ${ENV_REMOVE_PROJ_PREFIX:-false} == 'true' ]]; then
+    if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
         helm_release=${gitlab_project_name#*-}
     else
         helm_release=${gitlab_project_name}
@@ -314,7 +316,7 @@ deploy_k8s() {
     fi
 
     ## helm install flyway jobs
-    if [[ $ENV_HELM_FLYWAY == 1 && -d "${script_path_conf}/helm/flyway/" ]]; then
+    if [[ "$ENV_HELM_FLYWAY" == 1 && -d "${script_path_conf}"/helm/flyway ]]; then
         $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
@@ -586,7 +588,6 @@ func_check_os() {
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
         if [[ -n "$install_pkg" ]]; then
             $exec_sudo apt-get update -qq
-            $exec_sudo apt-get install -qq -y apt-utils >/dev/null
             $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
         fi
         command -v docker >/dev/null || (
@@ -654,7 +655,7 @@ func_generate_apidoc() {
 func_file_pre_process() {
     echo_time "preprocessing file..."
     ## frontend (VUE) .env file
-    if [[ $project_lang =~ (node|react) ]]; then
+    if [[ "$project_lang" =~ (node|react) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
         for file in $config_env_path; do
             if [[ "$file" =~ 'config/' ]]; then
@@ -746,7 +747,7 @@ func_setup_var_gitlab() {
     env_namespace=$gitlab_project_branch
 }
 
-func_detect_project_type() {
+func_detect_project_langs() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
@@ -811,7 +812,7 @@ func_detect_project_type() {
     project_lang=${project_lang:-other}
 }
 
-func_detect_project_sigle() {
+func_detect_project_lang() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
@@ -876,7 +877,7 @@ func_process_args() {
     ## 1，默认情况执行所有任务，
     ## 2，如果传入参数，则通过传递入参执行单个任务。适用于单独的gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
-        case $1 in
+        case "$1" in
         --debug)
             debug_on=1
             ;;
@@ -1017,8 +1018,8 @@ main() {
     [[ "$PIPELINE_RENEW_CERT" -eq 1 ]] && func_renew_cert
 
     ## 判定项目类型
-    # func_detect_project_type
-    func_detect_project_sigle
+    # func_detect_project_langs
+    func_detect_project_lang
 
     ## 文件预处理
     func_file_pre_process
