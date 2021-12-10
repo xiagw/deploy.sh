@@ -177,44 +177,25 @@ func_deploy_flyway_docker() {
 build_node_yarn() {
     echo_time_step "node yarn build..."
     rm -f package-lock.json
+    build_image_from=${build_image_from:-deploy/node}
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep 'deploy/node' >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
     fi
-    echo "PIPELINE_YARN_INSTALL: ${PIPELINE_YARN_INSTALL:-0}"
-    echo "YARN_INSTALL=${YARN_INSTALL:-false}"
-    if [[ -f "$script_path_bin/custome.docker.build.sh" ]]; then
-        source "$script_path_bin/custome.docker.build.sh"
-    else
-        if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
-            $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install"
-        fi
-        $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn run build"
-    fi
-    echo_time "end node build."
+    $docker_run -v "${gitlab_project_dir}":/app -w /app "$build_image_from" bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
+    echo_time "end node yarn build."
 }
 
 build_php_composer() {
     echo_time_step "php composer install..."
-    if [ "${ENV_IMAGE_FROM_DOCKERFILE}" = 'Dockerfile' ]; then
-        image_composer=$(awk '/FROM/ {print $2}' | tail -n 1)
-    else
-        image_composer="deploy/composer"
-    fi
+    build_image_from=${build_image_from:-deploy/composer}
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep -q "deploy/composer"; then
-        DOCKER_BUILDKIT=1 docker build --quiet -t "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+        DOCKER_BUILDKIT=1 docker build --quiet --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile"
     fi
-
-    [[ "${PIPELINE_COMPOSER_INSTALL:-0}" -eq 1 ]] && COMPOSER_INSTALL=true
-    echo "PIPELINE_COMPOSER_INSTALL: ${PIPELINE_COMPOSER_INSTALL:-0}"
-    echo "COMPOSER_INSTALL=${COMPOSER_INSTALL:-false}"
-    if [[ "${COMPOSER_INSTALL:-false}" == 'true' ]]; then
-        rm -f "${gitlab_project_dir}"/composer.lock
-        # rm -rf "${gitlab_project_dir}"/vendor
-        $docker_run -v "$gitlab_project_dir:/app" --env COMPOSER_INSTALL=${COMPOSER_INSTALL} -w /app "$image_composer" composer install -q || true
-    fi
+    rm -rf "${gitlab_project_dir}"/vendor
+    $docker_run -v "$gitlab_project_dir:/app" -w /app "$build_image_from" bash -c "composer install -q" || true
     echo_time "end php composer install."
 }
 
@@ -268,14 +249,8 @@ build_docker() {
         DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/" >/dev/null
     fi
     ## docker build
-    [[ "${PIPELINE_YARN_INSTALL:-0}" -eq 1 ]] && YARN_INSTALL=true
-    echo "PIPELINE_YARN_INSTALL: ${PIPELINE_YARN_INSTALL:-0}"
-    echo "YARN_INSTALL: ${YARN_INSTALL:-false}"
-    DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" \
-        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
-        "${gitlab_project_dir}" >/dev/null
+    DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}" >/dev/null
     echo_time "end docker build."
-    # --build-arg YARN_INSTALL="${YARN_INSTALL:-true}" \
     # --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
 }
 
@@ -700,8 +675,8 @@ func_file_preprocessing() {
         rsync -av "$HOME/.acme.sh/dest/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## Docker build from, 是否从模板构建
-    if [ -f "${gitlab_project_dir}"/Dockerfile ]; then
-        image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep -q "${image_registry%%:*}" | head -n 1)
+    if [ "${project_docker}" -eq 1 ]; then
+        image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep "${image_registry%%:*}" | head -n 1)
         if [ -n "$image_from" ]; then
             file_docker_tmpl="${script_dockerfile}/Dockerfile.${image_from##*:}"
             [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
@@ -785,6 +760,17 @@ func_detect_project_type() {
         exec_build_docker=1
         exec_docker_push=1
         exec_deploy_k8s=1
+        build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${env_image_reg}" | head -n 1)"
+    fi
+    if [[ -f "${gitlab_project_dir}/composer.json" ]]; then
+        project_lang='php'
+        path_for_rsync=
+        if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
+            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
+            exec_build_php=1
+        fi
+        [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
+        exec_build_node=0
     fi
     if [[ -f "${gitlab_project_dir}/package.json" ]]; then
         if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
@@ -799,36 +785,17 @@ func_detect_project_type() {
             YARN_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
-        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_build_node=1
-        fi
-    fi
-    if [[ -f "${gitlab_project_dir}/composer.json" ]]; then
-        project_lang='php'
-        path_for_rsync=
-        if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
-            COMPOSER_INSTALL=true
-        fi
-        [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=true
-        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_build_php=1
-            exec_build_node=0
-        fi
+        exec_build_node=1
     fi
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
         project_lang='java'
         path_for_rsync=
-        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_build_java=1
-        fi
+        [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]] && exec_build_java=1
     fi
     if [[ -f "${gitlab_project_dir}/requirements.txt" ]]; then
         project_lang='python'
         path_for_rsync=
-        if [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]]; then
-            exec_build_python=1
-        fi
+        [[ "$project_docker" -ne 1 || $ENV_FORCE_RSYNC == 'true' ]] && exec_build_python=1
     fi
     if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
         project_lang='android'
@@ -1050,7 +1017,9 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
 
-    image_registry="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-${gitlab_commit_short_sha}"
+    env_image_reg="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}"
+    env_image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}"
+    image_registry="${env_image_reg}:${env_image_tag}"
 
     ## 清理磁盘空间
     func_clean_disk
@@ -1095,13 +1064,13 @@ main() {
     # func_generate_apidoc
 
     ## build/deploy
-    [[ "${exec_build_docker}" -eq 1 ]] && build_docker
-    [[ "${exec_docker_push}" -eq 1 ]] && docker_push
-    [[ "${exec_deploy_k8s}" -eq 1 ]] && deploy_k8s
     [[ "${exec_build_php}" -eq 1 ]] && build_php_composer
     [[ "${exec_build_node}" -eq 1 ]] && build_node_yarn
     [[ "${exec_build_java}" -eq 1 ]] && build_java_maven
     [[ "${exec_build_python}" -eq 1 ]] && build_python_pip
+    [[ "${exec_build_docker}" -eq 1 ]] && build_docker
+    [[ "${exec_docker_push}" -eq 1 ]] && docker_push
+    [[ "${exec_deploy_k8s}" -eq 1 ]] && deploy_k8s
 
     [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
     [[ $ENV_FORCE_RSYNC == 'true' ]] && exec_deploy_rsync=1
