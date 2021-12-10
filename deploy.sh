@@ -651,7 +651,7 @@ func_generate_apidoc() {
     fi
 }
 
-func_file_preprocessing() {
+func_file_pre_process() {
     echo_time "preprocessing file..."
     ## frontend (VUE) .env file
     if [[ $project_lang =~ (node|react) ]]; then
@@ -733,8 +733,8 @@ func_setup_var_gitlab() {
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-develop}
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
-    [[ -z "$gitlab_commit_short_sha" && "$github_action" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
-    [[ -z "$gitlab_commit_short_sha" && "$debug_on" -eq 1 ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
+    [[ -z "$gitlab_commit_short_sha" && "${github_action:-0}" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
+    [[ -z "$gitlab_commit_short_sha" && "${debug_on:-0}" -eq 1 ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
     # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
     # gitlab_project_id=${CI_PROJECT_ID:-1234}
     # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
@@ -813,7 +813,7 @@ func_detect_project_type() {
     project_lang=${project_lang:-other}
 }
 
-func_detect_project_type2() {
+func_detect_project_sigle() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
@@ -824,6 +824,7 @@ func_detect_project_type2() {
         exec_build_docker=1
         exec_docker_push=1
         exec_deploy_k8s=1
+        build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
     fi
     test -f "${gitlab_project_dir}"/package.json && project_lang=node
     test -f "${gitlab_project_dir}"/composer.json && project_lang=php
@@ -1037,10 +1038,11 @@ main() {
     [[ "$PIPELINE_RENEW_CERT" -eq 1 ]] && func_renew_cert
 
     ## 判定项目类型
-    func_detect_project_type2
+    # func_detect_project_type
+    func_detect_project_sigle
 
     ## 文件预处理
-    func_file_preprocessing
+    func_file_pre_process
 
     ## 全自动执行所有步骤
     [[ "$exec_auto" -ne 1 ]] && return
