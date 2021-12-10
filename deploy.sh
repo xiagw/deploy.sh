@@ -785,7 +785,7 @@ func_detect_project_type() {
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         exec_build_node=1
-        [[ "$exec_build_php" -eq 1 ]] && exec_build_node=0
+        [[ -f "${gitlab_project_dir}/composer.json" ]] && exec_build_node=0
     fi
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
         project_lang='java'
