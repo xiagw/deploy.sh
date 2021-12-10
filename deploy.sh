@@ -762,15 +762,7 @@ func_detect_project_type() {
         exec_deploy_k8s=1
         build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${env_image_reg}" | head -n 1)"
     fi
-    if [[ -f "${gitlab_project_dir}/composer.json" ]]; then
-        project_lang='php'
-        path_for_rsync=
-        if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
-            exec_build_php=1
-        fi
-        [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
-    fi
+
     if [[ -f "${gitlab_project_dir}/package.json" ]]; then
         if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
             project_lang='react'
@@ -785,8 +777,20 @@ func_detect_project_type() {
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         exec_build_node=1
-        [[ -f "${gitlab_project_dir}/composer.json" ]] && exec_build_node=0
+
     fi
+
+    if [[ -f "${gitlab_project_dir}/composer.json" ]]; then
+        project_lang='php'
+        path_for_rsync=
+        if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
+            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
+            exec_build_php=1
+        fi
+        [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
+        exec_build_node=0
+    fi
+
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
         project_lang='java'
         path_for_rsync=
