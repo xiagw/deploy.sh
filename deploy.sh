@@ -177,12 +177,12 @@ func_deploy_flyway_docker() {
 build_node_yarn() {
     echo_time_step "node yarn build..."
     rm -f package-lock.json
-    build_image_from='deploy/node'
+    build_node_from='deploy/node'
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if ! docker images | grep "$build_image_from" >/dev/null; then
+    if ! docker images | grep "$build_node_from" >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
     fi
-    $docker_run -v "${gitlab_project_dir}":/app -w /app "$build_image_from" bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
+    $docker_run -v "${gitlab_project_dir}":/app -w /app "$build_node_from" bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
     echo_time "end node yarn build."
 }
 
@@ -236,11 +236,11 @@ build_docker() {
 
     ## Docker build from, 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if [ -n "$image_from" ]; then
+    if [ -n "$build_image_from" ]; then
         ## 判断模版是否存在,模版不存在，构建模板
-        docker images | grep -q "${image_from%%:*}.*${image_from##*:}" ||
-            DOCKER_BUILDKIT=1 docker build -q --tag "${image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-                -f "${gitlab_project_dir}/Dockerfile.${image_from##*:}" "${gitlab_project_dir}"
+        docker images | grep -q "${build_image_from%%:*}.*${build_image_from##*:}" ||
+            DOCKER_BUILDKIT=1 docker build -q --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+                -f "${gitlab_project_dir}/Dockerfile.${build_image_from##*:}" "${gitlab_project_dir}"
     fi
 
     ## docker build flyway
@@ -675,12 +675,9 @@ func_file_preprocessing() {
         rsync -av "$HOME/.acme.sh/dest/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## Docker build from, 是否从模板构建
-    if [ "${project_docker}" -eq 1 ]; then
-        image_from=$(awk '/^FROM/ {print $2}' Dockerfile | grep "${env_image_reg}" | head -n 1)
-        if [ -n "$image_from" ]; then
-            file_docker_tmpl="${script_dockerfile}/Dockerfile.${image_from##*:}"
+    if [[ "${project_docker}" -eq 1 && -n "$build_image_from" ]]; then
+            file_docker_tmpl="${script_dockerfile}/Dockerfile.${build_image_from##*:}"
             [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
-        fi
     fi
     ## flyway sql/conf files
     [[ ! -d "${gitlab_project_dir}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && copy_flyway_file=0
@@ -760,7 +757,7 @@ func_detect_project_type() {
         exec_build_docker=1
         exec_docker_push=1
         exec_deploy_k8s=1
-        build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${env_image_reg}" | head -n 1)"
+        build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
     fi
 
     if [[ -f "${gitlab_project_dir}/package.json" ]]; then
@@ -1021,9 +1018,7 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
 
-    env_image_reg="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}"
-    env_image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}"
-    image_registry="${env_image_reg}:${env_image_tag}"
+    image_registry="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}"
 
     ## 清理磁盘空间
     func_clean_disk
@@ -1088,12 +1083,12 @@ main() {
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
     [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
-    [[ "$ENV_DISABLE_MSG" = 1 ]] && exec_deploy_notify=0
+    [[ "$ENV_DISABLE_MSG" -eq 1 ]] && exec_deploy_notify=0
     [[ "$ENV_DISABLE_MSG_BRANCH" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
-    [[ "${exec_deploy_notify:-1}" == 1 ]] && func_deploy_notify
+    [[ "${exec_deploy_notify:-1}" -eq 1 ]] && func_deploy_notify
 
     ## deploy result:  0 成功， 1 失败
-    return $deploy_result
+    return ${deploy_result:-0}
 }
 
 main "$@"
