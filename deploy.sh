@@ -247,7 +247,7 @@ build_docker() {
         DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/" >/dev/null
     fi
     ## docker build
-    DOCKER_BUILDKIT=1 docker build -q --tag "${image_registry}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}" >/dev/null
+    DOCKER_BUILDKIT=1 docker build -q --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}" >/dev/null
     echo_time "end docker build."
     # --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
 }
@@ -255,9 +255,8 @@ build_docker() {
 docker_push() {
     echo_time_step "docker push only..."
     docker_login
-    # echo "$image_registry"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    docker push -q "$image_registry" || echo_erro "error here, maybe caused by GFW."
+    docker push -q "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" || echo_erro "error here, maybe caused by GFW."
     if [[ $ENV_HELM_FLYWAY == 1 ]]; then
         docker push -q "$image_tag_flyway"
     fi
@@ -280,7 +279,6 @@ deploy_k8s() {
         path_helm="$gitlab_project_dir/helm"
     fi
 
-    image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}"
     if [ -z "$path_helm" ]; then
         echo_warn "helm files not found."
         ## Custom deployment method
@@ -290,7 +288,7 @@ deploy_k8s() {
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
-            --set image.tag="${image_tag}" \
+            --set image.tag="${gitlab_project_name}-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
         [[ "${debug_on:-0}" -ne 1 ]] && set +x
         ## Clean up
@@ -307,7 +305,7 @@ deploy_k8s() {
         echo_time_step "update helm files..."
         sed -i \
             -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
-            -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
+            -e "s@tag:.*@tag:\ \"${gitlab_project_name}-${gitlab_commit_short_sha}\"@" \
             "$file_helm_values"
     fi
 
@@ -1022,8 +1020,6 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && install_python_element
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
-
-    image_registry="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}"
 
     ## 清理磁盘空间
     func_clean_disk
