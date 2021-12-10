@@ -179,7 +179,7 @@ build_node_yarn() {
     rm -f package-lock.json
     build_image_from='deploy/node'
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if ! docker images | grep 'deploy/node' >/dev/null; then
+    if ! docker images | grep "$build_image_from" >/dev/null; then
         DOCKER_BUILDKIT=1 docker build -t deploy/node -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile" >/dev/null
     fi
     $docker_run -v "${gitlab_project_dir}":/app -w /app "$build_image_from" bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
@@ -785,7 +785,7 @@ func_detect_project_type() {
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         exec_build_node=1
-        [[ "$exec_build_php" -eq 1 ]] && exec_build_node=1
+        [[ "$exec_build_php" -eq 1 ]] && exec_build_node=0
     fi
     if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
         project_lang='java'
