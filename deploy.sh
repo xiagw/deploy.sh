@@ -2,7 +2,7 @@
 
 ################################################################################
 #
-# Description: Gitlab deploy, rsync file, import sql, deploy k8s
+# Description: deploy.sh is a CI/CD program for GitLab Server.
 # Author: xiagw <fxiaxiaoyu@gmail.com>
 # License: GNU/GPL, see http://www.gnu.org/copyleft/gpl.html
 # Date: 2019-04-03
@@ -12,21 +12,20 @@
 set -e ## 出现错误自动退出
 # set -u ## 变量未定义报错
 
-# install gitlab-runner, https://docs.gitlab.com/runner/install/linux-manually.html
-# http://www.ttlsa.com/auto/gitlab-cicd-variables-zh-document/
-
 echo_info() { echo -e "\033[32m$*\033[0m"; }        ## green
 echo_warn() { echo -e "\033[33m$*\033[0m"; }        ## yellow
 echo_erro() { echo -e "\033[31m$*\033[0m"; }        ## red
 echo_ques() { echo -e "\033[35m$*\033[0m"; }        ## brown
 echo_time() { echo "[$(date +%Y%m%d-%T-%u)], $*"; } ## time
-## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
 echo_time_step() { echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\033[0m $*" && STEP=$((STEP + 1)); }
+
+## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
 # https://zhuanlan.zhihu.com/p/48048906
 # https://www.jianshu.com/p/bf0ffe8e615a
 # https://www.cnblogs.com/lsgxeva/p/7994474.html
 # https://eslint.bootcss.com
 # http://eslint.cn/docs/user-guide/getting-started
+
 code_style_node() {
     echo_time_step "[TODO] eslint code style check..."
 }
@@ -141,14 +140,13 @@ func_deploy_flyway() {
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
-    ## 判断是否需要建立数据库远程连接
+    ## ssh port-forward mysql 3306 to localhost / 判断是否需要建立数据库远程连接
     [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
-        $flyway_docker_run migrate && deploy_result=0 || deploy_result=1
+        $flyway_docker_run migrate || deploy_result=1
         $flyway_docker_run info | tail -n 10
-        ## 断开数据库远程连接
     else
         echo "Nothing to do."
     fi
@@ -165,7 +163,7 @@ func_deploy_flyway_docker() {
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
-    docker run --rm "$image_tag_flyway"
+    docker run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
         echo_info "Result = OK"
     else
@@ -208,13 +206,13 @@ build_python_pip() {
     echo_time_step "python install..."
 }
 
-# 列出所有项目
+# python-gitlab list all projects / 列出所有项目
 # gitlab -v -o yaml -f path_with_namespace project list --all |awk -F': ' '{print $2}' |sort >p.txt
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
 docker_login() {
-    ## 比较上一次登陆时间，超过12小时则再次登录
+    ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
     lock_docker_login="$script_path_conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     time_save="$(if test -f "$lock_docker_login"; then cat "$lock_docker_login"; else :; fi)"
     if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
@@ -235,16 +233,16 @@ build_docker() {
     echo_time_step "docker build only..."
     docker_login
 
-    ## Docker build from, 是否从模板构建
+    ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    ## 判断模版是否存在,模版不存在，构建模板
+    ## When the image does not exist, build the image / 判断模版是否存在,模版不存在，构建模板
     if [ -n "$build_image_from" ]; then
         docker images | grep -q "${build_image_from%%:*}.*${build_image_from##*:}" ||
             DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${gitlab_project_dir}/Dockerfile.${build_image_from##*:}" "${gitlab_project_dir}"
     fi
 
-    ## docker build flyway
+    ## docker build flyway image / 构建 flyway 模板
     if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
         image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
         DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
@@ -253,7 +251,6 @@ build_docker() {
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
     echo_time "end docker build."
-    # --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
 }
 
 docker_push() {
@@ -274,9 +271,9 @@ deploy_k8s() {
     else
         helm_release=${gitlab_project_name}
     fi
-    ## 转换为小写， Convert to lower case
+    ## Convert to lower case / 转换为小写
     helm_release="${helm_release,,}"
-    ## helm files folder
+    ## finding helm files folder / 查找 helm 文件目录
     if [ -d "${script_path_conf}/helm/${gitlab_project_name}" ]; then
         path_helm="${script_path_conf}/helm/${gitlab_project_name}"
     elif [ -d "$gitlab_project_dir/helm" ]; then
@@ -284,7 +281,7 @@ deploy_k8s() {
     fi
 
     if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
-        ## update helm file for argocd
+        ## update gitops files / 更新 gitops 文件
         file_gitops="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo_time_step "update gitops files..."
@@ -299,7 +296,7 @@ deploy_k8s() {
 
     if [ -z "$path_helm" ]; then
         echo_warn "helm files not found."
-        ## Custom deployment method
+        ## Custom deployment method / 自定义部署方式
         [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" "$env_namespace"
     else
         set -x
@@ -309,15 +306,14 @@ deploy_k8s() {
             --set image.tag="${gitlab_project_name}-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
         [[ "${debug_on:-0}" -ne 1 ]] && set +x
-        ## Clean up
+        ## Clean up rs 0 0 / 清理 rs 0 0
         $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
         $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
         sleep 3
-        ## Get deployment results and set var: deploy_result
         $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" || deploy_result=1
     fi
 
-    ## helm install flyway jobs
+    ## install flyway jobs / 安装 flyway 任务
     if [[ "$ENV_HELM_FLYWAY" == 1 && -d "${script_path_conf}"/helm/flyway ]]; then
         $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
@@ -330,7 +326,7 @@ deploy_k8s() {
 
 func_deploy_rsync() {
     echo_time_step "rsync code file to remote server..."
-    ## 读取配置文件，获取 项目/分支名/war包目录
+    ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf"); do
     grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf" | while read -r line; do
         # shellcheck disable=2116
@@ -344,20 +340,20 @@ func_deploy_rsync() {
         # db_host=${array[7]}
         # db_name=${array[8]}
 
-        ## 防止出现空变量（若有空变量则自动退出）
+        ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
         echo "${ssh_host:?if stop here, check runner/conf/deploy.conf}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
-        ## rsync exclude some files
+        ## rsync exclude some files / rsync 排除某些文件
         if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
             rsync_conf="${gitlab_project_dir}/rsync.exclude"
         else
             rsync_conf="${script_path_conf}/rsync.exclude"
         fi
-        ## node/java use rsync --delete
-        [[ "${project_lang}" =~ (node|react|java|other) ]] && rsync_delete='--delete'
+        ## node/java use rsync --delete / node/java 使用 rsync --delete
+        [[ "${project_lang}" =~ (node|java|other) ]] && rsync_delete='--delete'
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsync_conf} $rsync_delete"
 
-        ## 源文件夹
+        ## rsync source folder / rsync 源目录
         if [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
             rsync_src="${gitlab_project_dir}/$path_for_rsync"
         elif [[ "$rsync_src" =~ \.[jw]ar$ ]]; then
@@ -369,20 +365,19 @@ func_deploy_rsync() {
                 return 1
             fi
         fi
-        ## 目标文件夹
+        ## rsycn dest folder / rsync 目标目录
         if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${env_namespace}.${gitlab_project_name}/"
         fi
-        ## 发布到 aliyun oss 存储
+        ## deploy to aliyun oss / 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
             aliyun oss cp "${rsync_src}/" "$rsync_dest/" --recursive --force
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
             return
         fi
-        ## 判断目标服务器/目标目录 是否存在？不存在则登录到目标服务器建立目标路径
         $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
-        ## 复制文件到目标服务器的目标目录
+        ## rsync to remote server / rsync 到远程服务器
         echo "deploy to ${ssh_host}:${rsync_dest}"
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
     done
@@ -390,9 +385,6 @@ func_deploy_rsync() {
 }
 
 func_deploy_notify_msg() {
-    # mr_iid="$(gitlab project-merge-request list --project-id "$gitlab_project_id" --page 1 --per-page 1 | awk '/^iid/ {print $2}')"
-    ## $exec_sudo -H python3 -m pip install PyYaml
-    # msg_describe="${msg_describe:-$(gitlab -v project-merge-request get --project-id "$gitlab_project_id" --iid "$mr_iid" | sed -e '/^description/,/^diff-refs/!d' -e 's/description: //' -e 's/diff-refs.*//')}"
     msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
     git_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}')"
 
@@ -410,7 +402,9 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 
 func_deploy_notify() {
     echo_time_step "deploy notify message..."
+
     func_deploy_notify_msg
+
     if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
         curl -s "$weixin_api" -H 'Content-Type: application/json' \
@@ -457,16 +451,16 @@ func_renew_cert() {
     conf_dns_aliyun="${script_path_conf}/.aliyun.dnsapi.conf"
     conf_dns_qcloud="${script_path_conf}/.qcloud.dnspod.conf"
 
-    ## install acme.sh
+    ## install acme.sh / 安装 acme.sh
     [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh
 
     [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
-    ## 支持多份 account.conf.[x] 配置。只有一个 account 则 copy 成 1
+    ## support multiple account.conf.[x] / 支持多账号,只有一个则 account.conf.1
     if [[ "$(find "${acme_home}" -name 'account.conf*' | wc -l)" == 1 ]]; then
         cp -vf "${acme_home}/"account.conf "${acme_home}/"account.conf.1
     fi
 
-    ## 根据多个不同的账号文件，循环处理 renew
+    ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     for account in "${acme_home}/"account.conf.*; do
         [ -f "$account" ] || continue
         if [ -f "$conf_dns_cloudflare" ]; then
@@ -484,7 +478,7 @@ func_renew_cert() {
             echo_warn "[TODO] use dnspod api."
         fi
         \cp -vf "$account" "${acme_home}/account.conf"
-        ## 单个 account 可能有多个 domain
+        ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domain_name}; do
             if [ -d "${acme_home}/$domain" ]; then
                 "${acme_cmd}" --renew -d "${domain}" || true
@@ -495,7 +489,7 @@ func_renew_cert() {
         done
     done
 
-    ## Custom deployment method
+    ## Custom deployment method / 自定义部署方式
     if [ -f "${acme_home}"/custom.acme.sh ]; then
         bash "${acme_home}"/custom.acme.sh
     fi
@@ -516,7 +510,7 @@ install_aws() {
     $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
     ./aws/install --bin-dir "${script_path_bin}" --install-dir "${script_data}" --update
-    ## install eksctl
+    ## install eksctl / 安装 eksctl
     $curl_opt "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
     mv /tmp/eksctl "${script_path_bin}/"
 }
@@ -552,6 +546,14 @@ install_jmeter() {
     rm -rf "$path_temp"
 }
 
+install_flarectl() {
+    command -v flarectl >/dev/null && return
+    ver_flarectl='0.28.0'
+    path_temp=$(mktemp -d)
+    $curl_opt -o "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver_flarectl}/flarectl_${ver_flarectl}_linux_amd64.tar.xz
+    tar xf "$path_temp"/flarectl.zip -C "${script_path_bin}/"
+}
+
 func_check_os() {
     if [[ $UID == 0 ]]; then
         exec_sudo=
@@ -579,7 +581,7 @@ func_check_os() {
 
     case "$OS" in
     debian | ubuntu)
-        ## fix gitlab-runner exit error.
+        ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
         test -f "$HOME"/.bash_logout && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         command -v git >/dev/null || install_pkg="git"
         git lfs version >/dev/null 2>&1 || install_pkg="$install_pkg git-lfs"
@@ -590,6 +592,7 @@ func_check_os() {
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
         if [[ -n "$install_pkg" ]]; then
             $exec_sudo apt-get update -qq
+            # shellcheck disable=SC2086
             $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
         fi
         command -v docker >/dev/null || (
@@ -605,11 +608,17 @@ func_check_os() {
                 $exec_sudo yum install -y epel-release >/dev/null
             fi
         }
-        command -v git >/dev/null || $exec_sudo yum install -y git2u >/dev/null
-        git lfs version >/dev/null 2>&1 || $exec_sudo yum install -y git-lfs >/dev/null
-        command -v curl >/dev/null || $exec_sudo yum install -y curl >/dev/null
-        command -v rsync >/dev/null || $exec_sudo yum install -y rsync >/dev/null
-        # command -v docker >/dev/null || sh "$script_path_bin/get-docker.sh"
+        command -v git >/dev/null || install_pkg=git2u
+        git lfs version >/dev/null 2>&1 || install_pkg="$install_pkg git-lfs"
+        command -v curl >/dev/null || install_pkg="$install_pkg curl"
+        command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
+        command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
+        # shellcheck disable=SC2086
+        [[ -n "$install_pkg" ]] && $exec_sudo yum install -y $install_pkg >/dev/null
+        command -v docker >/dev/null || (
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            bash get-docker.sh
+        )
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
         ;;
     *)
@@ -621,7 +630,7 @@ func_check_os() {
 }
 
 func_clean_disk() {
-    ## clean cache of docker build
+    ## clean cache of docker build / 清理 docker 构建缓存
     disk_usage="$(df / | awk 'NR>1 {print $5}')"
     disk_usage="${disk_usage/\%/}"
     if ((disk_usage < 80)); then
@@ -657,7 +666,7 @@ func_generate_apidoc() {
 func_file_pre_process() {
     echo_time "preprocessing file..."
     ## frontend (VUE) .env file
-    if [[ "$project_lang" =~ (node|react) ]]; then
+    if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
         for file in $config_env_path; do
             if [[ "$file" =~ 'config/' ]]; then
@@ -668,7 +677,7 @@ func_file_pre_process() {
         done
         copy_flyway_file=0
     fi
-    ## backend (PHP) project_conf files
+    ## backend (PHP/Java/Python) project_conf files
     path_project_conf="${script_path_conf}/project_conf/${env_namespace}.${gitlab_project_name}/"
     [ -d "$path_project_conf" ] && rsync -av "$path_project_conf" "${gitlab_project_dir}/"
     ## docker ignore file
@@ -677,12 +686,12 @@ func_file_pre_process() {
     if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
         rsync -av "$HOME/.acme.sh/dest/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
-    ## Docker build from, 是否从模板构建
+    ## Docker build from / 是否从模板构建
     if [[ "${project_docker}" -eq 1 && -n "$build_image_from" ]]; then
         file_docker_tmpl="${script_dockerfile}/Dockerfile.${build_image_from##*:}"
         [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
     fi
-    ## flyway sql/conf files
+    ## flyway files sql & conf
     [[ ! -d "${gitlab_project_dir}/${ENV_FLYWAY_SQL:-docs/sql}" ]] && copy_flyway_file=0
     if [[ "${copy_flyway_file:-1}" -eq 1 ]]; then
         path_flyway_conf="$gitlab_project_dir/flyway_conf"
@@ -697,7 +706,7 @@ func_file_pre_process() {
 }
 
 func_config_files() {
-    ## ssh config and key
+    ## ssh config and key files
     path_conf_ssh="${script_path_conf}/.ssh"
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
@@ -749,69 +758,6 @@ func_setup_var_gitlab() {
     env_namespace=$gitlab_project_branch
 }
 
-func_detect_project_langs() {
-    echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
-    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
-        disable_docker=1
-    fi
-    if [[ -f "${gitlab_project_dir}/Dockerfile" && "$disable_docker" -ne 1 ]]; then
-        project_docker=1
-        exec_build_docker=1
-        exec_docker_push=1
-        exec_deploy_k8s=1
-        build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
-    fi
-    file_lang="${gitlab_project_dir}/package.json"
-    if [[ -f "$file_lang" ]]; then
-        path_for_rsync='dist/'
-        string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
-        if ! grep -q "$string_grep" "${script_log}"; then
-            echo "$string_grep $file_lang" >>"${script_log}"
-            YARN_INSTALL=true
-        fi
-        [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
-        exec_build_node=1
-    fi
-    file_lang="${gitlab_project_dir}/composer.json"
-    if [[ -f "${file_lang}" ]]; then
-        project_lang='php'
-        path_for_rsync=
-        string_grep="$gitlab_project_path/$env_namespace/$(md5sum "${file_lang}" | awk '{print $1}')"
-        if ! grep -q "$string_grep" "${script_log}"; then
-            echo "$string_grep ${file_lang}" >>"${script_log}"
-            exec_build_php=1
-        fi
-        [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
-        exec_build_node=0
-    fi
-
-    if [[ -f "${gitlab_project_dir}/pom.xml" ]]; then
-        project_lang='java'
-        path_for_rsync=
-        exec_build_java=1
-    fi
-
-    if [[ -f "${gitlab_project_dir}/requirements.txt" ]]; then
-        project_lang='python'
-        path_for_rsync=
-        exec_build_python=1
-    fi
-
-    if grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml"; then
-        project_lang='android'
-        exec_deploy_rsync=0
-        exec_build_node=0
-    fi
-
-    if grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml"; then
-        project_lang='ios'
-        exec_deploy_rsync=0
-        exec_build_node=0
-    fi
-    project_lang=${project_lang:-other}
-}
-
 func_detect_project_lang() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
@@ -831,7 +777,7 @@ func_detect_project_lang() {
     test -f "${gitlab_project_dir}"/requirements.txt && project_lang=python
     grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=android
     grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=ios
-    project_lang=${project_lang:-$(awk -F= '/^project_lang/{print $2}' README.md | head -n 1)}
+    project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' README.md | head -n 1)}
     project_lang=${project_lang:-other)}
 
     case "$project_lang" in
@@ -878,8 +824,8 @@ func_process_args() {
     else
         quiet_flag=--quiet
     fi
-    ## 1，默认情况执行所有任务，
-    ## 2，如果传入参数，则通过传递入参执行单个任务。适用于单独的gitlab job，（一个 pipeline 多个独立的 job）
+    ## All tasks are performed by default / 默认执行所有任务
+    ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
         case "$1" in
         --debug)
@@ -950,7 +896,7 @@ func_process_args() {
             exec_auto=0
             ;;
         *)
-            ## 1，默认情况执行所有任务，
+            ## All tasks are performed by default / 默认执行所有任务
             exec_auto=${exec_auto:-1}
             break
             ;;
@@ -968,11 +914,11 @@ main() {
     script_path="$(cd "$(dirname "$0")" && pwd)"
     script_path_conf="${script_path}/conf"
     script_path_bin="${script_path}/bin"
-    script_conf="${script_path_conf}/deploy.conf"      ## 发布到目标服务器的配置信息
-    script_env="${script_path_conf}/deploy.env"        ## 发布配置信息(密)
-    script_data="${script_path}/data"                  ## 记录 deploy.sh 的数据文件
-    script_log="${script_data}/${script_name}.log"     ## 记录 deploy.sh 执行情况
-    script_dockerfile="${script_path_conf}/dockerfile" ## dockerfile
+    script_conf="${script_path_conf}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
+    script_env="${script_path_conf}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
+    script_data="${script_path}/data"                  ## deploy.sh data folder
+    script_log="${script_data}/${script_name}.log"     ## deploy.sh run loger
+    script_dockerfile="${script_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
 
     [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/deploy.conf.example" "$script_conf"
     [[ ! -f "$script_env" ]] && cp "${script_path_conf}/deploy.env.example" "$script_env"
@@ -983,27 +929,27 @@ main() {
     PATH="$PATH:$script_path_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
-    ## run docker with current/root user
     docker_run="docker run --interactive --rm -u 1000:1000"
     # docker_run_root="docker run --interactive --rm -u 0:0"
     git_diff="git --no-pager diff --name-only HEAD^"
     kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
     helm_opt="helm --kubeconfig $HOME/.kube/config"
 
-    ## 检查OS 类型和版本，安装基础命令和软件包
+    ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     func_check_os
 
-    ## 人工/手动/执行/定义参数
+    ## run deploy.sh by hand / 手动执行 deploy.sh
     func_setup_var_gitlab
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$script_env"
+    ## curl use proxy / curl 使用代理
     if [ -z "$ENV_HTTP_PROXY" ]; then
         curl_opt="curl -L"
     else
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
 
-    ## 安装依赖命令/工具
+    ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && install_aws
     [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && install_kubectl
     [[ "${ENV_INSTALL_HELM}" == 'true' ]] && install_helm
@@ -1011,26 +957,26 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
     # [[ "${ENV_INSTALL_ACMESH}" == 'true' ]] && install_acme_sh
+    [[ "${ENV_INSTALL_FLARECTL}" == 'true' ]] && install_flarectl
 
-    ## 清理磁盘空间
+    ## clean up disk space / 清理磁盘空间
     func_clean_disk
 
     ## setup ssh config/ acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     func_config_files
 
-    ## acme.sh 更新证书
+    ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
     [[ "${github_action:-0}" -eq 1 ]] && PIPELINE_RENEW_CERT=1
     [[ "$PIPELINE_RENEW_CERT" -eq 1 ]] && func_renew_cert
 
-    ## 判定项目类型
-    # func_detect_project_langs
+    ## detect program lang / 检测程序语言
     func_detect_project_lang
 
-    ## 文件预处理
+    ## preprocess project config files / 预处理项目配置文件
     func_file_pre_process
 
-    ## 全自动执行所有步骤
+    ## exec all tasks / 执行所有任务
     [[ "$exec_auto" -ne 1 ]] && return
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
@@ -1045,7 +991,7 @@ main() {
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-1}"
     [[ "${PIPELINE_UNIT_TEST:-1}" -eq 1 ]] && func_test_unit
 
-    ## use flyway deploy sql file
+    ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-1}"
     [[ -d "${gitlab_project_dir}/${ENV_FLYWAY_SQL:-docs/sql}" ]] || exec_deploy_flyway=0
     [[ "${PIPELINE_FLYWAY:-1}" -eq 0 ]] && exec_deploy_flyway=0
@@ -1056,7 +1002,7 @@ main() {
     ## generate api docs
     # func_generate_apidoc
 
-    ## build/deploy
+    ## build/deploy k8s
     [[ "${exec_build_php}" -eq 1 ]] && build_php_composer
     [[ "${exec_build_node}" -eq 1 ]] && build_node_yarn
     [[ "${exec_build_java}" -eq 1 ]] && build_java_maven
@@ -1064,16 +1010,15 @@ main() {
     [[ "${exec_build_docker}" -eq 1 ]] && build_docker
     [[ "${exec_docker_push}" -eq 1 ]] && docker_push
     [[ "${exec_deploy_k8s}" -eq 1 ]] && deploy_k8s
-
+    ## deploy with rsync / 使用 rsync 发布
     [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
-    [[ $ENV_FORCE_RSYNC == 'true' ]] && exec_deploy_rsync=1
     [[ "${exec_deploy_rsync:-1}" -eq 1 ]] && func_deploy_rsync
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
     [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 1 ]] && func_test_function
 
-    ## notify
+    ## deploy notify info / 发布通知信息
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
     [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
