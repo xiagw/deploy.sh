@@ -1,55 +1,73 @@
-deploy.sh for GitLab CI/CD：
+# deploy.sh 用于 GitLab 持续集成/持续发布
 
-- 支持 阿里云，腾讯云，AWS，
-- 支持 直接拷贝代码文件，rsync
-- 支持 docker build image，
-- 支持 PHP，Java，Vue，Dockerfile 代码格式化检查，
-- 支持 调用acme.sh更新ssl证书
-- 支持 调用单元测试
-- 支持 调用Sonarqube Scan
-- 支持 调用功能自动化测试
-- 支持 调用性能压测，例如 jmeter 之类
-- 支持 docker 挂载 nfs，直接部署文件模式
-- Node， npm/yarn，直接部署文件模式
-- Node， docker image 直接部署image模式
-- Java， maven/gradle打包，直接部署jar包文件模式
-- Java， docker image 直接部署image模式
-- PHP， 直接部署文件模式
-- PHP， composer，直接部署文件模式
-- PHP， docker image 直接部署image模式
-- 支持 k8s 部署
-- 支持 helm 部署
-- 支持 普通文件模式部署
-- 支持 结果的消息提醒，企业微信，Telegram，Element(Matrix)
 
-# 快速开始
-1. 安装 gitlab-runner 并且 register it 并且启动 gitlab-runner
+deploy.sh 是 Gitlab 持续集成/持续发布系统
+
+# 如何运行
+deploy.sh 依赖于 GitLab 和 GitLab-Runner.
+
+deploy.sh 如何探测程序开发语言:
+- node: 存在 ./package.json 或包含文本 `project_lang=node` 在 README.md
+- php: 存在 ./composer.json 或包含文本 `project_lang=php` 在 README.md
+- java: 存在 ./pom.xml 或包含文本 `project_lang=java` 在 README.md
+- python: 存在 ./requirements.txt 或包含文本 `project_lang=python` 在 README.md
+
+# 描述
+开发语言： shell
+运行平台： Unix/Linux/MacOS...
+# 支持
+* 云厂商: AWS, Aliyun, Qcloud, Huaweicloud...
+* 代码格式规范: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
+* 代码质量扫描/探测: sonarqube scan, OWASP, ZAP, vulmap...
+* 单元测试: phpunit, junit...
+* 扩展安装/编译/打包: npm build, composer install, maven build, gradle build, docker build, pip install ...
+* 发布方式: rsync+ssh, rsync+nfs,rsync + docker image, rsync jar/war, kubectl, helm...
+* 功能测试: Jmeter, pytest...
+* 性能测试: stress test, jmeter, loadrunner
+* 发布结果提醒: work-weixin, Telegram, Element(Matrix), dingding...
+* 更新证书: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
+
+# 安装
+`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
+
+## 快速开始
+1. 准备 Gitlab 服务器和 Gitlab-runner 服务器
+1. [安装 Gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), 按照文档注册 Gitlab-runner 到 Gitlab 服务器，并启动 Gitlab-runner
 1. cd $HOME
 1. git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
-1. 拷贝 conf/deploy.conf.example 为 conf/deploy.conf （修改为你的配置）
-1. 拷贝 conf/deploy.env.example 为 conf/deploy.env（修改为你的配置）
-1. 参看本项目 .gitlab-ci.yaml 设置于目标git仓库
-1. 目标git仓库提交/push代码，gitlab-runner 自动发布
+1. cd $HOME/runner
+1. cp conf/deploy.conf.example conf/deploy.conf      ## 修改为你的自定义配置
+1. cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配置
+1. 参考本项目的配置文件 conf/.gitlab-ci.yaml
 
-# 实际案例：
-1. 已有一台服务器安装启动了 gitlab ，（如果没有，可以参考 [xiagw/gitlab-docker](https://github.com/xiagw/docker-gitlab) 用 docker-compose up -d gitlab 启动一台）
-1. 已有一台服务器已经安装启动/注册 gitlab-runner，并且是默认安装（executer 为 shell）
-1. 已经准备好 ssh key file，从 gitlab-runner 服务器可以无密码登录到目标服务器，（id_rsa文件可以在 $HOME/.ssh/，也可以在 deploy.sh/.ssh/ 目录）
-1. 登录到 gitlab-runner 服务器，执行
-`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
-1. 参照 conf/deploy.conf.example, conf/deploy.env.example 例子修改好文件
-`
- cd $HOME/runner
- cp conf/deploy.conf.example conf/deploy.conf
- cp conf/deploy.env.example conf/deploy.env
-`
-1. 例如 gitlab 已经在 root 账号下面建立 projectA
-1. 在 projectA 修改代码，
-1. 并创建 .gitlab-ci.yml ，（同样可以参照本项目的.gitlab-ci.yml）
-1. 提交并push代码即可自动 CI/CD
 
-# 以下显示图片需要 mermain 支持
-![](readme.png)
+## 实际案例
+### Step 1: 准备 Gitlab 服务器
+已经准备好 Gitlab 服务器 (如果没有？可以参考[xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) 启动一个新服务器)
+### Step 2: 准备 Gitlab-runner 服务器
+已经安装准备 Gitlab-runner 服务器，已注册到 Gitlab 服务器，并启动 Gitlab-runner(executer is shell)
+### Step 3: 准备应用程序服务器
+准备好 ssh public key, 并可以无密码登录到应用程序服务器 (ssh private key 可以存放于 $HOME/.ssh/ 或 deploy.sh/conf/.ssh/)
+### Step 4: 安装 deploy.sh
+ssh 登录进入 Gitlab-runner 服务器，并执行以下命令用来安装 deploy.sh
+```
+git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
+```
+### Step 5: 更新配置文件 conf/deploy.conf， conf/deploy.env
+参考 conf/deploy.conf.example conf/deploy.env.example, 修改为你的自定义配置
+```
+cd $HOME/runner
+cp conf/deploy.conf.example conf/deploy.conf      ## 修改为你的自定义配置
+cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配置
+```
+### Step 6: 创建 Gitlab git 仓库
+登录进入 Gitlab 服务器，并创建一个 git 仓库 `project-A` (root/project-A)
+### Step 7: 创建 .gitlab-ci.yml
+创建并提交一个文件 `.gitlab-ci.yml` 在 git 仓库 `project-A`
+### Step 8: 享受 CI/CD
+
+![](../docs/readme.png)
+# 以下代码需要支持 "mermain" 语法的浏览器才能显示图片
 
 ```mermaid
 graph TB;
