@@ -1,13 +1,12 @@
-tmp/
-python/
-deploy.log
-
+## macos
 .DS_Store
-
+## vim swap
+.swp
+## gitlab runner exclude
 builds/
 cache/
 etc/
-
+## deploy.sh exclude
 conf/**
 !conf/deploy.*.example
 !conf/.dockerignore
@@ -20,11 +19,13 @@ conf/**
 !conf/helm/README.md
 !conf/.gitattributes
 !conf/.gitmodules
-
-data/*
+data/**
 !data/readme.md
-
 bin/*
 !bin/element-example.py
 !bin/flyway
 !bin/sendEmail
+## custome folder
+tmp/
+python/
+deploy.log
