@@ -456,10 +456,10 @@ func_renew_cert() {
     ## install acme.sh
     [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh
 
-    [ -d "$acme_cert" ] || mkdir "$acme_cert"
+    [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
     ## 支持多份 account.conf.[x] 配置。只有一个 account 则 copy 成 1
     if [[ "$(find "${acme_home}" -name 'account.conf*' | wc -l)" == 1 ]]; then
-        cp "${acme_home}/"account.conf "${acme_home}/"account.conf.1
+        cp -vf "${acme_home}/"account.conf "${acme_home}/"account.conf.1
     fi
 
     ## 根据多个不同的账号文件，循环处理 renew
@@ -495,7 +495,7 @@ func_renew_cert() {
         bash "${acme_home}"/custom.acme.sh
     fi
     echo_time "end renew cert."
-    exit
+    [[ "${github_action:-0}" -eq 1 ]] || exit
 }
 
 install_python_gitlab() {
