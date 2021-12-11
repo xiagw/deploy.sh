@@ -454,9 +454,8 @@ func_renew_cert() {
     conf_dns_qcloud="${script_path_conf}/.qcloud.dnspod.conf"
 
     ## install acme.sh
-    if [[ ! -x "${acme_cmd}" ]]; then
-        $curl_opt https://get.acme.sh | sh
-    fi
+    [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh
+
     [ -d "$acme_cert" ] || mkdir "$acme_cert"
     ## 支持多份 account.conf.[x] 配置。只有一个 account 则 copy 成 1
     if [[ "$(find "${acme_home}" -name 'account.conf*' | wc -l)" == 1 ]]; then
@@ -978,7 +977,7 @@ main() {
     export PATH
 
     ## run docker with current/root user
-    docker_run="docker run --interactive --rm -u $UID:$UID"
+    docker_run="docker run --interactive --rm -u 1000:1000"
     # docker_run_root="docker run --interactive --rm -u 0:0"
     git_diff="git --no-pager diff --name-only HEAD^"
     kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
@@ -1004,6 +1003,7 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && install_python_element
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && install_jmeter
+    # [[ "${ENV_INSTALL_ACMESH}" == 'true' ]] && install_acme_sh
 
     ## 清理磁盘空间
     func_clean_disk
@@ -1013,6 +1013,7 @@ main() {
 
     ## acme.sh 更新证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
+    [[ "${github_action:-0}" -eq 1 ]] && PIPELINE_RENEW_CERT=1
     [[ "$PIPELINE_RENEW_CERT" -eq 1 ]] && func_renew_cert
 
     ## 判定项目类型
