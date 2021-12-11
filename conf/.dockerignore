@@ -67,7 +67,7 @@ yarn-error.log*
 package-lock.json
 logs
 ## Dependency directories
-node_modules/
+# node_modules/
 
 core
 core.*
