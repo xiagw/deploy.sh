@@ -831,7 +831,8 @@ func_detect_project_lang() {
     test -f "${gitlab_project_dir}"/requirements.txt && project_lang=python
     grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=android
     grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=ios
-    project_lang=${project_lang:-other}
+    project_lang=${project_lang:-$(awk -F= '/^project_lang/{print $2}' README.md | head -n 1)}
+    project_lang=${project_lang:-other)}
 
     case "$project_lang" in
     node)
@@ -863,6 +864,7 @@ func_detect_project_lang() {
         ;;
     *)
         # if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
+        echo_ques "Not support? Issue: https://github.com/xiagw/deploy.sh/issues"
         exec_deploy_rsync=0
         ;;
     esac

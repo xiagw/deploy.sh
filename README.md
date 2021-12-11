@@ -14,7 +14,7 @@ How to detect program language with deploy.sh:
 - python: exist ./requirements.txt or include `project_lang=python` in README.md
 
 # Description
-Program Lang: shell
+project_lang=shell
 
 Run Platform: Unix/Linux/MacOS...
 
