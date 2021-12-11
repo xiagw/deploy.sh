@@ -164,7 +164,7 @@ func_deploy_flyway_docker() {
     ## docker build flyway
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    DOCKER_BUILDKIT=1 docker build "${quiet_flag}" --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     docker run --rm "$image_tag_flyway"
     if [ ${deploy_result:-0} = 0 ]; then
         echo_info "Result = OK"
@@ -179,7 +179,7 @@ build_node_yarn() {
     rm -f package-lock.json
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep 'deploy/node' >/dev/null; then
-        DOCKER_BUILDKIT=1 docker build "${quiet_flag}" -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+        DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
     fi
     $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
@@ -239,17 +239,17 @@ build_docker() {
     ## 判断模版是否存在,模版不存在，构建模板
     if [ -n "$build_image_from" ]; then
         docker images | grep -q "${build_image_from%%:*}.*${build_image_from##*:}" ||
-            DOCKER_BUILDKIT=1 docker build "${quiet_flag}" --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+            DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${gitlab_project_dir}/Dockerfile.${build_image_from##*:}" "${gitlab_project_dir}"
     fi
 
     ## docker build flyway
     if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
         image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
-        DOCKER_BUILDKIT=1 docker build "${quiet_flag}" --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
-    DOCKER_BUILDKIT=1 docker build "${quiet_flag}" --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" \
+    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
     echo_time "end docker build."
     # --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
@@ -259,9 +259,9 @@ docker_push() {
     echo_time_step "docker push only..."
     docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    docker push "${quiet_flag}" "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" || echo_erro "error here, maybe caused by GFW."
+    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" || echo_erro "error here, maybe caused by GFW."
     if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
-        docker push "${quiet_flag}" "$image_tag_flyway"
+        docker push ${quiet_flag} "$image_tag_flyway"
     fi
     echo_time "end docker push."
 }
@@ -757,22 +757,24 @@ func_detect_project_langs() {
         exec_deploy_k8s=1
         build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
     fi
-
-    if [[ -f "${gitlab_project_dir}/package.json" ]]; then
+    file_lang="${gitlab_project_dir}/package.json"
+    if [[ -f "$file_lang" ]]; then
         path_for_rsync='dist/'
-        if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
+        string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
+        if ! grep -q "$string_grep" "${script_log}"; then
+            echo "$string_grep $file_lang" >>"${script_log}"
             YARN_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         exec_build_node=1
     fi
-
-    if [[ -f "${gitlab_project_dir}/composer.json" ]]; then
+    file_lang="${gitlab_project_dir}/composer.json"
+    if [[ -f "${file_lang}" ]]; then
         project_lang='php'
         path_for_rsync=
-        if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
+        string_grep="$gitlab_project_path/$env_namespace/$(md5sum "${file_lang}" | awk '{print $1}')"
+        if ! grep -q "$string_grep" "${script_log}"; then
+            echo "$string_grep ${file_lang}" >>"${script_log}"
             exec_build_php=1
         fi
         [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
@@ -829,20 +831,24 @@ func_detect_project_lang() {
     case "$project_lang" in
     node)
         path_for_rsync='dist/'
-        if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
+        file_lang="${gitlab_project_dir}/package.json"
+        string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
+        if ! grep -q "$string_grep" "${script_log}"; then
+            echo "$string_grep ${file_lang}" >>"${script_log}"
             YARN_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
         exec_build_node=1
         ;;
     php)
-        if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
-            echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
+        file_lang="${gitlab_project_dir}/composer.json"
+        string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
+        if ! grep -q "$string_grep" "${script_log}"; then
+            echo "$string_grep ${file_lang}" >>"${script_log}"
             exec_build_php=1
+            # COMPOSER_INSTALL=true
         fi
         [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
-        # COMPOSER_INSTALL=true
         ;;
     java)
         exec_build_java=1
