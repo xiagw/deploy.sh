@@ -15,9 +15,10 @@ How to detect program language with deploy.sh:
 
 # Description
 Program Lang: shell
+
 Run Platform: Unix/Linux/MacOS...
 
-# Currently supported
+# Currently support
 * Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
 * Code style: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
 * Code quality: sonarqube scan, OWASP, ZAP, vulmap...
@@ -46,17 +47,17 @@ Run Platform: Unix/Linux/MacOS...
 ## Example step
 ### Step 1: Prepair Gitlab server
 There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
-### Step 2: Prepair Gitlab Runner
+### Step 2: Prepair Gitlab Runner server
 There is already a server that has installed gitlab-runner and register to Gitlab server, (executer is shell)
-### Step 3: Prepair Application server
+### Step 3: Prepair Application server (*nix/k8s/microk8s/k3s)
 The ssh key file had been prepared, and you can log in to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/conf/.ssh/)
-### Step 4: Clone github
+### Step 4: git clone deploy.sh
 Login to the gitlab-runner server and execute
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
-### Step 5: Update conf/deploy.conf conf/deploy.env
-Refer to the conf/deploy.conf.example conf/deploy.env.example, change to yours configure
+### Step 5: Update conf/deploy.conf, conf/deploy.env
+Refer to the conf/deploy.conf.example, conf/deploy.env.example, change to yours configure
 ```
 cd $HOME/runner
 cp conf/deploy.conf.example conf/deploy.conf      ## change to yours

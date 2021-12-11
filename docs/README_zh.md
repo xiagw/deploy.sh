@@ -1,6 +1,5 @@
 # deploy.sh 用于 GitLab 持续集成/持续发布
 
-
 deploy.sh 是 Gitlab 持续集成/持续发布系统
 
 # 如何运行
@@ -14,7 +13,9 @@ deploy.sh 如何探测程序开发语言:
 
 # 描述
 开发语言： shell
+
 运行平台： Unix/Linux/MacOS...
+
 # 支持
 * 云厂商: AWS, Aliyun, Qcloud, Huaweicloud...
 * 代码格式规范: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
@@ -46,7 +47,7 @@ deploy.sh 如何探测程序开发语言:
 已经准备好 Gitlab 服务器 (如果没有？可以参考[xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) 启动一个新服务器)
 ### Step 2: 准备 Gitlab-runner 服务器
 已经安装准备 Gitlab-runner 服务器，已注册到 Gitlab 服务器，并启动 Gitlab-runner(executer is shell)
-### Step 3: 准备应用程序服务器
+### Step 3: 准备应用程序服务器 (*nix/k8s/microk8s/k3s)
 准备好 ssh public key, 并可以无密码登录到应用程序服务器 (ssh private key 可以存放于 $HOME/.ssh/ 或 deploy.sh/conf/.ssh/)
 ### Step 4: 安装 deploy.sh
 ssh 登录进入 Gitlab-runner 服务器，并执行以下命令用来安装 deploy.sh
@@ -54,7 +55,7 @@ ssh 登录进入 Gitlab-runner 服务器，并执行以下命令用来安装 dep
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 ### Step 5: 更新配置文件 conf/deploy.conf， conf/deploy.env
-参考 conf/deploy.conf.example conf/deploy.env.example, 修改为你的自定义配置
+参考 conf/deploy.conf.example, conf/deploy.env.example, 修改为你的自定义配置
 ```
 cd $HOME/runner
 cp conf/deploy.conf.example conf/deploy.conf      ## 修改为你的自定义配置
