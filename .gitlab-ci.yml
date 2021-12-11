@@ -2,7 +2,7 @@
 # include:
 #   - project: 'root/deploy.sh'
 #     ref: main
-#     file: 'templates/gitlab-ci.yml'
+#     file: 'conf/gitlab-ci.yml'
 
 ## use current repo folder
 include:
@@ -10,5 +10,5 @@ include:
 
 ## use remote file
 # include:
-#   - remote: 'https://raw.githubusercontent.com/xiagw/deploy.sh/main/templates/gitlab-ci.yml'
+#   - remote: 'https://raw.githubusercontent.com/xiagw/deploy.sh/main/conf/gitlab-ci.yml'
 
