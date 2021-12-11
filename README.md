@@ -1,65 +1,75 @@
-# deploy.sh for GitLab CI/CD：
+# deploy.sh for GitLab CI/CD
 
 # 中文 [README_zh.md](docs/README_zh.md)
 
 deploy.sh is a CI/CD program for GitLab Server.
-# Description
-* support aliyun,qcloud,AWS
-* support rsync file
-* support docker build image,
-* support code format check (PHP，Java，Vue，Dockerfile)
-* call [acme.sh](https://github.com/acmesh-official/acme.sh.git) update ssl cert
-* call Unit test
-* call function test
-* call Sonarqube scan
-* call performance test, stress test, (jmeter)
-* Node: deploy docker image with NFS, rsync file to NFS
-* Node: run npm/yarn using docker image
-* Node: docker run image
-* Java: package with maven/gradle, and rsync jar/war file
-* Java: deploy docker image
-* PHP: rsync file
-* PHP: docker run composer and rsync file
-* PHP: deploy docker image
-* deploy to k8s
-* deploy to k8s using helm3
-* send message of deploy result with work-weixin, Telegram, Element(Matrix)
 
-# Installing
+# How it works
+deploy.sh dependend GitLab and GitLab-Runner.
+
+How to detect program language with deploy.sh:
+- node: exist ./package.json or include `project_lang=node` in README.md
+- php: exist ./composer.json or include `project_lang=php` in README.md
+- java: exist ./pom.xml or include `project_lang=java` in README.md
+- python: exist ./requirements.txt or include `project_lang=python` in README.md
+
+# Description
+Program Lang: shell
+Run Platform: Unix/Linux/MacOS...
+
+# Currently supported
+* Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
+* Code style: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
+* Code quality: sonarqube scan, OWASP, ZAP, vulmap...
+* Unit test: phpunit, junit...
+* Build: npm build, composer install, maven build, gradle build, docker build, pip install ...
+* Deploy method: rsync+ssh, rsync+nfs,rsync + docker image, rsync jar/war, kubectl, helm...
+* Function test: Jmeter, pytest...
+* Performance test: stress test, jmeter, loadrunner
+* Notify deploy result: work-weixin, Telegram, Element(Matrix), dingding...
+* Renew cert: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
+
+# Installation
 `git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
 
-# Quick Start
+## Quick Start
 1. Prepare a gitlab-server and gitlab-runner-server
 1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
 1. cd $HOME
 1. git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 1. cd $HOME/runner
-1. cp conf/deploy-example.conf conf/deploy.conf      ## change to yours
-1. cp conf/deploy-example.env conf/deploy.env        ## change to yours
+1. cp conf/deploy.conf.example conf/deploy.conf      ## change to yours
+1. cp conf/deploy.env.example conf/deploy.env        ## change to yours
 1. Refer to conf/.gitlab-ci.yaml of this project, setup yours
 
 
-# Example case
-1. There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
-1. There is already a server that has installed gitlab-runner, (executer is shell)
-1. The ssh key file has been prepared, and you can log in to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/.ssh/ directory)
-1. Login to the gitlab-runner server and execute
-```shell
+## Example step
+### Step 1: Prepair Gitlab server
+There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
+### Step 2: Prepair Gitlab Runner
+There is already a server that has installed gitlab-runner and register to Gitlab server, (executer is shell)
+### Step 3: Prepair Application server
+The ssh key file had been prepared, and you can log in to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/conf/.ssh/)
+### Step 4: Clone github
+Login to the gitlab-runner server and execute
+```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
-1. Refer to the deploy.conf/deploy.env, modify the file
-```shell
-cd runner
-cp conf/deploy-example.conf conf/deploy.conf      ## change to yours
-cp conf/deploy-example.env conf/deploy.env        ## change to yours
+### Step 5: Update conf/deploy.conf conf/deploy.env
+Refer to the conf/deploy.conf.example conf/deploy.env.example, change to yours configure
 ```
-1. For example: created projectA under the root account on gitlab-server (root/projectA)
-1. Create .gitlab-ci.yml
-1. Submit and push
-1. Enjoy CI/CD
+cd $HOME/runner
+cp conf/deploy.conf.example conf/deploy.conf      ## change to yours
+cp conf/deploy.env.example conf/deploy.env        ## change to yours
+```
+### Step 6: Create Gitlab project
+For example: created `project-A` under the root account on gitlab-server (root/project-A)
+### Step 7: Create .gitlab-ci.yml
+Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
+### Step 8: Enjoy CI/CD
 
-# The following pictures need "mermain" support
 ![](docs/readme.png)
+# The following need "mermain" support
 
 ```mermaid
 graph TB;
