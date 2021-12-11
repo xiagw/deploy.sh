@@ -283,6 +283,20 @@ deploy_k8s() {
         path_helm="$gitlab_project_dir/helm"
     fi
 
+    if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
+        ## update helm file for argocd
+        file_gitops="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yaml
+        if [ -f "$file_gitops" ]; then
+            echo_time_step "update gitops files..."
+            echo_erro "Note: Only the configuration file is updated, the project will not be deployed."
+            sed -i \
+                -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
+                -e "s@tag:.*@tag:\ \"${gitlab_project_name}-${gitlab_commit_short_sha}\"@" \
+                "$file_gitops"
+        fi
+        return 0
+    fi
+
     if [ -z "$path_helm" ]; then
         echo_warn "helm files not found."
         ## Custom deployment method
@@ -301,16 +315,6 @@ deploy_k8s() {
         sleep 3
         ## Get deployment results and set var: deploy_result
         $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" || deploy_result=1
-    fi
-
-    ## update helm file for argocd
-    file_helm_values="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yaml
-    if [ -f "$file_helm_values" ]; then
-        echo_time_step "update helm files..."
-        sed -i \
-            -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
-            -e "s@tag:.*@tag:\ \"${gitlab_project_name}-${gitlab_commit_short_sha}\"@" \
-            "$file_helm_values"
     fi
 
     ## helm install flyway jobs
@@ -464,6 +468,7 @@ func_renew_cert() {
 
     ## 根据多个不同的账号文件，循环处理 renew
     for account in "${acme_home}/"account.conf.*; do
+        [ -f "$account" ] || continue
         if [ -f "$conf_dns_cloudflare" ]; then
             command -v flarectl || return 1
             source "$conf_dns_cloudflare" "${account##*.}"
