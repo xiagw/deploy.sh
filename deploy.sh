@@ -164,7 +164,7 @@ func_deploy_flyway_docker() {
     ## docker build flyway
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+    DOCKER_BUILDKIT=1 docker build "${quiet_flag}" --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     docker run --rm "$image_tag_flyway"
     if [ ${deploy_result:-0} = 0 ]; then
         echo_info "Result = OK"
@@ -179,14 +179,11 @@ build_node_yarn() {
     rm -f package-lock.json
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep 'deploy/node' >/dev/null; then
-        DOCKER_BUILDKIT=1 docker build -q -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+        DOCKER_BUILDKIT=1 docker build "${quiet_flag}" -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
     fi
     $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
-    [ -d "${gitlab_project_dir}"/build ] && {
-        rm -rf "${gitlab_project_dir}"/dist
-        mv "${gitlab_project_dir}"/build "${gitlab_project_dir}"/dist
-    }
+    [ -d "${gitlab_project_dir}"/build ] && rsync -a --delete "${gitlab_project_dir}"/build/ "${gitlab_project_dir}"/dist/
     echo_time "end node yarn build."
 }
 
@@ -198,7 +195,7 @@ build_php_composer() {
             -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile" >/dev/null
     fi
     # rm -rf "${gitlab_project_dir}"/vendor
-    $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install -q" || true
+    $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install ${quiet_flag}" || true
     echo_time "end php composer install."
 }
 
@@ -242,17 +239,17 @@ build_docker() {
     ## 判断模版是否存在,模版不存在，构建模板
     if [ -n "$build_image_from" ]; then
         docker images | grep -q "${build_image_from%%:*}.*${build_image_from##*:}" ||
-            DOCKER_BUILDKIT=1 docker build -q --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+            DOCKER_BUILDKIT=1 docker build "${quiet_flag}" --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
                 -f "${gitlab_project_dir}/Dockerfile.${build_image_from##*:}" "${gitlab_project_dir}"
     fi
 
     ## docker build flyway
     if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
         image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
-        DOCKER_BUILDKIT=1 docker build -q --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        DOCKER_BUILDKIT=1 docker build "${quiet_flag}" --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
-    DOCKER_BUILDKIT=1 docker build -q --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" \
+    DOCKER_BUILDKIT=1 docker build "${quiet_flag}" --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
     echo_time "end docker build."
     # --build-arg COMPOSER_INSTALL="${COMPOSER_INSTALL:-true}" \
@@ -262,9 +259,9 @@ docker_push() {
     echo_time_step "docker push only..."
     docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    docker push -q "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" || echo_erro "error here, maybe caused by GFW."
+    docker push "${quiet_flag}" "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" || echo_erro "error here, maybe caused by GFW."
     if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
-        docker push -q "$image_tag_flyway"
+        docker push "${quiet_flag}" "$image_tag_flyway"
     fi
     echo_time "end docker push."
 }
@@ -762,11 +759,7 @@ func_detect_project_langs() {
     fi
 
     if [[ -f "${gitlab_project_dir}/package.json" ]]; then
-        if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
-            path_for_rsync='build/'
-        else
-            path_for_rsync='dist/'
-        fi
+        path_for_rsync='dist/'
         if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
             YARN_INSTALL=true
@@ -835,11 +828,7 @@ func_detect_project_lang() {
 
     case "$project_lang" in
     node)
-        if grep -i -q 'Create React' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" >/dev/null 2>&1; then
-            path_for_rsync='build/'
-        else
-            path_for_rsync='dist/'
-        fi
+        path_for_rsync='dist/'
         if ! grep -q "$(md5sum "${gitlab_project_dir}/package.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/package.json")" >>"${script_log}"
             YARN_INSTALL=true
@@ -848,7 +837,6 @@ func_detect_project_lang() {
         exec_build_node=1
         ;;
     php)
-        path_for_rsync=''
         if ! grep -q "$(md5sum "${gitlab_project_dir}/composer.json" | awk '{print $1}')" "${script_log}"; then
             echo "$gitlab_project_path $env_namespace $(md5sum "${gitlab_project_dir}/composer.json")" >>"${script_log}"
             exec_build_php=1
@@ -857,11 +845,9 @@ func_detect_project_lang() {
         # COMPOSER_INSTALL=true
         ;;
     java)
-        path_for_rsync=''
         exec_build_java=1
         ;;
     python)
-        path_for_rsync=''
         exec_build_python=1
         ;;
     *)
@@ -873,7 +859,12 @@ func_detect_project_lang() {
 
 func_process_args() {
     [[ "${PIPELINE_DEBUG:-0}" -eq 1 || "$1" =~ (--debug|--github) ]] && debug_on=1
-    [[ "$debug_on" -eq 1 ]] && set -x
+    if [[ "$debug_on" -eq 1 ]]; then
+        set -x
+        quiet_flag=
+    else
+        quiet_flag=--quiet
+    fi
     ## 1，默认情况执行所有任务，
     ## 2，如果传入参数，则通过传递入参执行单个任务。适用于单独的gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
