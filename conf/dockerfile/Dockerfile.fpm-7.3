@@ -1,13 +1,9 @@
 FROM php:7.3-fpm as BUILDENV
-
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
-
 ARG CHANGE_SOURCE=false
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
-    && if [ ${CHANGE_SOURCE} = true ]; then \
-    sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
-    ;fi \
+    && if [ ${CHANGE_SOURCE} = true ]; then sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; fi \
     && apt-get update \
     # && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
@@ -82,17 +78,13 @@ RUN docker-php-ext-install pcntl
 
 #############################################################
 FROM php:7.3-fpm
-
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
-
 USER root
 ARG CHANGE_SOURCE=false
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -x \
-    && if [ "${CHANGE_SOURCE}" = true ]; then \
-    sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
-    ;fi \
-    && curl -sS https://getcomposer.org/installer | php \
+    && if [ "${CHANGE_SOURCE}" = true ]; then sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; fi \
+    && curl -ssqS https://getcomposer.org/installer | php \
     && mv composer.phar /usr/local/bin/composer \
     && chmod +x /usr/local/bin/composer \
     && composer self-update --clean-backups \
@@ -101,7 +93,6 @@ RUN set -x \
     && chown 1000:1000 /var/www/.composer /.composer
 #####################################
 # Set Timezone
-#####################################
 ARG TZ=UTC
 ENV TZ ${TZ}
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -110,6 +101,7 @@ COPY --from=BUILDENV /usr/local/etc/php-fpm.conf /usr/local/etc/
 COPY --from=BUILDENV /usr/local/etc/php-fpm.d/www.conf /usr/local/etc/php-fpm.d/
 COPY --from=BUILDENV /usr/local/etc/php/conf.d/opcache.ini /usr/local/etc/php/conf.d/
 COPY --from=BUILDENV /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+COPY ./startup.sh /
 
 RUN set -x \
     # && sed -i \
@@ -129,20 +121,15 @@ RUN set -x \
     ## enable extention
     && docker-php-ext-enable bcmath gmp gd zip opcache pdo_mysql sockets sysvmsg sysvsem sysvshm redis swoole imagick pcntl \
     && usermod -u 1000 www-data \
+    && chmod +x /startup.sh \
     # Clear dev deps
     && apt-get clean \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/lastlog /var/log/faillog
 
-COPY ./startup.sh /
-RUN chmod +x /startup.sh
-
 WORKDIR /var/www
-
 USER 1000
-
 EXPOSE 9000
-
 # ENTRYPOINT ["php-fpm"]
 # CMD ["php-fpm"]
 CMD ["/startup.sh"]

@@ -3,11 +3,8 @@ FROM php:7.2-alpine
 ARG CHANGE_SOURCE=false
 ARG PHPCS_VERSION=3.5.8
 ARG PROXY=socks5://192.168.10.10:1081
-
 RUN set -x; \
-    if [ ${CHANGE_SOURCE} = true ]; then \
-    sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories \
-    ;fi \
+    if [ ${CHANGE_SOURCE} = true ]; then sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories; fi \
     && curl -Lo /usr/local/bin/phpcs https://squizlabs.github.io/PHP_CodeSniffer/phpcs.phar \
     && curl -Lo /usr/local/bin/phpcbf https://squizlabs.github.io/PHP_CodeSniffer/phpcbf.phar \
     && chmod +x /usr/local/bin/phpcs \
@@ -16,10 +13,9 @@ RUN set -x; \
 
 VOLUME ["/project"]
 WORKDIR /project
-
 # ENTRYPOINT ["phpcs"]
 CMD ["phpcs","--version"]
 
-# docker build --build-arg CHANGE_SOURCE=true --build-arg PHPCS_VERSION=3.5.4 -t xia/phpcs .
-# docker run --rm -ti -v $PWD:/project xia/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcsReport:-full}" /project
-# docker run --rm -ti -v $PWD:/project xia/phpcs phpcbf --standard=PSR12 /project
+# docker build --build-arg CHANGE_SOURCE=true --build-arg PHPCS_VERSION=3.5.4 -t deploy/phpcs .
+# docker run --rm -ti -v $PWD:/project deploy/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcsReport:-full}" /project
+# docker run --rm -ti -v $PWD:/project deploy/phpcs phpcbf --standard=PSR12 /project
