@@ -196,6 +196,7 @@ build_php_composer() {
     fi
     # rm -rf "${gitlab_project_dir}"/vendor
     $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install ${quiet_flag}" || true
+    chown -R 1000:1000 "$script_dockerfile"/vendor
     echo_time "end php composer install."
 }
 
