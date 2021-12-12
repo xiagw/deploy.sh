@@ -130,7 +130,7 @@ func_deploy_flyway_docker() {
 
 docker_login() {
     ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
-    lock_docker_login="$script_path_conf/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
+    lock_docker_login="$script_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     time_save="$(if test -f "$lock_docker_login"; then cat "$lock_docker_login"; else :; fi)"
     if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
         return 0
@@ -191,15 +191,15 @@ deploy_k8s() {
     ## Convert to lower case / 转换为小写
     helm_release="${helm_release,,}"
     ## finding helm files folder / 查找 helm 文件目录
-    if [ -d "${script_path_conf}/helm/${gitlab_project_name}" ]; then
-        path_helm="${script_path_conf}/helm/${gitlab_project_name}"
+    if [ -d "${script_path_data}/helm/${gitlab_project_name}" ]; then
+        path_helm="${script_path_data}/helm/${gitlab_project_name}"
     elif [ -d "$gitlab_project_dir/helm" ]; then
         path_helm="$gitlab_project_dir/helm"
     fi
 
     if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
         ## update gitops files / 更新 gitops 文件
-        file_gitops="$script_path_conf"/gitops/helm/${gitlab_project_name}/values.yaml
+        file_gitops="$script_path_data"/gitops/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo_time_step "update gitops files..."
             echo_erro "Note: Only the configuration file is updated, the project will not be deployed."
@@ -364,9 +364,9 @@ func_renew_cert() {
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/dest"
-    conf_dns_cloudflare="${script_path_conf}/.cloudflare.conf"
-    conf_dns_aliyun="${script_path_conf}/.aliyun.dnsapi.conf"
-    conf_dns_qcloud="${script_path_conf}/.qcloud.dnspod.conf"
+    conf_dns_cloudflare="${script_path_data}/.cloudflare.conf"
+    conf_dns_aliyun="${script_path_data}/.aliyun.dnsapi.conf"
+    conf_dns_qcloud="${script_path_data}/.qcloud.dnspod.conf"
 
     ## install acme.sh / 安装 acme.sh
     [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh
@@ -596,7 +596,7 @@ func_file_pre_process() {
         copy_flyway_file=0
     fi
     ## backend (PHP/Java/Python) project_conf files
-    path_project_conf="${script_path_conf}/project_conf/${env_namespace}.${gitlab_project_name}/"
+    path_project_conf="${script_path_data}/project_conf/${env_namespace}.${gitlab_project_name}/"
     [ -d "$path_project_conf" ] && rsync -av "$path_project_conf" "${gitlab_project_dir}/"
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path_conf}/.dockerignore" "${gitlab_project_dir}/"
@@ -624,8 +624,13 @@ func_file_pre_process() {
 }
 
 func_config_files() {
+    path_conf_ssh="${script_path_data}/.ssh"
+    path_conf_acme="${script_path_data}/.acme.sh"
+    path_conf_aws="${script_path_data}/.aws"
+    path_conf_kube="${script_path_data}/.kube"
+    path_conf_aliyun="${script_path_data}/.aliyun"
+    conf_python_gitlab="${script_path_data}/.python-gitlab.cfg"
     ## ssh config and key files
-    path_conf_ssh="${script_path_conf}/.ssh"
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
         echo_warn "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
@@ -640,11 +645,6 @@ func_config_files() {
         fi
     done
     ## acme.sh/aws/kube/aliyun/python-gitlab
-    path_conf_acme="${script_path_conf}/.acme.sh"
-    path_conf_aws="${script_path_conf}/.aws"
-    path_conf_kube="${script_path_conf}/.kube"
-    path_conf_aliyun="${script_path_conf}/.aliyun"
-    conf_python_gitlab="${script_path_conf}/.python-gitlab.cfg"
     [[ ! -d "${HOME}/.acme.sh" && -d "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
     [[ ! -d "${HOME}/.aws" && -d "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
     [[ ! -d "${HOME}/.kube" && -d "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
