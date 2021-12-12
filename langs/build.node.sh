@@ -13,9 +13,7 @@ fi
 echo_time_step "node yarn build..."
 # rm -f package-lock.json
 [[ "${github_action:-0}" -eq 1 ]] && return 0
-if docker images | grep -q 'deploy/node'; then
-    true
-else
+if ! docker images | grep -q 'deploy/node'; then
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
         -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
 fi

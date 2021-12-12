@@ -714,8 +714,7 @@ func_detect_langs() {
                 project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
                 project_lang=${project_lang// /}
                 project_lang=${project_lang,,}
-                project_lang=${project_lang:-other)}
-                exec_deploy_rsync=0
+                project_lang=${project_lang:-other}
                 break
                 ;;
             esac

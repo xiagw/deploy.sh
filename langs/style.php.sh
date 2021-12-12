@@ -17,6 +17,4 @@ for i in $(git --no-pager diff --name-only HEAD^ | awk '/\.php$/{if (NR>0){print
         phpcs_result=$((phpcs_result + 1))
     fi
 done
-if [ "$phpcs_result" -ne "0" ]; then
-    exit $phpcs_result
-fi
+[ "$phpcs_result" -ne "0" ] && exit $phpcs_result
