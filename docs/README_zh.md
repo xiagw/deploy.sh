@@ -67,7 +67,7 @@ cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配
 创建并提交一个文件 `.gitlab-ci.yml` 在 git 仓库 `project-A`
 ### Step 8: 享受 CI/CD
 
-![](../docs/readme.png)
+![](../docs/README.png)
 # 以下代码需要支持 "mermain" 语法的浏览器才能显示图片
 
 ```mermaid

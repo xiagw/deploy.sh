@@ -69,8 +69,8 @@ For example: created `project-A` under the root account on gitlab-server (root/p
 Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 ### Step 8: Enjoy CI/CD
 
-![](docs/readme.png)
-# The following need "mermain" support
+![](docs/README.png)
+# Display the following code as picture, support by "mermain"
 
 ```mermaid
 graph TB;
