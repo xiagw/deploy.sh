@@ -199,7 +199,7 @@ deploy_k8s() {
 
     if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
         ## update gitops files / 更新 gitops 文件
-        file_gitops="$script_path_data"/gitops/helm/${gitlab_project_name}/values.yaml
+        file_gitops="$script_path_data"/$gitlab_project_branch/gitops/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo_time_step "update gitops files..."
             echo_erro "Note: Only the configuration file is updated, the project will not be deployed."

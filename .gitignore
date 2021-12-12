@@ -2,23 +2,14 @@
 .DS_Store
 ## vim swap
 .swp
+*.log
 ## gitlab runner exclude
 builds/
 cache/
 etc/
-## deploy.sh exclude
-conf/**
-!conf/deploy.*.example
-!conf/.dockerignore
-!conf/gitlab-ci.yml
-!conf/rsync.exclude
-!conf/dockerfile/
-!conf/flyway/flyway.conf
-!conf/flyway/README.md
-!conf/helm/flyway/
-!conf/helm/README.md
-!conf/.gitattributes
-!conf/.gitmodules
+conf/deploy.env
+conf/deploy.conf
+conf/deploy.yml
 data/**
 !data/readme.md
 bin/*
@@ -27,5 +18,3 @@ bin/*
 !bin/sendEmail
 ## custome folder
 tmp/
-python/
-deploy.log
