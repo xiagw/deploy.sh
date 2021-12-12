@@ -26,54 +26,6 @@ echo_time_step() { echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\
 # https://eslint.bootcss.com
 # http://eslint.cn/docs/user-guide/getting-started
 
-code_style_node() {
-    echo_time_step "[TODO] eslint code style check..."
-}
-
-code_style_python() {
-    echo_time_step "[TODO] vsc-extension-python..."
-}
-
-## https://github.com/squizlabs/PHP_CodeSniffer
-## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)
-code_style_php() {
-    echo_time_step 'starting PHP Code Sniffer, < standard=PSR12 >...'
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if ! docker images | grep 'deploy/phpcs'; then
-        DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dockerfile/Dockerfile.phpcs" "$script_dockerfile" >/dev/null
-    fi
-    phpcs_result=0
-    for i in $($git_diff | awk '/\.php$/{if (NR>0){print $0}}'); do
-        if [ ! -f "$gitlab_project_dir/$i" ]; then
-            echo_warn "$gitlab_project_dir/$i not exists."
-            continue
-        fi
-        if ! $docker_run -v "$gitlab_project_dir":/project deploy/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcs_report:-full}" "/project/$i"; then
-            phpcs_result=$((phpcs_result + 1))
-        fi
-    done
-    if [ "$phpcs_result" -ne "0" ]; then
-        exit $phpcs_result
-    fi
-}
-
-# https://github.com/alibaba/p3c/wiki/FAQ
-code_style_java() {
-    echo_time_step "[TODO] Java code style check..."
-}
-
-code_style_dockerfile() {
-    echo_time_step "[TODO] vsc-extension-hadolint..."
-}
-
-func_code_style() {
-    [[ "${project_lang}" == php ]] && code_style_php
-    [[ "${project_lang}" == node ]] && code_style_node
-    [[ "${project_lang}" == java ]] && code_style_java
-    [[ "${project_lang}" == python ]] && code_style_python
-    [[ "${project_docker}" == 1 ]] && code_style_dockerfile
-}
-
 ## install phpunit
 func_test_unit() {
     echo_time_step "unit test..."
@@ -169,41 +121,6 @@ func_deploy_flyway_docker() {
     else
         echo_erro "Result = FAIL"
     fi
-}
-
-# https://github.com/nodesource/distributions#debinstall
-build_node_yarn() {
-    echo_time_step "node yarn build..."
-    rm -f package-lock.json
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if ! docker images | grep 'deploy/node' >/dev/null; then
-        DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-            -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
-    fi
-    $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "if [[ ${YARN_INSTALL:-false} == 'true' ]]; then yarn install; fi; yarn run build"
-    [ -d "${gitlab_project_dir}"/build ] && rsync -a --delete "${gitlab_project_dir}"/build/ "${gitlab_project_dir}"/dist/
-    echo_time "end node yarn build."
-}
-
-build_php_composer() {
-    echo_time_step "php composer install..."
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if ! docker images | grep -q "deploy/composer"; then
-        DOCKER_BUILDKIT=1 docker build --quiet --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-            -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile" >/dev/null
-    fi
-    # rm -rf "${gitlab_project_dir}"/vendor
-    $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install ${quiet_flag}" || true
-    [ -d "$gitlab_project_dir"/vendor ] && chown -R 1000:1000 "$gitlab_project_dir"/vendor
-    echo_time "end php composer install."
-}
-
-build_java_maven() {
-    echo_time_step "java maven build..."
-}
-
-build_python_pip() {
-    echo_time_step "python install..."
 }
 
 # python-gitlab list all projects / 列出所有项目
@@ -509,7 +426,7 @@ install_aws() {
     command -v aws >/dev/null && return
     $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
-    ./aws/install --bin-dir "${script_path_bin}" --install-dir "${script_data}" --update
+    ./aws/install --bin-dir "${script_path_bin}" --install-dir "${script_path_data}" --update
     ## install eksctl / 安装 eksctl
     $curl_opt "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
     mv /tmp/eksctl "${script_path_bin}/"
@@ -539,7 +456,7 @@ install_jmeter() {
     fi
     $curl_opt -o "$path_temp"/jmeter.zip https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
     (
-        cd "$script_data"
+        cd "$script_path_data"
         unzip "$path_temp"/jmeter.zip
         ln -sf apache-jmeter-${ver_jmeter} jmeter
     )
@@ -669,6 +586,7 @@ func_file_pre_process() {
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
         for file in $config_env_path; do
+            [[ -f "$file" ]] || continue
             if [[ "$file" =~ 'config/' ]]; then
                 rsync -av "$file" "${file/${env_namespace}./}" # vue2.x
             else
@@ -735,7 +653,7 @@ func_config_files() {
     return 0
 }
 
-func_setup_var_gitlab() {
+func_gitlab_var() {
     gitlab_project_dir=${CI_PROJECT_DIR:-$PWD}
     gitlab_project_name=${CI_PROJECT_NAME:-${gitlab_project_dir##*/}}
     # read -rp "Enter gitlab project namespace: " -e -i 'root' gitlab_project_namespace
@@ -758,7 +676,7 @@ func_setup_var_gitlab() {
     env_namespace=$gitlab_project_branch
 }
 
-func_detect_project_lang() {
+func_detect_langs() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
@@ -769,6 +687,7 @@ func_detect_project_lang() {
         exec_build_docker=1
         exec_docker_push=1
         exec_deploy_k8s=1
+        exec_deploy_rsync=0
         build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
     fi
     test -f "${gitlab_project_dir}"/package.json && project_lang=node
@@ -777,47 +696,16 @@ func_detect_project_lang() {
     test -f "${gitlab_project_dir}"/requirements.txt && project_lang=python
     grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=android
     grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=ios
-    project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' README.md | head -n 1)}
+    test -f "${gitlab_project_dir}"/README.md && project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/README.md | head -n 1)}
+    test -f "${gitlab_project_dir}"/readme.md && project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/readme.md | head -n 1)}
     project_lang=${project_lang:-other)}
-
-    case "$project_lang" in
-    node)
-        path_for_rsync='dist/'
-        file_lang="${gitlab_project_dir}/package.json"
-        string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
-        if ! grep -q "$string_grep" "${script_log}"; then
-            echo "$string_grep ${file_lang}" >>"${script_log}"
-            YARN_INSTALL=true
-        fi
-        [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
-        exec_build_node=1
-        ;;
-    php)
-        file_lang="${gitlab_project_dir}/composer.json"
-        string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
-        if ! grep -q "$string_grep" "${script_log}"; then
-            echo "$string_grep ${file_lang}" >>"${script_log}"
-            exec_build_php=1
-            # COMPOSER_INSTALL=true
-        fi
-        [ -d "${gitlab_project_dir}/vendor" ] || exec_build_php=1
-        ;;
-    java)
-        exec_build_java=1
-        ;;
-    python)
-        exec_build_python=1
-        ;;
-    *)
-        # if grep '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" >/dev/null; then
-        echo_ques "Not support? Issue: https://github.com/xiagw/deploy.sh/issues"
-        exec_deploy_rsync=0
-        ;;
-    esac
+    project_lang=${project_lang// /}
+    project_lang=${project_lang,,}
 }
 
 func_process_args() {
-    [[ "${PIPELINE_DEBUG:-0}" -eq 1 || "$1" =~ (--debug|--github) ]] && debug_on=1
+    [[ "${PIPELINE_DEBUG:-0}" -eq 1 || "$*" =~ (--debug|--github) ]] && debug_on=1
+    [[ "$*" =~ (--github) ]] && github_action=1
     if [[ "$debug_on" -eq 1 ]]; then
         set -x
         quiet_flag=
@@ -828,27 +716,16 @@ func_process_args() {
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
     while [[ "${#}" -ge 0 ]]; do
         case "$1" in
-        --debug)
-            debug_on=1
-            ;;
-        --github-action)
-            debug_on=1
-            github_action=1
-            ;;
         --renwe-cert)
             func_renew_cert
             exec_auto=0
             ;;
-        --build-docker)
-            build_docker
+        --code-style)
+            func_code_style
             exec_auto=0
             ;;
-        --docker-push)
-            docker_push
-            exec_auto=0
-            ;;
-        --deploy-k8s)
-            deploy_k8s
+        --code-quality)
+            func_code_quality_sonar
             exec_auto=0
             ;;
         --build-php)
@@ -867,12 +744,16 @@ func_process_args() {
             build_python_pip
             exec_auto=0
             ;;
-        --code-style)
-            func_code_style
+        --build-docker)
+            build_docker
             exec_auto=0
             ;;
-        --code-quality)
-            func_code_quality_sonar
+        --docker-push)
+            docker_push
+            exec_auto=0
+            ;;
+        --deploy-k8s)
+            deploy_k8s
             exec_auto=0
             ;;
         --deploy-flyway)
@@ -914,24 +795,23 @@ main() {
     script_path="$(cd "$(dirname "$0")" && pwd)"
     script_path_conf="${script_path}/conf"
     script_path_bin="${script_path}/bin"
-    script_conf="${script_path_conf}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
-    script_env="${script_path_conf}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
-    script_data="${script_path}/data"                  ## deploy.sh data folder
-    script_log="${script_data}/${script_name}.log"     ## deploy.sh run loger
-    script_dockerfile="${script_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
+    script_path_data="${script_path}/data"              ## deploy.sh data folder
+    script_conf="${script_path_conf}/deploy.conf"       ## deploy to app server 发布到目标服务器的配置信息
+    script_env="${script_path_conf}/deploy.env"         ## deploy.sh ENV 发布配置信息(密)
+    script_log="${script_path_data}/${script_name}.log" ## deploy.sh run loger
+    script_dockerfile="${script_path_conf}/dockerfile"  ## deploy.sh dependent dockerfile
 
     [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/deploy.conf.example" "$script_conf"
     [[ ! -f "$script_env" ]] && cp "${script_path_conf}/deploy.env.example" "$script_env"
     [[ ! -f "$script_log" ]] && touch "$script_log"
 
     PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
-    PATH="$PATH:$script_data/jdk/bin:$script_data/jmeter/bin:$script_data/ant/bin:$script_data/maven/bin"
+    PATH="$PATH:$script_path_data/jdk/bin:$script_path_data/jmeter/bin:$script_path_data/ant/bin:$script_path_data/maven/bin"
     PATH="$PATH:$script_path_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
     docker_run="docker run --interactive --rm -u 1000:1000"
     # docker_run_root="docker run --interactive --rm -u 0:0"
-    git_diff="git --no-pager diff --name-only HEAD^"
     kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
     helm_opt="helm --kubeconfig $HOME/.kube/config"
 
@@ -939,7 +819,7 @@ main() {
     func_check_os
 
     ## run deploy.sh by hand / 手动执行 deploy.sh
-    func_setup_var_gitlab
+    func_gitlab_var
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$script_env"
     ## curl use proxy / curl 使用代理
@@ -971,7 +851,7 @@ main() {
     [[ "$PIPELINE_RENEW_CERT" -eq 1 ]] && func_renew_cert
 
     ## detect program lang / 检测程序语言
-    func_detect_project_lang
+    func_detect_langs
 
     ## preprocess project config files / 预处理项目配置文件
     func_file_pre_process
@@ -985,7 +865,8 @@ main() {
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && func_code_style
+    style_sh="$script_path"/langs/style.${project_lang}.sh
+    [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-1}"
@@ -1002,16 +883,17 @@ main() {
     ## generate api docs
     # func_generate_apidoc
 
-    ## build/deploy k8s
-    [[ "${exec_build_php}" -eq 1 ]] && build_php_composer
-    [[ "${exec_build_node}" -eq 1 ]] && build_node_yarn
-    [[ "${exec_build_java}" -eq 1 ]] && build_java_maven
-    [[ "${exec_build_python}" -eq 1 ]] && build_python_pip
+    ## build
+    build_sh="$script_path"/langs/build.${project_lang}.sh
+    [[ -f "$build_sh" ]] && source "$build_sh"
+
+    ## deploy k8s
     [[ "${exec_build_docker}" -eq 1 ]] && build_docker
     [[ "${exec_docker_push}" -eq 1 ]] && docker_push
     [[ "${exec_deploy_k8s}" -eq 1 ]] && deploy_k8s
+
     ## deploy with rsync / 使用 rsync 发布
-    [[ "${project_docker}" -eq 1 || "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
+    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync=0
     [[ "${exec_deploy_rsync:-1}" -eq 1 ]] && func_deploy_rsync
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
