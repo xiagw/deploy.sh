@@ -21,14 +21,14 @@ cache:
 # code_style:
 #   stage: code_style
 #   script:
-#     - bash deploy.sh --code-style
+#     - bash $HOME/runner/deploy.sh --code-style
 #   only:
 #     - develop
 
 # code_quality:
 #   stage: code_quality
 #   script:
-#     - bash deploy.sh --code-quality
+#     - bash $HOME/runner/deploy.sh --code-quality
 #   only:
 #     - develop
 #   when: manual
@@ -37,7 +37,7 @@ cache:
 # test_unit:
 #   stage: test_unit
 #   script:
-#     - bash deploy.sh --test-unit
+#     - bash $HOME/runner/deploy.sh --test-unit
 #   # when: manual
 #   only:
 #     - develop
@@ -45,11 +45,11 @@ cache:
 # build:
 #   stage: build
 #   script:
-#     - bash deploy.sh --build-php
-#     - bash deploy.sh --build-node
-#     - bash deploy.sh --build-java
-#     - bash deploy.sh --build-python
-#     - bash deploy.sh --build-docker
+#     - bash $HOME/runner/deploy.sh --build-php
+#     - bash $HOME/runner/deploy.sh --build-node
+#     - bash $HOME/runner/deploy.sh --build-java
+#     - bash $HOME/runner/deploy.sh --build-python
+#     - bash $HOME/runner/deploy.sh --build-docker
 #   when: manual
 #   only:
 #     - develop
@@ -67,7 +67,7 @@ deploy:
   #     - target/
   #     - dist/
   script:
-    - bash deploy.sh
+    - bash $HOME/runner/deploy.sh
   environment:
     name: ENV-${CI_COMMIT_REF_NAME}
   only:
@@ -85,7 +85,7 @@ deploy:
 # test_function:
 #   stage: test_function
 #   script:
-#     - bash deploy.sh --test-function
+#     - bash $HOME/runner/deploy.sh --test-function
 #   when: manual
 #   only:
 #     - dev

@@ -10,5 +10,6 @@ include:
 
 ## use remote file
 # include:
+#   - remote: 'https://gitee.com/xiagw/deploy.sh/raw/main/conf/gitlab-ci.yml'
 #   - remote: 'https://raw.githubusercontent.com/xiagw/deploy.sh/main/conf/gitlab-ci.yml'
 

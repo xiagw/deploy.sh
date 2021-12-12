@@ -100,7 +100,7 @@ CICD -- cert --> cert[Cert manage];
 CICD -- notify --> notify[Notify manage];
 CICD -- check --> rev[Code Check];
 CICD -- test --> test[Test Center];
-notify -- notify --> weixin/dingding/telegram/elemetn;
+notify -- notify --> weixin/dingding/telegram/element;
 db1 -- sql --> flyway;
 cert -- shell --> acme[acme.sh];
 acme -- dns api --> dnsapi;
