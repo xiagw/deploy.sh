@@ -679,28 +679,48 @@ func_gitlab_var() {
 func_detect_langs() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
-        disable_docker=1
-    fi
-    if [[ -f "${gitlab_project_dir}"/Dockerfile && "$disable_docker" -ne 1 ]]; then
-        project_docker=1
-        exec_build_docker=1
-        exec_docker_push=1
-        exec_deploy_k8s=1
-        exec_deploy_rsync=0
-        build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
-    fi
-    test -f "${gitlab_project_dir}"/package.json && project_lang=node
-    test -f "${gitlab_project_dir}"/composer.json && project_lang=php
-    test -f "${gitlab_project_dir}"/pom.xml && project_lang=java
-    test -f "${gitlab_project_dir}"/requirements.txt && project_lang=python
-    grep -q '^## android' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=android
-    grep -q '^## ios' "${gitlab_project_dir}/.gitlab-ci.yml" && project_lang=ios
-    test -f "${gitlab_project_dir}"/README.md && project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/README.md | head -n 1)}
-    test -f "${gitlab_project_dir}"/readme.md && project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/readme.md | head -n 1)}
-    project_lang=${project_lang:-other)}
-    project_lang=${project_lang// /}
-    project_lang=${project_lang,,}
+    for f in Dockerfile composer.json package.json pom.xml requirements.txt README.md readme.md README.txt readme.txt; do
+        test -f "${gitlab_project_dir}"/${f} && {
+            case $f in
+            Dockerfile)
+                if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
+                    :
+                else
+                    project_docker=1
+                    exec_build_docker=1
+                    exec_docker_push=1
+                    exec_deploy_k8s=1
+                    exec_deploy_rsync=0
+                    build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
+                fi
+                ;;
+            composer.json)
+                project_lang=php
+                break
+                ;;
+            package.json)
+                project_lang=node
+                break
+                ;;
+            pom.xml)
+                project_lang=java
+                break
+                ;;
+            requirements.txt)
+                project_lang=python
+                break
+                ;;
+            *)
+                project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
+                project_lang=${project_lang// /}
+                project_lang=${project_lang,,}
+                project_lang=${project_lang:-other)}
+                exec_deploy_rsync=0
+                break
+                ;;
+            esac
+        }
+    done
 }
 
 func_process_args() {
