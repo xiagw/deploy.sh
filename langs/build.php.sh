@@ -8,6 +8,11 @@ if ! grep -q "$string_grep" "${script_log}"; then
 fi
 [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=1
 
+if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
+    bash "$gitlab_project_dir"/custom.build.sh
+    return
+fi
+
 if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
     echo_time_step "php composer install..."
     [[ "${github_action:-0}" -eq 1 ]] && return 0
