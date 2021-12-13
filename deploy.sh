@@ -586,7 +586,7 @@ func_file_pre_process() {
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
         for file in $config_env_path; do
             [[ -f "$file" ]] || continue
-            if [[ "$file" =~ 'config/' ]]; then
+            if [[ "$file" =~ 'config' ]]; then
                 rsync -av "$file" "${file/${env_namespace}./}" # vue2.x
             else
                 rsync -av "$file" "${file/${env_namespace}/}" # vue3.x
