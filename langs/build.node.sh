@@ -4,7 +4,6 @@ path_for_rsync='dist/'
 file_lang="${gitlab_project_dir}/package.json"
 string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
 if ! grep -q "$string_grep" "${script_log}"; then
-    echo "$string_grep ${file_lang}" >>"${script_log}"
     YARN_INSTALL=true
 fi
 [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
@@ -26,11 +25,11 @@ if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
 fi
 
 if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
-    $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install"
+    $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install" &&
+        echo "$string_grep ${file_lang}" >>"${script_log}"
 else
     echo_time "skip node yarn install..."
 fi
-
 
 $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn run build"
 
