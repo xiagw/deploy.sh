@@ -45,7 +45,7 @@ func_test_function() {
 }
 
 func_code_quality_sonar() {
-    echo_time_step "sonar scanner..."
+    echo_time_step "code quality [sonarqube scanner]..."
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$gitlab_project_dir/sonar-project.properties"
     if ! curl "$sonar_url" >/dev/null 2>&1; then
@@ -73,21 +73,21 @@ EOF
     $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
-    echo_time "end sonar scanner."
+    echo_time "end code quality [sonarqube scanner]."
     exit
 }
 
 scan_ZAP() {
-    echo_time_step "[TODO] ZAP scan..."
+    echo_time_step "[TODO] scan [ZAP]..."
     # docker pull owasp/zap2docker-stable
 }
 
 scan_vulmap() {
-    echo_time_step "[TODO] vulmap scan..."
+    echo_time_step "[TODO] scan[vulmap]..."
 }
 
 func_deploy_flyway() {
-    echo_time_step "flyway migrate..."
+    echo_time_step "deploy database [flyway]..."
     flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
@@ -107,7 +107,7 @@ func_deploy_flyway() {
     else
         echo_erro "Result = FAIL"
     fi
-    echo_time "end flyway migrate."
+    echo_time "end deploy database [flyway]."
 }
 
 func_deploy_flyway_docker() {
@@ -135,7 +135,7 @@ docker_login() {
     if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
         return 0
     fi
-    echo_time "docker login ${ENV_DOCKER_LOGIN_TYPE:-none} ..."
+    echo_time "docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "${ENV_DOCKER_LOGIN_TYPE:-none}" == 'aws' ]]; then
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
@@ -147,7 +147,7 @@ docker_login() {
 }
 
 build_docker() {
-    echo_time_step "docker build only..."
+    echo_time_step "docker build image only..."
     docker_login
 
     ## Docker build from template image / 是否从模板构建
@@ -167,22 +167,22 @@ build_docker() {
     ## docker build
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
-    echo_time "end docker build."
+    echo_time "end docker build image."
 }
 
 docker_push() {
-    echo_time_step "docker push only..."
+    echo_time_step "docker push image only..."
     docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" || echo_erro "error here, maybe caused by GFW."
     if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
     fi
-    echo_time "end docker push."
+    echo_time "end docker push image."
 }
 
 deploy_k8s() {
-    echo_time_step "deploy k8s..."
+    echo_time_step "deploy k8s [helm]..."
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
         helm_release=${gitlab_project_name#*-}
     else
@@ -208,7 +208,7 @@ deploy_k8s() {
                 -e "s@tag:.*@tag:\ \"${gitlab_project_name}-${gitlab_commit_short_sha}\"@" \
                 "$file_gitops"
         fi
-        return 0
+        # return 0
     fi
 
     if [ -z "$path_helm" ]; then
@@ -238,11 +238,11 @@ deploy_k8s() {
             --set image.tag="${gitlab_project_name}-flyway" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    echo_time "end deploy k8s."
+    echo_time "end deploy k8s [helm]."
 }
 
 func_deploy_rsync() {
-    echo_time_step "rsync code file to remote server..."
+    echo_time_step "deploy code file [rsync]..."
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf"); do
     grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf" | while read -r line; do
@@ -298,7 +298,7 @@ func_deploy_rsync() {
         echo "deploy to ${ssh_host}:${rsync_dest}"
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
     done
-    echo_time "end rsync file."
+    echo_time "end deploy code file [rsync]."
 }
 
 func_deploy_notify_msg() {
@@ -333,10 +333,10 @@ func_deploy_notify() {
             }
         }"
     elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
-        tgApiMsg="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendMessage"
-        # tgApiUrlDoc="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendDocument"
+        telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendMessage"
+        # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
-        $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$tgApiMsg"
+        $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$telegram_api_msg"
     elif [[ "${PIPELINE_TEMP_PASS:-0}" -eq 1 ]]; then
         python3 "$script_path_bin/element-up.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
@@ -360,7 +360,7 @@ func_deploy_notify() {
 }
 
 func_renew_cert() {
-    echo_time_step "renew cert (dns api)..."
+    echo_time_step "renew cert [dns api]..."
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/dest"
@@ -581,7 +581,7 @@ func_generate_apidoc() {
 }
 
 func_file_pre_process() {
-    echo_time "preprocessing file..."
+    echo_time "preprocessing file [env/config]..."
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -680,7 +680,7 @@ func_detect_langs() {
     echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     for f in Dockerfile composer.json package.json pom.xml requirements.txt README.md readme.md README.txt readme.txt; do
-        test -f "${gitlab_project_dir}"/${f} && {
+        if test -f "${gitlab_project_dir}"/${f}; then
             case $f in
             Dockerfile)
                 if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
@@ -718,7 +718,7 @@ func_detect_langs() {
                 break
                 ;;
             esac
-        }
+        fi
     done
 }
 
