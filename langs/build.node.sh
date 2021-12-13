@@ -10,27 +10,30 @@ fi
 [ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
 
 # https://github.com/nodesource/distributions#debinstall
-echo_time_step "node yarn build..."
-if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
-    bash "$gitlab_project_dir"/custom.build.sh
-    return
-fi
+echo_time_step "node build [yarn]..."
 
 # rm -f package-lock.json
 [[ "${github_action:-0}" -eq 1 ]] && return 0
+
 if ! docker images | grep -q 'deploy/node'; then
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
         -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
 fi
 
+if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
+    $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash custom.build.sh
+    return
+fi
+
 if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
-    $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "yarn install"
+    $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install"
 else
     echo_time "skip node yarn install..."
 fi
 
-$docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "yarn run build"
+
+$docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn run build"
 
 [ -d "${gitlab_project_dir}"/build ] && rsync -a --delete "${gitlab_project_dir}"/build/ "${gitlab_project_dir}"/dist/
 
-echo_time "end node yarn build."
+echo_time "end node build [yarn]."
