@@ -20,5 +20,5 @@ if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
     [ -d "$gitlab_project_dir"/vendor ] && chown -R 1000:1000 "$gitlab_project_dir"/vendor
     echo_time "end php composer install."
 else
-    :
+    echo_time "skip php composer install."
 fi

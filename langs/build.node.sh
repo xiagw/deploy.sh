@@ -19,6 +19,8 @@ if ! docker images | grep -q 'deploy/node'; then
 fi
 if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
     $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "yarn install"
+else
+    echo_time "skip node yarn install..."
 fi
 $docker_run -v "${gitlab_project_dir}":/app -w /app 'deploy/node' bash -c "yarn run build"
 [ -d "${gitlab_project_dir}"/build ] && rsync -a --delete "${gitlab_project_dir}"/build/ "${gitlab_project_dir}"/dist/
