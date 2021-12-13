@@ -8,7 +8,7 @@ if ! grep -q "$string_grep" "${script_log}"; then
 fi
 [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=1
 
-[[ "${COMPOSER_INSTALL}" -eq 1 ]] && {
+if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
     echo_time_step "php composer install..."
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep -q "deploy/composer"; then
@@ -19,4 +19,6 @@ fi
     $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install ${quiet_flag}" || true
     [ -d "$gitlab_project_dir"/vendor ] && chown -R 1000:1000 "$gitlab_project_dir"/vendor
     echo_time "end php composer install."
-}
+else
+    :
+fi
