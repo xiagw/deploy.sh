@@ -112,7 +112,7 @@ func_deploy_flyway() {
 
 func_deploy_flyway_docker() {
     ## docker build flyway
-    image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
+    echo "$image_tag_flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     docker run --rm "$image_tag_flyway" || deploy_result=1
@@ -161,11 +161,10 @@ build_docker() {
 
     ## docker build flyway image / 构建 flyway 模板
     if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
-        image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO:?undefine}:${gitlab_project_name}-flyway"
         DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
-    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" \
+    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${image_tag}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
     echo_time "end docker build image."
 }
@@ -174,7 +173,7 @@ docker_push() {
     echo_time_step "docker push image only..."
     docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${gitlab_project_name}-${gitlab_commit_short_sha}" || echo_erro "error here, maybe caused by GFW."
+    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${image_tag}" || echo_erro "error here, maybe caused by GFW."
     if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
     fi
@@ -205,7 +204,7 @@ deploy_k8s() {
             echo_erro "Note: Only the configuration file is updated, the project will not be deployed."
             sed -i \
                 -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
-                -e "s@tag:.*@tag:\ \"${gitlab_project_name}-${gitlab_commit_short_sha}\"@" \
+                -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
         fi
         # return 0
@@ -220,7 +219,7 @@ deploy_k8s() {
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
-            --set image.tag="${gitlab_project_name}-${gitlab_commit_short_sha}" \
+            --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
         [[ "${debug_on:-0}" -ne 1 ]] && set +x
         ## Clean up rs 0 0 / 清理 rs 0 0
@@ -847,6 +846,8 @@ main() {
     else
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
+    image_tag="${gitlab_project_name}-$(date +%s)-${gitlab_commit_short_sha}"
+    image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
 
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && install_aws
