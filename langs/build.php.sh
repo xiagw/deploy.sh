@@ -3,7 +3,6 @@
 file_lang="${gitlab_project_dir}/composer.json"
 string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
 if ! grep -q "$string_grep" "${script_log}"; then
-    echo "$string_grep ${file_lang}" >>"${script_log}"
     COMPOSER_INSTALL=1
 fi
 [ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=1
@@ -21,7 +20,8 @@ if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
             -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile" >/dev/null
     fi
     # rm -rf "${gitlab_project_dir}"/vendor
-    $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install ${quiet_flag}" || true
+    $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-deploy/composer}" bash -c "composer install ${quiet_flag}" &&
+        echo "$string_grep ${file_lang}" >>"${script_log}" || true
     [ -d "$gitlab_project_dir"/vendor ] && chown -R 1000:1000 "$gitlab_project_dir"/vendor
     echo_time "end php composer install."
 else
