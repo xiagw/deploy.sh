@@ -201,13 +201,14 @@ deploy_k8s() {
         file_gitops="$script_path_data"/$gitlab_project_branch/gitops/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo_time_step "update gitops files..."
-            echo_erro "Note: Only the configuration file is updated, the project will not be deployed."
+            echo_erro "Note: Only update 'gitops', disable deploy to AWS."
             sed -i \
                 -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
         fi
-        # return 0
+        ( cd "$script_path_data/$gitlab_project_branch"/gitops/ && git add . && git commit -m "gitops files $gitlab_project_name")
+        return 0
     fi
 
     if [ -z "$path_helm" ]; then
