@@ -207,7 +207,7 @@ deploy_k8s() {
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
         fi
-        ( cd "$script_path_data/$gitlab_project_branch"/gitops/ && git add . && git commit -m "gitops files $gitlab_project_name")
+        (cd "$script_path_data/$gitlab_project_branch"/gitops/ && git add . && git commit -m "gitops files $gitlab_project_name" && git push origin "$gitlab_project_branch")
         return 0
     fi
 
