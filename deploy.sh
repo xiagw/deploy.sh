@@ -208,7 +208,7 @@ deploy_k8s() {
                 "$file_gitops"
         fi
         (cd "$script_path_data/$gitlab_project_branch"/gitops/ && git add . && git commit -m "gitops files $gitlab_project_name" && git push origin "$gitlab_project_branch")
-        return 0
+        [[ "${ENV_DISABLE_HELM:-0}" -eq 1 ]] && return 0
     fi
 
     if [ -z "$path_helm" ]; then
