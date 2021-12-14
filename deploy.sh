@@ -147,7 +147,7 @@ docker_login() {
 }
 
 build_docker() {
-    echo_time_step "docker build image only..."
+    echo_time_step "docker build image..."
     docker_login
 
     ## Docker build from template image / 是否从模板构建
@@ -170,7 +170,7 @@ build_docker() {
 }
 
 docker_push() {
-    echo_time_step "docker push image only..."
+    echo_time_step "docker push image..."
     docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${image_tag}" || echo_erro "error here, maybe caused by GFW."
