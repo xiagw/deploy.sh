@@ -207,7 +207,13 @@ deploy_k8s() {
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
         fi
-        (cd "$script_path_data/$gitlab_project_branch"/gitops/ && git add . && git commit -m "gitops files $gitlab_project_name" && git push origin "$gitlab_project_branch")
+        (
+            cd "$script_path_data/$gitlab_project_branch"/gitops
+            GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git pull
+            git add .
+            git commit -m "gitops files $gitlab_project_name"
+            GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git push origin "$gitlab_project_branch"
+        )
         [[ "${ENV_DISABLE_HELM:-0}" -eq 1 ]] && return 0
     fi
 
