@@ -164,6 +164,8 @@ build_docker() {
         DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
+    [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
+    [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${image_tag}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
     echo_time "end docker build image."
