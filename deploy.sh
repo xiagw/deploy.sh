@@ -205,7 +205,7 @@ deploy_k8s() {
             echo_time_step "update gitops files..."
             echo_erro "Note: Only update 'gitops', disable deploy to AWS."
             sed -i \
-                -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}\"@" \
+                -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY_GITOPS}/${ENV_DOCKER_REPO_GITOPS}\"@" \
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
         fi
@@ -216,7 +216,7 @@ deploy_k8s() {
             git commit -m "gitops files $gitlab_project_name"
             GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git push origin "$gitlab_project_branch"
         )
-        [[ "${ENV_DISABLE_HELM:-0}" -eq 1 ]] && return 0
+        [[ "${ENV_ENABLE_HELM:-1}" -eq 0 ]] && return 0
     fi
 
     if [ -z "$path_helm" ]; then
