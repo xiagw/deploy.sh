@@ -8,11 +8,11 @@ deploy.sh is a CI/CD program for GitLab Server.
 deploy.sh dependend GitLab and GitLab-Runner.
 
 How to detect program language with deploy.sh:
-- node: exist ./package.json or include `project_lang=node` in README.md
-- php: exist ./composer.json or include `project_lang=php` in README.md
-- java: exist ./pom.xml or include `project_lang=java` in README.md
-- python: exist ./requirements.txt or include `project_lang=python` in README.md
-
+- node: exist package.json or include `project_lang=node` in README.md
+- php: exist composer.json or include `project_lang=php` in README.md
+- java: exist pom.xml or include `project_lang=java` in README.md
+- python: exist requirements.txt or include `project_lang=python` in README.md
+- other: include `project_lang=other` in README.md
 # Description
 project_lang=shell
 
@@ -69,8 +69,10 @@ For example: created `project-A` under the root account on gitlab-server (root/p
 Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 ### Step 8: Enjoy CI/CD
 
+
 ![](docs/README.png)
-# Display the following code as picture, support by "mermain"
+
+# The following code requires a browser that supports "[mermain](https://mermaid-js.github.io/mermaid/#/README)" syntax to display pictures
 
 ```mermaid
 graph TB;

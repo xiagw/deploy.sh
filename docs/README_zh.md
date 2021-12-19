@@ -6,13 +6,14 @@ deploy.sh 是 Gitlab 持续集成/持续发布系统
 deploy.sh 依赖于 GitLab 和 GitLab-Runner.
 
 deploy.sh 如何探测程序开发语言:
-- node: 存在 ./package.json 或包含文本 `project_lang=node` 在 README.md
-- php: 存在 ./composer.json 或包含文本 `project_lang=php` 在 README.md
-- java: 存在 ./pom.xml 或包含文本 `project_lang=java` 在 README.md
-- python: 存在 ./requirements.txt 或包含文本 `project_lang=python` 在 README.md
+- node: 存在 package.json 或包含文本 `project_lang=node` 在 README.md
+- php: 存在 composer.json 或包含文本 `project_lang=php` 在 README.md
+- java: 存在 pom.xml 或包含文本 `project_lang=java` 在 README.md
+- python: 存在 requirements.txt 或包含文本 `project_lang=python` 在 README.md
+- other: 包含文本 `project_lang=other` 在 README.md
 
 # 描述
-开发语言： shell
+project_lang=shell
 
 运行平台： Unix/Linux/MacOS...
 
@@ -67,8 +68,9 @@ cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配
 创建并提交一个文件 `.gitlab-ci.yml` 在 git 仓库 `project-A`
 ### Step 8: 享受 CI/CD
 
+
 ![](../docs/README.png)
-# 以下代码需要支持 "mermain" 语法的浏览器才能显示图片
+# 以下代码需要支持 "[mermain](https://mermaid-js.github.io/mermaid/#/README)" 语法的浏览器才能显示图片
 
 ```mermaid
 graph TB;
