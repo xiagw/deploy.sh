@@ -1,22 +1,24 @@
-# deploy.sh for GitLab CI/CD
+# deploy.sh for CI/CD
 
 # 中文 [README_zh.md](docs/README_zh.md)
 
-deploy.sh is a CI/CD program for GitLab Server.
+# Description
+deploy.sh is a CI/CD program.
 
-# How it works
-deploy.sh dependend GitLab and GitLab-Runner.
+project_lang=shell
 
-How to detect program language with deploy.sh:
+Run Platform: Unix/Linux/MacOS...
+
+It can be executed manually/automated.
+
+It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
+
+# How to detect program language
 - node: exist package.json or include `project_lang=node` in README.md
 - php: exist composer.json or include `project_lang=php` in README.md
 - java: exist pom.xml or include `project_lang=java` in README.md
 - python: exist requirements.txt or include `project_lang=python` in README.md
-- other: include `project_lang=other` in README.md
-# Description
-project_lang=shell
-
-Run Platform: Unix/Linux/MacOS...
+- [other]: include `project_lang=[other]` in README.md
 
 # Currently support
 * Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
@@ -24,7 +26,7 @@ Run Platform: Unix/Linux/MacOS...
 * Code quality: sonarqube scan, OWASP, ZAP, vulmap...
 * Unit test: phpunit, junit...
 * Build: npm build, composer install, maven build, gradle build, docker build, pip install ...
-* Deploy method: rsync+ssh, rsync+nfs,rsync + docker image, rsync jar/war, kubectl, helm...
+* Deploy method: rsync+ssh, rsync, rsync + container image, rsync jar/war, ftp, sftp, kubectl, helm...
 * Function test: Jmeter, pytest...
 * Performance test: stress test, jmeter, loadrunner
 * Notify deploy result: work-weixin, Telegram, Element(Matrix), dingding...
@@ -34,6 +36,18 @@ Run Platform: Unix/Linux/MacOS...
 `git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
 
 ## Quick Start
+### option [1], Running applications manually
+```
+mkdir ~/src && git clone https://github.com/<your_name>/<your_project>.git ~/src/<your_project>
+cd ~/src/<your_project> && $HOME/runner/deploy.sh
+```
+### option [2], Running applications automated
+```
+## crontab
+* * * * * for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done
+```
+
+### option [3], Running applications with GitLab-Runner
 1. Prepare a gitlab-server and gitlab-runner-server
 1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
 1. cd $HOME
@@ -42,6 +56,8 @@ Run Platform: Unix/Linux/MacOS...
 1. cp conf/deploy.conf.example conf/deploy.conf      ## change to yours
 1. cp conf/deploy.env.example conf/deploy.env        ## change to yours
 1. Refer to conf/.gitlab-ci.yaml of this project, setup yours
+### option [4], Running applications with Jenkins
+...
 
 
 ## Example step
@@ -68,6 +84,38 @@ For example: created `project-A` under the root account on gitlab-server (root/p
 ### Step 7: Create .gitlab-ci.yml
 Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 ### Step 8: Enjoy CI/CD
+
+# Development and Contribution
+[deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
+
+[deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
+
+# Donation
+It would be much appreciated if you want to make a small donation to support my work!
+Alipay, WeChat Pay, BitCoin are avaliable for donation. You can chose any of them.
+
+Alipay | WeChat Pay
+-|-
+<img src=docs/pay-alipay.jpg width="250" height="250">|<img src=docs/pay-wechatpay.jpg width="250" height="250">
+
+### Digital Currency:
+**BitCoin**
+
+BTC native segwit Address: `bc1qaphg63gygfelzq5ptssv3rq6eayhwclghucf8r`
+
+BTC segwit Address: `3LzwrtqD6av77XVN68UXWLKaHEtAPEQiPt`
+
+**ETH/ERC20**
+
+ETH/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
+
+**BSC/ERC20**
+
+BSC/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
+
+**TRX/TRC20**
+
+TRX/TRC20 Address `TAnZ537r98Jo63aKDTfbWmBeooz29ASd73`
 
 
 ![](docs/README.png)
