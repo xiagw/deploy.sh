@@ -754,9 +754,29 @@ _git_clone_repo() {
 }
 
 _usage() {
-    echo "$0"
+    echo "Usage: $0 [parameters ...]
 
+Parameters:
+    -h, --help               Show this help message.
+    -v, --version            Show version info.
+    -r, --renew-cert         Renew all the certs.
+    --git-repo https://xxx.com/yyy/zzz.git      Clone git repo url.
+    --code-style             Check code style.
+    --code-quality           Check code quality.
+    --build-langs            Build all the languages.
+    --build-image            Build docker image.
+    --push-image             Push docker image.
+    --deploy-k8s             Deploy to kubernetes.
+    --deploy-flyway          Deploy database with flyway.
+    --deploy-rsync-ssh       Deploy to rsync with ssh.
+    --deploy-rsync           Deploy to rsync server.
+    --deploy-ftp             Deploy to ftp server.
+    --deploy-sftp            Deploy to sftp.
+    --test-unit              Run unit tests.
+    --test-function          Run function tests.
+"
 }
+
 _process_args() {
     [[ "${PIPELINE_DEBUG:-0}" -eq 1 || "$*" =~ (--debug|--github) ]] && debug_on=1
     [[ "$*" =~ (--github) ]] && github_action=1
@@ -793,11 +813,11 @@ _process_args() {
             arg_build_langs=1
             exec_single=$((exec_single + 1))
             ;;
-        --build-docker)
-            arg_build_docker=1
+        --build-image)
+            arg_build_image=1
             exec_single=$((exec_single + 1))
             ;;
-        --docker-push)
+        --push-image)
             arg_push_image=1
             exec_single=$((exec_single + 1))
             ;;
@@ -813,6 +833,18 @@ _process_args() {
             arg_deploy_rsync_ssh=1
             exec_single=$((exec_single + 1))
             ;;
+        --deploy-rsync)
+            arg_deploy_rsync=1
+            exec_single=$((exec_single + 1))
+            ;;
+        --deploy-ftp)
+            arg_deploy_ftp=1
+            exec_single=$((exec_single + 1))
+            ;;
+        --deploy-sftp)
+            arg_deploy_sftp=1
+            exec_single=$((exec_single + 1))
+            ;;
         --test-unit)
             arg_test_unit=1
             exec_single=$((exec_single + 1))
@@ -824,13 +856,15 @@ _process_args() {
         *)
             ## All tasks are performed by default / 默认执行所有任务
             # exec_auto=${exec_auto:-1}
-            _usage
+            if [[ "${#}" -gt 0 ]]; then
+                _usage
+                return
+            fi
             break
             ;;
         esac
         shift
     done
-
 }
 
 main() {
@@ -926,7 +960,7 @@ main() {
             [[ "${arg_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
         fi
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
-        [[ "${arg_build_docker:-0}" -eq 1 ]] && _build_docker
+        [[ "${arg_build_image:-0}" -eq 1 ]] && _build_docker
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
         [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
         [[ "${arg_deploy_rsync_ssh:-0}" -eq 1 ]] && _deploy_rsync_ssh
