@@ -771,7 +771,7 @@ Parameters:
     --deploy-rsync-ssh       Deploy to rsync with ssh.
     --deploy-rsync           Deploy to rsync server.
     --deploy-ftp             Deploy to ftp server.
-    --deploy-sftp            Deploy to sftp.
+    --deploy-sftp            Deploy to sftp server.
     --test-unit              Run unit tests.
     --test-function          Run function tests.
 "
