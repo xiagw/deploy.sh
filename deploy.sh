@@ -90,7 +90,7 @@ _scan_vulmap() {
     echo_time_step "[TODO] scan[vulmap]..."
 }
 
-_deploy_flyway() {
+_deploy_flyway_docker() {
     echo_time_step "deploy database [flyway]..."
     flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
@@ -114,7 +114,7 @@ _deploy_flyway() {
     echo_time "end deploy database [flyway]."
 }
 
-_deploy_flyway_docker() {
+_deploy_flyway_helm_job() {
     ## docker build flyway
     echo "$image_tag_flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
@@ -164,7 +164,7 @@ _build_docker() {
     fi
 
     ## docker build flyway image / 构建 flyway 模板
-    if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
+    if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
@@ -175,12 +175,12 @@ _build_docker() {
     echo_time "end docker build image."
 }
 
-_docker_push() {
+_push_image() {
     echo_time_step "docker push image..."
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${image_tag}" || echo_erro "error here, maybe caused by GFW."
-    if [[ "$ENV_HELM_FLYWAY" -eq 1 ]]; then
+    if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
     fi
     echo_time "end docker push image."
@@ -243,7 +243,7 @@ _deploy_k8s() {
     fi
 
     ## install flyway jobs / 安装 flyway 任务
-    if [[ "$ENV_HELM_FLYWAY" == 1 && -d "${script_path_conf}"/helm/flyway ]]; then
+    if [[ "$ENV_FLYWAY_HELM_JOB" == 1 && -d "${script_path_conf}"/helm/flyway ]]; then
         $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
@@ -711,7 +711,7 @@ _detect_langs() {
                 else
                     project_docker=1
                     exec_build_docker=1
-                    exec_docker_push=1
+                    exec_push_image=1
                     exec_deploy_k8s=1
                     exec_deploy_rsync_ssh=0
                     build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
@@ -745,6 +745,18 @@ _detect_langs() {
     done
 }
 
+_git_clone_repo() {
+    [[ -d builds ]] || mkdir -p builds
+    git clone "$arg_git_clone_url"
+    local tmp_dir=builds/"${arg_git_clone_url##*/}"
+    local tmp_dir="${tmp_dir%.git}"
+    cd "${tmp_dir}"
+}
+
+_usage() {
+    echo "$0"
+
+}
 _process_args() {
     [[ "${PIPELINE_DEBUG:-0}" -eq 1 || "$*" =~ (--debug|--github) ]] && debug_on=1
     [[ "$*" =~ (--github) ]] && github_action=1
@@ -756,44 +768,63 @@ _process_args() {
     fi
     ## All tasks are performed by default / 默认执行所有任务
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
+    exec_single=0
     while [[ "${#}" -ge 0 ]]; do
         case "$1" in
         --renwe-cert)
             arg_renew_cert=1
+            exec_single=$((exec_single + 1))
+            ;;
+        --git-repo)
+            arg_git_clone=1
+            arg_git_clone_url="$2"
+            exec_single=$((exec_single + 1))
+            shift
             ;;
         --code-style)
             arg_code_style=1
+            exec_single=$((exec_single + 1))
             ;;
         --code-quality)
             arg_code_quality=1
+            exec_single=$((exec_single + 1))
             ;;
         --build-langs)
             arg_build_langs=1
+            exec_single=$((exec_single + 1))
             ;;
         --build-docker)
             arg_build_docker=1
+            exec_single=$((exec_single + 1))
             ;;
         --docker-push)
-            arg_docker_push=1
+            arg_push_image=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-k8s)
             arg_deploy_k8s=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-flyway)
             arg_deploy_flyway=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync-ssh)
             arg_deploy_rsync_ssh=1
+            exec_single=$((exec_single + 1))
             ;;
         --test-unit)
             arg_test_unit=1
+            exec_single=$((exec_single + 1))
             ;;
         --test-function)
             arg_test_function=1
+            exec_single=$((exec_single + 1))
             ;;
         *)
             ## All tasks are performed by default / 默认执行所有任务
-            exec_auto=${exec_auto:-1}
+            # exec_auto=${exec_auto:-1}
+            _usage
             break
             ;;
         esac
@@ -832,6 +863,9 @@ main() {
 
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _check_os
+
+    ## git clone repo / 克隆 git 仓库
+    [[ "${arg_git_clone:-0}" -eq 1 ]] && _git_clone_repo
 
     ## run deploy.sh by hand / 手动执行 deploy.sh
     _gitlab_var
@@ -878,95 +912,82 @@ main() {
     ## preprocess project config files / 预处理项目配置文件
     _file_preprocess
 
-    ## exec all tasks / 执行所有任务
-    # [[ "$exec_auto" -ne 1 ]] && return
+    style_sh="$script_path"/langs/style.${project_lang}.sh
+    build_sh="$script_path"/langs/build.${project_lang}.sh
+
+    ## exec single task / 执行单个任务
+    if [[ "${exec_single:-0}" -ge 1 ]]; then
+        [[ "${arg_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
+        [[ "${arg_code_style:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
+        [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
+        if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
+            [[ "${arg_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job
+        else
+            [[ "${arg_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
+        fi
+        [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
+        [[ "${arg_build_docker:-0}" -eq 1 ]] && _build_docker
+        [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
+        [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
+        [[ "${arg_deploy_rsync_ssh:-0}" -eq 1 ]] && _deploy_rsync_ssh
+        [[ "${arg_deploy_rsync:-0}" -eq 1 ]] && _deploy_rsync
+        [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
+        [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
+        [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
+        return
+    fi
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    [[ "${arg_code_quality:-0}" -eq 1 ]] && exec_code_quality=1
     [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && exec_code_quality=1
-    if [[ "${exec_code_quality:-0}" -eq 1 ]]; then
-        _code_quality_sonar
-        [[ "${arg_code_quality}" -eq 1 ]] && return
-    fi
+    [[ "${exec_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    [[ "${arg_code_style:-0}" -eq 1 ]] && exec_code_style=1
     [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && exec_code_style=1
-    style_sh="$script_path"/langs/style.${project_lang}.sh
-    if [[ "${exec_code_style:-1}" -eq 1 && -f "$style_sh" ]]; then
-        source "$style_sh"
-        [[ "${arg_code_style:-0}" -eq 1 ]] && return
-    fi
+
+    [[ "${exec_code_style:-1}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
-    [[ "${arg_test_unit:-0}" -eq 1 ]] && exec_test_unit=1
     [[ "${PIPELINE_UNIT_TEST:-0}" -eq 1 ]] && exec_test_unit=1
-    if [[ "${exec_test_unit:-1}" -eq 1 ]]; then
-        _test_unit
-        [[ "${arg_test_unit:-0}" -eq 1 ]] && return
-    fi
+    [[ "${exec_test_unit:-1}" -eq 1 ]] && _test_unit
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     for sql in docs/sql doc/sql flyway_sql sql ${ENV_FLYWAY_SQL:-docs/sql}; do
         [[ -d "${gitlab_project_dir}/$sql" ]] && path_flyway_sql_proj="${gitlab_project_dir}/$sql" && break
     done
-    [[ "${arg_deploy_flyway:-0}" -eq 1 ]] && exec_deploy_flyway=1
     [[ -d "${path_flyway_sql_proj}" ]] || exec_deploy_flyway=0
     [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_deploy_flyway=0
-    [[ "${ENV_HELM_FLYWAY:-0}" -eq 1 ]] && exec_deploy_flyway=0
-    if [[ ${exec_deploy_flyway:-1} -eq 1 ]]; then
-        _deploy_flyway
-        [[ "${arg_deploy_flyway:-0}" -eq 1 ]] && return
+    if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
+        [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job
+    else
+        [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
     fi
-    # [[ ${exec_deploy_flyway:-1} -eq 1 ]] && _deploy_flyway_docker
 
     ## generate api docs
     # _generate_apidoc
 
     ## build
-    [[ "${arg_build_langs:-0}" -eq 1 ]] && exec_build_langs=1
-    build_sh="$script_path"/langs/build.${project_lang}.sh
-    if [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_sh" ]]; then
-        source "$build_sh"
-        [[ "${arg_build_langs:-0}" -eq 1 ]] && return
-    fi
+    [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
 
     ## deploy k8s
-    [[ "${arg_build_docker:-0}" -eq 1 ]] && exec_build_docker=1
-    if [[ "${exec_build_docker:-1}" -eq 1 ]]; then
-        _build_docker
-        [[ "${arg_build_docker:-0}" -eq 1 ]] && return
-    fi
-    [[ "${arg_docker_push:-0}" -eq 1 ]] && exec_docker_push=1
-    if [[ "${exec_docker_push:-1}" -eq 1 ]]; then
-        _docker_push
-        [[ "${arg_docker_push:-0}" -eq 1 ]] && return
-    fi
-    [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && exec_deploy_k8s=1
-    if [[ "${exec_deploy_k8s:-1}" -eq 1 ]]; then
-        _deploy_k8s
-        [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && return
-    fi
+    [[ "${exec_build_docker:-1}" -eq 1 ]] && _build_docker
+    [[ "${exec_push_image:-1}" -eq 1 ]] && _push_image
+    [[ "${exec_deploy_k8s:-1}" -eq 1 ]] && _deploy_k8s
 
     ## deploy with rsync / 使用 rsync 发布
-    [[ "${arg_deploy_rsync_ssh:-0}" -eq 1 ]] && exec_deploy_rsync_ssh=1
     [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync_ssh=0
-    if [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]]; then
-        _deploy_rsync_ssh
-        [[ "${arg_deploy_rsync_ssh:-0}" -eq 1 ]] && return
-    fi
+    [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
+    [[ "${exec_deploy_rsync:-0}" -eq 1 ]] && _deploy_rsync
+    [[ "${exec_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
+    [[ "${exec_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
-    [[ "${arg_test_function:-0}" -eq 1 ]] && exec_test_function=1
     [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 1 ]] && exec_test_function=1
-    if [[ "${exec_test_function:-1}" -eq 1 ]]; then
-        _test_function
-    fi
+    [[ "${exec_test_function:-1}" -eq 1 ]] && _test_function
 
     ## deploy notify info / 发布通知信息
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
