@@ -937,6 +937,8 @@ main() {
         return
     fi
 
+    ## default exec all tasks / 默认执行所有任务
+
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && exec_code_quality=1
