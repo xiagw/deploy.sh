@@ -45,11 +45,8 @@ cache:
 # build:
 #   stage: build
 #   script:
-#     - bash $HOME/runner/deploy.sh --build-php
-#     - bash $HOME/runner/deploy.sh --build-node
-#     - bash $HOME/runner/deploy.sh --build-java
-#     - bash $HOME/runner/deploy.sh --build-python
-#     - bash $HOME/runner/deploy.sh --build-docker
+#     - bash $HOME/runner/deploy.sh --build-langs
+#     - bash $HOME/runner/deploy.sh --build-image
 #   when: manual
 #   only:
 #     - develop
@@ -68,6 +65,10 @@ deploy:
   #     - dist/
   script:
     - bash $HOME/runner/deploy.sh
+    # - bash $HOME/runner/deploy.sh --deploy-rsync-ssh
+    # - bash $HOME/runner/deploy.sh --deploy-rsync
+    # - bash $HOME/runner/deploy.sh --deploy-ftp
+    # - bash $HOME/runner/deploy.sh --deploy-sftp
   environment:
     name: ENV-${CI_COMMIT_REF_NAME}
   only:

@@ -46,6 +46,10 @@ cd ~/src/<your_project> && $HOME/runner/deploy.sh
 ## crontab
 * * * * * for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done
 ```
+```
+## run in Screen or tmux
+for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done
+```
 
 ### option [3], Running applications with GitLab-Runner
 1. Prepare a gitlab-server and gitlab-runner-server
@@ -57,7 +61,8 @@ cd ~/src/<your_project> && $HOME/runner/deploy.sh
 1. cp conf/deploy.env.example conf/deploy.env        ## change to yours
 1. Refer to conf/.gitlab-ci.yaml of this project, setup yours
 ### option [4], Running applications with Jenkins
-...
+1. Create job,
+1. setup job, run custom shell, `bash $HOME/runner/deploy.sh`
 
 
 ## Example step
@@ -66,9 +71,9 @@ There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab]
 ### Step 2: Prepair Gitlab Runner server
 There is already a server that has installed gitlab-runner and register to Gitlab server, (executer is shell)
 ### Step 3: Prepair Application server (*nix/k8s/microk8s/k3s)
-The ssh key file had been prepared, and you can log in to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/conf/.ssh/)
+The ssh key file had been prepared, and you can login to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/data/.ssh/)
 ### Step 4: git clone deploy.sh
-Login to the gitlab-runner server and execute
+Ssh login to the gitlab-runner server and execute
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
@@ -86,6 +91,7 @@ Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 ### Step 8: Enjoy CI/CD
 
 # Development and Contribution
+Welcome create Issue or create PR
 [deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
 
 [deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
