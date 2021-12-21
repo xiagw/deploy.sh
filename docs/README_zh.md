@@ -103,7 +103,7 @@ cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配
 
 Alipay | WeChat Pay
 -|-
-<img src=docs/pay-alipay.jpg width="250" height="250">|<img src=docs/pay-wechatpay.jpg width="250" height="250">
+<img src=pay-alipay.jpg width="250" height="250">|<img src=pay-wechatpay.jpg width="250" height="250">
 
 ### 数字币:
 **比特币**
