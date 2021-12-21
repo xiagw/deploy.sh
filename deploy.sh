@@ -789,7 +789,7 @@ _process_args() {
             debug_on=1
             quiet_flag=
             ;;
-        --github)
+        --github-action)
             set -x
             debug_on=1
             quiet_flag=
