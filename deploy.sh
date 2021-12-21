@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+### shellcheck disable=1090,2086
 ################################################################################
 #
 # Description: deploy.sh is a CI/CD program for GitLab Server.
@@ -150,7 +150,7 @@ _docker_login() {
     date +%s >"$lock_docker_login"
 }
 
-_build_docker() {
+_build_image_docker() {
     echo_time_step "docker build image..."
     _docker_login
 
@@ -521,7 +521,7 @@ _check_os() {
     fi
 
     case "$OS" in
-    debian | ubuntu)
+    debian | ubuntu | linuxmint)
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
         test -f "$HOME"/.bash_logout && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         command -v git >/dev/null || install_pkg="git"
@@ -710,7 +710,7 @@ _detect_langs() {
                     :
                 else
                     project_docker=1
-                    exec_build_docker=1
+                    exec_build_image=1
                     exec_push_image=1
                     exec_deploy_k8s=1
                     exec_deploy_rsync_ssh=0
@@ -778,19 +778,23 @@ Parameters:
 }
 
 _process_args() {
-    [[ "${PIPELINE_DEBUG:-0}" -eq 1 || "$*" =~ (--debug|--github) ]] && debug_on=1
-    [[ "$*" =~ (--github) ]] && github_action=1
-    if [[ "$debug_on" -eq 1 ]]; then
-        set -x
-        quiet_flag=
-    else
-        quiet_flag='--quiet'
-    fi
+    [[ "${PIPELINE_DEBUG:-0}" -eq 1 ]] && set -x
     ## All tasks are performed by default / 默认执行所有任务
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
     exec_single=0
     while [[ "${#}" -ge 0 ]]; do
         case "$1" in
+        --debug)
+            set -x
+            debug_on=1
+            quiet_flag=
+            ;;
+        --github)
+            set -x
+            debug_on=1
+            quiet_flag=
+            github_action=1
+            ;;
         --renwe-cert)
             arg_renew_cert=1
             exec_single=$((exec_single + 1))
@@ -854,12 +858,11 @@ _process_args() {
             exec_single=$((exec_single + 1))
             ;;
         *)
-            ## All tasks are performed by default / 默认执行所有任务
-            # exec_auto=${exec_auto:-1}
             if [[ "${#}" -gt 0 ]]; then
                 _usage
-                return
+                exit
             fi
+            [[ "${debug_on:-0}" -eq 0 ]] && quiet_flag='--quiet'
             break
             ;;
         esac
@@ -946,8 +949,8 @@ main() {
     ## preprocess project config files / 预处理项目配置文件
     _file_preprocess
 
-    style_sh="$script_path"/langs/style.${project_lang}.sh
-    build_sh="$script_path"/langs/build.${project_lang}.sh
+    style_sh="$script_path/langs/style.${project_lang}.sh"
+    build_sh="$script_path/langs/build.${project_lang}.sh"
 
     ## exec single task / 执行单个任务
     if [[ "${exec_single:-0}" -ge 1 ]]; then
@@ -960,7 +963,7 @@ main() {
             [[ "${arg_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
         fi
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
-        [[ "${arg_build_image:-0}" -eq 1 ]] && _build_docker
+        [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
         [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
         [[ "${arg_deploy_rsync_ssh:-0}" -eq 1 ]] && _deploy_rsync_ssh
@@ -1009,7 +1012,7 @@ main() {
     [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
 
     ## deploy k8s
-    [[ "${exec_build_docker:-1}" -eq 1 ]] && _build_docker
+    [[ "${exec_build_image:-1}" -eq 1 ]] && _build_image_docker
     [[ "${exec_push_image:-1}" -eq 1 ]] && _push_image
     [[ "${exec_deploy_k8s:-1}" -eq 1 ]] && _deploy_k8s
 
