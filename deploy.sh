@@ -717,7 +717,7 @@ _detect_langs() {
             case $f in
             Dockerfile)
                 if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
-                    :
+                    project_docker=0
                 else
                     project_docker=1
                     exec_deploy_rsync_ssh=0
@@ -754,10 +754,12 @@ _detect_langs() {
 
 _git_clone_repo() {
     [[ -d builds ]] || mkdir -p builds
-    git clone "$arg_git_clone_url"
     local tmp_dir=builds/"${arg_git_clone_url##*/}"
     local tmp_dir="${tmp_dir%.git}"
-    cd "${tmp_dir}"
+    (
+        cd "${tmp_dir}"
+        git clone "$arg_git_clone_url"
+    )
 }
 
 _usage() {
