@@ -49,7 +49,7 @@ cd ~/src/<your_project> && $HOME/runner/deploy.sh
 ```
 ```
 ## run in Screen or tmux
-for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done
+while true; do for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done; done
 ```
 
 ### 可选项 [3], 配合 GitLab-Runner 运行程序
@@ -93,6 +93,7 @@ cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配
 
 # 开发和贡献
 欢迎提 Issue 或提交 PR
+
 [deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
 
 [deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)

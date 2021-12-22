@@ -48,7 +48,7 @@ cd ~/src/<your_project> && $HOME/runner/deploy.sh
 ```
 ```
 ## run in Screen or tmux
-for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done
+while tru; do for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done; done
 ```
 
 ### option [3], Running applications with GitLab-Runner
@@ -73,7 +73,7 @@ There is already a server that has installed gitlab-runner and register to Gitla
 ### Step 3: Prepair Application server (*nix/k8s/microk8s/k3s)
 The ssh key file had been prepared, and you can login to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/data/.ssh/)
 ### Step 4: git clone deploy.sh
-Ssh login to the gitlab-runner server and execute
+SSH login to the gitlab-runner server and execute
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
@@ -92,6 +92,7 @@ Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 
 # Development and Contribution
 Welcome create Issue or create PR
+
 [deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
 
 [deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
