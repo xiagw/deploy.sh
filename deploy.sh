@@ -33,6 +33,8 @@ _test_unit() {
         bash "$gitlab_project_dir"/tests/unit_test.sh
     elif [[ -f "$script_path_data"/tests/unit_test.sh ]]; then
         bash "$script_path_data"/tests/unit_test.sh
+    else
+        echo_warn "no unit test script found, sktip unit test."
     fi
     echo_time "end unit test."
 }
@@ -44,6 +46,8 @@ _test_function() {
         bash "$gitlab_project_dir"/tests/func_test.sh
     elif [ -f "$script_path_data"/tests/func_test.sh ]; then
         bash "$script_path_data"/tests/func_test.sh
+    else
+        echo_warn "no func_test.sh found, skip function test."
     fi
     echo_time "end function test."
 }
@@ -204,27 +208,27 @@ _deploy_k8s() {
 
     if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
         ## update gitops files / 更新 gitops 文件
-        file_gitops="$script_path_data"/$gitlab_project_branch/gitops/helm/${gitlab_project_name}/values.yaml
+        file_gitops="$script_path_data"/gitops_${gitlab_project_branch}/gitops/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo_time_step "update gitops files..."
-            echo_erro "Note: Only update 'gitops', disable deploy to AWS."
+            echo_warn "Note: only update 'gitops', skip deploy to k8s."
             sed -i \
                 -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY_GITOPS}/${ENV_DOCKER_REPO_GITOPS}\"@" \
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
+            (
+                cd "$script_path_data/$gitlab_project_branch"/gitops
+                GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git pull
+                git add .
+                git commit -m "gitops files $gitlab_project_name"
+                GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git push origin "$gitlab_project_branch"
+            )
         fi
-        (
-            cd "$script_path_data/$gitlab_project_branch"/gitops
-            GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git pull
-            git add .
-            git commit -m "gitops files $gitlab_project_name"
-            GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git push origin "$gitlab_project_branch"
-        )
         [[ "${ENV_ENABLE_HELM:-1}" -eq 0 ]] && return 0
     fi
 
     if [ -z "$path_helm" ]; then
-        echo_warn "helm files not found."
+        echo_warn "helm files not found, skip deploy k8s."
         ## Custom deployment method / 自定义部署方式
         [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" "$env_namespace"
     else
@@ -378,7 +382,7 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo_warn "No message send."
+        echo_warn "skip message send."
     fi
 }
 
@@ -706,7 +710,7 @@ _gitlab_var() {
     # read -rp "Enter gitlab user id: " -e -i '1' gitlab_user_id
     gitlab_user_id=${GITLAB_USER_ID:-1}
     gitlab_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}' || true)"
-    gitlab_username="${gitlab_username:-gitlab-runner}"
+    gitlab_username="${gitlab_username:-root}"
     env_namespace=$gitlab_project_branch
 }
 
@@ -770,7 +774,7 @@ Parameters:
     -h, --help               Show this help message.
     -v, --version            Show version info.
     -r, --renew-cert         Renew all the certs.
-    --git-repo https://xxx.com/yyy/zzz.git      Clone git repo url.
+    --git-repo https://xxx.com/yyy/zzz.git      Clone git repo url, clone to builds/zzz.git
     --code-style             Check code style.
     --code-quality           Check code quality.
     --build-langs            Build all the languages.

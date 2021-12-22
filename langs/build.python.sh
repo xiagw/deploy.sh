@@ -2,7 +2,7 @@
 
 echo_time_step "python3 -m pip install..."
 if [[ "${project_docker:-0}" -eq 1 ]]; then
-    echo "build image"
+    echo "skip pip install, just build image."
 else
     python3 -m pip install -r requirements.txt
     python manage.py test
