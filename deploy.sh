@@ -91,7 +91,7 @@ _scan_ZAP() {
 }
 
 _scan_vulmap() {
-    echo_time_step "[TODO] scan[vulmap]..."
+    echo_time_step "[TODO] scan [vulmap]..."
 }
 
 _deploy_flyway_docker() {
@@ -155,7 +155,7 @@ _docker_login() {
 }
 
 _build_image_docker() {
-    echo_time_step "docker build image..."
+    echo_time_step "build image [docker]..."
     _docker_login
 
     ## Docker build from template image / 是否从模板构建
@@ -180,7 +180,7 @@ _build_image_docker() {
 }
 
 _push_image() {
-    echo_time_step "docker push image..."
+    echo_time_step "push image [docker]..."
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${image_tag}" || echo_erro "error here, maybe caused by GFW."
@@ -210,7 +210,7 @@ _deploy_k8s() {
         ## update gitops files / 更新 gitops 文件
         file_gitops="$script_path_data"/gitops_${gitlab_project_branch}/gitops/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
-            echo_time_step "update gitops files..."
+            echo_time_step "update gitops files [helm]..."
             echo_warn "Note: only update 'gitops', skip deploy to k8s."
             sed -i \
                 -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY_GITOPS}/${ENV_DOCKER_REPO_GITOPS}\"@" \
@@ -223,6 +223,8 @@ _deploy_k8s() {
                 git commit -m "gitops files $gitlab_project_name"
                 GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git push origin "$gitlab_project_branch"
             )
+        else
+            echo "File not found: $file_gitops , [skip update gitops files]."
         fi
         [[ "${ENV_ENABLE_HELM:-1}" -eq 0 ]] && return 0
     fi
@@ -345,7 +347,7 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 }
 
 _deploy_notify() {
-    echo_time_step "deploy notify message..."
+    echo_time_step "deploy notify message [chat/email]..."
 
     _deploy_notify_msg
 
@@ -602,7 +604,7 @@ get_maxmind_ip() {
 
 _generate_apidoc() {
     if [[ -f "${gitlab_project_dir}/apidoc.json" ]]; then
-        echo_time_step "generate apidoc."
+        echo_time_step "generate API Docs [apidoc]..."
         $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
     fi
 }

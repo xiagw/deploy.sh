@@ -13,7 +13,7 @@ if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
 fi
 
 if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
-    echo_time_step "php composer install..."
+    echo_time_step "build php [composer install]..."
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep -q "deploy/composer"; then
         DOCKER_BUILDKIT=1 docker build --quiet --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \

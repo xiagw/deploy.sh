@@ -2,7 +2,7 @@
 
 ## https://github.com/squizlabs/PHP_CodeSniffer
 ## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)
-echo_time_step 'starting PHP Code Sniffer, < standard=PSR12 >...'
+echo_time_step 'code style [PHP Code Sniffer], < standard=PSR12 >...'
 [[ "${github_action:-0}" -eq 1 ]] && return 0
 if ! docker images | grep 'deploy/phpcs'; then
     DOCKER_BUILDKIT=1 docker build -t deploy/phpcs -f "$script_dockerfile/Dockerfile.phpcs" "$script_dockerfile" >/dev/null
