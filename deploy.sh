@@ -634,7 +634,17 @@ _file_preprocess() {
         [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
     fi
     ## flyway files sql & conf
-    [[ ! -d "${path_flyway_sql_proj}" ]] && copy_flyway_file=0
+    for sql in docs/sql doc/sql flyway_sql sql ${ENV_FLYWAY_SQL:-docs/sql}; do
+        if [[ -d "${gitlab_project_dir}/$sql" ]]; then
+            path_flyway_sql_proj="${gitlab_project_dir}/$sql"
+            break
+        fi
+    done
+
+    if [[ ! -d "${path_flyway_sql_proj}" ]]; then
+        exec_deploy_flyway=0
+        copy_flyway_file=0
+    fi
     if [[ "${copy_flyway_file:-1}" -eq 1 ]]; then
         path_flyway_conf="$gitlab_project_dir/flyway_conf"
         path_flyway_sql="$gitlab_project_dir/flyway_sql"
@@ -710,9 +720,6 @@ _detect_langs() {
                     :
                 else
                     project_docker=1
-                    exec_build_image=1
-                    exec_push_image=1
-                    exec_deploy_k8s=1
                     exec_deploy_rsync_ssh=0
                     build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
                 fi
@@ -953,7 +960,7 @@ main() {
     build_sh="$script_path/langs/build.${project_lang}.sh"
 
     ## exec single task / 执行单个任务
-    if [[ "${exec_single:-0}" -ge 1 ]]; then
+    if [[ "${exec_single:-0}" -gt 0 ]]; then
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
         [[ "${arg_code_style:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
@@ -984,7 +991,6 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && exec_code_style=1
-
     [[ "${exec_code_style:-1}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
@@ -994,10 +1000,6 @@ main() {
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
-    for sql in docs/sql doc/sql flyway_sql sql ${ENV_FLYWAY_SQL:-docs/sql}; do
-        [[ -d "${gitlab_project_dir}/$sql" ]] && path_flyway_sql_proj="${gitlab_project_dir}/$sql" && break
-    done
-    [[ -d "${path_flyway_sql_proj}" ]] || exec_deploy_flyway=0
     [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_deploy_flyway=0
     if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
         [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job

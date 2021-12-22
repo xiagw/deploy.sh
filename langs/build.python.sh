@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
 echo_time_step "python3 -m pip install..."
-# python3 -m pip install -r requirements.txt
-# python manage.py test
+if [[ "${project_docker:-0}" -eq 1 ]]; then
+    echo "build image"
+else
+    python3 -m pip install -r requirements.txt
+    python manage.py test
+fi

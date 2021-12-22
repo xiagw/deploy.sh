@@ -48,7 +48,7 @@ cd ~/src/<your_project> && $HOME/runner/deploy.sh
 ```
 ```
 ## run in Screen or tmux
-while tru; do for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done; done
+while true; do for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done; done
 ```
 
 ### option [3], Running applications with GitLab-Runner
