@@ -327,7 +327,6 @@ _deploy_sftp() {
 
 _deploy_notify_msg() {
     msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
-    git_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}')"
 
     msg_body="
 [Gitlab Deploy]
@@ -335,7 +334,7 @@ Project = ${gitlab_project_path}
 Branche = ${gitlab_project_branch}
 Pipeline = ${gitlab_pipeline_id}/JobID-$gitlab_job_id
 Describe = [${gitlab_commit_short_sha}]/${msg_describe}
-Who = ${gitlab_user_id}/${git_username}
+Who = ${gitlab_user_id}/${gitlab_username}
 Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
 $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi)
 "
@@ -706,6 +705,8 @@ _gitlab_var() {
     gitlab_job_id=${CI_JOB_ID:-5678}
     # read -rp "Enter gitlab user id: " -e -i '1' gitlab_user_id
     gitlab_user_id=${GITLAB_USER_ID:-1}
+    gitlab_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}' || true)"
+    gitlab_username="${gitlab_username:-gitlab-runner}"
     env_namespace=$gitlab_project_branch
 }
 
@@ -756,10 +757,10 @@ _git_clone_repo() {
     [[ -d builds ]] || mkdir -p builds
     local tmp_dir=builds/"${arg_git_clone_url##*/}"
     local tmp_dir="${tmp_dir%.git}"
-    (
-        cd "${tmp_dir}"
-        git clone "$arg_git_clone_url"
-    )
+    if [[ ! -d "${tmp_dir}" ]]; then
+        git clone "$arg_git_clone_url" "${tmp_dir}"
+    fi
+    cd "${tmp_dir}" || return 1
 }
 
 _usage() {
@@ -783,6 +784,7 @@ Parameters:
     --deploy-sftp            Deploy to sftp server.
     --test-unit              Run unit tests.
     --test-function          Run function tests.
+    --debug                  Run with debug.
 "
 }
 
@@ -811,7 +813,6 @@ _process_args() {
         --git-repo)
             arg_git_clone=1
             arg_git_clone_url="$2"
-            exec_single=$((exec_single + 1))
             shift
             ;;
         --code-style)
@@ -839,7 +840,7 @@ _process_args() {
             exec_single=$((exec_single + 1))
             ;;
         --deploy-flyway)
-            arg_deploy_flyway=1
+            # arg_deploy_flyway=1
             exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync-ssh)
@@ -967,9 +968,9 @@ main() {
         [[ "${arg_code_style:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
-            [[ "${arg_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job
+            [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job
         else
-            [[ "${arg_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
+            [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
         fi
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
