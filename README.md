@@ -38,17 +38,26 @@ It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 ## Quick Start
 ### option [1], Running applications manually
 ```
-mkdir ~/src && git clone https://github.com/<your_name>/<your_project>.git ~/src/<your_project>
-cd ~/src/<your_project> && $HOME/runner/deploy.sh
+## git repo exists
+mkdir ~/src
+git clone https://github.com/<your_name>/<your_project>.git ~/src/<your_project>
+cd ~/src/<your_project>
+$HOME/runner/deploy.sh
+```
+```
+## clone git repo by [deploy.sh]
+mkdir ~/src
+cd ~/src/
+$HOME/runner/deploy.sh --git-repo https://github.com/<your_name>/<your_project>.git
 ```
 ### option [2], Running applications automated
 ```
 ## crontab
-* * * * * for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done
+*/5 * * * * for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done
 ```
 ```
 ## run in Screen or tmux
-while true; do for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done; done
+while true; do for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done; sleep 60; done
 ```
 
 ### option [3], Running applications with GitLab-Runner
