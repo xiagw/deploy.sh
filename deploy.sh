@@ -327,7 +327,6 @@ _deploy_sftp() {
 
 _deploy_notify_msg() {
     msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
-    git_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}')"
 
     msg_body="
 [Gitlab Deploy]
@@ -335,7 +334,7 @@ Project = ${gitlab_project_path}
 Branche = ${gitlab_project_branch}
 Pipeline = ${gitlab_pipeline_id}/JobID-$gitlab_job_id
 Describe = [${gitlab_commit_short_sha}]/${msg_describe}
-Who = ${gitlab_user_id}/${git_username}
+Who = ${gitlab_user_id}/${gitlab_username}
 Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
 $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi)
 "
@@ -706,6 +705,8 @@ _gitlab_var() {
     gitlab_job_id=${CI_JOB_ID:-5678}
     # read -rp "Enter gitlab user id: " -e -i '1' gitlab_user_id
     gitlab_user_id=${GITLAB_USER_ID:-1}
+    gitlab_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}' || true)"
+    gitlab_username="${gitlab_username:-gitlab-runner}"
     env_namespace=$gitlab_project_branch
 }
 
