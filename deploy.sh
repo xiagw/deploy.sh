@@ -217,7 +217,7 @@ _deploy_k8s() {
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
             (
-                cd "$script_path_data/$gitlab_project_branch"/gitops
+                cd "$script_path_data/gitops_$gitlab_project_branch"/gitops
                 GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git pull
                 git add .
                 git commit -m "gitops files $gitlab_project_name"
