@@ -3,7 +3,7 @@
 # 中文 [README_zh.md](docs/README_zh.md)
 
 # Description
-deploy.sh is a general CI/CD program, comparable "Buddy".
+deploy.sh is a general CI/CD program, better than "Buddy".
 
 project_lang=shell
 

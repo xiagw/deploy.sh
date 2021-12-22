@@ -42,7 +42,7 @@ bash $HOME/runner/bin/helm-new.sh
 `git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
 
 ## 快速开始
-### 可选项 [1], 手动单独运行程序
+### 可选方式 [1], 手动单独运行程序
 ```
 ## git 仓库已预先存在，在仓库目录直接运行 deploy.sh
 mkdir ~/src
@@ -56,7 +56,7 @@ mkdir ~/src
 cd ~/src/
 $HOME/runner/deploy.sh --git-clone https://github.com/<your_name>/<your_project>.git
 ```
-### 可选项 [2], 通过 crontab 或 Screen/tmux 等调用全自动运行程序
+### 可选方式 [2], 通过 crontab 或 Screen/tmux 等调用全自动运行程序
 ```
 ## crontab
 */10 * * * * for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done
@@ -66,7 +66,7 @@ $HOME/runner/deploy.sh --git-clone https://github.com/<your_name>/<your_project>
 while true; do for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done; sleep 60; done
 ```
 
-### 可选项 [3], 配合 GitLab-Runner 运行程序
+### 可选方式 [3], 配合 GitLab-Runner 运行程序
 1. 准备 Gitlab 服务器和 Gitlab-runner 服务器
 1. [安装 Gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), 按照文档注册 Gitlab-runner 到 Gitlab 服务器，并启动 Gitlab-runner
 1. cd $HOME
@@ -76,7 +76,7 @@ while true; do for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.s
 1. cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配置
 1. 参考本项目的配置文件 conf/.gitlab-ci.yaml
 
-### 可选项 [4], 配合 Jenkins 运行程序
+### 可选方式 [4], 配合 Jenkins 运行程序
 1. 创建任务,
 1. 设置任务，运行自定义 shell, `bash $HOME/runner/deploy.sh`
 
