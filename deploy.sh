@@ -699,7 +699,8 @@ _gitlab_var() {
     # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
     gitlab_project_path=${CI_PROJECT_PATH:-root/$gitlab_project_name}
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
-    gitlab_project_branch=${CI_COMMIT_REF_NAME:-develop}
+    gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}
+    gitlab_project_branch=${gitlab_project_branch:-develop}
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
     [[ -z "$gitlab_commit_short_sha" && "${github_action:-0}" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
     [[ -z "$gitlab_commit_short_sha" && "${debug_on:-0}" -eq 1 ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
