@@ -48,7 +48,7 @@ $HOME/runner/deploy.sh
 ## clone git repo by [deploy.sh]
 mkdir ~/src
 cd ~/src/
-$HOME/runner/deploy.sh --git-repo https://github.com/<your_name>/<your_project>.git
+$HOME/runner/deploy.sh --git-clone https://github.com/<your_name>/<your_project>.git
 ```
 ### option [2], Running applications automated
 ```

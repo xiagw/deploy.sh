@@ -48,7 +48,7 @@ $HOME/runner/deploy.sh
 ## 使用 [deploy.sh] 克隆 git 仓库
 mkdir ~/src
 cd ~/src/
-$HOME/runner/deploy.sh --git-repo https://github.com/<your_name>/<your_project>.git
+$HOME/runner/deploy.sh --git-clone https://github.com/<your_name>/<your_project>.git
 ```
 ### 可选项 [2], 通过 crontab 或 Screen/tmux 等调用全自动运行程序
 ```

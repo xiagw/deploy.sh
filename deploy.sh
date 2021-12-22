@@ -764,9 +764,16 @@ _git_clone_repo() {
     local tmp_dir=builds/"${arg_git_clone_url##*/}"
     local tmp_dir="${tmp_dir%.git}"
     if [[ ! -d "${tmp_dir}" ]]; then
-        git clone "$arg_git_clone_url" "${tmp_dir}"
+        if [[ -z "$arg_git_clone_branch" ]]; then
+            git clone "$arg_git_clone_url" "${tmp_dir}"
+        else
+            git clone --branch "${arg_git_clone_branch}" "$arg_git_clone_url" "${tmp_dir}"
+        fi
     fi
     cd "${tmp_dir}" || return 1
+    if [[ -n "$arg_git_clone_branch" ]]; then
+        git checkout "${arg_git_clone_branch}" || return 1
+    fi
 }
 
 _usage() {
@@ -776,7 +783,8 @@ Parameters:
     -h, --help               Show this help message.
     -v, --version            Show version info.
     -r, --renew-cert         Renew all the certs.
-    --git-repo https://xxx.com/yyy/zzz.git      Clone git repo url, clone to builds/zzz.git
+    --git-clone  https://xxx.com/yyy/zzz.git      Clone git repo url, clone to builds/zzz.git
+    --git-clone-branch  [dev|main] default \"main\"      git branch name
     --code-style             Check code style.
     --code-quality           Check code quality.
     --build-langs            Build all the languages.
@@ -812,13 +820,17 @@ _process_args() {
             quiet_flag=
             github_action=1
             ;;
-        --renwe-cert)
+        --renwe-cert | -r)
             arg_renew_cert=1
             exec_single=$((exec_single + 1))
             ;;
-        --git-repo)
+        --git-clone)
             arg_git_clone=1
             arg_git_clone_url="$2"
+            shift
+            ;;
+        --git-clone-branch)
+            arg_git_clone_branch="$2"
             shift
             ;;
         --code-style)
