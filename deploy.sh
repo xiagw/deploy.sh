@@ -208,20 +208,28 @@ _deploy_k8s() {
 
     if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
         ## update gitops files / 更新 gitops 文件
-        file_gitops="$script_path_data"/gitops_${gitlab_project_branch}/gitops/helm/${gitlab_project_name}/values.yaml
+        file_gitops="$script_path_data"/gitops_${gitlab_project_branch}/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo_time_step "update gitops files [helm]..."
             echo_warn "Note: only update 'gitops', skip deploy to k8s."
             sed -i \
-                -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY_GITOPS}/${ENV_DOCKER_REPO_GITOPS}\"@" \
+                -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY_GITOPS:-registry}/${ENV_DOCKER_REPO_GITOPS:-repo}\"@" \
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
             (
-                cd "$script_path_data/gitops_$gitlab_project_branch"/gitops
-                GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git pull
-                git add .
-                git commit -m "gitops files $gitlab_project_name"
-                GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git push origin "$gitlab_project_branch"
+                cd "$script_path_data/gitops_$gitlab_project_branch"
+                if [ -f "$ENV_GITOPS_SSH_KEY" ]; then
+                    GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git pull
+                    git add .
+                    git commit -m "gitops files $gitlab_project_name"
+                    GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git push origin "$gitlab_project_branch"
+                else
+                    git pull
+                    git add .
+                    git commit -m "gitops files $gitlab_project_name"
+                    git push origin "$gitlab_project_branch"
+                fi
+
             )
         else
             echo "File not found: $file_gitops , [skip update gitops files]."
