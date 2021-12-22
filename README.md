@@ -20,6 +20,12 @@ It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 - python: exist requirements.txt or include `project_lang=python` in README.md
 - [other]: include `project_lang=[other]` in README.md
 
+# How to create Helm project
+```
+bash $HOME/runner/bin/helm-new.sh
+## change to yours [$HOME/runner/data/helm/<your_project>
+```
+
 # Currently support
 * Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
 * Code style: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...

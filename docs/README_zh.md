@@ -14,11 +14,17 @@ project_lang=shell
 亦可以配合 GitLab/GitLab-Runner, Jenkins 等全自动运行。
 
 # 如何探测程序开发语言
-- node: git仓库内存在 package.json 或包含文本 `project_lang=node` 在 README.md
-- php: git仓库内存在 composer.json 或包含文本 `project_lang=php` 在 README.md
-- java: git仓库内存在 pom.xml 或包含文本 `project_lang=java` 在 README.md
-- python: git仓库内存在 requirements.txt 或包含文本 `project_lang=python` 在 README.md
-- other: git仓库内README.md包含文本 `project_lang=other`
+- node: git库存在`package.json`或在 README.md 包含文本 `project_lang=node`
+- php: git库存在`composer.json`或在 README.md 包含文本 `project_lang=php`
+- java: git库存在`pom.xml`或在 README.md 包含文本 `project_lang=java`
+- python: git库存在`requirements.txt`或在 README.md 包含文本 `project_lang=python`
+- [other]: git库内 README.md 包含文本 `project_lang=[other]`
+
+# 如何创建 helm 项目文件
+```
+bash $HOME/runner/bin/helm-new.sh
+## change to yours [$HOME/runner/data/helm/<your_project>
+```
 
 # 支持
 * 云厂商: AWS, Aliyun, Qcloud, Huaweicloud...
