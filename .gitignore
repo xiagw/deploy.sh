@@ -16,5 +16,6 @@ bin/*
 !bin/element-example.py
 !bin/flyway
 !bin/sendEmail
+!bin/helm-new.sh
 ## custome folder
 tmp/
