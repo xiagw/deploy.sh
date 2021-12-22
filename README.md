@@ -3,7 +3,7 @@
 # 中文 [README_zh.md](docs/README_zh.md)
 
 # Description
-deploy.sh is a CI/CD program.
+deploy.sh is a general CI/CD program.
 
 project_lang=shell
 
@@ -53,7 +53,7 @@ $HOME/runner/deploy.sh --git-repo https://github.com/<your_name>/<your_project>.
 ### option [2], Running applications automated
 ```
 ## crontab
-*/5 * * * * for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done
+*/10 * * * * for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done
 ```
 ```
 ## run in Screen or tmux
@@ -69,12 +69,13 @@ while true; do for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.s
 1. cp conf/deploy.conf.example conf/deploy.conf      ## change to yours
 1. cp conf/deploy.env.example conf/deploy.env        ## change to yours
 1. Refer to conf/.gitlab-ci.yaml of this project, setup yours
+
 ### option [4], Running applications with Jenkins
 1. Create job,
 1. setup job, run custom shell, `bash $HOME/runner/deploy.sh`
 
 
-## Example step
+## Example step with GitLab Server and GitLab-Runner
 ### Step 1: Prepair Gitlab server
 There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
 ### Step 2: Prepair Gitlab Runner server

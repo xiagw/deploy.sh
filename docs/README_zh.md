@@ -3,16 +3,15 @@
 # 英文 [README.md](../README.md)
 
 # 描述信息
-deploy.sh 是持续集成/持续发布系统.
-
+deploy.sh 是一个通用的持续集成/持续发布系统。
 
 project_lang=shell
 
 运行平台： Unix/Linux/MacOS...
 
-可以手动单独运行或全自动运行
+可以手动单独运行或全自动运行。
 
-亦可以配合 GitLab/GitLab-Runner, Jenkins 等等全自动运行
+亦可以配合 GitLab/GitLab-Runner, Jenkins 等全自动运行。
 
 # 如何探测程序开发语言
 - node: git仓库内存在 package.json 或包含文本 `project_lang=node` 在 README.md
@@ -39,17 +38,26 @@ project_lang=shell
 ## 快速开始
 ### 可选项 [1], 手动单独运行程序
 ```
-mkdir ~/src && git clone https://github.com/<your_name>/<your_project>.git ~/src/<your_project>
-cd ~/src/<your_project> && $HOME/runner/deploy.sh
+## git 仓库已预先存在，在仓库目录直接运行 deploy.sh
+mkdir ~/src
+git clone https://github.com/<your_name>/<your_project>.git ~/src/<your_project>
+cd ~/src/<your_project>
+$HOME/runner/deploy.sh
+```
+```
+## 使用 [deploy.sh] 克隆 git 仓库
+mkdir ~/src
+cd ~/src/
+$HOME/runner/deploy.sh --git-repo https://github.com/<your_name>/<your_project>.git
 ```
 ### 可选项 [2], 通过 crontab 或 Screen/tmux 等调用全自动运行程序
 ```
 ## crontab
-* * * * * for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done
+*/10 * * * * for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done
 ```
 ```
 ## run in Screen or tmux
-while true; do for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done; done
+while true; do for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done; sleep 60; done
 ```
 
 ### 可选项 [3], 配合 GitLab-Runner 运行程序
@@ -61,12 +69,13 @@ while true; do for d in ~/src/*/; do (cd $d && $HOME/runner/deploy.sh); done; do
 1. cp conf/deploy.conf.example conf/deploy.conf      ## 修改为你的自定义配置
 1. cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配置
 1. 参考本项目的配置文件 conf/.gitlab-ci.yaml
+
 ### 可选项 [4], 配合 Jenkins 运行程序
 1. 创建任务,
 1. 设置任务，运行自定义 shell, `bash $HOME/runner/deploy.sh`
 
 
-## 实际案例
+## 实际案例，配合 GitLab Server and GitLab-Runner
 ### Step 1: 准备 Gitlab 服务器
 已经准备好 Gitlab 服务器 (如果没有？可以参考[xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) 启动一个新服务器)
 ### Step 2: 准备 Gitlab-runner 服务器
@@ -99,7 +108,7 @@ cp conf/deploy.env.example conf/deploy.env        ## 修改为你的自定义配
 [deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
 
 # 捐赠
-假如您觉得这个项目对您有用，可不吝捐赠一下。
+假如您觉得这个项目对您有用，望不吝捐赠一下。
 支持 支付宝/微信支付/数字币支付 等方式。
 
 Alipay | WeChat Pay
@@ -126,7 +135,7 @@ BSC/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
 TRX/TRC20 Address `TAnZ537r98Jo63aKDTfbWmBeooz29ASd73`
 
 
-![](../docs/README.png)
+![](README.png)
 
 # 以下代码需要支持 "[mermain](https://mermaid-js.github.io/mermaid/#/README)" 语法的浏览器才能显示图片
 
