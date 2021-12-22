@@ -756,10 +756,8 @@ _git_clone_repo() {
     [[ -d builds ]] || mkdir -p builds
     local tmp_dir=builds/"${arg_git_clone_url##*/}"
     local tmp_dir="${tmp_dir%.git}"
-    (
-        cd "${tmp_dir}"
-        git clone "$arg_git_clone_url"
-    )
+    git clone "$arg_git_clone_url" "${tmp_dir}"
+    cd "${tmp_dir}" || return 1
 }
 
 _usage() {
