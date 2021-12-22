@@ -781,6 +781,7 @@ Parameters:
     --deploy-sftp            Deploy to sftp server.
     --test-unit              Run unit tests.
     --test-function          Run function tests.
+    --debug                  Run with debug.
 "
 }
 
@@ -809,7 +810,6 @@ _process_args() {
         --git-repo)
             arg_git_clone=1
             arg_git_clone_url="$2"
-            exec_single=$((exec_single + 1))
             shift
             ;;
         --code-style)
@@ -837,7 +837,7 @@ _process_args() {
             exec_single=$((exec_single + 1))
             ;;
         --deploy-flyway)
-            arg_deploy_flyway=1
+            # arg_deploy_flyway=1
             exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync-ssh)
@@ -965,9 +965,9 @@ main() {
         [[ "${arg_code_style:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
-            [[ "${arg_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job
+            [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job
         else
-            [[ "${arg_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
+            [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
         fi
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
