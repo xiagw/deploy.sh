@@ -729,13 +729,14 @@ _gitlab_var() {
 }
 
 _detect_langs() {
-    echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
-    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     for f in Dockerfile composer.json package.json pom.xml requirements.txt README.md readme.md README.txt readme.txt; do
         if test -f "${gitlab_project_dir}"/${f}; then
             case $f in
             Dockerfile)
+                echo "Found Dockerfile, enable docker build and helm deploy. disable rsync+ssh."
+                echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
                 if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
+                    echo "Force disable docker build and helm deploy, default enable rsync+ssh."
                     project_docker=0
                     exec_deploy_rsync_ssh=1
                 else
@@ -748,18 +749,22 @@ _detect_langs() {
                 fi
                 ;;
             composer.json)
+                echo "found composer.json, detect lang: php"
                 project_lang=php
                 break
                 ;;
             package.json)
+                echo "found package.json, detect lang: node"
                 project_lang=node
                 break
                 ;;
             pom.xml)
+                echo "found pom.xml, detect lang: java"
                 project_lang=java
                 break
                 ;;
             requirements.txt)
+                echo "found requirements.txt, detect lang: python"
                 project_lang=python
                 break
                 ;;
@@ -768,6 +773,7 @@ _detect_langs() {
                 project_lang=${project_lang// /}
                 project_lang=${project_lang,,}
                 project_lang=${project_lang:-other}
+                echo "Detect lang: $project_lang"
                 break
                 ;;
             esac

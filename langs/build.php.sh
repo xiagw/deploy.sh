@@ -2,10 +2,16 @@
 
 file_lang="${gitlab_project_dir}/composer.json"
 string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
-if ! grep -q "$string_grep" "${script_log}"; then
+if grep -q "$string_grep" "${script_log}"; then
+    echo "The same checksum for ${file_lang}, skip composer install."
+else
+    echo "New checksum for ${file_lang}, run composer install."
     COMPOSER_INSTALL=1
 fi
-[ -d "${gitlab_project_dir}/vendor" ] || COMPOSER_INSTALL=1
+if [ ! -d "${gitlab_project_dir}/vendor" ]; then
+    echo "Not found ${gitlab_project_dir}/vendor, run composer install."
+    COMPOSER_INSTALL=1
+fi
 
 if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
     bash "$gitlab_project_dir"/custom.build.sh
@@ -16,7 +22,7 @@ if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
     echo_time_step "build php [composer install]..."
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if ! docker images | grep -q "deploy/composer"; then
-        DOCKER_BUILDKIT=1 docker build --quiet --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+        DOCKER_BUILDKIT=1 docker build $quiet_flag --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
             -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile" >/dev/null
     fi
     # rm -rf "${gitlab_project_dir}"/vendor

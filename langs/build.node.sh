@@ -3,10 +3,15 @@
 path_for_rsync='dist/'
 file_lang="${gitlab_project_dir}/package.json"
 string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
-if ! grep -q "$string_grep" "${script_log}"; then
+if grep -q "$string_grep" "${script_log}"; then
+    echo "The same checksum for ${file_lang}, skip yarn install."
+else
+    echo "New checksum for ${file_lang}, run yarn install."
     YARN_INSTALL=true
 fi
-[ -d "${gitlab_project_dir}/node_modules" ] || YARN_INSTALL=true
+if [ ! -d "${gitlab_project_dir}/node_modules" ]; then
+    YARN_INSTALL=true
+fi
 
 # https://github.com/nodesource/distributions#debinstall
 echo_time_step "node build [yarn]..."
