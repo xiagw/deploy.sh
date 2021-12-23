@@ -751,16 +751,19 @@ _detect_langs() {
             composer.json)
                 echo "Found composer.json, detect lang: php"
                 project_lang=php
+                exec_build_langs=1
                 break
                 ;;
             package.json)
                 echo "Found package.json, detect lang: node"
                 project_lang=node
+                exec_build_langs=1
                 break
                 ;;
             pom.xml)
                 echo "Found pom.xml, detect lang: java"
                 project_lang=java
+                exec_build_langs=1
                 break
                 ;;
             requirements.txt)
