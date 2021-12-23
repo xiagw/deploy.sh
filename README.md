@@ -23,7 +23,7 @@ It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 # How to create Helm project
 ```
 bash $HOME/runner/bin/helm-new.sh
-## change to yours [$HOME/runner/data/helm/<your_project>
+## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
 
 # Currently support

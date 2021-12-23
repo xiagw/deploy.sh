@@ -23,7 +23,7 @@ project_lang=shell
 # 如何创建 helm 项目文件
 ```
 bash $HOME/runner/bin/helm-new.sh
-## change to yours [$HOME/runner/data/helm/<your_project>
+## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
 
 # 支持

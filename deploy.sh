@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### shellcheck disable=1090,2086
+# shellcheck disable=1090,2086
 ################################################################################
 #
 # Description: deploy.sh is a CI/CD program for GitLab Server.
