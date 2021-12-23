@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=2154,2034
 
 file_lang="${gitlab_project_dir}/composer.json"
 string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"

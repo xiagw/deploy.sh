@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=1090,2086
+# shellcheck disable=2154,2034
 
 ## https://github.com/squizlabs/PHP_CodeSniffer
 ## install ESlint: yarn global add eslint ("$HOME/".yarn/bin/eslint)

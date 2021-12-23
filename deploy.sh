@@ -298,6 +298,7 @@ _deploy_rsync_ssh() {
 
         ## rsync source folder / rsync 源目录
         if [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
+            # shellcheck disable=2154
             rsync_src="${gitlab_project_dir}/$path_for_rsync"
         elif [[ "$rsync_src" =~ \.[jw]ar$ ]]; then
             find_file="$(find "${gitlab_project_dir}" -name "$rsync_src" -print0 | head -n 1)"

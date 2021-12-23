@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=2154,2034
 
 path_for_rsync='dist/'
 file_lang="${gitlab_project_dir}/package.json"
