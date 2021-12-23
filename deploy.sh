@@ -34,7 +34,7 @@ _test_unit() {
     elif [[ -f "$script_path_data"/tests/unit_test.sh ]]; then
         bash "$script_path_data"/tests/unit_test.sh
     else
-        echo_warn "no unit test script found, sktip unit test."
+        echo_warn "not found tests/unit_test.sh, skip unit test."
     fi
     echo_time "end unit test."
 }
@@ -47,7 +47,7 @@ _test_function() {
     elif [ -f "$script_path_data"/tests/func_test.sh ]; then
         bash "$script_path_data"/tests/func_test.sh
     else
-        echo_warn "no func_test.sh found, skip function test."
+        echo_warn "not found tests/func_test.sh, skip function test."
     fi
     echo_time "end function test."
 }
@@ -654,11 +654,14 @@ _file_preprocess() {
         fi
     done
 
-    if [[ ! -d "${path_flyway_sql_proj}" ]]; then
+    if [[ -d "${path_flyway_sql_proj}" ]]; then
+        exec_deploy_flyway=1
+        copy_flyway_file=1
+    else
         exec_deploy_flyway=0
         copy_flyway_file=0
     fi
-    if [[ "${copy_flyway_file:-1}" -eq 1 ]]; then
+    if [[ "${copy_flyway_file:-0}" -eq 1 ]]; then
         path_flyway_conf="$gitlab_project_dir/flyway_conf"
         path_flyway_sql="$gitlab_project_dir/flyway_sql"
         [[ -d "$path_flyway_sql_proj" && ! -d "$path_flyway_sql" ]] && rsync -a "$path_flyway_sql_proj/" "$path_flyway_sql/"
@@ -734,8 +737,12 @@ _detect_langs() {
             Dockerfile)
                 if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
                     project_docker=0
+                    exec_deploy_rsync_ssh=1
                 else
                     project_docker=1
+                    exec_build_image=1
+                    exec_push_image=1
+                    exec_deploy_k8s=1
                     exec_deploy_rsync_ssh=0
                     build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
                 fi
@@ -995,9 +1002,9 @@ main() {
         [[ "${arg_code_style:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
-            [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job
+            [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
         else
-            [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
+            [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         fi
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
@@ -1021,7 +1028,7 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && exec_code_style=1
-    [[ "${exec_code_style:-1}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
+    [[ "${exec_code_style:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
@@ -1032,27 +1039,30 @@ main() {
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_deploy_flyway=0
     if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
-        [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_helm_job
+        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
     else
-        [[ "${exec_deploy_flyway:-1}" -eq 1 ]] && _deploy_flyway_docker
+        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
     fi
 
     ## generate api docs
     # _generate_apidoc
 
     ## build
-    [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
+    [[ "${exec_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
 
     ## deploy k8s
-    [[ "${exec_build_image:-1}" -eq 1 ]] && _build_image_docker
-    [[ "${exec_push_image:-1}" -eq 1 ]] && _push_image
-    [[ "${exec_deploy_k8s:-1}" -eq 1 ]] && _deploy_k8s
+    [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
+    [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
+    [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
 
     ## deploy with rsync / 使用 rsync 发布
     [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync_ssh=0
     [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
+    ## rsync server
     [[ "${exec_deploy_rsync:-0}" -eq 1 ]] && _deploy_rsync
+    ## ftp server
     [[ "${exec_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
+    ## sftp server
     [[ "${exec_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
