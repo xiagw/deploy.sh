@@ -749,22 +749,22 @@ _detect_langs() {
                 fi
                 ;;
             composer.json)
-                echo "found composer.json, detect lang: php"
+                echo "Found composer.json, detect lang: php"
                 project_lang=php
                 break
                 ;;
             package.json)
-                echo "found package.json, detect lang: node"
+                echo "Found package.json, detect lang: node"
                 project_lang=node
                 break
                 ;;
             pom.xml)
-                echo "found pom.xml, detect lang: java"
+                echo "Found pom.xml, detect lang: java"
                 project_lang=java
                 break
                 ;;
             requirements.txt)
-                echo "found requirements.txt, detect lang: python"
+                echo "Found requirements.txt, detect lang: python"
                 project_lang=python
                 break
                 ;;
