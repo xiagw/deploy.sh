@@ -62,6 +62,7 @@ _code_quality_sonar() {
     fi
 
     if [[ ! -f "$sonar_conf" ]]; then
+        echo "Not found $sonar_conf, create it"
         cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
 sonar.projectKey=${gitlab_project_namespace}_${gitlab_project_name}
@@ -137,18 +138,17 @@ _deploy_flyway_helm_job() {
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
 _docker_login() {
-    ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
-    lock_docker_login="$script_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
-    time_save="$(if test -f "$lock_docker_login"; then cat "$lock_docker_login"; else :; fi)"
-    if [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]]; then
-        return 0
-    fi
-    echo_time "docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
+    local lock_docker_login="$script_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "${ENV_DOCKER_LOGIN_TYPE:-none}" == 'aws' ]]; then
+        time_save="$(if [[ -f "$lock_docker_login" ]]; then cat "$lock_docker_login"; else echo 0; fi)"
+        ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
+        [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]] && return 0
+        echo_time "docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
+        [[ -f "$lock_docker_login" ]] && return 0
         echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
     fi
     date +%s >"$lock_docker_login"
@@ -270,8 +270,9 @@ _deploy_k8s() {
 _deploy_rsync_ssh() {
     echo_time_step "deploy code file [rsync+ssh]..."
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
+    # grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf" | while read -r line; do
     # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf"); do
-    grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf" | while read -r line; do
+    while read -r line; do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
         # git_branch=${array[1]}
@@ -320,11 +321,11 @@ _deploy_rsync_ssh() {
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
             return
         fi
-        $ssh_opt -n "${ssh_host}" "test -d $rsync_dest || mkdir -p $rsync_dest"
+        $ssh_opt -n "${ssh_host}" "[[ -d $rsync_dest ]] || mkdir -p $rsync_dest"
         ## rsync to remote server / rsync 到远程服务器
         echo "deploy to ${ssh_host}:${rsync_dest}"
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
-    done
+    done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf")
     echo_time "end deploy code file [rsync+ssh]."
 }
 
@@ -537,7 +538,7 @@ _check_os() {
     case "$OS" in
     debian | ubuntu | linuxmint)
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
-        test -f "$HOME"/.bash_logout && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
+        [[ -f "$HOME"/.bash_logout ]] && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         command -v git >/dev/null || install_pkg="git"
         git lfs version >/dev/null 2>&1 || install_pkg="$install_pkg git-lfs"
         command -v curl >/dev/null || install_pkg="$install_pkg curl"
@@ -605,9 +606,9 @@ get_maxmind_ip() {
     $curl_opt -qs -o "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
     $curl_opt -qs -o "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
     gunzip "$t1" "$t2"
-    for i in ${ENV_NGINX_IPS:?undefine var}; do
-        echo "$i"
-        rsync -av "${t}/" "root@$i":/etc/nginx/conf.d/
+    for ip in ${ENV_NGINX_IPS:?undefine var}; do
+        echo "$ip"
+        rsync -av "${t}/" "root@$ip":/etc/nginx/conf.d/
     done
 }
 
@@ -688,10 +689,10 @@ _deploy_conf_files() {
         ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
         [ -d "$HOME/.ssh" ] || ln -sf "$path_conf_ssh" "$HOME/"
     fi
-    for f in "$path_conf_ssh"/*; do
-        if [ ! -f "$HOME/.ssh/${f##*/}" ]; then
-            chmod 600 "${f}"
-            ln -sf "${f}" "$HOME/.ssh/"
+    for file in "$path_conf_ssh"/*; do
+        if [ ! -f "$HOME/.ssh/${file##*/}" ]; then
+            chmod 600 "${file}"
+            ln -sf "${file}" "$HOME/.ssh/"
         fi
     done
     ## acme.sh/aws/kube/aliyun/python-gitlab
@@ -731,7 +732,7 @@ _gitlab_var() {
 
 _detect_langs() {
     for f in Dockerfile composer.json package.json pom.xml requirements.txt README.md readme.md README.txt readme.txt; do
-        if test -f "${gitlab_project_dir}"/${f}; then
+        if [[ -f "${gitlab_project_dir}"/${f} ]]; then
             case $f in
             Dockerfile)
                 echo "Found Dockerfile, enable docker build and helm deploy. disable rsync+ssh."
