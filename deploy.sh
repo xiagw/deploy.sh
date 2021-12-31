@@ -30,8 +30,10 @@ echo_time_step() { echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\
 _test_unit() {
     echo_time_step "unit test..."
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
+        echo "Found $gitlab_project_dir/tests/unit_test.sh"
         bash "$gitlab_project_dir"/tests/unit_test.sh
     elif [[ -f "$script_path_data"/tests/unit_test.sh ]]; then
+        echo "Found $script_path_data/tests/unit_test.sh"
         bash "$script_path_data"/tests/unit_test.sh
     else
         echo_warn "not found tests/unit_test.sh, skip unit test."
@@ -43,8 +45,10 @@ _test_unit() {
 _test_function() {
     echo_time_step "function test..."
     if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
+        echo "Found $gitlab_project_dir/tests/func_test.sh"
         bash "$gitlab_project_dir"/tests/func_test.sh
     elif [ -f "$script_path_data"/tests/func_test.sh ]; then
+        echo "Found $script_path_data/tests/func_test.sh"
         bash "$script_path_data"/tests/func_test.sh
     else
         echo_warn "not found tests/func_test.sh, skip function test."
@@ -101,8 +105,8 @@ _deploy_flyway_docker() {
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
-    ## ssh port-forward mysql 3306 to localhost / 判断是否需要建立数据库远程连接
-    [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" port
+    ## ssh port-forward mysql 3306 to localhost / 判断是否需要通过 ssh 端口转发建立数据库远程连接
+    [ -f "$script_path_bin/ssh-port-forward.sh" ] && source "$script_path_bin/ssh-port-forward.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
@@ -179,6 +183,10 @@ _build_image_docker() {
     echo_time "end docker build image."
 }
 
+_build_image_podman() {
+    echo_time_step "[TODO] build image [podman]..."
+}
+
 _push_image() {
     echo_time_step "push image [docker]..."
     _docker_login
@@ -193,6 +201,7 @@ _push_image() {
 _deploy_k8s() {
     echo_time_step "deploy k8s [helm]..."
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
+        echo "remove project prefix."
         helm_release=${gitlab_project_name#*-}
     else
         helm_release=${gitlab_project_name}
@@ -202,14 +211,17 @@ _deploy_k8s() {
     ## finding helm files folder / 查找 helm 文件目录
     if [ -d "${script_path_data}/helm/${gitlab_project_name}" ]; then
         path_helm="${script_path_data}/helm/${gitlab_project_name}"
+        echo "Found $path_helm"
     elif [ -d "$gitlab_project_dir/helm" ]; then
         path_helm="$gitlab_project_dir/helm"
+        echo "Found $path_helm"
     fi
 
     if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
         ## update gitops files / 更新 gitops 文件
         file_gitops="$script_path_data"/gitops_${gitlab_project_branch}/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
+            echo "Found $file_gitops"
             echo_time_step "update gitops files [helm]..."
             echo_warn "Note: only update 'gitops', skip deploy to k8s."
             sed -i \
@@ -232,15 +244,15 @@ _deploy_k8s() {
 
             )
         else
-            echo "File not found: $file_gitops , [skip update gitops files]."
+            echo "Not found: $file_gitops , [skip update gitops files]."
         fi
-        [[ "${ENV_ENABLE_HELM:-1}" -eq 0 ]] && return 0
+        [[ "${ENV_ENABLE_HELM_AFTER_GITOPS:-1}" -eq 0 ]] && return 0
     fi
 
     if [ -z "$path_helm" ]; then
-        echo_warn "helm files not found, skip deploy k8s."
+        echo_warn "not found helm files, skip deploy k8s."
         ## Custom deployment method / 自定义部署方式
-        [ -f "$script_path_bin/special.sh" ] && source "$script_path_bin/special.sh" "$env_namespace"
+        [ -f "$script_path_bin/custom-deploy.sh" ] && source "$script_path_bin/custom-deploy.sh" "$env_namespace"
     else
         set -x
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
@@ -261,7 +273,7 @@ _deploy_k8s() {
         $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
-            --set image.tag="${gitlab_project_name}-flyway" \
+            --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
     echo_time "end deploy k8s [helm]."
@@ -283,19 +295,18 @@ _deploy_rsync_ssh() {
         # db_user=${array[6]}
         # db_host=${array[7]}
         # db_name=${array[8]}
-
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
         echo "${ssh_host:?if stop here, check runner/conf/deploy.conf}"
-        ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=20 -p ${ssh_port:-22}"
+        ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
         ## rsync exclude some files / rsync 排除某些文件
         if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
-            rsync_conf="${gitlab_project_dir}/rsync.exclude"
+            rsync_exclude="${gitlab_project_dir}/rsync.exclude"
         else
-            rsync_conf="${script_path_conf}/rsync.exclude"
+            rsync_exclude="${script_path_conf}/rsync.exclude"
         fi
         ## node/java use rsync --delete / node/java 使用 rsync --delete
         [[ "${project_lang}" =~ (node|java|other) ]] && rsync_delete='--delete'
-        rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=20 --no-times --exclude-from=${rsync_conf} $rsync_delete"
+        rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=10 --no-times --exclude-from=${rsync_exclude} $rsync_delete"
 
         ## rsync source folder / rsync 源目录
         if [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
@@ -306,7 +317,7 @@ _deploy_rsync_ssh() {
             if [[ "$find_file" =~ \.[jw]ar$ ]]; then
                 rsync_src="$find_file"
             else
-                echo "file not found: ${find_file}"
+                echo "Not found: ${find_file}"
                 return 1
             fi
         fi
@@ -318,6 +329,7 @@ _deploy_rsync_ssh() {
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
             aliyun oss cp "${rsync_src}/" "$rsync_dest/" --recursive --force
+            ## 如果使用 rclone， 则需要安装和配置
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
             return
         fi
@@ -348,7 +360,7 @@ _deploy_notify_msg() {
 [Gitlab Deploy]
 Project = ${gitlab_project_path}
 Branche = ${gitlab_project_branch}
-Pipeline = ${gitlab_pipeline_id}/JobID-$gitlab_job_id
+Pipeline = ${gitlab_pipeline_id}/JobID=$gitlab_job_id
 Describe = [${gitlab_commit_short_sha}]/${msg_describe}
 Who = ${gitlab_user_id}/${gitlab_username}
 Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
@@ -402,7 +414,7 @@ _renew_cert() {
     echo_time_step "renew cert [dns api]..."
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
-    acme_cert="${acme_home}/dest"
+    acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
     conf_dns_cloudflare="${script_path_data}/.cloudflare.conf"
     conf_dns_aliyun="${script_path_data}/.aliyun.dnsapi.conf"
     conf_dns_qcloud="${script_path_data}/.qcloud.dnspod.conf"
@@ -447,6 +459,7 @@ _renew_cert() {
 
     ## Custom deployment method / 自定义部署方式
     if [ -f "${acme_home}"/custom.acme.sh ]; then
+        echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}"/custom.acme.sh
     fi
     echo_time "end renew cert."
@@ -510,7 +523,7 @@ _install_flarectl() {
     tar xf "$path_temp"/flarectl.zip -C "${script_path_bin}/"
 }
 
-_check_os() {
+_detect_os() {
     if [[ $UID == 0 ]]; then
         exec_sudo=
     else
@@ -592,6 +605,7 @@ _clean_disk() {
     if ((disk_usage < 80)); then
         return
     fi
+    echo "Disk space is less than 80%, run clean_disk"
     docker images "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
     docker system prune -f >/dev/null || true
 }
@@ -619,13 +633,14 @@ _generate_apidoc() {
     fi
 }
 
-_file_preprocess() {
+_preprocess_file() {
     echo_time "preprocessing file [env/config]..."
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
         for file in $config_env_path; do
             [[ -f "$file" ]] || continue
+            echo "Found $file"
             if [[ "$file" =~ 'config' ]]; then
                 rsync -av "$file" "${file/${env_namespace}./}" # vue2.x
             else
@@ -640,8 +655,8 @@ _file_preprocess() {
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## cert file for nginx
-    if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/dest/" ]]; then
-        rsync -av "$HOME/.acme.sh/dest/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
+    if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
+        rsync -av "$HOME/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## Docker build from / 是否从模板构建
     if [[ "${project_docker}" -eq 1 && -n "$build_image_from" ]]; then
@@ -649,20 +664,17 @@ _file_preprocess() {
         [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
     fi
     ## flyway files sql & conf
-    for sql in docs/sql doc/sql flyway_sql sql ${ENV_FLYWAY_SQL:-docs/sql}; do
+    for sql in ${ENV_FLYWAY_SQL:-docs/sql} flyway_sql doc/sql sql; do
         if [[ -d "${gitlab_project_dir}/$sql" ]]; then
             path_flyway_sql_proj="${gitlab_project_dir}/$sql"
+            exec_deploy_flyway=1
+            copy_flyway_file=1
             break
+        else
+            exec_deploy_flyway=0
+            copy_flyway_file=0
         fi
     done
-
-    if [[ -d "${path_flyway_sql_proj}" ]]; then
-        exec_deploy_flyway=1
-        copy_flyway_file=1
-    else
-        exec_deploy_flyway=0
-        copy_flyway_file=0
-    fi
     if [[ "${copy_flyway_file:-0}" -eq 1 ]]; then
         path_flyway_conf="$gitlab_project_dir/flyway_conf"
         path_flyway_sql="$gitlab_project_dir/flyway_sql"
@@ -674,7 +686,7 @@ _file_preprocess() {
     echo_time "end preprocessing file."
 }
 
-_deploy_conf_files() {
+_setup_deploy_conf() {
     path_conf_ssh="${script_path_data}/.ssh"
     path_conf_acme="${script_path_data}/.acme.sh"
     path_conf_aws="${script_path_data}/.aws"
@@ -691,6 +703,7 @@ _deploy_conf_files() {
     fi
     for file in "$path_conf_ssh"/*; do
         if [ ! -f "$HOME/.ssh/${file##*/}" ]; then
+            echo "link $file to $HOME/.ssh/"
             chmod 600 "${file}"
             ln -sf "${file}" "$HOME/.ssh/"
         fi
@@ -704,19 +717,21 @@ _deploy_conf_files() {
     return 0
 }
 
-_gitlab_var() {
+_setup_gitlab_vars() {
     gitlab_project_dir=${CI_PROJECT_DIR:-$PWD}
     gitlab_project_name=${CI_PROJECT_NAME:-${gitlab_project_dir##*/}}
     # read -rp "Enter gitlab project namespace: " -e -i 'root' gitlab_project_namespace
     gitlab_project_namespace=${CI_PROJECT_NAMESPACE:-root}
     # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
-    gitlab_project_path=${CI_PROJECT_PATH:-root/$gitlab_project_name}
+    gitlab_project_path=${CI_PROJECT_PATH:-$gitlab_project_namespace/$gitlab_project_name}
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}
     gitlab_project_branch=${gitlab_project_branch:-develop}
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
-    [[ -z "$gitlab_commit_short_sha" && "${github_action:-0}" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
-    [[ -z "$gitlab_commit_short_sha" && "${debug_on:-0}" -eq 1 ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
+    if [[ -z "$gitlab_commit_short_sha" ]]; then
+        [[ "${github_action:-0}" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
+        [[ "${debug_on:-0}" -eq 1 ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
+    fi
     # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
     # gitlab_project_id=${CI_PROJECT_ID:-1234}
     # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
@@ -789,7 +804,7 @@ _detect_langs() {
 _git_clone_repo() {
     [[ -d builds ]] || mkdir -p builds
     local tmp_dir=builds/"${arg_git_clone_url##*/}"
-    local tmp_dir="${tmp_dir%.git}"
+    tmp_dir="${tmp_dir%.git}"
     if [[ ! -d "${tmp_dir}" ]]; then
         if [[ -z "$arg_git_clone_branch" ]]; then
             git clone "$arg_git_clone_url" "${tmp_dir}"
@@ -954,13 +969,13 @@ main() {
     helm_opt="helm --kubeconfig $HOME/.kube/config"
 
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
-    _check_os
+    _detect_os
 
     ## git clone repo / 克隆 git 仓库
     [[ "${arg_git_clone:-0}" -eq 1 ]] && _git_clone_repo
 
     ## run deploy.sh by hand / 手动执行 deploy.sh
-    _gitlab_var
+    _setup_gitlab_vars
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$script_env"
     ## curl use proxy / curl 使用代理
@@ -969,7 +984,7 @@ main() {
     else
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
-    image_tag="${gitlab_project_name}-$(date +%s)-${gitlab_commit_short_sha}"
+    image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
 
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
@@ -986,7 +1001,7 @@ main() {
     _clean_disk
 
     ## setup ssh config/ acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
-    _deploy_conf_files
+    _setup_deploy_conf
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
@@ -1001,23 +1016,23 @@ main() {
     ## detect program lang / 检测程序语言
     _detect_langs
 
-    ## preprocess project config files / 预处理项目配置文件
-    _file_preprocess
+    ## preprocess project config files / 预处理业务项目配置文件
+    _preprocess_file
 
-    style_sh="$script_path/langs/style.${project_lang}.sh"
-    build_sh="$script_path/langs/build.${project_lang}.sh"
+    code_style_sh="$script_path/langs/style.${project_lang}.sh"
+    build_langs_sh="$script_path/langs/build.${project_lang}.sh"
 
     ## exec single task / 执行单个任务
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
-        [[ "${arg_code_style:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
+        [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
             [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
         else
             [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         fi
-        [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
+        [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
         [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
@@ -1039,7 +1054,7 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && exec_code_style=1
-    [[ "${exec_code_style:-0}" -eq 1 && -f "$style_sh" ]] && source "$style_sh"
+    [[ "${exec_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
@@ -1059,10 +1074,11 @@ main() {
     # _generate_apidoc
 
     ## build
-    [[ "${exec_build_langs:-0}" -eq 1 && -f "$build_sh" ]] && source "$build_sh"
+    [[ "${exec_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
 
     ## deploy k8s
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
+    # [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
     [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
 

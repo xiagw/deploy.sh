@@ -1,8 +1,7 @@
 FROM php:7.2-alpine
 
 ARG CHANGE_SOURCE=false
-ARG PHPCS_VERSION=3.5.8
-ARG PROXY=socks5://192.168.10.10:1081
+ARG PHPCS_VERSION=3.6.2
 RUN set -x; \
     if [ ${CHANGE_SOURCE} = true ]; then sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories; fi \
     && curl -Lo /usr/local/bin/phpcs https://squizlabs.github.io/PHP_CodeSniffer/phpcs.phar \

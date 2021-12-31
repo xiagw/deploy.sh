@@ -17,5 +17,6 @@ bin/*
 !bin/flyway
 !bin/sendEmail
 !bin/helm-new.sh
+!bin/ssh-port-forward.sh
 ## custome folder
 tmp/
