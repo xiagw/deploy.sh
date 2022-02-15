@@ -20,6 +20,9 @@ project_lang=shell
 - python: git库存在`requirements.txt`或在 README.md 包含文本 `project_lang=python`
 - [other]: git库内 README.md 包含文本 `project_lang=[other]`
 
+# 安装
+`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
+
 # 如何创建 helm 项目文件
 ```
 bash $HOME/runner/bin/helm-new.sh
@@ -38,8 +41,6 @@ bash $HOME/runner/bin/helm-new.sh
 * 发布结果提醒到聊天软件: 企业微信, Telegram, Element(Matrix), 钉钉...
 * 全自动更新证书: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
 
-# 安装
-`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
 
 ## 快速开始
 ### 可选方式 [1], 手动单独运行程序

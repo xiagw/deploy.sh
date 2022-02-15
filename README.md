@@ -20,6 +20,9 @@ It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 - python: exist requirements.txt or include `project_lang=python` in README.md
 - [other]: include `project_lang=[other]` in README.md
 
+# Installation
+`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
+
 # How to create Helm project
 ```
 bash $HOME/runner/bin/helm-new.sh
@@ -38,8 +41,6 @@ bash $HOME/runner/bin/helm-new.sh
 * Notify deploy result: work-weixin, Telegram, Element(Matrix), dingding...
 * Renew cert: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
 
-# Installation
-`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
 
 ## Quick Start
 ### option [1], Running applications manually
