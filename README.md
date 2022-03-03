@@ -142,9 +142,6 @@ BSC/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
 TRX/TRC20 Address `TAnZ537r98Jo63aKDTfbWmBeooz29ASd73`
 
 
-![](docs/README.png)
-
-# The following code requires a browser that supports "[mermain](https://mermaid-js.github.io/mermaid/#/README)" syntax to display pictures
 
 ```mermaid
 graph TB;
