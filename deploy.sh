@@ -634,7 +634,7 @@ _generate_apidoc() {
 }
 
 _preprocess_file() {
-    echo_time "preprocessing file [env/config]..."
+    echo_time "preprocessing file [env/config etc.]..."
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
