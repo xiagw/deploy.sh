@@ -988,7 +988,7 @@ main() {
     else
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
-    if [[ ${ENV_DOCKER_REGISTRY} == 'nginx']]; then
+    if [[ ${ENV_DOCKER_REGISTRY} == 'nginx' ]]; then
         image_tag=latest
     else
         image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
