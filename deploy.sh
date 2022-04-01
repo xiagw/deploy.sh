@@ -152,6 +152,10 @@ _docker_login() {
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
+        if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' ]]; then 
+            echo "Found default password, skip docker login"
+            return 0
+        fi    
         [[ -f "$lock_docker_login" ]] && return 0
         echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
     fi
