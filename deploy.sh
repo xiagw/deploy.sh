@@ -149,7 +149,7 @@ _docker_login() {
         ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
         [[ "$(date +%s -d '12 hours ago')" -lt "${time_save:-0}" ]] && return 0
         echo_time "docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
-        str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY}"
+        str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
         if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' ]]; then 
@@ -157,7 +157,7 @@ _docker_login() {
             return 0
         fi    
         [[ -f "$lock_docker_login" ]] && return 0
-        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY}"
+        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"
     fi
     date +%s >"$lock_docker_login"
 }
