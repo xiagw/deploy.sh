@@ -182,7 +182,7 @@ _build_image_docker() {
     ## docker build
     [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
     [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
-    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${image_tag}" \
+    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
     echo_time "end docker build image."
 }
@@ -195,7 +195,7 @@ _push_image() {
     echo_time_step "push image [docker]..."
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}:${image_tag}" || echo_erro "error here, maybe caused by GFW."
+    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "error here, maybe caused by GFW."
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
     fi
@@ -261,7 +261,7 @@ _deploy_k8s() {
         set -x
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
-            --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
+            --set image.repository="${ENV_DOCKER_REGISTRY}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' >/dev/null
         [[ "${debug_on:-0}" -ne 1 ]] && set +x
@@ -276,7 +276,7 @@ _deploy_k8s() {
     if [[ "$ENV_FLYWAY_HELM_JOB" == 1 && -d "${script_path_conf}"/helm/flyway ]]; then
         $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
-            --set image.repository="${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" \
+            --set image.repository="${ENV_DOCKER_REGISTRY}" \
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
@@ -610,7 +610,7 @@ _clean_disk() {
         return
     fi
     echo "Disk space is less than 80%, run clean_disk"
-    docker images "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
+    docker images "${ENV_DOCKER_REGISTRY}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
     docker system prune -f >/dev/null || true
 }
 
@@ -766,7 +766,7 @@ _detect_langs() {
                     exec_push_image=1
                     exec_deploy_k8s=1
                     exec_deploy_rsync_ssh=0
-                    build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}/${ENV_DOCKER_REPO}" | head -n 1)"
+                    build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}" | head -n 1)"
                 fi
                 ;;
             composer.json)
@@ -988,8 +988,12 @@ main() {
     else
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
-    image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
-    image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}/${ENV_DOCKER_REPO}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
+    if [[ ${ENV_DOCKER_REGISTRY} == 'nginx']]; then
+        image_tag=latest
+    else
+        image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
+    fi
+    image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
 
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && _install_aws
