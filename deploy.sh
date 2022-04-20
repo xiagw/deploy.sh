@@ -29,6 +29,10 @@ echo_time_step() { echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\
 ## install phpunit
 _test_unit() {
     echo_time_step "unit test..."
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
+    echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
+    [[ "${PIPELINE_UNIT_TEST:-0}" -eq 0 ]] && return 0
+
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
         echo "Found $gitlab_project_dir/tests/unit_test.sh"
         bash "$gitlab_project_dir"/tests/unit_test.sh
@@ -44,6 +48,10 @@ _test_unit() {
 ## install jdk/ant/jmeter
 _test_function() {
     echo_time_step "function test..."
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
+    echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
+    [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 0 ]] && return 0
+
     if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
         echo "Found $gitlab_project_dir/tests/func_test.sh"
         bash "$gitlab_project_dir"/tests/func_test.sh
@@ -58,6 +66,10 @@ _test_function() {
 
 _code_quality_sonar() {
     echo_time_step "code quality [sonarqube scanner]..."
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
+    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
+    [[ "${PIPELINE_SONAR:-0}" -eq 0 ]] && return 0
+
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$gitlab_project_dir/sonar-project.properties"
     if ! curl "$sonar_url" >/dev/null 2>&1; then
@@ -152,10 +164,10 @@ _docker_login() {
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
-        if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' ]]; then 
+        if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' ]]; then
             echo "Found default password, skip docker login"
             return 0
-        fi    
+        fi
         [[ -f "$lock_docker_login" ]] && return 0
         echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"
     fi
@@ -1054,20 +1066,15 @@ main() {
 
     ## default exec all tasks / 默认执行所有任务
 
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
-    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    [[ "${PIPELINE_SONAR:-0}" -eq 1 ]] && exec_code_quality=1
-    [[ "${exec_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
+    _code_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
+    echo_time_step "code style..."
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && exec_code_style=1
     [[ "${exec_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
 
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
-    echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
-    [[ "${PIPELINE_UNIT_TEST:-0}" -eq 1 ]] && exec_test_unit=1
-    [[ "${exec_test_unit:-1}" -eq 1 ]] && _test_unit
+    _test_unit
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
@@ -1100,10 +1107,7 @@ main() {
     ## sftp server
     [[ "${exec_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
 
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
-    echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
-    [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 1 ]] && exec_test_function=1
-    [[ "${exec_test_function:-1}" -eq 1 ]] && _test_function
+    _test_function
 
     ## deploy notify info / 发布通知信息
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
