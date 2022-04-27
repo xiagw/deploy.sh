@@ -207,7 +207,7 @@ _push_image() {
     echo_time_step "push image [docker]..."
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "error here, maybe caused by GFW."
+    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "got an error here, probably caused by GFW..."
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
     fi
