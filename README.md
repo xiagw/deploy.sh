@@ -107,41 +107,7 @@ For example: created `project-A` under the root account on gitlab-server (root/p
 Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 ### Step 8: Enjoy CI/CD
 
-# Development and Contribution
-Welcome create Issue or create PR
-
-[deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
-
-[deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
-
-# Donation
-It would be much appreciated if you want to make a small donation to support my work!
-Alipay, WeChat Pay, BitCoin are avaliable for donation. You can chose any of them.
-
-Alipay | WeChat Pay
--|-
-<img src=docs/pay-alipay.jpg width="250" height="250">|<img src=docs/pay-wechatpay.jpg width="250" height="250">
-
-### Digital Currency:
-**BitCoin**
-
-BTC native segwit Address: `bc1qaphg63gygfelzq5ptssv3rq6eayhwclghucf8r`
-
-BTC segwit Address: `3LzwrtqD6av77XVN68UXWLKaHEtAPEQiPt`
-
-**ETH/ERC20**
-
-ETH/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
-
-**BSC/ERC20**
-
-BSC/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
-
-**TRX/TRC20**
-
-TRX/TRC20 Address `TAnZ537r98Jo63aKDTfbWmBeooz29ASd73`
-
-
+# Flow
 
 ```mermaid
 graph TB;
@@ -199,3 +165,39 @@ ENV_M -- pri --> app_m[app 1,2,3...];
 app_m -- pri --> cache_m[redis cluster];
 cache_m -- pri --> db_m[mysql cluster];
 ```
+
+# Development and Contribution
+Welcome create Issue or create PR
+
+[deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
+
+[deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
+
+# Donation
+It would be much appreciated if you want to make a small donation to support my work!
+Alipay, WeChat Pay, BitCoin are avaliable for donation. You can chose any of them.
+
+Alipay | WeChat Pay
+-|-
+<img src=docs/pay-alipay.jpg width="250" height="250">|<img src=docs/pay-wechatpay.jpg width="250" height="250">
+
+### Digital Currency:
+**BitCoin**
+
+BTC native segwit Address: `bc1qaphg63gygfelzq5ptssv3rq6eayhwclghucf8r`
+
+BTC segwit Address: `3LzwrtqD6av77XVN68UXWLKaHEtAPEQiPt`
+
+**ETH/ERC20**
+
+ETH/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
+
+**BSC/ERC20**
+
+BSC/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
+
+**TRX/TRC20**
+
+TRX/TRC20 Address `TAnZ537r98Jo63aKDTfbWmBeooz29ASd73`
+
+
