@@ -112,7 +112,7 @@ _scan_vulmap() {
 }
 
 _deploy_flyway_docker() {
-    echo_time_step "deploy database [flyway]..."
+    echo_time_step "deploy SQL [flyway]..."
     flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
