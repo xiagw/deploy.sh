@@ -1,25 +1,25 @@
 ### 文件说明
 gitops，密码/密钥/机密信息 （运维部门/管理者）
 
-### .acme.sh
+### .acme.sh/
 证书配置/dns api/部署程序
 
 https://github.com/acmesh-official/acme.sh
 
 
-### .aws
+### .aws/
 aws Access Key 管理配置文件机密（运维部门/管理者）
 
-### .kube
+### .kube/
 k8s集群 机密配置文件（运维部门/管理者）
 
-### project_conf
+### project_conf/
 各个业务 Git 项目的配置 .env/config 等机密文件 （运维部门/管理者）
 
-### .ssh
+### .ssh/
 gitlab-runner login 所有服务器需要的 ssh private key 文件（运维部门/管理者）
 
-### helm
+### helm/
 各个业务 Git 项目基于 helm 自动发布部署到 k8s 集群的配置文件（运维部门/研发部门可配置）
 
 ### .cloudflare.conf
