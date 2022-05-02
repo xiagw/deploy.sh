@@ -958,7 +958,7 @@ _process_args() {
 }
 
 main() {
-    ## 处理传入的参数
+    ## Process parameters / 处理传入的参数
     _process_args "$@"
 
     script_name="$(basename "$0")"
