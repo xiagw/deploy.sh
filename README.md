@@ -20,15 +20,6 @@ It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 - python: exist requirements.txt or include `project_lang=python` in README.md
 - [other]: include `project_lang=[other]` in README.md
 
-# Installation
-`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
-
-# How to create Helm project
-```
-bash $HOME/runner/bin/helm-new.sh
-## change to yours [$HOME/runner/data/helm/<your_project>]
-```
-
 # Currently support
 * Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
 * Code style: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
@@ -42,40 +33,40 @@ bash $HOME/runner/bin/helm-new.sh
 * Renew cert: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
 
 
+# Installation
+`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
+
+
 ## Quick Start
-### option [1], Running applications manually
+### option [1], Running deploy.sh manually
 ```
-## git repo exists
-mkdir ~/src
-git clone https://github.com/<your_name>/<your_project>.git ~/src/<your_project>
-cd ~/src/<your_project>
+## If your project repository already exists
+cd /path/to/<your_project.git>
 $HOME/runner/deploy.sh
 ```
+
 ```
-## clone git repo by [deploy.sh]
-mkdir ~/src
-cd ~/src/
-$HOME/runner/deploy.sh --git-clone https://github.com/<your_name>/<your_project>.git
+## If your project repository dose not exist. (deploy.sh will clone it)
+cd /path/to/<your_project.git>
+$HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
-### option [2], Running applications automated
+### option [2], Running deploy.sh automated
 ```
 ## crontab
-*/10 * * * * for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done
+*/5 * * * * for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done
 ```
 ```
-## run in Screen or tmux
-while true; do for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done; sleep 60; done
+## run in screen or tmux
+while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done; sleep 300; done
 ```
 
 ### option [3], Running applications with GitLab-Runner
 1. Prepare a gitlab-server and gitlab-runner-server
 1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
-1. cd $HOME
-1. git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 1. cd $HOME/runner
-1. cp conf/deploy.conf.example conf/deploy.conf      ## change to yours
-1. cp conf/deploy.env.example conf/deploy.env        ## change to yours
-1. Refer to conf/.gitlab-ci.yaml of this project, setup yours
+1. cp conf/deploy.conf.example conf/deploy.conf      ## !!!change to yours!!!
+1. cp conf/deploy.env.example conf/deploy.env        ## !!!change to yours!!!
+1. Refer to conf/.gitlab-ci.yaml of this project, setup \<your_project.git\>/.gitlab-ci.yaml
 
 ### option [4], Running applications with Jenkins
 1. Create job,
@@ -87,10 +78,13 @@ while true; do for d in ~/src/*/; do (cd $d && git pull && $HOME/runner/deploy.s
 There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
 ### Step 2: Prepair Gitlab Runner server
 There is already a server that has installed gitlab-runner and register to Gitlab server, (executer is shell)
+
+and make sure gitlab-runner is running properly. `sudo gitlab-runner status`
+
 ### Step 3: Prepair Application server (*nix/k8s/microk8s/k3s)
-The ssh key file had been prepared, and you can login to the target server without a password from the gitlab-runner server (the id_rsa file can be in $HOME/.ssh/, or in the deploy.sh/data/.ssh/)
+The ssh key file had been prepared, and you can login to the Application server without a password from the gitlab-runner server (the key file can be in $HOME/.ssh/, or in the deploy.sh/data/.ssh/)
 ### Step 4: git clone deploy.sh
-SSH login to the gitlab-runner server and execute
+SSH login to the gitlab-runner server
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
@@ -101,11 +95,18 @@ cd $HOME/runner
 cp conf/deploy.conf.example conf/deploy.conf      ## change to yours
 cp conf/deploy.env.example conf/deploy.env        ## change to yours
 ```
-### Step 6: Create Gitlab project
+### Step 6: Create Gitlab project on gitlab server
 For example: created `project-A` under the root account on gitlab-server (root/project-A)
-### Step 7: Create .gitlab-ci.yml
+### Step 7: Create root/project-A/.gitlab-ci.yml on gitlab server
 Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 ### Step 8: Enjoy CI/CD
+
+# How to create Helm files for applications project
+If you use helm to deploy to k8s.
+```
+bash $HOME/runner/bin/helm-new.sh
+## change to yours [$HOME/runner/data/helm/<your_project>]
+```
 
 # Flow
 
@@ -177,9 +178,9 @@ Welcome create Issue or create PR
 It would be much appreciated if you want to make a small donation to support my work!
 Alipay, WeChat Pay, BitCoin are avaliable for donation. You can chose any of them.
 
-Alipay | WeChat Pay
--|-
-<img src=docs/pay-alipay.jpg width="250" height="250">|<img src=docs/pay-wechatpay.jpg width="250" height="250">
+| Alipay                                                 | WeChat Pay                                                |
+|--------------------------------------------------------|-----------------------------------------------------------|
+| <img src=docs/pay-alipay.jpg width="250" height="250"> | <img src=docs/pay-wechatpay.jpg width="250" height="250"> |
 
 ### Digital Currency:
 **BitCoin**
