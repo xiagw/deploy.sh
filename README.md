@@ -47,7 +47,6 @@ $HOME/runner/deploy.sh
 
 ```
 ## If your project repository dose not exist. (deploy.sh will clone it)
-cd /path/to/<your_project.git>
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
 ### option [2], Running deploy.sh automated
