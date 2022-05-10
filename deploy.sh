@@ -2,7 +2,7 @@
 # shellcheck disable=1090,2086
 ################################################################################
 #
-# Description: deploy.sh is a CI/CD program for GitLab Server.
+# Description: deploy.sh is a CI/CD program.
 # Author: xiagw <fxiaxiaoyu@gmail.com>
 # License: GNU/GPL, see http://www.gnu.org/copyleft/gpl.html
 # Date: 2019-04-03
@@ -19,12 +19,7 @@ echo_ques() { echo -e "\033[35m$*\033[0m"; }        ## brown
 echo_time() { echo "[$(date +%Y%m%d-%T-%u)], $*"; } ## time
 echo_time_step() { echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\033[0m $*" && STEP=$((STEP + 1)); }
 
-## year mon day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W   week number of year, with Monday as first day of week (00..53)
-# https://zhuanlan.zhihu.com/p/48048906
-# https://www.jianshu.com/p/bf0ffe8e615a
-# https://www.cnblogs.com/lsgxeva/p/7994474.html
-# https://eslint.bootcss.com
-# http://eslint.cn/docs/user-guide/getting-started
+## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
 ## install phpunit
 _test_unit() {
@@ -359,7 +354,7 @@ _deploy_rsync_ssh() {
 }
 
 _deploy_rsync() {
-    echo_time_step "[TODO] deploy code file [rsync]..."
+    echo_time_step "[TODO] deploy code file [rsyncd]..."
 }
 
 _deploy_ftp() {
