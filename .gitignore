@@ -13,7 +13,7 @@ conf/deploy.yml
 data/**
 !data/readme.md
 bin/*
-!bin/element-example.py
+!bin/example-element.py
 !bin/flyway
 !bin/sendEmail
 !bin/helm-new.sh

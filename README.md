@@ -65,8 +65,8 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. Prepare a gitlab-server and gitlab-runner-server
 1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
 1. cd $HOME/runner
-1. cp conf/deploy.conf.example conf/deploy.conf      ## !!!change to yours!!!
-1. cp conf/deploy.env.example conf/deploy.env        ## !!!change to yours!!!
+1. cp conf/example-deploy.conf conf/deploy.conf      ## !!!change to yours!!!
+1. cp conf/example-deploy.env conf/deploy.env        ## !!!change to yours!!!
 1. Refer to conf/.gitlab-ci.yaml of this project, setup \<your_project.git\>/.gitlab-ci.yaml
 
 ### option [4], Running applications with Jenkins
@@ -90,14 +90,14 @@ SSH login to the gitlab-runner server
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 ### Step 5: Update conf/deploy.conf, conf/deploy.env
-Refer to the conf/deploy.conf.example, conf/deploy.env.example, change to yours configure
+Refer to the conf/example-deploy.conf, conf/example-deploy.env, change to yours configure
 ```
 cd $HOME/runner
-cp conf/deploy.conf.example conf/deploy.conf      ## change to yours
-cp conf/deploy.env.example conf/deploy.env        ## change to yours
+cp conf/example-deploy.conf conf/deploy.conf      ## change to yours
+cp conf/example-deploy.env conf/deploy.env        ## change to yours
 ```
 ### Step 6: Create Gitlab project on gitlab server
-For example: created `project-A` under the root account on gitlab-server (root/project-A)
+Example: created `project-A` under the root account on gitlab-server (root/project-A)
 ### Step 7: Create root/project-A/.gitlab-ci.yml on gitlab server
 Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 ### Step 8: Enjoy CI/CD

@@ -966,8 +966,8 @@ main() {
     script_log="${script_path_data}/${script_name}.log" ## deploy.sh run loger
     script_dockerfile="${script_path_conf}/dockerfile"  ## deploy.sh dependent dockerfile
 
-    [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/deploy.conf.example" "$script_conf"
-    [[ ! -f "$script_env" ]] && cp "${script_path_conf}/deploy.env.example" "$script_env"
+    [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/example-deploy.conf" "$script_conf"
+    [[ ! -f "$script_env" ]] && cp "${script_path_conf}/example-deploy.env" "$script_env"
     [[ ! -f "$script_log" ]] && touch "$script_log"
 
     PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
