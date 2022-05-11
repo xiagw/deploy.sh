@@ -7,7 +7,7 @@ deploy.sh is a general CI/CD program, better than "Buddy".
 
 project_lang=shell
 
-Run Platform: Unix/Linux/MacOS...
+Platform: Unix/Linux/MacOS...
 
 It can be executed manually/automated.
 
@@ -34,7 +34,9 @@ It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 
 
 # Installation
-`git clone https://github.com/xiagw/deploy.sh.git $HOME/runner`
+```
+git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
+```
 
 
 ## Quick Start
@@ -108,7 +110,6 @@ bash $HOME/runner/bin/helm-new.sh
 ```
 
 # Flow
-
 ```mermaid
 graph TB;
 
