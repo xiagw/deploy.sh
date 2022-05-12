@@ -543,11 +543,9 @@ _detect_os() {
     fi
 
     if [[ -e /etc/debian_version ]]; then
-        # shellcheck disable=SC1091
         source /etc/os-release
         OS="${ID}" # debian or ubuntu
     elif [[ -e /etc/fedora-release ]]; then
-        # shellcheck disable=SC1091
         source /etc/os-release
         OS="${ID}"
     elif [[ -e /etc/centos-release ]]; then
@@ -594,7 +592,6 @@ _detect_os() {
         command -v curl >/dev/null || install_pkg="$install_pkg curl"
         command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
         command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
-        # shellcheck disable=SC2086
         [[ -n "$install_pkg" ]] && $exec_sudo yum install -y $install_pkg >/dev/null
         command -v docker >/dev/null || (
             curl -fsSL https://get.docker.com -o get-docker.sh
@@ -831,7 +828,8 @@ _git_clone_repo() {
 }
 
 _usage() {
-    echo "Usage: $0 [parameters ...]
+    echo "
+Usage: $0 [parameters ...]
 
 Parameters:
     -h, --help               Show this help message.
