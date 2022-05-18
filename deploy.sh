@@ -160,11 +160,7 @@ _docker_login() {
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
-        if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' ]]; then
-            echo "Found default password, skip docker login"
-            skip_docker_push=1
-            return 0
-        fi
+        [[ "${demo_mode:-0}" == 1 ]] && return 0
         [[ -f "$lock_docker_login" ]] && return 0
         echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"
     fi
@@ -204,7 +200,7 @@ _push_image() {
     echo_time_step "push image [docker]..."
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    [[ "$skip_docker_push" == 1 ]] && return 0
+    [[ "$demo_mode" == 1 ]] && return 0
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "got an error here, probably caused by GFW..."
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
@@ -997,6 +993,10 @@ main() {
         curl_opt="curl -L"
     else
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
+    fi
+    if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
+        echo "Found default username/password, skip docker login/push image/deploy k8s..."
+        demo_mode=1
     fi
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
