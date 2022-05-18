@@ -811,17 +811,18 @@ _detect_langs() {
 }
 
 _git_clone_repo() {
-    [[ -d builds ]] || mkdir -p builds
-    local tmp_dir=builds/"${arg_git_clone_url##*/}"
-    tmp_dir="${tmp_dir%.git}"
-    if [[ ! -d "${tmp_dir}" ]]; then
-        if [[ -z "$arg_git_clone_branch" ]]; then
-            git clone "$arg_git_clone_url" "${tmp_dir}"
-        else
-            git clone --branch "${arg_git_clone_branch}" "$arg_git_clone_url" "${tmp_dir}"
-        fi
+    if [[ ! -d "$script_path_builds" ]]; then
+        echo "not found $script_path_builds, create it..."
+        mkdir -p builds
     fi
-    cd "${tmp_dir}" || return 1
+    local path_git_clone="$script_path_builds/${arg_git_clone_url##*/}"
+    path_git_clone="${path_git_clone%.git}"
+    if [ ! -d "$path_git_clone" ]; then
+        echo "Clone git repo: $arg_git_clone_url"
+        git clone "$arg_git_clone_url" "${path_git_clone}"
+    fi
+    # echo "\"$path_git_clone\" exists"
+    cd "${path_git_clone}" || return 1
     if [[ -n "$arg_git_clone_branch" ]]; then
         git checkout "${arg_git_clone_branch}" || return 1
     fi
@@ -958,6 +959,7 @@ main() {
     script_path="$(cd "$(dirname "$0")" && pwd)"
     script_path_conf="${script_path}/conf"
     script_path_bin="${script_path}/bin"
+    script_path_builds="${script_path}/builds"
     script_path_data="${script_path}/data"              ## deploy.sh data folder
     script_conf="${script_path_conf}/deploy.conf"       ## deploy to app server 发布到目标服务器的配置信息
     script_env="${script_path_conf}/deploy.env"         ## deploy.sh ENV 发布配置信息(密)
