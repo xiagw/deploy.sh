@@ -15,7 +15,7 @@ set -e ## 出现错误自动退出
 echo_info() { echo -e "\033[32m$*\033[0m"; }        ## green
 echo_warn() { echo -e "\033[33m$*\033[0m"; }        ## yellow
 echo_erro() { echo -e "\033[31m$*\033[0m"; }        ## red
-echo_ques() { echo -e "\033[35m$*\033[0m"; }        ## brown
+echo_ques() { echo -e "\033[35m$*\033[0m"; }        ## purple
 echo_time() { echo "[$(date +%Y%m%d-%T-%u)], $*"; } ## time
 echo_time_step() { echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\033[0m $*" && STEP=$((STEP + 1)); }
 
@@ -266,7 +266,7 @@ _deploy_k8s() {
     fi
 
     if [ -z "$path_helm" ]; then
-        echo_ques "not found helm files, skip deploy k8s."
+        echo_ques "Not found helm files, skip deploy k8s."
         ## Custom deployment method / 自定义部署方式
         [ -f "$script_path_bin/custom-deploy.sh" ] && source "$script_path_bin/custom-deploy.sh" "$env_namespace"
     else
