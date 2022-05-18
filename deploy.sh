@@ -162,6 +162,7 @@ _docker_login() {
     else
         if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' ]]; then
             echo "Found default password, skip docker login"
+            skip_docker_push=1
             return 0
         fi
         [[ -f "$lock_docker_login" ]] && return 0
@@ -203,6 +204,7 @@ _push_image() {
     echo_time_step "push image [docker]..."
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
+    [[ "$skip_docker_push" == 1 ]] && return 0
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "got an error here, probably caused by GFW..."
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
@@ -996,11 +998,7 @@ main() {
     else
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
-    if [[ ${ENV_DOCKER_REGISTRY} == 'nginx' ]]; then
-        image_tag=latest
-    else
-        image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
-    fi
+    image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
 
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
