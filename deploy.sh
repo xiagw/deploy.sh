@@ -35,7 +35,7 @@ _test_unit() {
         echo "Found $script_path_data/tests/unit_test.sh"
         bash "$script_path_data"/tests/unit_test.sh
     else
-        echo_warn "not found tests/unit_test.sh, skip unit test."
+        echo_ques "not found tests/unit_test.sh, skip unit test."
     fi
     echo_time "end unit test."
 }
@@ -54,7 +54,7 @@ _test_function() {
         echo "Found $script_path_data/tests/func_test.sh"
         bash "$script_path_data"/tests/func_test.sh
     else
-        echo_warn "not found tests/func_test.sh, skip function test."
+        echo_ques "not found tests/func_test.sh, skip function test."
     fi
     echo_time "end function test."
 }
@@ -160,7 +160,10 @@ _docker_login() {
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
-        [[ "${demo_mode:-0}" == 1 ]] && return 0
+        if [[ "${demo_mode:-0}" == 1 ]]; then
+            echo_ques "Demo mode, skip docker login."
+            return 0
+        fi
         [[ -f "$lock_docker_login" ]] && return 0
         echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"
     fi
@@ -200,7 +203,10 @@ _push_image() {
     echo_time_step "push image [docker]..."
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    [[ "$demo_mode" == 1 ]] && return 0
+    if [[ "$demo_mode" == 1 ]]; then
+        echo_ques "Demo mode, skip push image."
+        return 0
+    fi
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "got an error here, probably caused by GFW..."
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
@@ -233,7 +239,7 @@ _deploy_k8s() {
         if [ -f "$file_gitops" ]; then
             echo "Found $file_gitops"
             echo_time_step "update gitops files [helm]..."
-            echo_warn "Note: only update 'gitops', skip deploy to k8s."
+            echo_ques "Note: only update 'gitops', skip deploy to k8s."
             sed -i \
                 -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY_GITOPS:-registry}/${ENV_DOCKER_REPO_GITOPS:-repo}\"@" \
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
@@ -254,13 +260,13 @@ _deploy_k8s() {
 
             )
         else
-            echo "Not found: $file_gitops , [skip update gitops files]."
+            echo_ques "Not found: $file_gitops, skip update gitops files."
         fi
         [[ "${ENV_ENABLE_HELM_AFTER_GITOPS:-1}" -eq 0 ]] && return 0
     fi
 
     if [ -z "$path_helm" ]; then
-        echo_warn "not found helm files, skip deploy k8s."
+        echo_ques "not found helm files, skip deploy k8s."
         ## Custom deployment method / 自定义部署方式
         [ -f "$script_path_bin/custom-deploy.sh" ] && source "$script_path_bin/custom-deploy.sh" "$env_namespace"
     else
@@ -641,7 +647,7 @@ _generate_apidoc() {
 }
 
 _preprocess_file() {
-    echo_time "preprocessing file [env/config etc.]..."
+    echo_time "preprocessing [env/config...]..."
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -690,7 +696,7 @@ _preprocess_file() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${script_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_time "end preprocessing file."
+    echo_time "end preprocessing preprocessing [env/config...]."
 }
 
 _setup_deploy_conf() {
@@ -995,7 +1001,7 @@ main() {
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
-        echo "Found default username/password, skip docker login/push image/deploy k8s..."
+        echo_ques "Found default username/password, skip docker login/push image/deploy k8s..."
         demo_mode=1
     fi
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
