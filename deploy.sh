@@ -177,11 +177,11 @@ _build_image_docker() {
     ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     ## When the image does not exist, build the image / 判断模版是否存在,模版不存在，构建模板
-    if [ -n "$build_image_from" ]; then
-        docker images | grep -q "${build_image_from%%:*}.*${build_image_from##*:}" ||
-            DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-                -f "${gitlab_project_dir}/Dockerfile.${build_image_from##*:}" "${gitlab_project_dir}"
-    fi
+    # if [ -n "$build_image_from" ]; then
+    #     docker images | grep -q "${build_image_from%%:*}.*${build_image_from##*:}" ||
+    #         DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+    #             -f "${gitlab_project_dir}/Dockerfile.${build_image_from##*:}" "${gitlab_project_dir}"
+    # fi
 
     ## docker build flyway image / 构建 flyway 模板
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
