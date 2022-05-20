@@ -207,7 +207,7 @@ _push_image() {
         echo_ques "Demo mode, skip push image."
         return 0
     fi
-    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "got an error here, probably caused by GFW..."
+    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "got an error here, probably caused by network..."
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
     fi
