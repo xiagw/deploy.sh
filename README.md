@@ -83,7 +83,10 @@ There is already a server that has installed gitlab-runner and register to Gitla
 and make sure gitlab-runner is running properly. `sudo gitlab-runner status`
 
 ### Step 3: Prepair Application server (*nix/k8s/microk8s/k3s)
-The ssh key file had been prepared, and you can login to the Application server without a password from the gitlab-runner server (the key file can be in $HOME/.ssh/, or in the deploy.sh/data/.ssh/)
+if use rsync+ssh to deploy: The ssh key file had been prepared, and you can login to the Application server without a password from the gitlab-runner server (the key file can be in $HOME/.ssh/, or in the deploy.sh/data/.ssh/)
+
+if use k8s to deploy: prepare ~/.kube/config
+
 ### Step 4: git clone deploy.sh
 SSH login to the gitlab-runner server
 ```

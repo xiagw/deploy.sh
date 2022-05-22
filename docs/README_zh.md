@@ -9,11 +9,11 @@ project_lang=shell
 
 运行平台： Unix/Linux/MacOS...
 
-可以手动单独运行或全自动运行。
+可以手动单独运行/或全自动运行。
 
-亦可以配合 GitLab/GitLab-Runner, Jenkins 等全自动运行。
+亦可以配合 GitLab/GitLab-Runner, Jenkins, crontab 等全自动运行。
 
-# 如何探测程序开发语言
+# deploy.sh 如何探测程序开发语言
 - node: git库存在`package.json`或在 README.md 包含文本 `project_lang=node`
 - php: git库存在`composer.json`或在 README.md 包含文本 `project_lang=php`
 - java: git库存在`pom.xml`或在 README.md 包含文本 `project_lang=java`
@@ -43,13 +43,13 @@ git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ## 快速开始
 ### 可选方式 [1], 手动单独运行程序
 ```
-## 应用 git 仓库已预先存在，在仓库目录直接运行 deploy.sh
+## 您的应用程序 git 仓库已预先存在，在仓库目录直接运行 deploy.sh
 cd /path/to/<your_project.git>
 $HOME/runner/deploy.sh
 ```
 
 ```
-## 如果应用 git 仓库不存在，使用 [deploy.sh] 克隆 git 仓库
+## 如果您的应用程序 git 仓库不存在，使用 [deploy.sh] 克隆 git 仓库
 mkdir ~/src && cd ~/src/
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
@@ -76,7 +76,8 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. Create job,
 1. 设置任务, run custom shell, `bash $HOME/runner/deploy.sh`
 
-## 实际案例，配合 GitLab Server and GitLab-Runner
+## 实际案例
+（配合 GitLab Server and GitLab-Runner）
 ### Step 1: 准备 Gitlab 服务器
 已经准备好 Gitlab 服务器 (如果没有？可以参考[xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) 启动一个新服务器)
 ### Step 2: 准备 Gitlab-runner 服务器
@@ -84,7 +85,9 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 
 并且确认一下运行状态。 `sudo gitlab-runner status`
 ### Step 3: 准备应用程序服务器 (*nix/k8s/microk8s/k3s)
-准备好 ssh public key, 并可以无密码登录到应用程序服务器 (ssh private key 可以存放于 $HOME/.ssh/ 或 deploy.sh/data/.ssh/)
+如果您打算使用 rsync+ssh 的方式发布：准备好 ssh public key, 并可以无密码登录到应用程序服务器 (ssh private key 可以存放于 $HOME/.ssh/ 或 deploy.sh/data/.ssh/)
+
+如果您打算使用 k8s 的方式发布：准备好 ~/.kube/config 等配置文件
 ### Step 4: 安装 deploy.sh
 ssh 登录进入 Gitlab-runner 服务器，并执行以下命令用来安装 deploy.sh
 ```
@@ -98,7 +101,7 @@ cp conf/example-deploy.conf conf/deploy.conf      ## 修改为你的自定义配
 cp conf/example-deploy.env conf/deploy.env        ## 修改为你的自定义配置
 ```
 ### Step 6: 创建 Gitlab git 仓库
-登录进入 Gitlab 服务器，并创建一个 git 仓库 `project-A` (root/project-A)
+登录进入 Gitlab 服务器，并创建一个 git 仓库 `project-A` (例如 root/project-A)
 ### Step 7: 创建 .gitlab-ci.yml
 创建并提交一个文件 `.gitlab-ci.yml` 在 git 仓库 `project-A`
 ### Step 8: 享受 CI/CD
