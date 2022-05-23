@@ -12,6 +12,41 @@
 set -e ## 出现错误自动退出
 # set -u ## 变量未定义报错
 
+echo_msg() {
+    color_off='\033[0m' # Text Reset
+    case "$1" in
+    red | error | erro)
+        color_on='\033[0;31m' # Red
+        ;;
+    green | info)
+        color_on='\033[0;32m' # Green
+        ;;
+    yellow | warning | warn)
+        color_on='\033[0;33m' # Yellow
+        ;;
+    blue)
+        color_on='\033[0;34m' # Blue
+        ;;
+    purple | question | ques)
+        color_on='\033[0;35m' # Purple
+        ;;
+    cyan)
+        color_on='\033[0;36m' # Cyan
+        ;;
+    time)
+        color_on="[$(date +%Y%m%d-%T-%u)], "
+        color_off=''
+        ;;
+    step | timestep)
+        color_on="\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)), \033[0m"
+        STEP=$((STEP + 1))
+        color_off=''
+        ;;
+    esac
+    shift
+    echo -e "${color_on}$*${color_off}"
+}
+
 echo_info() { echo -e "\033[32m$*\033[0m"; }        ## green
 echo_warn() { echo -e "\033[33m$*\033[0m"; }        ## yellow
 echo_erro() { echo -e "\033[31m$*\033[0m"; }        ## red
