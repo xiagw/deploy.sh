@@ -34,11 +34,11 @@ echo_msg() {
         color_on='\033[0;36m' # Cyan
         ;;
     time)
-        color_on="[$(date +%Y%m%d-%T-%u)], "
+        color_on="[$(date +%Y%m%d-%T-%u)], " ## datetime
         color_off=''
         ;;
     step | timestep)
-        color_on="\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)), \033[0m"
+        color_on="\033[0;33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)), \033[0m"
         STEP=$((STEP + 1))
         color_off=''
         ;;
@@ -47,18 +47,11 @@ echo_msg() {
     echo -e "${color_on}$*${color_off}"
 }
 
-echo_info() { echo -e "\033[32m$*\033[0m"; }        ## green
-echo_warn() { echo -e "\033[33m$*\033[0m"; }        ## yellow
-echo_erro() { echo -e "\033[31m$*\033[0m"; }        ## red
-echo_ques() { echo -e "\033[35m$*\033[0m"; }        ## purple
-echo_time() { echo "[$(date +%Y%m%d-%T-%u)], $*"; } ## time
-echo_time_step() { echo -e "\033[33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)),\033[0m $*" && STEP=$((STEP + 1)); }
-
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
 ## install phpunit
 _test_unit() {
-    echo_time_step "unit test..."
+    echo_msg step "unit test..."
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
     [[ "${PIPELINE_UNIT_TEST:-0}" -eq 0 ]] && return 0
@@ -70,14 +63,14 @@ _test_unit() {
         echo "Found $script_path_data/tests/unit_test.sh"
         bash "$script_path_data"/tests/unit_test.sh
     else
-        echo_ques "not found tests/unit_test.sh, skip unit test."
+        echo_msg question "not found tests/unit_test.sh, skip unit test."
     fi
-    echo_time "end unit test."
+    echo_msg time "end unit test."
 }
 
 ## install jdk/ant/jmeter
 _test_function() {
-    echo_time_step "function test..."
+    echo_msg step "function test..."
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
     [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 0 ]] && return 0
@@ -89,13 +82,13 @@ _test_function() {
         echo "Found $script_path_data/tests/func_test.sh"
         bash "$script_path_data"/tests/func_test.sh
     else
-        echo_ques "not found tests/func_test.sh, skip function test."
+        echo_msg question "not found tests/func_test.sh, skip function test."
     fi
-    echo_time "end function test."
+    echo_msg time "end function test."
 }
 
 _code_quality_sonar() {
-    echo_time_step "code quality [sonarqube scanner]..."
+    echo_msg step "code quality [sonarqube scanner]..."
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     [[ "${PIPELINE_SONAR:-0}" -eq 0 ]] && return 0
@@ -103,7 +96,7 @@ _code_quality_sonar() {
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$gitlab_project_dir/sonar-project.properties"
     if ! curl "$sonar_url" >/dev/null 2>&1; then
-        echo_warn "Could not found sonarqube server, exit."
+        echo_msg warning "Could not found sonarqube server, exit."
         return
     fi
 
@@ -128,21 +121,21 @@ EOF
     $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
-    echo_time "end code quality [sonarqube scanner]."
+    echo_msg time "end code quality [sonarqube scanner]."
     exit
 }
 
 _scan_ZAP() {
-    echo_time_step "[TODO] scan [ZAP]..."
+    echo_msg step "[TODO] scan [ZAP]..."
     # docker pull owasp/zap2docker-stable
 }
 
 _scan_vulmap() {
-    echo_time_step "[TODO] scan [vulmap]..."
+    echo_msg step "[TODO] scan [vulmap]..."
 }
 
 _deploy_flyway_docker() {
-    echo_time_step "deploy SQL [flyway]..."
+    echo_msg step "deploy SQL [flyway]..."
     flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
@@ -158,11 +151,11 @@ _deploy_flyway_docker() {
         echo "Nothing to do."
     fi
     if [ ${deploy_result:-0} = 0 ]; then
-        echo_info "Result = OK"
+        echo_msg green "Result = OK"
     else
-        echo_erro "Result = FAIL"
+        echo_msg error "Result = FAIL"
     fi
-    echo_time "end deploy database [flyway]."
+    echo_msg time "end deploy database [flyway]."
 }
 
 _deploy_flyway_helm_job() {
@@ -172,9 +165,9 @@ _deploy_flyway_helm_job() {
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     docker run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
-        echo_info "Result = OK"
+        echo_msg green "Result = OK"
     else
-        echo_erro "Result = FAIL"
+        echo_msg error "Result = FAIL"
     fi
 }
 
@@ -191,12 +184,12 @@ _docker_login() {
         time_last="$(stat -t -c %Y "$lock_docker_login")"
         ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
         [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]] && return 0
-        echo_time "docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
+        echo_msg time "docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
         if [[ "${demo_mode:-0}" == 1 ]]; then
-            echo_ques "Demo mode, skip docker login."
+            echo_msg question "demo mode, skip docker login."
             return 0
         fi
         [[ -f "$lock_docker_login" ]] && return 0
@@ -206,7 +199,7 @@ _docker_login() {
 }
 
 _build_image_docker() {
-    echo_time_step "build image [docker]..."
+    echo_msg step "build image [docker]..."
     _docker_login
 
     ## Docker build from template image / 是否从模板构建
@@ -227,30 +220,30 @@ _build_image_docker() {
     [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
-    echo_time "end docker build image."
+    echo_msg time "end docker build image."
 }
 
 _build_image_podman() {
-    echo_time_step "[TODO] build image [podman]..."
+    echo_msg step "[TODO] build image [podman]..."
 }
 
 _push_image() {
-    echo_time_step "push image [docker]..."
+    echo_msg step "push image [docker]..."
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "$demo_mode" == 1 ]]; then
-        echo_ques "Demo mode, skip push image."
+        echo_msg question "Demo mode, skip push image."
         return 0
     fi
-    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_erro "got an error here, probably caused by network..."
+    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_msg error "got an error here, probably caused by network..."
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway"
     fi
-    echo_time "end docker push image."
+    echo_msg time "end docker push image."
 }
 
 _deploy_k8s() {
-    echo_time_step "deploy k8s [helm]..."
+    echo_msg step "deploy k8s [helm]..."
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
         echo "remove project prefix."
         helm_release=${gitlab_project_name#*-}
@@ -273,8 +266,8 @@ _deploy_k8s() {
         file_gitops="$script_path_data"/gitops_${gitlab_project_branch}/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo "Found $file_gitops"
-            echo_time_step "update gitops files [helm]..."
-            echo_ques "Note: only update 'gitops', skip deploy to k8s."
+            echo_msg step "update gitops files [helm]..."
+            echo_msg question "Note: only update 'gitops', skip deploy to k8s."
             sed -i \
                 -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY_GITOPS:-registry}/${ENV_DOCKER_REPO_GITOPS:-repo}\"@" \
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
@@ -295,13 +288,13 @@ _deploy_k8s() {
 
             )
         else
-            echo_ques "Not found: $file_gitops, skip update gitops files."
+            echo_msg question "Not found: $file_gitops, skip update gitops files."
         fi
         [[ "${ENV_ENABLE_HELM_AFTER_GITOPS:-1}" -eq 0 ]] && return 0
     fi
 
     if [ -z "$path_helm" ]; then
-        echo_ques "Not found helm files, skip deploy k8s."
+        echo_msg question "Not found helm files, skip deploy k8s."
         ## Custom deployment method / 自定义部署方式
         [ -f "$script_path_bin/custom-deploy.sh" ] && source "$script_path_bin/custom-deploy.sh" "$env_namespace"
     else
@@ -327,11 +320,11 @@ _deploy_k8s() {
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    echo_time "end deploy k8s [helm]."
+    echo_msg time "end deploy k8s [helm]."
 }
 
 _deploy_rsync_ssh() {
-    echo_time_step "deploy code file [rsync+ssh]..."
+    echo_msg step "deploy code file [rsync+ssh]..."
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     # grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf" | while read -r line; do
     # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf"); do
@@ -368,7 +361,7 @@ _deploy_rsync_ssh() {
             if [[ "$find_file" =~ \.[jw]ar$ ]]; then
                 rsync_src="$find_file"
             else
-                echo "Not found: ${find_file}"
+                echo_msg warning "Not found: ${find_file}"
                 return 1
             fi
         fi
@@ -378,7 +371,7 @@ _deploy_rsync_ssh() {
         fi
         ## deploy to aliyun oss / 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
-            command -v aliyun >/dev/null || echo_warn "command not exist: aliyun"
+            command -v aliyun >/dev/null || echo_msg warning "command not exist: aliyun"
             aliyun oss cp "${rsync_src}/" "$rsync_dest/" --recursive --force
             ## 如果使用 rclone， 则需要安装和配置
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
@@ -389,19 +382,19 @@ _deploy_rsync_ssh() {
         echo "deploy to ${ssh_host}:${rsync_dest}"
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf")
-    echo_time "end deploy code file [rsync+ssh]."
+    echo_msg time "end deploy code file [rsync+ssh]."
 }
 
 _deploy_rsync() {
-    echo_time_step "[TODO] deploy code file [rsyncd]..."
+    echo_msg step "[TODO] deploy code file [rsyncd]..."
 }
 
 _deploy_ftp() {
-    echo_time_step "[TODO] deploy code file [ftp]..."
+    echo_msg step "[TODO] deploy code file [ftp]..."
 }
 
 _deploy_sftp() {
-    echo_time_step "[TODO] deploy code file [sftp]..."
+    echo_msg step "[TODO] deploy code file [sftp]..."
 }
 
 _deploy_notify_msg() {
@@ -420,7 +413,7 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 }
 
 _deploy_notify() {
-    echo_time_step "deploy notify message [chat/email]..."
+    echo_msg step "deploy notify message [chat/email]..."
 
     _deploy_notify_msg
 
@@ -457,12 +450,12 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo_warn "skip message send."
+        echo_msg warning "skip message send."
     fi
 }
 
 _renew_cert() {
-    echo_time_step "renew cert [dns api]..."
+    echo_msg step "renew cert [dns api]..."
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
@@ -494,7 +487,7 @@ _renew_cert() {
             domain_name="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
             dnsType='dns_ali'
         elif [ -f "$conf_dns_qcloud" ]; then
-            echo_warn "[TODO] use dnspod api."
+            echo_msg warning "[TODO] use dnspod api."
         fi
         \cp -vf "$account" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
@@ -513,7 +506,7 @@ _renew_cert() {
         echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}"/custom.acme.sh
     fi
-    echo_time "end renew cert."
+    echo_msg time "end renew cert."
     # [[ "${github_action:-0}" -eq 1 ]] || exit
 }
 
@@ -576,7 +569,7 @@ _install_flarectl() {
 
 _detect_os() {
     if [[ $UID == 0 ]]; then
-        exec_sudo=
+        exec_sudo=''
     else
         exec_sudo=sudo
     fi
@@ -593,7 +586,7 @@ _detect_os() {
         OS=arch
     else
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        echo "Not support. exit."
+        echo_msg error "Not support. exit."
         exit 1
     fi
 
@@ -640,7 +633,7 @@ _detect_os() {
         ;;
     *)
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        echo "Not support. exit."
+        echo_msg error "Not support. exit."
         exit 1
         ;;
     esac
@@ -653,7 +646,7 @@ _clean_disk() {
     if ((disk_usage < 80)); then
         return
     fi
-    echo "Disk space is less than 80%, run clean_disk"
+    echo_msg warning "Disk space is less than 80%, run clean_disk"
     docker images "${ENV_DOCKER_REGISTRY}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
     docker system prune -f >/dev/null || true
 }
@@ -676,13 +669,13 @@ get_maxmind_ip() {
 
 _generate_apidoc() {
     if [[ -f "${gitlab_project_dir}/apidoc.json" ]]; then
-        echo_time_step "generate API Docs [apidoc]..."
+        echo_msg step "generate API Docs [apidoc]..."
         $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
     fi
 }
 
 _preprocess_file() {
-    echo_time "preprocessing [env/config...]..."
+    echo_msg time "preprocessing [env/config...]..."
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -731,7 +724,7 @@ _preprocess_file() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${script_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_time "end preprocessing preprocessing [env/config...]."
+    echo_msg time "end preprocessing preprocessing [env/config...]."
 }
 
 _setup_deploy_conf() {
@@ -744,8 +737,8 @@ _setup_deploy_conf() {
     ## ssh config and key files
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
-        echo_warn "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
-        echo_erro "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
+        echo_msg warning "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
+        echo_msg error "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
         [ -d "$HOME/.ssh" ] || ln -sf "$path_conf_ssh" "$HOME/"
     fi
@@ -913,8 +906,7 @@ _process_args() {
             github_action=1
             ;;
         --renwe-cert | -r)
-            arg_renew_cert=1
-            exec_single=$((exec_single + 1))
+            arg_renew_cert=1 && exec_single=$((exec_single + 1))
             ;;
         --git-clone)
             arg_git_clone=1
@@ -926,56 +918,44 @@ _process_args() {
             shift
             ;;
         --code-style)
-            arg_code_style=1
-            exec_single=$((exec_single + 1))
+            arg_code_style=1 && exec_single=$((exec_single + 1))
             ;;
         --code-quality)
-            arg_code_quality=1
-            exec_single=$((exec_single + 1))
+            arg_code_quality=1 && exec_single=$((exec_single + 1))
             ;;
         --build-langs)
-            arg_build_langs=1
-            exec_single=$((exec_single + 1))
+            arg_build_langs=1 && exec_single=$((exec_single + 1))
             ;;
         --build-image)
-            arg_build_image=1
-            exec_single=$((exec_single + 1))
+            arg_build_image=1 && exec_single=$((exec_single + 1))
             ;;
         --push-image)
-            arg_push_image=1
-            exec_single=$((exec_single + 1))
+            arg_push_image=1 && exec_single=$((exec_single + 1))
             ;;
         --deploy-k8s)
-            arg_deploy_k8s=1
-            exec_single=$((exec_single + 1))
+            arg_deploy_k8s=1 && exec_single=$((exec_single + 1))
             ;;
         --deploy-flyway)
             # arg_deploy_flyway=1
             exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync-ssh)
-            arg_deploy_rsync_ssh=1
-            exec_single=$((exec_single + 1))
+            arg_deploy_rsync_ssh=1 && exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync)
-            arg_deploy_rsync=1
-            exec_single=$((exec_single + 1))
+            arg_deploy_rsync=1 && exec_single=$((exec_single + 1))
             ;;
         --deploy-ftp)
-            arg_deploy_ftp=1
-            exec_single=$((exec_single + 1))
+            arg_deploy_ftp=1 && exec_single=$((exec_single + 1))
             ;;
         --deploy-sftp)
-            arg_deploy_sftp=1
-            exec_single=$((exec_single + 1))
+            arg_deploy_sftp=1 && exec_single=$((exec_single + 1))
             ;;
         --test-unit)
-            arg_test_unit=1
-            exec_single=$((exec_single + 1))
+            arg_test_unit=1 && exec_single=$((exec_single + 1))
             ;;
         --test-function)
-            arg_test_function=1
-            exec_single=$((exec_single + 1))
+            arg_test_function=1 && exec_single=$((exec_single + 1))
             ;;
         *)
             if [[ "${#}" -gt 0 ]]; then
@@ -1036,7 +1016,7 @@ main() {
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
-        echo_ques "Found default username/password, skip docker login/push image/deploy k8s..."
+        echo_msg question "Found default username/password, skip docker login/push image/deploy k8s..."
         demo_mode=1
     fi
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
@@ -1104,7 +1084,7 @@ main() {
     _code_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-    echo_time_step "code style..."
+    echo_msg step "code style..."
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && exec_code_style=1
     [[ "${exec_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
