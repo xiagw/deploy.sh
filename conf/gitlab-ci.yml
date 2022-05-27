@@ -24,6 +24,7 @@ cache:
 #     - bash $HOME/runner/deploy.sh --code-style
 #   only:
 #     - develop
+#     - dev
 
 # code_quality:
 #   stage: code_quality
@@ -31,6 +32,7 @@ cache:
 #     - bash $HOME/runner/deploy.sh --code-quality
 #   only:
 #     - develop
+#     - dev
 #   when: manual
 #   allow_failure: true
 
@@ -41,6 +43,7 @@ cache:
 #   # when: manual
 #   only:
 #     - develop
+#     - dev
 
 # build:
 #   stage: build
@@ -53,6 +56,11 @@ cache:
 #     - testing
 #     - release
 #     - master
+#     - dev
+#     - sit
+#     - uat
+#     - main
+#     - prod
 
 deploy:
   stage: deploy
@@ -81,6 +89,7 @@ deploy:
     - release
     - master
     - main
+    - prod
   interruptible: true
 
 # test_function:
