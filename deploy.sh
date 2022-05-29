@@ -42,6 +42,10 @@ echo_msg() {
         STEP=$((STEP + 1))
         color_off=''
         ;;
+    *)
+        color_on=''
+        color_off=''
+        ;;
     esac
     shift
     echo -e "${color_on}$*${color_off}"
@@ -237,7 +241,7 @@ _push_image() {
     fi
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_msg error "got an error here, probably caused by network..."
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        docker push ${quiet_flag} "$image_tag_flyway"
+        docker push ${quiet_flag} "$image_tag_flyway" || echo_msg error "got an error here, probably caused by network..."
     fi
     echo_msg time "end docker push image."
 }
@@ -261,8 +265,8 @@ _deploy_k8s() {
         echo "Found $path_helm"
     fi
 
+    ## update gitops files / 更新 gitops 文件
     if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
-        ## update gitops files / 更新 gitops 文件
         file_gitops="$script_path_data"/gitops_${gitlab_project_branch}/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo "Found $file_gitops"
@@ -293,10 +297,17 @@ _deploy_k8s() {
         [[ "${ENV_ENABLE_HELM_AFTER_GITOPS:-1}" -eq 0 ]] && return 0
     fi
 
+    ## Custom deployment method / 自定义部署方式
+    if [ -f "$script_path_bin/custom-deploy.sh" ]; then
+        echo_msg time "custom deploy..."
+        docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
+        docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" || echo_msg error "got an error here, probably caused by network..."
+        source "$script_path_bin/custom-deploy.sh" "$env_namespace" "${gitlab_project_name}" "${image_tag}"
+        echo_msg time "end custom deploy."
+    fi
+    ## helm install / helm 安装
     if [ -z "$path_helm" ]; then
         echo_msg question "Not found helm files, skip deploy k8s."
-        ## Custom deployment method / 自定义部署方式
-        [ -f "$script_path_bin/custom-deploy.sh" ] && source "$script_path_bin/custom-deploy.sh" "$env_namespace"
     else
         set -x
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
@@ -312,7 +323,7 @@ _deploy_k8s() {
         $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" || deploy_result=1
     fi
 
-    ## install flyway jobs / 安装 flyway 任务
+    ## helm install flyway jobs / helm 安装 flyway 任务
     if [[ "$ENV_FLYWAY_HELM_JOB" == 1 && -d "${script_path_conf}"/helm/flyway ]]; then
         $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
