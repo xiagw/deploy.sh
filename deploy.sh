@@ -920,11 +920,11 @@ _process_args() {
             ;;
         --git-clone)
             arg_git_clone=1
-            arg_git_clone_url="$2"
+            arg_git_clone_url="${2:?empty git clone url}"
             shift
             ;;
         --git-clone-branch)
-            arg_git_clone_branch="$2"
+            arg_git_clone_branch="${2:?empty git clone branch}"
             shift
             ;;
         --code-style)
