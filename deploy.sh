@@ -1134,6 +1134,8 @@ main() {
     [[ "${exec_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
 
     _test_function
+    _scan_ZAP
+    _scan_vulmap
 
     ## deploy notify info / 发布通知信息
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
