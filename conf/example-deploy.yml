@@ -1,0 +1,44 @@
+demo-api:
+  dev:
+    ssh_host: 192.168.0.10
+    ssh_port: 22
+    ssh_user: ubuntu
+    db_host: 192.168.0.11
+    db_port: 3306
+    db_username: db_user
+    db_password: db_pass
+  sit:
+    ssh_host: 192.168.0.10
+    ssh_port: 22
+    ssh_user: ubuntu
+    db_host: 192.168.0.11
+    db_port: 3306
+    db_username: db_user
+    db_password: db_pass
+  uat:
+    ssh_host: 192.168.0.10
+    ssh_port: 22
+    ssh_user: ubuntu
+    db_host: 192.168.0.11
+    db_port: 3306
+    db_username: db_user
+    db_password: db_pass
+  main:
+    ssh_host: 192.168.0.10
+    ssh_port: 22
+    ssh_user: ubuntu
+    db_host: 192.168.0.11
+    db_port: 3306
+    db_username: db_user
+    db_password: db_pass
+
+demo-order:
+  dev:
+    ssh_host: 192.168.0.10
+    ssh_port: 22
+    ssh_user: ubuntu
+    db_host: 192.168.0.11
+    db_port: 3306
+    db_username: db_user
+    db_password: db_pass
+
