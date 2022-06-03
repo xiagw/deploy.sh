@@ -402,6 +402,19 @@ _deploy_rsync() {
 
 _deploy_ftp() {
     echo_msg step "[TODO] deploy code file [ftp]..."
+    return
+    upload_file="${gitlab_project_dir}/ftp.tgz"
+    tar czvf "${upload_file}" -C "${gitlab_project_dir}" .
+    ftp -v -n "${ssh_host}" <<EOF
+user your_name your_pass
+passive on
+binary
+delete $upload_file
+put $upload_file
+passive off
+bye
+EOF
+    echo_msg time "end deploy code file [ftp]."
 }
 
 _deploy_sftp() {
