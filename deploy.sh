@@ -1005,11 +1005,13 @@ main() {
     script_path_builds="${script_path}/builds"
     script_path_data="${script_path}/data"              ## deploy.sh data folder
     script_conf="${script_path_conf}/deploy.conf"       ## deploy to app server 发布到目标服务器的配置信息
+    script_yaml="${script_path_conf}/deploy.yml"       ## deploy to app server 发布到目标服务器的配置信息
     script_env="${script_path_conf}/deploy.env"         ## deploy.sh ENV 发布配置信息(密)
     script_log="${script_path_data}/${script_name}.log" ## deploy.sh run loger
     script_dockerfile="${script_path_conf}/dockerfile"  ## deploy.sh dependent dockerfile
 
     [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/example-deploy.conf" "$script_conf"
+    [[ ! -f "$script_yaml" ]] && cp "${script_path_conf}/example-deploy.yml" "$script_yaml"
     [[ ! -f "$script_env" ]] && cp "${script_path_conf}/example-deploy.env" "$script_env"
     [[ ! -f "$script_log" ]] && touch "$script_log"
 
@@ -1064,9 +1066,7 @@ main() {
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-    [[ "${github_action:-0}" -eq 1 ]] && exec_renew_cert=1
-    [[ "${arg_renew_cert:-0}" -eq 1 ]] && exec_renew_cert=1
-    [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && exec_renew_cert=1
+    [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && exec_renew_cert=1
     if [[ "${exec_renew_cert:-0}" -eq 1 ]]; then
         _renew_cert
         [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && return
@@ -1081,6 +1081,7 @@ main() {
     code_style_sh="$script_path/langs/style.${project_lang}.sh"
     build_langs_sh="$script_path/langs/build.${project_lang}.sh"
 
+    ################################################################################
     ## exec single task / 执行单个任务
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
@@ -1103,8 +1104,8 @@ main() {
         return
     fi
 
+    ################################################################################
     ## default exec all tasks / 默认执行所有任务
-
     _code_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
