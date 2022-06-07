@@ -225,7 +225,7 @@ _build_image_docker() {
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
-    echo_msg time "end docker build image."
+    echo_msg time "end build image [docker]."
 }
 
 _build_image_podman() {
@@ -244,7 +244,7 @@ _push_image() {
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway" || echo_msg error "got an error here, probably caused by network..."
     fi
-    echo_msg time "end docker push image."
+    echo_msg time "end push image [docker]."
 }
 
 _deploy_k8s() {
