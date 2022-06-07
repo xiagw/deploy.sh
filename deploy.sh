@@ -223,7 +223,8 @@ _build_image_docker() {
     [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
     [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
-        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" "${gitlab_project_dir}"
+        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
+        --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     echo_msg time "end docker build image."
 }
 
