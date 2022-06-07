@@ -28,6 +28,8 @@ SECURITY.md
 doc/
 docs/
 !docs/nginx
+!docs/run.sh
+!docs/startup.sh
 LICENSE
 tests/
 
