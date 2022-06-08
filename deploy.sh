@@ -1000,7 +1000,7 @@ main() {
     _process_args "$@"
 
     script_name="$(basename "$0")"
-    script_path="$(cd "$(dirname "$0")" && pwd)"
+    script_path="$(dirname "$(readlink -f "$0")")"
     script_path_conf="${script_path}/conf"
     script_path_bin="${script_path}/bin"
     script_path_builds="${script_path}/builds"
