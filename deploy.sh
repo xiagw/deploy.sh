@@ -536,14 +536,17 @@ _renew_cert() {
 }
 
 _install_python_gitlab() {
+    echo_msg info "install python3 gitlab api..."
     python3 -m pip list 2>/dev/null | grep -q python-gitlab || python3 -m pip install --user --upgrade python-gitlab
 }
 
 _install_python_element() {
+    echo_msg info "install python3 element api..."
     python3 -m pip list 2>/dev/null | grep -q matrix-nio || python3 -m pip install --user --upgrade matrix-nio
 }
 
 _install_aws() {
+    echo_msg info "install aws cli..."
     command -v aws >/dev/null && return
     $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
@@ -554,6 +557,7 @@ _install_aws() {
 }
 
 _install_kubectl() {
+    echo_msg info "install kubectl..."
     command -v kubectl >/dev/null && return
     kube_ver="$($curl_opt --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
@@ -562,10 +566,12 @@ _install_kubectl() {
 }
 
 _install_helm() {
+    echo_msg info "install helm..."
     command -v helm >/dev/null || $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
 _install_jmeter() {
+    echo_msg info "install jmeter..."
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
@@ -585,6 +591,7 @@ _install_jmeter() {
 }
 
 _install_flarectl() {
+    echo_msg info "install flarectl"
     command -v flarectl >/dev/null && return
     ver_flarectl='0.28.0'
     path_temp=$(mktemp -d)
@@ -816,7 +823,7 @@ _detect_langs() {
         if [[ -f "${gitlab_project_dir}"/${f} ]]; then
             case $f in
             Dockerfile)
-                echo "Found Dockerfile, enable docker build and helm deploy. disable rsync+ssh."
+                echo "Found Dockerfile, disable rsync+ssh, enable docker build and helm deploy. "
                 echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
                 if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
                     echo "Force disable docker build and helm deploy, default enable rsync+ssh."
