@@ -536,18 +536,22 @@ _renew_cert() {
 }
 
 _install_python_gitlab() {
-    echo_msg info "install python3 gitlab api..."
-    python3 -m pip list 2>/dev/null | grep -q python-gitlab || python3 -m pip install --user --upgrade python-gitlab
+    if ! python3 -m pip list 2>/dev/null | grep -q python-gitlab; then
+        echo_msg info "install python3 gitlab api..."
+        python3 -m pip install --user --upgrade python-gitlab
+    fi
 }
 
 _install_python_element() {
-    echo_msg info "install python3 element api..."
-    python3 -m pip list 2>/dev/null | grep -q matrix-nio || python3 -m pip install --user --upgrade matrix-nio
+    if ! python3 -m pip list 2>/dev/null | grep -q matrix-nio; then
+        echo_msg info "install python3 element api..."
+        python3 -m pip install --user --upgrade matrix-nio
+    fi
 }
 
 _install_aws() {
-    echo_msg info "install aws cli..."
     command -v aws >/dev/null && return
+    echo_msg info "install aws cli..."
     $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
     ./aws/install --bin-dir "${script_path_bin}" --install-dir "${script_path_data}" --update
@@ -557,8 +561,8 @@ _install_aws() {
 }
 
 _install_kubectl() {
-    echo_msg info "install kubectl..."
     command -v kubectl >/dev/null && return
+    echo_msg info "install kubectl..."
     kube_ver="$($curl_opt --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
     $curl_opt -o "${script_path_bin}/kubectl" "$kube_url"
@@ -566,8 +570,10 @@ _install_kubectl() {
 }
 
 _install_helm() {
-    echo_msg info "install helm..."
-    command -v helm >/dev/null || $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+    if ! command -v helm >/dev/null; then
+        echo_msg info "install helm..."
+        $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+    fi
 }
 
 _install_jmeter() {
@@ -1013,7 +1019,7 @@ main() {
     script_path_builds="${script_path}/builds"
     script_path_data="${script_path}/data"              ## deploy.sh data folder
     script_conf="${script_path_conf}/deploy.conf"       ## deploy to app server 发布到目标服务器的配置信息
-    script_yaml="${script_path_conf}/deploy.yml"       ## deploy to app server 发布到目标服务器的配置信息
+    script_yaml="${script_path_conf}/deploy.yml"        ## deploy to app server 发布到目标服务器的配置信息
     script_env="${script_path_conf}/deploy.env"         ## deploy.sh ENV 发布配置信息(密)
     script_log="${script_path_data}/${script_name}.log" ## deploy.sh run loger
     script_dockerfile="${script_path_conf}/dockerfile"  ## deploy.sh dependent dockerfile
