@@ -942,7 +942,7 @@ _process_args() {
             quiet_flag=
             github_action=1
             ;;
-        --renwe-cert | -r)
+        --renew-cert | -r)
             arg_renew_cert=1 && exec_single=$((exec_single + 1))
             ;;
         --git-clone)
