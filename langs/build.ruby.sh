@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-echo_time_step "[TODO] build ruby..."
+echo_msg step "[TODO] build ruby..."

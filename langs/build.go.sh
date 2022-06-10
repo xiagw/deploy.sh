@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-echo_time_step "golang build..."
+echo_msg step "golang build..."
 go test
 go build -o bin/build

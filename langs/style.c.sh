@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-echo_time_step "[TODO] C code style..."
+echo_msg step "[TODO] C code style..."
