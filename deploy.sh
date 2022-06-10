@@ -322,7 +322,7 @@ _deploy_k8s() {
         $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
         $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
         sleep 3
-        $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" || deploy_result=1
+        $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 90s || deploy_result=1
     fi
 
     ## helm install flyway jobs / helm 安装 flyway 任务
