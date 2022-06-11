@@ -2,7 +2,7 @@
 gitops，密码/密钥/机密信息 （运维部门/管理者）
 
 ### .acme.sh/
-证书配置/dns api/部署程序
+自动更新证书配置/dns api/部署程序
 
 https://github.com/acmesh-official/acme.sh
 

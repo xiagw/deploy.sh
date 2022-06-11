@@ -112,6 +112,9 @@ bash $HOME/runner/bin/helm-new.sh
 ## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
 
+# How to resolve gitlab-runner fail
+If you use Ubuntu, just `rm -f ~/.bash_logout`
+
 # Flow
 ```mermaid
 graph TB;
