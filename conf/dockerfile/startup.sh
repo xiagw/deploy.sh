@@ -7,10 +7,11 @@ trap "exit 0" HUP INT PIPE QUIT TERM
 [ -f /var/www/schedule.sh ] && bash /var/www/schedule.sh &
 [ -f /app/schedule.sh ] && bash /app/schedule.sh &
 
-## start php-fpm
 if [ -f easyswoole ]; then
+    ## start easyswoole
     exec php easyswoole server start -mode=config
 elif command -v php-fpm >/dev/null 2>&1; then
+    ## start php-fpm
     exec php-fpm -F
 else
     echo "No easyswoole/php-fpm found, exit 1."
