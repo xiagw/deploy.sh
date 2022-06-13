@@ -398,6 +398,10 @@ _deploy_rsync_ssh() {
     echo_msg time "end deploy code file [rsync+ssh]."
 }
 
+_deploy_aliyun_oss() {
+    echo_msg step "deploy code file [aliyun oss]..."
+}
+
 _deploy_rsync() {
     echo_msg step "[TODO] deploy code file [rsyncd]..."
 }
