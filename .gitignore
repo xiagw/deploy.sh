@@ -18,5 +18,6 @@ bin/*
 !bin/sendEmail
 !bin/helm-new.sh
 !bin/ssh-port-forward.sh
+!bin/install-gitlab-runner.sh
 ## custome folder
 tmp/

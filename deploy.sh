@@ -508,20 +508,20 @@ _renew_cert() {
         if [ -f "$conf_dns_cloudflare" ]; then
             command -v flarectl || return 1
             source "$conf_dns_cloudflare" "${account##*.}"
-            domain_name="$(flarectl zone list | awk '/active/ {print $3}')"
+            domains="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
         elif [ -f "$conf_dns_aliyun" ]; then
             command -v aliyun || return 1
             source "$conf_dns_aliyun" "${account##*.}"
             aliyun configure set --profile "deploy${account##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
-            domain_name="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
+            domains="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
             dnsType='dns_ali'
         elif [ -f "$conf_dns_qcloud" ]; then
             echo_msg warning "[TODO] use dnspod api."
         fi
         \cp -vf "$account" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
-        for domain in ${domain_name}; do
+        for domain in ${domains}; do
             if [ -d "${acme_home}/$domain" ]; then
                 "${acme_cmd}" --renew -d "${domain}" || true
             else
