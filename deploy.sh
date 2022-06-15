@@ -432,7 +432,7 @@ _deploy_notify_msg() {
 
     msg_body="
 [Gitlab Deploy]
-Project = ${gitlab_project_path}
+Project = ${gitlab_project_path}/${gitlab_project_id}
 Branche = ${gitlab_project_branch}
 Pipeline = ${gitlab_pipeline_id}/JobID=$gitlab_job_id
 Describe = [${gitlab_commit_short_sha}]/${msg_describe}
@@ -489,8 +489,11 @@ _renew_cert() {
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
+    ## content: export CF_Key="sdfsdfsdfljlbjkljlkjsdfoiwje" export CF_Email="xxxx@sss.com"
     conf_dns_cloudflare="${script_path_data}/.cloudflare.conf"
+    ## export Ali_Key="sdfsdfsdfljlbjkljlkjsdfoiwje" export Ali_Secret="jlsdflanljkljlfdsaklkjflsa"
     conf_dns_aliyun="${script_path_data}/.aliyun.dnsapi.conf"
+    ## content: DP_Id="1234" DP_Key="sADDsdasdgdsf"
     conf_dns_qcloud="${script_path_data}/.qcloud.dnspod.conf"
 
     ## install acme.sh / 安装 acme.sh
@@ -781,7 +784,7 @@ _setup_deploy_conf() {
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
         echo_msg warning "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
-        echo_msg error "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
+        echo_msg question "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
         [ -d "$HOME/.ssh" ] || ln -sf "$path_conf_ssh" "$HOME/"
     fi
@@ -813,11 +816,11 @@ _setup_gitlab_vars() {
     gitlab_project_branch=${gitlab_project_branch:-develop}
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
     if [[ -z "$gitlab_commit_short_sha" ]]; then
-        [[ "${github_action:-0}" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-7d30547}
+        [[ "${github_action:-0}" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-1234567}
         [[ "${debug_on:-0}" -eq 1 ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
     fi
     # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
-    # gitlab_project_id=${CI_PROJECT_ID:-1234}
+    gitlab_project_id=${CI_PROJECT_ID:-1234}
     # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
     gitlab_pipeline_id=${CI_PIPELINE_ID:-3456}
     # read -rp "Enter gitlab job id: " -e -i '5678' gitlab_job_id
@@ -1060,6 +1063,7 @@ main() {
     else
         curl_opt="curl -x$ENV_HTTP_PROXY -L"
     fi
+    ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
         echo_msg question "Found default username/password, skip docker login/push image/deploy k8s..."
         demo_mode=1
