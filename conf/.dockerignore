@@ -30,6 +30,7 @@ docs/
 !docs/nginx
 !docs/run.sh
 !docs/startup.sh
+!docs/settings.xml
 LICENSE
 tests/
 
