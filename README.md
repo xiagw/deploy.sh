@@ -1,6 +1,6 @@
 # deploy.sh for CI/CD
 
-# 中文 [README_zh.md](docs/README_zh.md)
+# 中文 [README_zh.md](README_zh.md)
 
 # Description
 deploy.sh is a general CI/CD program, better than "Buddy".

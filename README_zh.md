@@ -1,6 +1,6 @@
 # deploy.sh for CI/CD
 
-# 英文 [README.md](../README.md)
+# 英文 [README.md](README.md)
 
 # 描述信息
 deploy.sh 是一个通用的持续集成/持续发布系统，胜过"Buddy"。
