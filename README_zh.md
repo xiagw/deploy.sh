@@ -50,7 +50,6 @@ $HOME/runner/deploy.sh
 
 ```
 ## 如果您的应用程序 git 仓库不存在，使用 [deploy.sh] 克隆 git 仓库
-mkdir ~/src && cd ~/src/
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
 ### 可选方式 [2], 通过 crontab 或 Screen/tmux 等方式全自动运行程序
