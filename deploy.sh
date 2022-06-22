@@ -136,6 +136,8 @@ _scan_ZAP() {
 
 _scan_vulmap() {
     echo_msg step "[TODO] scan [vulmap]..."
+    # https://github.com/zhzyker/vulmap
+    # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
 }
 
 _deploy_flyway_docker() {
@@ -260,10 +262,10 @@ _deploy_k8s() {
     ## finding helm files folder / 查找 helm 文件目录
     if [ -d "${script_path_data}/helm/${gitlab_project_name}" ]; then
         path_helm="${script_path_data}/helm/${gitlab_project_name}"
-        echo "Found $path_helm"
     elif [ -d "$gitlab_project_dir/helm" ]; then
         path_helm="$gitlab_project_dir/helm"
-        echo "Found $path_helm"
+    elif [ -d "$gitlab_project_dir/docs/helm" ]; then
+        path_helm="$gitlab_project_dir/docs/helm"
     fi
 
     ## update gitops files / 更新 gitops 文件
@@ -299,17 +301,18 @@ _deploy_k8s() {
     fi
 
     ## Custom deployment method / 自定义部署方式
-    if [ -f "$script_path_bin/custom-deploy.sh" ]; then
+    if [ -f "$script_path_data_bin/custom-deploy.sh" ]; then
         echo_msg time "custom deploy..."
         docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
         docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" || echo_msg error "got an error here, probably caused by network..."
-        source "$script_path_bin/custom-deploy.sh" "$env_namespace" "${gitlab_project_name}" "${image_tag}"
+        source "$script_path_data_bin/custom-deploy.sh" "$env_namespace" "${gitlab_project_name}" "${image_tag}"
         echo_msg time "end custom deploy."
     fi
     ## helm install / helm 安装
     if [ -z "$path_helm" ]; then
         echo_msg question "Not found helm files, skip deploy k8s."
     else
+        echo "Found helm files: $path_helm"
         set -x
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
@@ -446,8 +449,8 @@ _deploy_notify() {
     echo_msg step "deploy notify message [chat/email]..."
 
     _deploy_notify_msg
-
     if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
+        ## work chat / 发送至 企业微信
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
         curl -s "$weixin_api" -H 'Content-Type: application/json' \
             -d "
@@ -458,15 +461,16 @@ _deploy_notify() {
             }
         }"
     elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
+        ## Telegram / 发送至 Telegram
         telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendMessage"
         # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
         $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$telegram_api_msg"
-    elif [[ "${PIPELINE_TEMP_PASS:-0}" -eq 1 ]]; then
-        python3 "$script_path_bin/element-up.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
-        python3 "$script_path_bin/element.py" "$msg_body"
+        ## element / 发送至 element
+        python3 "$script_path_data_bin/element.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_EMAIL:-0}" -eq 1 ]]; then
+        ## email / 发送至 email
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
         "$script_path_bin/sendEmail" \
@@ -562,10 +566,10 @@ _install_aws() {
     echo_msg info "install aws cli..."
     $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
-    ./aws/install --bin-dir "${script_path_bin}" --install-dir "${script_path_data}" --update
+    ./aws/install --bin-dir "${script_path_data_bin}" --install-dir "${script_path_data}" --update
     ## install eksctl / 安装 eksctl
     $curl_opt "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    mv /tmp/eksctl "${script_path_bin}/"
+    mv /tmp/eksctl "${script_path_data_bin}/"
 }
 
 _install_kubectl() {
@@ -573,8 +577,8 @@ _install_kubectl() {
     echo_msg info "install kubectl..."
     kube_ver="$($curl_opt --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    $curl_opt -o "${script_path_bin}/kubectl" "$kube_url"
-    chmod +x "${script_path_bin}/kubectl"
+    $curl_opt -o "${script_path_data_bin}/kubectl" "$kube_url"
+    chmod +x "${script_path_data_bin}/kubectl"
 }
 
 _install_helm() {
@@ -605,12 +609,12 @@ _install_jmeter() {
 }
 
 _install_flarectl() {
-    echo_msg info "install flarectl"
     command -v flarectl >/dev/null && return
+    echo_msg info "install flarectl"
     ver_flarectl='0.28.0'
     path_temp=$(mktemp -d)
     $curl_opt -o "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver_flarectl}/flarectl_${ver_flarectl}_linux_amd64.tar.xz
-    tar xf "$path_temp"/flarectl.zip -C "${script_path_bin}/"
+    tar xf "$path_temp"/flarectl.zip -C "${script_path_data_bin}/"
 }
 
 _detect_os() {
@@ -1024,6 +1028,7 @@ main() {
     script_path="$(dirname "$(readlink -f "$0")")"
     script_path_conf="${script_path}/conf"
     script_path_bin="${script_path}/bin"
+    script_path_data_bin="${script_path}/data/bin"
     script_path_builds="${script_path}/builds"
     script_path_data="${script_path}/data"              ## deploy.sh data folder
     script_conf="${script_path_conf}/deploy.conf"       ## deploy to app server 发布到目标服务器的配置信息
@@ -1039,7 +1044,7 @@ main() {
 
     PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
     PATH="$PATH:$script_path_data/jdk/bin:$script_path_data/jmeter/bin:$script_path_data/ant/bin:$script_path_data/maven/bin"
-    PATH="$PATH:$script_path_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
+    PATH="$PATH:$script_path_bin:$script_path_data_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
     docker_run="docker run --interactive --rm -u 1000:1000"
