@@ -1,0 +1,19 @@
+#!/bin/bash
+
+main() {
+    select ssh_host in $(awk 'NR>1' "$HOME/.ssh/config" | awk '/^Host/ {print $2}') quit; do
+        case "${ssh_host:?undefine}" in
+        'quit')
+            break
+            ;;
+        *)
+            [ -n "${1}" ] && ssh_host="${1}@${ssh_host}"
+            ssh -A -t "${ssh_host}" byobu || ssh -A "${ssh_host}"
+            break
+            ;;
+        esac
+        break
+    done
+}
+
+main "$@"
