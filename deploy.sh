@@ -260,12 +260,12 @@ _deploy_k8s() {
     ## Convert to lower case / 转换为小写
     helm_release="${helm_release,,}"
     ## finding helm files folder / 查找 helm 文件目录
-    if [ -d "${script_path_data}/helm/${gitlab_project_name}" ]; then
-        path_helm="${script_path_data}/helm/${gitlab_project_name}"
-    elif [ -d "$gitlab_project_dir/helm" ]; then
+    if [ -d "$gitlab_project_dir/helm" ]; then
         path_helm="$gitlab_project_dir/helm"
     elif [ -d "$gitlab_project_dir/docs/helm" ]; then
         path_helm="$gitlab_project_dir/docs/helm"
+    elif [ -d "${script_path_data}/helm/${gitlab_project_name}" ]; then
+        path_helm="${script_path_data}/helm/${gitlab_project_name}"
     fi
 
     ## update gitops files / 更新 gitops 文件
