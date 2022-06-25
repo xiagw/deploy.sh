@@ -834,6 +834,17 @@ _setup_gitlab_vars() {
     gitlab_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}' || true)"
     gitlab_username="${gitlab_username:-root}"
     env_namespace=$gitlab_project_branch
+    if [[ $run_crontab -eq 1 ]]; then
+        cron_save_file="$(find ${script_path_data} -name "crontab.${gitlab_project_id}.*" | head -n 1)"
+        cron_save_id="${cron_save_file##*.}"
+        if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
+            echo warning "no code change found, skip."
+            exit
+        else
+            rm -f "${script_path_data}/crontab.${gitlab_project_id}".*
+            touch "${script_path_data}/crontab.${gitlab_project_id}.${gitlab_commit_short_sha}"
+        fi
+    fi
 }
 
 _detect_langs() {
@@ -934,6 +945,7 @@ Parameters:
     --test-unit              Run unit tests.
     --test-function          Run function tests.
     --debug                  Run with debug.
+    --cron                   Run on crontab.
 "
 }
 
@@ -947,6 +959,9 @@ _process_args() {
             set -x
             debug_on=1
             quiet_flag=
+            ;;
+        --cron)
+            run_crontab=1
             ;;
         --github-action)
             set -x
