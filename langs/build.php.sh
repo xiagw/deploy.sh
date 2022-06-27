@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # shellcheck disable=2154,2034
 
-file_lang="${gitlab_project_dir}/composer.json"
-string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
-if grep -q "$string_grep" "${script_log}"; then
-    echo "The same checksum for ${file_lang}, skip composer install."
+file_json="${gitlab_project_dir}/composer.json"
+file_json_md5="$gitlab_project_path/$env_namespace/$(md5sum "$file_json" | awk '{print $1}')"
+if grep -q "$file_json_md5" "${script_log}"; then
+    echo "The same checksum for ${file_json}, skip composer install."
 else
-    echo "New checksum for ${file_lang}, run composer install."
+    echo "New checksum for ${file_json}, run composer install."
     COMPOSER_INSTALL=1
 fi
 if [ ! -d "${gitlab_project_dir}/vendor" ]; then
@@ -30,7 +30,7 @@ if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
     # rm -rf "${gitlab_project_dir}"/vendor
     # shellcheck disable=2015
     $docker_run -v "$gitlab_project_dir:/app" -w /app "${build_image_from:-composer}" bash -c "composer install ${quiet_flag}" &&
-        echo "$string_grep ${file_lang}" >>"${script_log}" || true
+        echo "$file_json_md5 ${file_json}" >>"${script_log}" || true
     [ -d "$gitlab_project_dir"/vendor ] && chown -R 1000:1000 "$gitlab_project_dir"/vendor
     echo_msg time "end php composer install."
 else

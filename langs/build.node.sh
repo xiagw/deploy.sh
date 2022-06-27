@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # shellcheck disable=2154,2034
 
-path_for_rsync='dist/'
-file_lang="${gitlab_project_dir}/package.json"
-string_grep="$gitlab_project_path/$env_namespace/$(md5sum "$file_lang" | awk '{print $1}')"
-if grep -q "$string_grep" "${script_log}"; then
-    echo "The same checksum for ${file_lang}, skip yarn install."
+path_rsync_src='dist/'
+file_json="${gitlab_project_dir}/package.json"
+file_json_md5="$gitlab_project_path/$env_namespace/$(md5sum "$file_json" | awk '{print $1}')"
+if grep -q "$file_json_md5" "${script_log}"; then
+    echo "The same checksum for ${file_json}, skip yarn install."
 else
-    echo "New checksum for ${file_lang}, run yarn install."
+    echo "New checksum for ${file_json}, run yarn install."
     YARN_INSTALL=true
 fi
 if [ ! -d "${gitlab_project_dir}/node_modules" ]; then
@@ -21,7 +21,8 @@ echo_msg step "node build [yarn]..."
 [[ "${github_action:-0}" -eq 1 ]] && return 0
 
 if ! docker images | grep -q 'deploy/node'; then
-    DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/node --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+    DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/node \
+        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
         -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
 fi
 
