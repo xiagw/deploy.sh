@@ -1,6 +1,10 @@
 #!/bin/bash
 
 main() {
+    if [ ! -f "$HOME/.ssh/config" ]; then
+        echo "Not found $HOME/.ssh/config. exit."
+        return
+    fi
     select ssh_host in $(awk 'NR>1' "$HOME/.ssh/config" | awk '/^Host/ {print $2}') quit; do
         case "${ssh_host:?undefine}" in
         'quit')
