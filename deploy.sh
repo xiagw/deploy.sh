@@ -249,6 +249,26 @@ _push_image() {
     echo_msg time "end push image [docker]."
 }
 
+_deploy_single_host() {
+    echo_msg step "deploy single host [docker-compose]..."
+    while read -r line; do
+        # shellcheck disable=2116
+        read -ra array <<<"$(echo "$line")"
+        conf_project_name=${array[0]}
+        # conf_namespace=${array[1]}
+        conf_ssh_host=${array[2]}
+        conf_ssh_port=${array[3]}
+        # conf_rsync_src=${array[4]}
+        # conf_rsync_dest=${array[5]}
+        # conf_db_user=${array[6]}
+        # conf_db_host=${array[7]}
+        # conf_db_name=${array[8]}
+        ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
+        echo "${conf_ssh_host:?if stop here, check runner/conf/deploy.conf}"
+        ssh -n -p $conf_ssh_port $conf_ssh_host "cd ~/docker/laradock && docker compose up -d $conf_project_name"
+    done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf")
+}
+
 _deploy_k8s() {
     echo_msg step "deploy k8s [helm]..."
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
@@ -865,6 +885,10 @@ _detect_langs() {
                     exec_deploy_k8s=1
                     exec_deploy_rsync_ssh=0
                     build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}" | head -n 1)"
+                    if [[ -f "${gitlab_project_dir}/docker-compose.yml" || -f "${gitlab_project_dir}/docker-compose.yaml" ]]; then
+                        exec_deploy_k8s=0
+                        exec_deploy_single_host=1
+                    fi
                 fi
                 ;;
             composer.json)
@@ -1178,6 +1202,7 @@ main() {
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
     # [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
+    [[ "${exec_deploy_single_host:-0}" -eq 1 ]] && _deploy_single_host
     [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
 
     ## deploy with rsync / 使用 rsync 发布
