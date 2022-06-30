@@ -533,15 +533,21 @@ _renew_cert() {
     for account in "${acme_home}/"account.conf.*; do
         [ -f "$account" ] || continue
         if [ -f "$conf_dns_cloudflare" ]; then
-            command -v flarectl || return 1
+            if ! command -v flarectl; then
+                echo_msg warning "command not found: flarectl "
+                return 1
+            fi
             source "$conf_dns_cloudflare" "${account##*.}"
             domains="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
         elif [ -f "$conf_dns_aliyun" ]; then
-            command -v aliyun || return 1
+            if ! command -v aliyun; then
+                echo_msg warning "command not found: aliyun "
+                return 1
+            fi
             source "$conf_dns_aliyun" "${account##*.}"
             aliyun configure set --profile "deploy${account##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
-            domains="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed '1,2d')"
+            domains="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
             dnsType='dns_ali'
         elif [ -f "$conf_dns_qcloud" ]; then
             echo_msg warning "[TODO] use dnspod api."
@@ -579,6 +585,14 @@ _install_python_element() {
         echo_msg info "install python3 element api..."
         python3 -m pip install --user --upgrade matrix-nio
     fi
+}
+
+_install_aliyun_cli() {
+    echo_msg info "install aliyun cli..."
+    curl -Lo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
+    tar -C /tmp -zxf /tmp/aliyun.tgz
+    # install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    install -m 0755 /tmp/aliyun "${script_path_data_bin}/aliyun"
 }
 
 _install_aws() {
@@ -1117,6 +1131,7 @@ main() {
 
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && _install_aws
+    [[ "${ENV_INSTALL_ALIYUN}" == 'true' ]] && _install_aliyun_cli
     [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && _install_kubectl
     [[ "${ENV_INSTALL_HELM}" == 'true' ]] && _install_helm
     [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && _install_python_element
