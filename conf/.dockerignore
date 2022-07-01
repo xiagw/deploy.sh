@@ -71,6 +71,3 @@ package-lock.json
 logs
 ## Dependency directories
 # node_modules/
-
-core
-core.*
