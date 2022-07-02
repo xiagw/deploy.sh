@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -xe
+# set -xe
 
 script_path="$(dirname "$(readlink -f "$0")")"
 cd "$script_path" || exit 1
