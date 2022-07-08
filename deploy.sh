@@ -595,6 +595,16 @@ _install_aliyun_cli() {
     install -m 0755 /tmp/aliyun "${script_path_data_bin}/aliyun"
 }
 
+_install_aliyun_terraform() {
+    echo_msg info "install terraform..."
+    sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
+        sudo tee /etc/apt/sources.list.d/hashicorp.list
+    sudo apt update && sudo apt install -y terraform
+    # terraform version
+}
+
 _install_aws() {
     command -v aws >/dev/null && return
     echo_msg info "install aws cli..."
@@ -1132,6 +1142,7 @@ main() {
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && _install_aws
     [[ "${ENV_INSTALL_ALIYUN}" == 'true' ]] && _install_aliyun_cli
+    [[ "${ENV_INSTALL_TERRAFORM}" == 'true' ]] && _install_aliyun_terraform
     [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && _install_kubectl
     [[ "${ENV_INSTALL_HELM}" == 'true' ]] && _install_helm
     [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && _install_python_element
