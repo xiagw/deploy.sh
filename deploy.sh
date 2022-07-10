@@ -1175,7 +1175,7 @@ main() {
     build_langs_sh="$script_path/langs/build.${project_lang}.sh"
 
     ################################################################################
-    ## exec single task / 执行单个任务
+    ## exec single task / 执行单个任务，适用于gitlab-ci/jenkins等自动化部署工具的单个job任务执行
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
