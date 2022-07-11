@@ -265,7 +265,7 @@ _deploy_single_host() {
         # conf_db_name=${array[8]}
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
         echo "${conf_ssh_host:?if stop here, check runner/conf/deploy.conf}"
-        ssh -n -p $conf_ssh_port $conf_ssh_host "cd ~/docker/laradock && docker compose up -d $conf_project_name"
+        ssh -n -p $conf_ssh_port $conf_ssh_host "cd ~/docker/laradock && docker pull "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" && docker compose up -d $conf_project_name"
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf")
 }
 
@@ -1126,10 +1126,9 @@ main() {
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$script_env"
     ## curl use proxy / curl 使用代理
-    if [ -z "$ENV_HTTP_PROXY" ]; then
-        curl_opt="curl -L"
-    else
-        curl_opt="curl -x$ENV_HTTP_PROXY -L"
+    curl_opt="curl -L"
+    if [ -n "$ENV_HTTP_PROXY" ]; then
+        curl_opt="$curl_opt -x$ENV_HTTP_PROXY"
     fi
     ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
@@ -1205,7 +1204,9 @@ main() {
     echo_msg step "code style..."
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && exec_code_style=1
-    [[ "${exec_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
+    if [[ "${exec_code_style:-0}" -eq 1 && -f "$code_style_sh" ]]; then
+        source "$code_style_sh"
+    fi
 
     _test_unit
 
