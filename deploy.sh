@@ -251,6 +251,8 @@ _push_image() {
 
 _deploy_single_host() {
     echo_msg step "deploy single host [docker-compose]..."
+    docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
+    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
     while read -r line; do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
@@ -636,14 +638,26 @@ _install_jmeter() {
     echo_msg info "install jmeter..."
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
+
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
     if ! command -v java >/dev/null; then
-        {
-            echo 6
-            echo 70
-        } | $exec_sudo apt-get install -y openjdk-16-jdk
+        export DEBIAN_FRONTEND=noninteractive
+        export DEBCONF_NONINTERACTIVE_SEEN=true
+        export TIME_ZOME=Asia/Shanghai
+        truncate -s0 /tmp/preseed.cfg
+        echo "tzdata tzdata/Areas select Asia" >>/tmp/preseed.cfg
+        echo "tzdata tzdata/Zones/Asia select Shanghai" >>/tmp/preseed.cfg
+        debconf-set-selections /tmp/preseed.cfg
+        rm -f /etc/timezone /etc/localtime
+        $exec_sudo apt-get update -y
+        $exec_sudo apt-get install -y tzdata
+        rm -rf /tmp/preseed.cfg
+        unset DEBIAN_FRONTEND DEBCONF_NONINTERACTIVE_SEEN TIME_ZOME
+        ## install jdk
+        $exec_sudo apt-get install -y openjdk-16-jdk
     fi
-    $curl_opt -o "$path_temp"/jmeter.zip https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip
+    url_jmeter="https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
+    $curl_opt --retry -C - -o "$path_temp"/jmeter.zip $url_jmeter
     (
         cd "$script_path_data"
         unzip "$path_temp"/jmeter.zip
@@ -893,61 +907,60 @@ _setup_gitlab_vars() {
 
 _detect_langs() {
     for f in Dockerfile composer.json package.json pom.xml requirements.txt README.md readme.md README.txt readme.txt; do
-        if [[ -f "${gitlab_project_dir}"/${f} ]]; then
-            case $f in
-            Dockerfile)
-                echo "Found Dockerfile, disable rsync+ssh, enable docker build and helm deploy. "
-                echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
-                if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
-                    echo "Force disable docker build and helm deploy, default enable rsync+ssh."
-                    project_docker=0
-                    exec_deploy_rsync_ssh=1
-                else
-                    project_docker=1
-                    exec_build_image=1
-                    exec_push_image=1
-                    exec_deploy_k8s=1
-                    exec_deploy_rsync_ssh=0
-                    build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}" | head -n 1)"
-                    if [[ -f "${gitlab_project_dir}/docker-compose.yml" || -f "${gitlab_project_dir}/docker-compose.yaml" ]]; then
-                        exec_deploy_k8s=0
-                        exec_deploy_single_host=1
-                    fi
+        [[ -f "${gitlab_project_dir}"/${f} ]] || continue
+        case $f in
+        Dockerfile)
+            echo "Found Dockerfile, disable rsync+ssh, enable docker build and helm deploy. "
+            echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
+            if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
+                echo "Force disable docker build and helm deploy, default enable rsync+ssh."
+                project_docker=0
+                exec_deploy_rsync_ssh=1
+            else
+                project_docker=1
+                exec_build_image=1
+                exec_push_image=1
+                exec_deploy_k8s=1
+                exec_deploy_rsync_ssh=0
+                build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}" | head -n 1)"
+                if [[ -f "${gitlab_project_dir}/docker-compose.yml" || -f "${gitlab_project_dir}/docker-compose.yaml" ]]; then
+                    exec_deploy_k8s=0
+                    exec_deploy_single_host=1
                 fi
-                ;;
-            composer.json)
-                echo "Found composer.json, detect lang: php"
-                project_lang=php
-                exec_build_langs=1
-                break
-                ;;
-            package.json)
-                echo "Found package.json, detect lang: node"
-                project_lang=node
-                exec_build_langs=1
-                break
-                ;;
-            pom.xml)
-                echo "Found pom.xml, detect lang: java"
-                project_lang=java
-                exec_build_langs=1
-                break
-                ;;
-            requirements.txt)
-                echo "Found requirements.txt, detect lang: python"
-                project_lang=python
-                break
-                ;;
-            *)
-                project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
-                project_lang=${project_lang// /}
-                project_lang=${project_lang,,}
-                project_lang=${project_lang:-other}
-                echo "Detect lang: $project_lang"
-                break
-                ;;
-            esac
-        fi
+            fi
+            ;;
+        composer.json)
+            echo "Found composer.json, detect lang: php"
+            project_lang=php
+            exec_build_langs=1
+            break
+            ;;
+        package.json)
+            echo "Found package.json, detect lang: node"
+            project_lang=node
+            exec_build_langs=1
+            break
+            ;;
+        pom.xml)
+            echo "Found pom.xml, detect lang: java"
+            project_lang=java
+            exec_build_langs=1
+            break
+            ;;
+        requirements.txt)
+            echo "Found requirements.txt, detect lang: python"
+            project_lang=python
+            break
+            ;;
+        *)
+            project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
+            project_lang=${project_lang// /}
+            project_lang=${project_lang,,}
+            project_lang=${project_lang:-other}
+            echo "Detect lang: $project_lang"
+            break
+            ;;
+        esac
     done
 }
 
