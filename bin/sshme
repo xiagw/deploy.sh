@@ -5,8 +5,8 @@ main() {
         echo "Not found $HOME/.ssh/config. exit."
         return
     fi
-    select ssh_host in $(awk 'NR>1' "$HOME/.ssh/config" | awk '/^Host/ {print $2}') quit; do
-        case "${ssh_host:?undefine}" in
+    select ssh_host in $(awk 'NR>1 && /^Host/ {print $2}') quit; do
+        case "${ssh_host:-quit}" in
         'quit')
             break
             ;;
