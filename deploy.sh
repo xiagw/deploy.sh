@@ -982,6 +982,14 @@ _git_clone_repo() {
     fi
 }
 
+_create_k8s() {
+    ## create k8s with terraform
+    if [ -d "$script_path_data/terraform" ]; then
+        echo "create k8s [terraform]..."
+        cd "$script_path_data/terraform" && terraform init && terraform apply -auto-approve
+    fi
+}
+
 _usage() {
     echo "
 Usage: $0 [parameters ...]
@@ -1007,6 +1015,7 @@ Parameters:
     --test-function          Run function tests.
     --debug                  Run with debug.
     --cron                   Run on crontab.
+    --create-k8s           create k8s.
 "
 }
 
@@ -1023,6 +1032,9 @@ _process_args() {
             ;;
         --cron)
             run_crontab=1
+            ;;
+        --create-k8s)
+            create_k8s=1
             ;;
         --github-action)
             set -x
@@ -1162,6 +1174,9 @@ main() {
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && _install_jmeter
     # [[ "${ENV_INSTALL_ACMESH}" == 'true' ]] && _install_acme_sh
     [[ "${ENV_INSTALL_FLARECTL}" == 'true' ]] && _install_flarectl
+
+    ## create k8s
+    [[ "$create_k8s" -eq 1 ]] && _create_k8s
 
     ## clean up disk space / 清理磁盘空间
     _clean_disk
