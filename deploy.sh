@@ -987,6 +987,7 @@ _create_k8s() {
     if [ -d "$script_path_data/terraform" ]; then
         echo "create k8s [terraform]..."
         cd "$script_path_data/terraform" && terraform init && terraform apply -auto-approve
+        exit $?
     fi
 }
 
@@ -998,8 +999,6 @@ Parameters:
     -h, --help               Show this help message.
     -v, --version            Show version info.
     -r, --renew-cert         Renew all the certs.
-    --git-clone  https://xxx.com/yyy/zzz.git      Clone git repo url, clone to builds/zzz.git
-    --git-clone-branch  [dev|main] default \"main\"      git branch name
     --code-style             Check code style.
     --code-quality           Check code quality.
     --build-langs            Build all the languages.
@@ -1015,7 +1014,9 @@ Parameters:
     --test-function          Run function tests.
     --debug                  Run with debug.
     --cron                   Run on crontab.
-    --create-k8s           create k8s.
+    --create-k8s             Create k8s with terraform.
+    --git-clone https://xxx.com/yyy/zzz.git      Clone git repo url, clone to builds/zzz.git
+    --git-clone-branch [dev|main] default \"main\"      git branch name
 "
 }
 
