@@ -1152,9 +1152,8 @@ main() {
     source "$script_env"
     ## curl use proxy / curl 使用代理
     curl_opt="curl -L"
-    if [ -n "$ENV_HTTP_PROXY" ]; then
-        curl_opt="$curl_opt -x$ENV_HTTP_PROXY"
-    fi
+    [ -n "$ENV_HTTP_PROXY" ] && curl_opt="$curl_opt -x$ENV_HTTP_PROXY"
+
     ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
         echo_msg question "Found default username/password, skip docker login/push image/deploy k8s..."
