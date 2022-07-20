@@ -964,6 +964,15 @@ _detect_langs() {
     done
 }
 
+_svn_co_repo() {
+    if [[ ! -d "$script_path_builds" ]]; then
+        echo "not found $script_path_builds, create it..."
+        mkdir -p builds
+    fi
+    local path_git_clone="$script_path_builds/${arg_svn_co_url##*/}"
+    echo 'coming soon...'
+}
+
 _git_clone_repo() {
     if [[ ! -d "$script_path_builds" ]]; then
         echo "not found $script_path_builds, create it..."
@@ -1045,6 +1054,11 @@ _process_args() {
             ;;
         --renew-cert | -r)
             arg_renew_cert=1 && exec_single=$((exec_single + 1))
+            ;;
+        --svn-co)
+            arg_svn_co=1
+            arg_svn_co_url="${2:?empty svn url}"
+            shift
             ;;
         --git-clone)
             arg_git_clone=1
@@ -1146,6 +1160,9 @@ main() {
 
     ## git clone repo / 克隆 git 仓库
     [[ "${arg_git_clone:-0}" -eq 1 ]] && _git_clone_repo
+
+    ## svn checkout repo / 克隆 svn 仓库
+    [[ "${arg_svn_co:-0}" -eq 1 ]] && _svn_co_repo
 
     ## run deploy.sh by hand / 手动执行 deploy.sh
     _setup_gitlab_vars
