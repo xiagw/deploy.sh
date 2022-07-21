@@ -800,7 +800,10 @@ _preprocess_file() {
     fi
     ## backend (PHP/Java/Python) project_conf files
     path_project_conf="${script_path_data}/project_conf/${env_namespace}.${gitlab_project_name}/"
-    [ -d "$path_project_conf" ] && rsync -av "$path_project_conf" "${gitlab_project_dir}/"
+    if [ -d "$path_project_conf" ]; then
+        echo_msg warning "found and rsync custom config files by devops."
+        rsync -av "$path_project_conf" "${gitlab_project_dir}/"
+    fi
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## cert file for nginx
