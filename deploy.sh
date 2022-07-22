@@ -549,7 +549,7 @@ _renew_cert() {
             fi
             source "$conf_dns_aliyun" "${account##*.}"
             aliyun configure set --profile "deploy${account##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
-            domains="$(aliyun domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
+            domains="$(aliyun --profile "deploy${account##*.}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
             dnsType='dns_ali'
         elif [ -f "$conf_dns_qcloud" ]; then
             echo_msg warning "[TODO] use dnspod api."
