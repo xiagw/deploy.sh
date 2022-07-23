@@ -34,6 +34,21 @@ DNS api config file, [cloudflare]
 ### .aliyun.dnsapi.conf
 DNS api config file, [aliyun]
 
+```
+# .aliyun.dnsapi.conf example:
+case "$1" in
+1)
+    export Ali_Key="LTAIxxxxxxxxxxxxxxxxxxxxx"
+    export Ali_Secret="yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+    export Ali_region='cn-hangzhou'
+    ;;
+2)
+    export Ali_Key="LTAIxxxxxxxxxxxxxxxxxxxxx"
+    export Ali_Secret="yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+    export Ali_region='cn-hangzhou'
+    ;;
+esac
+```
 ### .qcloud.dnspod.conf
 DNS api config file, [qcloud/dnspod]
 
