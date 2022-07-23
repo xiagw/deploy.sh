@@ -558,8 +558,10 @@ _renew_cert() {
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
             if [ -d "${acme_home}/$domain" ]; then
+                ## renew cert / 续签证书
                 "${acme_cmd}" --renew -d "${domain}" || true
             else
+                ## create cert / 创建证书
                 "${acme_cmd}" --issue --dns $dnsType -d "$domain" -d "*.$domain"
             fi
             "${acme_cmd}" --install-cert -d "$domain" --key-file "$acme_cert/$domain".key --fullchain-file "$acme_cert/$domain".crt
