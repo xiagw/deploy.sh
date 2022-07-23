@@ -37,11 +37,13 @@ DNS api config file, [aliyun]
 ```
 # .aliyun.dnsapi.conf example:
 case "$1" in
+# ~/acme.sh/account.conf.1
 1)
     export Ali_Key="LTAIxxxxxxxxxxxxxxxxxxxxx"
     export Ali_Secret="yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
     export Ali_region='cn-hangzhou'
     ;;
+# ~/acme.sh/account.conf.2
 2)
     export Ali_Key="LTAIxxxxxxxxxxxxxxxxxxxxx"
     export Ali_Secret="yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
