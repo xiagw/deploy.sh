@@ -896,8 +896,7 @@ _setup_gitlab_vars() {
     gitlab_job_id=${CI_JOB_ID:-5678}
     # read -rp "Enter gitlab user id: " -e -i '1' gitlab_user_id
     gitlab_user_id=${GITLAB_USER_ID:-1}
-    gitlab_username="$(gitlab -v user get --id "${gitlab_user_id}" | awk '/^name:/ {print $2}' || true)"
-    gitlab_username="${gitlab_username:-root}"
+    gitlab_username="${GITLAB_USER_LOGIN:-unknown}"
     env_namespace=$gitlab_project_branch
     if [[ $run_crontab -eq 1 ]]; then
         cron_save_file="$(find ${script_path_data} -name "crontab.${gitlab_project_id}.*" | head -n 1)"
