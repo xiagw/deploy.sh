@@ -578,20 +578,21 @@ _renew_cert() {
 }
 
 _install_python_gitlab() {
-    if ! python3 -m pip list 2>/dev/null | grep -q python-gitlab; then
-        echo_msg info "install python3 gitlab api..."
-        python3 -m pip install --user --upgrade python-gitlab
-    fi
+    python3 -m pip list 2>/dev/null | grep -q python-gitlab && return
+    echo_msg info "install python3 gitlab api..."
+    python3 -m pip install --user --upgrade python-gitlab
+
 }
 
 _install_python_element() {
-    if ! python3 -m pip list 2>/dev/null | grep -q matrix-nio; then
-        echo_msg info "install python3 element api..."
-        python3 -m pip install --user --upgrade matrix-nio
-    fi
+    python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
+    echo_msg info "install python3 element api..."
+    python3 -m pip install --user --upgrade matrix-nio
+
 }
 
 _install_aliyun_cli() {
+    command -v aliyun >/dev/null && return
     echo_msg info "install aliyun cli..."
     curl -Lo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
     tar -C /tmp -zxf /tmp/aliyun.tgz
@@ -600,6 +601,7 @@ _install_aliyun_cli() {
 }
 
 _install_terraform() {
+    command -v terraform >/dev/null && return
     echo_msg info "install terraform..."
     sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
@@ -630,13 +632,13 @@ _install_kubectl() {
 }
 
 _install_helm() {
-    if ! command -v helm >/dev/null; then
-        echo_msg info "install helm..."
-        $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
-    fi
+    command -v helm >/dev/null && return
+    echo_msg info "install helm..."
+    $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
 _install_jmeter() {
+    command -v jmeter >/dev/null && return
     echo_msg info "install jmeter..."
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
@@ -1194,7 +1196,6 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && _install_python_element
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && _install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && _install_jmeter
-    # [[ "${ENV_INSTALL_ACMESH}" == 'true' ]] && _install_acme_sh
     [[ "${ENV_INSTALL_FLARECTL}" == 'true' ]] && _install_flarectl
 
     ## create k8s
