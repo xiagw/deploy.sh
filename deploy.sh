@@ -227,6 +227,13 @@ _build_image_docker() {
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
+
+    ## docker push to ttl.sh
+    image_uuid="ttl.sh/$(uuidgen):1h"
+    docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" ${image_uuid}
+    echo_msg warning "Notice (local): docker push $image_uuid"
+    echo_msg warning "Notice (remote): docker pull $image_uuid"
+    echo_msg warning "Notice (remote): docker tag $image_uuid run/example"
     echo_msg time "end build image [docker]."
 }
 
