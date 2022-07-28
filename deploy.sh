@@ -231,9 +231,9 @@ _build_image_docker() {
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
     docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" ${image_uuid}
-    echo_msg warning "Notice (local): docker push $image_uuid"
-    echo_msg warning "Notice (remote): docker pull $image_uuid"
-    echo_msg warning "Notice (remote): docker tag $image_uuid run/example"
+    echo_msg warning "run on (gitlab): docker push $image_uuid"
+    echo_msg warning "run on (remote): docker pull $image_uuid; docker tag $image_uuid deploy/app1"
+
     echo_msg time "end build image [docker]."
 }
 
