@@ -26,6 +26,7 @@ if ! docker images | grep -q 'deploy/node'; then
         -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
 fi
 
+## exist custome build? / 自定义构建？
 if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
     $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash custom.build.sh
     return
@@ -33,7 +34,7 @@ fi
 
 if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
     $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install" &&
-        echo "$string_grep ${file_lang}" >>"${script_log}"
+        echo "$file_json_md5" >>"${script_log}"
 else
     echo_msg time "skip node yarn install..."
 fi
