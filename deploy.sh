@@ -398,18 +398,11 @@ _deploy_rsync_ssh() {
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=10 --no-times --exclude-from=${rsync_exclude} $rsync_delete"
 
         ## rsync source folder / rsync 源目录
-        if [[ "$rsync_src" == 'null' || -z "$rsync_src" ]]; then
-            # shellcheck disable=2154
-            rsync_src="${gitlab_project_dir}/$path_for_rsync"
-        elif [[ "$rsync_src" =~ \.[jw]ar$ ]]; then
-            find_file="$(find "${gitlab_project_dir}" -name "$rsync_src" -print0 | head -n 1)"
-            if [[ "$find_file" =~ \.[jw]ar$ ]]; then
-                rsync_src="$find_file"
-            else
-                echo_msg warning "Not found: ${find_file}"
-                return 1
-            fi
-        fi
+        ## define path_for_rsync in langs/build.*.sh / 在 langs/build.*.sh 中定义 path_for_rsync
+        ## default: path_for_rsync=''
+        # shellcheck disable=2154
+        rsync_src="${gitlab_project_dir}/$path_for_rsync"
+
         ## rsycn dest folder / rsync 目标目录
         if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${env_namespace}.${gitlab_project_name}/"
@@ -417,7 +410,7 @@ _deploy_rsync_ssh() {
         ## deploy to aliyun oss / 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             command -v aliyun >/dev/null || echo_msg warning "command not exist: aliyun"
-            aliyun oss cp "${rsync_src}/" "$rsync_dest/" --recursive --force
+            aliyun oss cp "${rsync_src}" "$rsync_dest" --recursive --force
             ## 如果使用 rclone， 则需要安装和配置
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
             return
