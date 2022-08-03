@@ -394,7 +394,7 @@ _deploy_rsync_ssh() {
             rsync_exclude="${script_path_conf}/rsync.exclude"
         fi
         ## node/java use rsync --delete / node/java 使用 rsync --delete
-        [[ "${project_lang}" =~ (node|java|other) ]] && rsync_delete='--delete'
+        [[ "${project_lang}" =~ (node|other) ]] && rsync_delete='--delete'
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=10 --no-times --exclude-from=${rsync_exclude} $rsync_delete"
 
         ## rsync source folder / rsync 源目录
