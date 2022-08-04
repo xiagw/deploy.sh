@@ -811,7 +811,7 @@ _preprocess_file() {
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## maven settings.xml
-    [ -f "${script_path_conf}/settings.xml" ] || rsync -av "${script_path_conf}/settings.xml" "${gitlab_project_dir}/"
+    [ -f "${script_path_conf}/dockerfile/settings.xml" ] || rsync -av "${script_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}/"
 
     ## cert file for nginx
     if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
