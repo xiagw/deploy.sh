@@ -9,11 +9,16 @@ if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
 else
     echo_msg step "java build [maven]..."
     # docker run -i --rm -v "$gitlab_project_dir":/usr/src/mymaven -w /usr/src/mymaven maven:3.6-jdk-8 mvn clean -U package -DskipTests
-    docker run -i --rm \
-        -v "$gitlab_project_dir":/usr/src/mymaven \
-        -v "$gitlab_project_dir"/docs/settings.xml:/root/.m2/settings.xml \
-        -w /usr/src/mymaven maven:3.6-jdk-8 \
-        mvn clean -U package -DskipTests --quiet --activate-profiles "$MVN_PROFILE"
+    docker run -i --rm -u 1000:1000 \
+        -v "$gitlab_project_dir":/app \
+        -w /app \
+        maven:3.6-jdk-8 \
+        mvn -T 1C clean --quiet  \
+        --update-snapshots package \
+        --define skipTests \
+        --define maven.compile.fork=true \
+        --activate-profiles "$MVN_PROFILE" \
+        --settings settings.xml
 fi
 
 [ -d $path_for_rsync ] || mkdir "$gitlab_project_dir/${path_for_rsync%/}"
