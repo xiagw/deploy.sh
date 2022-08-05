@@ -5,15 +5,15 @@
           <localRepository>/maven_repository</localRepository>
     <mirrors>
         <mirror>
-            <id>huaweicloud</id>
-            <mirrorOf>*</mirrorOf>
-            <url>https://repo.huaweicloud.com/repository/maven/</url>
-        </mirror>
-        <mirror>
             <id>aliyunmaven</id>
             <mirrorOf>*</mirrorOf>
             <name>aliyunpublic</name>
             <url>https://maven.aliyun.com/repository/public</url>
+        </mirror>
+        <mirror>
+            <id>huaweicloud</id>
+            <mirrorOf>*</mirrorOf>
+            <url>https://repo.huaweicloud.com/repository/maven/</url>
         </mirror>
     </mirrors>
 </settings>
