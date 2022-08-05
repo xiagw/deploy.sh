@@ -13,6 +13,7 @@ if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
 else
     echo_msg step "java build [maven]..."
     # docker run -i --rm -v "$gitlab_project_dir":/usr/src/mymaven -w /usr/src/mymaven maven:3.6-jdk-8 mvn clean -U package -DskipTests
+    [ -d "$gitlab_project_dir"/maven_repository ] || mkdir "$gitlab_project_dir"/maven_repository
     docker run -i --rm -u 1000:1000 \
         -v "$gitlab_project_dir"/maven_repository:/maven_repository \
         -v "$gitlab_project_dir":/app \
