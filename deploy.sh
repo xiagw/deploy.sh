@@ -77,7 +77,7 @@ _test_function() {
     echo_msg step "function test..."
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
-    [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 0 ]] && return 0
+    [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 0 ]] && return 0
 
     if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
         echo "Found $gitlab_project_dir/tests/func_test.sh"
@@ -86,7 +86,7 @@ _test_function() {
         echo "Found $script_path_data/tests/func_test.sh"
         bash "$script_path_data"/tests/func_test.sh
     else
-        echo_msg question "not found tests/func_test.sh, skip function test."
+        echo "not found tests/func_test.sh, skip function test."
     fi
     echo_msg time "end function test."
 }
@@ -231,8 +231,8 @@ _build_image_docker() {
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
     docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" ${image_uuid}
-    echo_msg warning "run on (gitlab): docker push $image_uuid"
-    echo_msg warning "run on (remote): docker pull $image_uuid; docker tag $image_uuid deploy/app1"
+    echo "run on (gitlab): docker push $image_uuid"
+    echo "run on (remote): docker pull $image_uuid; docker tag $image_uuid deploy/app1"
 
     echo_msg time "end build image [docker]."
 }
@@ -506,7 +506,7 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo_msg warning "skip message send."
+        echo "skip message send."
     fi
 }
 
