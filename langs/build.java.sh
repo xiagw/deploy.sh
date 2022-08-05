@@ -12,8 +12,12 @@ if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
     gradle -q
 else
     echo_msg step "java build [maven]..."
-    # docker run -i --rm -v "$gitlab_project_dir":/usr/src/mymaven -w /usr/src/mymaven maven:3.6-jdk-8 mvn clean -U package -DskipTests
-    [ -d "${script_path_data}"/maven/.m2 ] || mkdir -p "${script_path_data}"/maven/.m2
+    if [[ -f settings.xml ]]; then
+        MVN_SET='--settings settings.xml'
+    else
+        MVN_SET=''
+    fi
+    [ -d "${script_path_data}"/maven ] || mkdir -p "${script_path_data}"/maven
 
     docker run -i --rm --user "$(id -u):$(id -g)" \
         -e MAVEN_CONFIG=/var/maven/.m2 \
@@ -26,8 +30,7 @@ else
         --define skipTests \
         --define user.home=/var/maven \
         --define maven.compile.fork=true \
-        --activate-profiles "$MVN_PROFILE" \
-        --settings settings.xml
+        --activate-profiles "$MVN_PROFILE" $MVN_SET
 fi
 
 [ -d $path_for_rsync ] || mkdir "$gitlab_project_dir/${path_for_rsync%/}"
