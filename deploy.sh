@@ -231,8 +231,12 @@ _build_image_docker() {
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
     docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" ${image_uuid}
-    echo "run on (gitlab): docker push $image_uuid"
-    echo "run on (remote): docker pull $image_uuid; docker tag $image_uuid deploy/app1"
+    echo "If you want to push the image to ttl.sh, please execute the following command:"
+    echo "run on gitlab-runner:"
+    echo "docker push $image_uuid"
+    echo "Then execute the following command on remote server:"
+    echo "docker pull $image_uuid"
+    echo "docker tag $image_uuid deploy/app1"
 
     echo_msg time "end build image [docker]."
 }
