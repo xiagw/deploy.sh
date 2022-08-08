@@ -338,7 +338,7 @@ _deploy_k8s() {
         echo_msg time "custom deploy..."
         docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
         docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" || echo_msg error "got an error here, probably caused by network..."
-        source "$script_path_data_bin/custom-deploy.sh" "$env_namespace" "${gitlab_project_name}" "${image_tag}"
+        bash "$script_path_data_bin/custom-deploy.sh" "$env_namespace" "${gitlab_project_name}" "${image_tag}"
         echo_msg time "end custom deploy."
     fi
     ## helm install / helm 安装
@@ -423,6 +423,11 @@ _deploy_rsync_ssh() {
         ## rsync to remote server / rsync 到远程服务器
         echo "deploy to ${ssh_host}:${rsync_dest}"
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
+        if [ -f "$script_path_data_bin/custom.deploy.sh" ]; then
+            echo_msg time "custom deploy..."
+            bash "$script_path_data_bin/custom.deploy.sh" ${ssh_host} ${rsync_dest}
+            echo_msg time "end custom deploy."
+        fi
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf")
     echo_msg time "end deploy code file [rsync+ssh]."
 }
