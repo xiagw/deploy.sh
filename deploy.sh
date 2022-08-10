@@ -328,7 +328,7 @@ _deploy_k8s() {
 
             )
         else
-            echo_msg info "not found: $file_gitops, skip update gitops files."
+            echo_msg "not found: $file_gitops, skip update gitops files."
         fi
         [[ "${ENV_ENABLE_HELM_AFTER_GITOPS:-1}" -eq 0 ]] && return 0
     fi
