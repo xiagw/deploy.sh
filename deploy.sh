@@ -413,7 +413,10 @@ _deploy_rsync_ssh() {
         fi
         ## deploy to aliyun oss / 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
-            command -v aliyun >/dev/null || echo_msg warning "command not exist: aliyun"
+            command -v aliyun &>/dev/null || {
+                echo_msg warning "command not exist: aliyun"
+                exit 1
+            }
             aliyun oss cp "${rsync_src}" "$rsync_dest" --recursive --force
             ## 如果使用 rclone， 则需要安装和配置
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
@@ -532,7 +535,7 @@ _renew_cert() {
     conf_dns_qcloud="${script_path_data}/.qcloud.dnspod.conf"
 
     ## install acme.sh / 安装 acme.sh
-    [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh
+    [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh --home ${script_path_data}/.acmd.sh
 
     [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
     ## support multiple account.conf.[x] / 支持多账号,只有一个则 account.conf.1
@@ -824,8 +827,8 @@ _preprocess_file() {
         rsync -av "${script_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}/"
 
     ## cert file for nginx
-    if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$HOME/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
-        rsync -av "$HOME/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
+    if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$script_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
+        rsync -av "$script_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## Docker build from / 是否从模板构建
     if [[ "${project_docker}" -eq 1 && -n "$build_image_from" ]]; then
@@ -916,7 +919,7 @@ _setup_gitlab_vars() {
         cron_save_id="${cron_save_file##*.}"
         if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
             echo warning "no code change found, skip."
-            exit
+            exit 0
         else
             rm -f "${script_path_data}/crontab.${gitlab_project_id}".*
             touch "${script_path_data}/crontab.${gitlab_project_id}.${gitlab_commit_short_sha}"
@@ -1150,9 +1153,9 @@ main() {
     script_path="$(dirname "$(readlink -f "$0")")"
     script_path_conf="${script_path}/conf"
     script_path_bin="${script_path}/bin"
+    script_path_data="${script_path}/data" ## deploy.sh data folder
     script_path_data_bin="${script_path}/data/bin"
     script_path_builds="${script_path}/builds"
-    script_path_data="${script_path}/data"              ## deploy.sh data folder
     script_conf="${script_path_conf}/deploy.conf"       ## deploy to app server 发布到目标服务器的配置信息
     script_yaml="${script_path_conf}/deploy.yml"        ## deploy to app server 发布到目标服务器的配置信息
     script_env="${script_path_conf}/deploy.env"         ## deploy.sh ENV 发布配置信息(密)
@@ -1221,8 +1224,7 @@ main() {
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-    [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && exec_renew_cert=1
-    if [[ "${exec_renew_cert:-0}" -eq 1 ]]; then
+    if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
         _renew_cert
         [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && return
     fi
@@ -1233,6 +1235,7 @@ main() {
     ## preprocess project config files / 预处理业务项目配置文件
     _preprocess_file
 
+    ## code style check / 代码风格检查
     code_style_sh="$script_path/langs/style.${project_lang}.sh"
     build_langs_sh="$script_path/langs/build.${project_lang}.sh"
 
@@ -1258,16 +1261,15 @@ main() {
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
         return
     fi
-
     ################################################################################
+
     ## default exec all tasks / 默认执行所有任务
     _code_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo_msg step "code style..."
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]] && exec_code_style=1
-    if [[ "${exec_code_style:-0}" -eq 1 && -f "$code_style_sh" ]]; then
+    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
         source "$code_style_sh"
     fi
 
