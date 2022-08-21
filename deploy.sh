@@ -548,7 +548,7 @@ _renew_cert() {
         [ -f "$account" ] || continue
         if [ -f "$conf_dns_cloudflare" ]; then
             if ! command -v flarectl; then
-                echo_msg warning "command not found: flarectl "
+                echo_msg warning "not found: flarectl "
                 return 1
             fi
             source "$conf_dns_cloudflare" "${account##*.}"
@@ -556,7 +556,7 @@ _renew_cert() {
             dnsType='dns_cf'
         elif [ -f "$conf_dns_aliyun" ]; then
             if ! command -v aliyun; then
-                echo_msg warning "command not found: aliyun "
+                echo_msg warning "not found: aliyun "
                 return 1
             fi
             source "$conf_dns_aliyun" "${account##*.}"
@@ -817,7 +817,7 @@ _preprocess_file() {
     ## backend (PHP/Java/Python) project_conf files
     path_project_conf="${script_path_data}/project_conf/${env_namespace}.${gitlab_project_name}/"
     if [ -d "$path_project_conf" ]; then
-        echo_msg warning "found and rsync custom config files by devops."
+        echo_msg warning "found custom config files, sync it."
         rsync -av "$path_project_conf" "${gitlab_project_dir}/"
     fi
     ## docker ignore file
@@ -932,7 +932,8 @@ _detect_langs() {
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
         Dockerfile)
-            echo "Found Dockerfile, disable rsync+ssh, enable docker build and helm deploy. "
+            echo "Found Dockerfile, enable docker build / helm deploy."
+            echo "disable [rsync+ssh]"
             echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
             if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
                 echo "Force disable docker build and helm deploy, default enable rsync+ssh."
