@@ -815,7 +815,7 @@ _preprocess_file() {
         copy_flyway_file=0
     fi
     ## backend (PHP/Java/Python) project_conf files
-    path_project_conf="${script_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
+    path_project_conf="${script_path_data}/project_conf/${gitlab_project_name}/${env_namespace}/"
     if [ -d "$path_project_conf" ]; then
         echo_msg warning "found custom config files, sync it."
         rsync -av "$path_project_conf" "${gitlab_project_dir}/"
