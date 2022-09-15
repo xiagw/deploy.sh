@@ -297,6 +297,8 @@ _deploy_k8s() {
         path_helm="$gitlab_project_dir/helm"
     elif [ -d "$gitlab_project_dir/docs/helm" ]; then
         path_helm="$gitlab_project_dir/docs/helm"
+    elif [ -d "${script_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}" ]; then
+        path_helm="${script_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}"
     elif [ -d "${script_path_data}/helm/${gitlab_project_name}" ]; then
         path_helm="${script_path_data}/helm/${gitlab_project_name}"
     fi
