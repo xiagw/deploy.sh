@@ -857,7 +857,7 @@ _preprocess_file() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${script_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_msg time "end preprocessing preprocessing [env/config...]."
+    echo_msg time "end preprocessing [env/config...]."
 }
 
 _setup_deploy_conf() {
