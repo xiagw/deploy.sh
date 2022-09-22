@@ -947,7 +947,7 @@ _detect_langs() {
                 exec_push_image=1
                 exec_deploy_k8s=1
                 exec_deploy_rsync_ssh=0
-                build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}" | head -n 1)"
+                build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep -m1 "${ENV_DOCKER_REGISTRY}")"
                 if [[ -f "${gitlab_project_dir}/docker-compose.yml" || -f "${gitlab_project_dir}/docker-compose.yaml" ]]; then
                     exec_deploy_k8s=0
                     exec_deploy_single_host=1
