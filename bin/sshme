@@ -1,24 +1,20 @@
 #!/bin/bash
 
 main() {
-    file_conf="$HOME/.ssh/config"
-    if [ ! -f "$file_conf" ]; then
-        echo "Not found $file_conf. exit."
-        return
-    fi
-    select ssh_host in $(awk 'NR>1 && /^Host/ {print $2}' "$file_conf") quit; do
+    file_conf=("$HOME/.ssh/config"*)
+    select ssh_host in $(awk 'NR>1 && /^Host/ {print $2}' "${file_conf[@]}") quit; do
         case "${ssh_host:-quit}" in
         'quit')
             break
             ;;
         *)
-            if grep -B 2 "${ssh_host}" "$file_conf" | grep -q 'nobyobu'; then
+            if grep -B 2 "${ssh_host}" "${file_conf[@]}" | grep -q 'nobyobu'; then
                 use_byobu=''
             else
                 use_byobu='byobu'
             fi
             [ -n "${1}" ] && ssh_host="${1}@${ssh_host}"
-            ssh -A -t "${ssh_host}" $use_byobu || ssh -A "${ssh_host}"
+            ssh -A -t "${ssh_host}" $use_byobu
             break
             ;;
         esac
