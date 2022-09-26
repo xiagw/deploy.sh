@@ -804,7 +804,7 @@ _generate_apidoc() {
 }
 
 _preprocess_file() {
-    echo_msg time "copy from [runner/data/project_conf] to [env/config] to project dir...start"
+    echo_msg time "copy from [runner/data/project_conf] to project dir...start"
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -860,7 +860,7 @@ _preprocess_file() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${script_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_msg time "copy from [runner/data/project_conf] to [env/config] to project dir...end"
+    echo_msg time "copy from [runner/data/project_conf] to project dir...end"
 }
 
 _setup_deploy_conf() {
