@@ -254,7 +254,12 @@ _push_image() {
         echo_msg question "Demo mode, skip push image."
         return 0
     fi
-    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" || echo_msg error "got an error here, probably caused by network..."
+    if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" ; then
+        echo "remove docker image "
+        echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}"
+    else
+        echo_msg error "got an error here, probably caused by network..."
+    fi
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway" || echo_msg error "got an error here, probably caused by network..."
     fi
