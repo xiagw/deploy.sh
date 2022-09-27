@@ -2,7 +2,7 @@
 
 # 中文 [README_zh.md](README_zh.md)
 
-# Description
+# Introduction
 deploy.sh is a general CI/CD program, better than "Buddy".
 
 project_lang=shell
@@ -13,14 +13,14 @@ It can be executed manually/automated.
 
 It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 
-# How to detect program language
-- node: exist package.json or include `project_lang=node` in README.md
-- php: exist composer.json or include `project_lang=php` in README.md
-- java: exist pom.xml or include `project_lang=java` in README.md
-- python: exist requirements.txt or include `project_lang=python` in README.md
-- [other]: include `project_lang=[other]` in README.md
+# How to automatically detect the programming language
+- node: exist package.json or include `project_lang=node` in README.md of your project
+- php: exist composer.json or include `project_lang=php` in README.md of your project
+- java: exist pom.xml or include `project_lang=java` in README.md of your project
+- python: exist requirements.txt or include `project_lang=python` in README.md of your project
+- [other]: include `project_lang=[other]` in README.md of your project
 
-# Currently support
+# Features
 * Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
 * Code style: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
 * Code quality: sonarqube scan, OWASP, ZAP, vulmap...
@@ -39,8 +39,8 @@ git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
 
-## Quick Start
-### option [1], Running deploy.sh manually
+# Quickstart
+### option [1]. Running deploy.sh manually
 ```
 ## If your project repository already exists
 cd /path/to/<your_project.git>
@@ -51,7 +51,7 @@ $HOME/runner/deploy.sh
 ## If your project repository dose not exist. (deploy.sh will clone it)
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
-### option [2], Running deploy.sh automated
+### option [2]. Running deploy.sh automated
 ```
 ## crontab
 */5 * * * * for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --cron); done
@@ -61,7 +61,7 @@ $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>
 while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --cron); done; sleep 300; done
 ```
 
-### option [3], Running applications with GitLab-Runner
+### option [3]. Running applications with GitLab-Runner
 1. Prepare a gitlab-server and gitlab-runner-server
 1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
 1. cd $HOME/runner
@@ -69,12 +69,13 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. cp conf/example-deploy.env conf/deploy.env        ## !!!change to yours!!!
 1. Refer to conf/.gitlab-ci.yaml of this project, setup \<your_project.git\>/.gitlab-ci.yaml
 
-### option [4], Running applications with Jenkins
+### option [4]. Running applications with Jenkins
 1. Create job,
 1. setup job, run custom shell, `bash $HOME/runner/deploy.sh`
 
 
-## Example step with GitLab Server and GitLab-Runner
+# Examples
+### (with GitLab Server and GitLab-Runner)
 ### Step 1: Prepair Gitlab server
 There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
 ### Step 2: Prepair Gitlab Runner server
@@ -82,17 +83,17 @@ There is already a server that has installed gitlab-runner and register to Gitla
 
 and make sure gitlab-runner is running properly. `sudo gitlab-runner status`
 
-### Step 3: Prepair Application server (*nix/k8s/microk8s/k3s)
+### Step 3: Prepair Application server (Linux/k8s/microk8s/k3s)
 if use rsync+ssh to deploy: The ssh key file had been prepared, and you can login to the Application server without a password from the gitlab-runner server (the key file can be in $HOME/.ssh/, or in the deploy.sh/data/.ssh/)
 
-if use k8s to deploy: prepare ~/.kube/config
+if use k8s to deploy: on the gitlab-runner server, prepare ~/.kube/config
 
-### Step 4: git clone deploy.sh
+### Step 4: install, git clone deploy.sh
 SSH login to the gitlab-runner server
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
-### Step 5: Update conf/deploy.conf, conf/deploy.env
+### Step 5: Update $HOME/runner/conf/deploy.conf, $HOME/runner/conf/deploy.env
 Refer to the conf/example-deploy.conf, conf/example-deploy.env, change to yours configure
 ```
 cd $HOME/runner
@@ -105,14 +106,15 @@ Example: created `project-A` under the root account on gitlab-server (root/proje
 Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 ### Step 8: Enjoy CI/CD
 
-# How to create Helm files for applications project
+
+# FAQ
+### How to create Helm files for applications project
 If you use helm to deploy to k8s.
 ```
 bash $HOME/runner/bin/helm-new.sh
 ## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
-
-# How to resolve gitlab-runner fail
+### How to resolve gitlab-runner fail
 If you use Ubuntu, just `rm -f ~/.bash_logout`
 
 # Flow
