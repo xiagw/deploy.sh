@@ -809,7 +809,7 @@ _generate_apidoc() {
 }
 
 _preprocess_file() {
-    echo_msg time "copy from [runner/data/project_conf] to project dir...start"
+    echo_msg step "copy from [runner/data/project_conf] to project dir...start"
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -937,7 +937,8 @@ _setup_gitlab_vars() {
     fi
 }
 
-_detect_langs() {
+_probe_langs() {
+    echo_msg step "[langs] probe language..."
     for f in Dockerfile composer.json package.json pom.xml requirements.txt README.md readme.md README.txt readme.txt; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
@@ -945,6 +946,7 @@ _detect_langs() {
             echo "Found Dockerfile, enable docker build / helm deploy."
             echo "disable [rsync+ssh]"
             echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
+            echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
             if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
                 echo "Force disable docker build and helm deploy, default enable rsync+ssh."
                 project_docker=0
@@ -997,7 +999,7 @@ _detect_langs() {
     done
 }
 
-_svn_co_repo() {
+_svn_checkout_repo() {
     if [[ ! -d "$script_path_builds" ]]; then
         echo "not found $script_path_builds, create it..."
         mkdir -p builds
@@ -1195,7 +1197,7 @@ main() {
     [[ "${arg_git_clone:-0}" -eq 1 ]] && _git_clone_repo
 
     ## svn checkout repo / 克隆 svn 仓库
-    [[ "${arg_svn_co:-0}" -eq 1 ]] && _svn_co_repo
+    [[ "${arg_svn_co:-0}" -eq 1 ]] && _svn_checkout_repo
 
     ## run deploy.sh by hand / 手动执行 deploy.sh
     _setup_gitlab_vars
@@ -1240,8 +1242,8 @@ main() {
         [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && return
     fi
 
-    ## detect program lang / 检测程序语言
-    _detect_langs
+    ## probe program lang / 探测程序语言
+    _probe_langs
 
     ## preprocess project config files / 预处理业务项目配置文件
     _preprocess_file
