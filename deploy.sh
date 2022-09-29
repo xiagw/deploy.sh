@@ -58,7 +58,10 @@ _test_unit() {
     echo_msg step "[unit test]...start"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
-    [[ "${PIPELINE_UNIT_TEST:-0}" -eq 0 ]] && return 0
+    if [[ "${PIPELINE_UNIT_TEST:-0}" -eq 0 ]]; then
+        echo "<skip>"
+        return 0
+    fi
 
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
         echo "Found $gitlab_project_dir/tests/unit_test.sh"
@@ -77,8 +80,10 @@ _test_function() {
     echo_msg step "[function test]...start"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
-    [[ "${PIPELINE_FUNCTION_TEST:-1}" -eq 0 ]] && return 0
-
+    if [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 0 ]]; then
+        echo "<skip>"
+        return 0
+    fi
     if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
         echo "Found $gitlab_project_dir/tests/func_test.sh"
         bash "$gitlab_project_dir"/tests/func_test.sh
@@ -95,8 +100,10 @@ _code_quality_sonar() {
     echo_msg step "[sonarqube] check code quality...start"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    [[ "${PIPELINE_SONAR:-0}" -eq 0 ]] && return 0
-
+    if [[ "${PIPELINE_SONAR:-0}" -eq 0 ]]; then
+        echo "<skip>"
+        return 0
+    fi
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$gitlab_project_dir/sonar-project.properties"
     if ! curl "$sonar_url" >/dev/null 2>&1; then
@@ -130,12 +137,12 @@ EOF
 }
 
 _scan_ZAP() {
-    echo_msg step "[TODO] [ZAP] scan ...start"
+    echo_msg step "[ZAP] scan ... <skip>"
     # docker pull owasp/zap2docker-stable
 }
 
 _scan_vulmap() {
-    echo_msg step "[TODO] [vulmap] scan...start"
+    echo_msg step "[vulmap] scan...<skip>"
     # https://github.com/zhzyker/vulmap
     # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
 }
@@ -236,13 +243,13 @@ _build_image_docker() {
     echo "docker push $image_uuid"
     echo "Then execute the following command on remote server:"
     echo "docker pull $image_uuid"
-    echo "docker tag $image_uuid deploy/app1"
+    echo "docker tag $image_uuid deploy/<your_app>"
 
     echo_msg time "[docker] build image...end"
 }
 
 _build_image_podman() {
-    echo_msg step "[TODO] [podman] build image...start"
+    echo_msg step "[podman] build image...<skip>"
     # echo_msg time "[TODO] [podman] build image...end"
 }
 
@@ -254,7 +261,7 @@ _push_image() {
         echo_msg question "Demo mode, skip push image."
         return 0
     fi
-    if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}" ; then
+    if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
         echo "remove docker image "
         echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}"
     else
@@ -450,11 +457,11 @@ _deploy_aliyun_oss() {
 }
 
 _deploy_rsync() {
-    echo_msg step "[TODO] [rsyncd] deploy code files to rsyncd server...start"
+    echo_msg step "[rsyncd] deploy code files to rsyncd server...start"
 }
 
 _deploy_ftp() {
-    echo_msg step "[TODO] [ftp] deploy code files to ftp server...start"
+    echo_msg step "[ftp] deploy code files to ftp server...start"
     return
     upload_file="${gitlab_project_dir}/ftp.tgz"
     tar czvf "${upload_file}" -C "${gitlab_project_dir}" .
@@ -471,7 +478,7 @@ EOF
 }
 
 _deploy_sftp() {
-    echo_msg step "[TODO] [sftp] deploy code files to sftp server...start"
+    echo_msg step "[sftp] deploy code files to sftp server...start"
 }
 
 _deploy_notify_msg() {
@@ -965,25 +972,25 @@ _probe_langs() {
             fi
             ;;
         composer.json)
-            echo "Found composer.json, detect lang: php"
+            echo "Found composer.json, probe lang: php"
             project_lang=php
             exec_build_langs=1
             break
             ;;
         package.json)
-            echo "Found package.json, detect lang: node"
+            echo "Found package.json, probe lang: node"
             project_lang=node
             exec_build_langs=1
             break
             ;;
         pom.xml)
-            echo "Found pom.xml, detect lang: java"
+            echo "Found pom.xml, probe lang: java"
             project_lang=java
             exec_build_langs=1
             break
             ;;
         requirements.txt)
-            echo "Found requirements.txt, detect lang: python"
+            echo "Found requirements.txt, probe lang: python"
             project_lang=python
             break
             ;;
@@ -992,7 +999,7 @@ _probe_langs() {
             project_lang=${project_lang// /}
             project_lang=${project_lang,,}
             project_lang=${project_lang:-other}
-            echo "Detect lang: $project_lang"
+            echo "Probe lang: $project_lang"
             break
             ;;
         esac
