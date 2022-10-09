@@ -66,9 +66,9 @@ _test_unit() {
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
         echo "Found $gitlab_project_dir/tests/unit_test.sh"
         bash "$gitlab_project_dir"/tests/unit_test.sh
-    elif [[ -f "$script_path_data"/tests/unit_test.sh ]]; then
-        echo "Found $script_path_data/tests/unit_test.sh"
-        bash "$script_path_data"/tests/unit_test.sh
+    elif [[ -f "$me_path_data"/tests/unit_test.sh ]]; then
+        echo "Found $me_path_data/tests/unit_test.sh"
+        bash "$me_path_data"/tests/unit_test.sh
     else
         echo_msg question "not found tests/unit_test.sh, skip unit test."
     fi
@@ -87,9 +87,9 @@ _test_function() {
     if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
         echo "Found $gitlab_project_dir/tests/func_test.sh"
         bash "$gitlab_project_dir"/tests/func_test.sh
-    elif [ -f "$script_path_data"/tests/func_test.sh ]; then
-        echo "Found $script_path_data/tests/func_test.sh"
-        bash "$script_path_data"/tests/func_test.sh
+    elif [ -f "$me_path_data"/tests/func_test.sh ]; then
+        echo "Found $me_path_data/tests/func_test.sh"
+        bash "$me_path_data"/tests/func_test.sh
     else
         echo "not found tests/func_test.sh, skip function test."
     fi
@@ -154,7 +154,7 @@ _deploy_flyway_docker() {
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
     ## ssh port-forward mysql 3306 to localhost / 判断是否需要通过 ssh 端口转发建立数据库远程连接
-    [ -f "$script_path_bin/ssh-port-forward.sh" ] && source "$script_path_bin/ssh-port-forward.sh" port
+    [ -f "$me_path_bin/ssh-port-forward.sh" ] && source "$me_path_bin/ssh-port-forward.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
         $flyway_docker_run repair
@@ -190,7 +190,7 @@ _deploy_flyway_helm_job() {
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
 _docker_login() {
-    local lock_docker_login="$script_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
+    local lock_docker_login="$me_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "${ENV_DOCKER_LOGIN_TYPE:-none}" == 'aws' ]]; then
         # time_last="$(if [[ -f "$lock_docker_login" ]]; then cat "$lock_docker_login"; else echo 0; fi)"
@@ -292,7 +292,7 @@ _deploy_single_host() {
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
         echo "${conf_ssh_host:?if stop here, check runner/conf/deploy.conf}"
         ssh -n -p $conf_ssh_port $conf_ssh_host "cd ~/docker/laradock && docker pull "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" && docker compose up -d $conf_project_name"
-    done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf")
+    done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
     echo_msg time "[docker-compose] deploy with docker-compose to singl host...end"
 }
 
@@ -311,15 +311,15 @@ _deploy_k8s() {
         path_helm="$gitlab_project_dir/helm"
     elif [ -d "$gitlab_project_dir/docs/helm" ]; then
         path_helm="$gitlab_project_dir/docs/helm"
-    elif [ -d "${script_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}" ]; then
-        path_helm="${script_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}"
-    elif [ -d "${script_path_data}/helm/${gitlab_project_name}" ]; then
-        path_helm="${script_path_data}/helm/${gitlab_project_name}"
+    elif [ -d "${me_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}" ]; then
+        path_helm="${me_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}"
+    elif [ -d "${me_path_data}/helm/${gitlab_project_name}" ]; then
+        path_helm="${me_path_data}/helm/${gitlab_project_name}"
     fi
 
     ## update gitops files / 更新 gitops 文件
     if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
-        file_gitops="$script_path_data"/gitops_${gitlab_project_branch}/helm/${gitlab_project_name}/values.yaml
+        file_gitops="$me_path_data"/gitops_${gitlab_project_branch}/helm/${gitlab_project_name}/values.yaml
         if [ -f "$file_gitops" ]; then
             echo "Found $file_gitops"
             echo_msg step "[helm] update gitops files...start"
@@ -329,7 +329,7 @@ _deploy_k8s() {
                 -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
                 "$file_gitops"
             (
-                cd "$script_path_data/gitops_$gitlab_project_branch"
+                cd "$me_path_data/gitops_$gitlab_project_branch"
                 if [ -f "$ENV_GITOPS_SSH_KEY" ]; then
                     GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git pull
                     git add .
@@ -351,11 +351,11 @@ _deploy_k8s() {
     fi
 
     ## Custom deployment method / 自定义部署方式
-    if [ -f "$script_path_data_bin/custom-deploy.sh" ]; then
+    if [ -f "$me_path_data_bin/custom-deploy.sh" ]; then
         echo_msg time "[shell] custom deploy...start"
         docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
         docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" || echo_msg error "got an error here, probably caused by network..."
-        bash "$script_path_data_bin/custom-deploy.sh" "$env_namespace" "${gitlab_project_name}" "${image_tag}"
+        bash "$me_path_data_bin/custom-deploy.sh" "$env_namespace" "${gitlab_project_name}" "${image_tag}"
         echo_msg time "[shell] custom deploy...end"
     fi
     ## helm install / helm 安装
@@ -379,8 +379,8 @@ _deploy_k8s() {
     fi
 
     ## helm install flyway jobs / helm 安装 flyway 任务
-    if [[ "$ENV_FLYWAY_HELM_JOB" == 1 && -d "${script_path_conf}"/helm/flyway ]]; then
-        $helm_opt upgrade flyway "${script_path_conf}/helm/flyway/" --install --history-max 1 \
+    if [[ "$ENV_FLYWAY_HELM_JOB" == 1 && -d "${me_path_conf}"/helm/flyway ]]; then
+        $helm_opt upgrade flyway "${me_path_conf}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}" \
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
@@ -392,8 +392,8 @@ _deploy_k8s() {
 _deploy_rsync_ssh() {
     echo_msg step "[rsync+ssh] deploy code files...start"
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
-    # grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf" | while read -r line; do
-    # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf"); do
+    # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | while read -r line; do
+    # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf"); do
     while read -r line; do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
@@ -412,7 +412,7 @@ _deploy_rsync_ssh() {
         if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
             rsync_exclude="${gitlab_project_dir}/rsync.exclude"
         else
-            rsync_exclude="${script_path_conf}/rsync.exclude"
+            rsync_exclude="${me_path_conf}/rsync.exclude"
         fi
         ## node/java use rsync --delete / node/java 使用 rsync --delete
         [[ "${project_lang}" =~ (node|other) ]] && rsync_delete='--delete'
@@ -443,12 +443,12 @@ _deploy_rsync_ssh() {
         ## rsync to remote server / rsync 到远程服务器
         echo "deploy to ${ssh_host}:${rsync_dest}"
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
-        if [ -f "$script_path_data_bin/custom.deploy.sh" ]; then
+        if [ -f "$me_path_data_bin/custom.deploy.sh" ]; then
             echo_msg time "custom deploy..."
-            bash "$script_path_data_bin/custom.deploy.sh" ${ssh_host} ${rsync_dest}
+            bash "$me_path_data_bin/custom.deploy.sh" ${ssh_host} ${rsync_dest}
             echo_msg time "end custom deploy."
         fi
-    done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$script_conf")
+    done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
     echo_msg time "[rsync+ssh] deploy code files...end"
 }
 
@@ -519,12 +519,12 @@ _deploy_notify() {
         $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$telegram_api_msg"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         ## element / 发送至 element
-        python3 "$script_path_data_bin/element.py" "$msg_body"
+        python3 "$me_path_data_bin/element.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_EMAIL:-0}" -eq 1 ]]; then
         ## email / 发送至 email
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
-        "$script_path_bin/sendEmail" \
+        "$me_path_bin/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
             -xu "$ENV_EMAIL_USERNAME" \
@@ -545,14 +545,14 @@ _renew_cert() {
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
     ## content: export CF_Key="sdfsdfsdfljlbjkljlkjsdfoiwje" export CF_Email="xxxx@sss.com"
-    conf_dns_cloudflare="${script_path_data}/.cloudflare.conf"
+    conf_dns_cloudflare="${me_path_data}/.cloudflare.conf"
     ## export Ali_Key="sdfsdfsdfljlbjkljlkjsdfoiwje" export Ali_Secret="jlsdflanljkljlfdsaklkjflsa"
-    conf_dns_aliyun="${script_path_data}/.aliyun.dnsapi.conf"
+    conf_dns_aliyun="${me_path_data}/.aliyun.dnsapi.conf"
     ## content: DP_Id="1234" DP_Key="sADDsdasdgdsf"
-    conf_dns_qcloud="${script_path_data}/.qcloud.dnspod.conf"
+    conf_dns_qcloud="${me_path_data}/.qcloud.dnspod.conf"
 
     ## install acme.sh / 安装 acme.sh
-    [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh --home ${script_path_data}/.acmd.sh
+    [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
 
     [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
     ## support multiple account.conf.[x] / 支持多账号,只有一个则 account.conf.1
@@ -626,7 +626,7 @@ _install_aliyun_cli() {
     curl -Lo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
     tar -C /tmp -zxf /tmp/aliyun.tgz
     # install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-    install -m 0755 /tmp/aliyun "${script_path_data_bin}/aliyun"
+    install -m 0755 /tmp/aliyun "${me_path_data_bin}/aliyun"
 }
 
 _install_terraform() {
@@ -645,10 +645,10 @@ _install_aws() {
     echo_msg info "install aws cli..."
     $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
-    ./aws/install --bin-dir "${script_path_data_bin}" --install-dir "${script_path_data}" --update
+    ./aws/install --bin-dir "${me_path_data_bin}" --install-dir "${me_path_data}" --update
     ## install eksctl / 安装 eksctl
     $curl_opt "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    mv /tmp/eksctl "${script_path_data_bin}/"
+    mv /tmp/eksctl "${me_path_data_bin}/"
 }
 
 _install_kubectl() {
@@ -656,8 +656,8 @@ _install_kubectl() {
     echo_msg info "install kubectl..."
     kube_ver="$($curl_opt --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    $curl_opt -o "${script_path_data_bin}/kubectl" "$kube_url"
-    chmod +x "${script_path_data_bin}/kubectl"
+    $curl_opt -o "${me_path_data_bin}/kubectl" "$kube_url"
+    chmod +x "${me_path_data_bin}/kubectl"
 }
 
 _install_helm() {
@@ -692,7 +692,7 @@ _install_jmeter() {
     url_jmeter="https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
     $curl_opt --retry -C - -o "$path_temp"/jmeter.zip $url_jmeter
     (
-        cd "$script_path_data"
+        cd "$me_path_data"
         unzip "$path_temp"/jmeter.zip
         ln -sf apache-jmeter-${ver_jmeter} jmeter
     )
@@ -705,7 +705,7 @@ _install_flarectl() {
     ver_flarectl='0.28.0'
     path_temp=$(mktemp -d)
     $curl_opt -o "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver_flarectl}/flarectl_${ver_flarectl}_linux_amd64.tar.xz
-    tar xf "$path_temp"/flarectl.zip -C "${script_path_data_bin}/"
+    tar xf "$path_temp"/flarectl.zip -C "${me_path_data_bin}/"
 }
 
 _detect_os() {
@@ -832,24 +832,24 @@ _preprocess_file() {
         copy_flyway_file=0
     fi
     ## backend (PHP/Java/Python) project_conf files
-    path_project_conf="${script_path_data}/project_conf/${gitlab_project_name}/${env_namespace}/"
+    path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}/"
     if [ -d "$path_project_conf" ]; then
         echo_msg warning "found custom config files, sync it."
         rsync -av "$path_project_conf" "${gitlab_project_dir}/"
     fi
     ## docker ignore file
-    [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${script_path_conf}/.dockerignore" "${gitlab_project_dir}/"
+    [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## maven settings.xml
-    [[ "$ENV_CHANGE_SOURCE" == 'true' && -f "${script_path_conf}/dockerfile/settings.xml" ]] &&
-        rsync -av "${script_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}/"
+    [[ "$ENV_CHANGE_SOURCE" == 'true' && -f "${me_path_conf}/dockerfile/settings.xml" ]] &&
+        rsync -av "${me_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}/"
 
     ## cert file for nginx
-    if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$script_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
-        rsync -av "$script_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
+    if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
+        rsync -av "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## Docker build from / 是否从模板构建
     if [[ "${project_docker}" -eq 1 && -n "$build_image_from" ]]; then
-        file_docker_tmpl="${script_dockerfile}/Dockerfile.${build_image_from##*:}"
+        file_docker_tmpl="${me_dockerfile}/Dockerfile.${build_image_from##*:}"
         [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
     fi
     ## flyway files sql & conf
@@ -870,18 +870,18 @@ _preprocess_file() {
         [[ -d "$path_flyway_sql_proj" && ! -d "$path_flyway_sql" ]] && rsync -a "$path_flyway_sql_proj/" "$path_flyway_sql/"
         [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
-        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${script_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     echo_msg time "copy from [runner/data/project_conf] to project dir...end"
 }
 
 _setup_deploy_conf() {
-    path_conf_ssh="${script_path_data}/.ssh"
-    path_conf_acme="${script_path_data}/.acme.sh"
-    path_conf_aws="${script_path_data}/.aws"
-    path_conf_kube="${script_path_data}/.kube"
-    path_conf_aliyun="${script_path_data}/.aliyun"
-    conf_python_gitlab="${script_path_data}/.python-gitlab.cfg"
+    path_conf_ssh="${me_path_data}/.ssh"
+    path_conf_acme="${me_path_data}/.acme.sh"
+    path_conf_aws="${me_path_data}/.aws"
+    path_conf_kube="${me_path_data}/.kube"
+    path_conf_aliyun="${me_path_data}/.aliyun"
+    conf_python_gitlab="${me_path_data}/.python-gitlab.cfg"
     ## ssh config and key files
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
@@ -932,14 +932,14 @@ _setup_gitlab_vars() {
     gitlab_username="${GITLAB_USER_LOGIN:-unknown}"
     env_namespace=$gitlab_project_branch
     if [[ $run_crontab -eq 1 ]]; then
-        cron_save_file="$(find ${script_path_data} -name "crontab.${gitlab_project_id}.*" | head -n 1)"
+        cron_save_file="$(find ${me_path_data} -name "crontab.${gitlab_project_id}.*" | head -n 1)"
         cron_save_id="${cron_save_file##*.}"
         if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
             echo warning "no code change found, skip."
             exit 0
         else
-            rm -f "${script_path_data}/crontab.${gitlab_project_id}".*
-            touch "${script_path_data}/crontab.${gitlab_project_id}.${gitlab_commit_short_sha}"
+            rm -f "${me_path_data}/crontab.${gitlab_project_id}".*
+            touch "${me_path_data}/crontab.${gitlab_project_id}.${gitlab_commit_short_sha}"
         fi
     fi
 }
@@ -1007,20 +1007,20 @@ _probe_langs() {
 }
 
 _svn_checkout_repo() {
-    if [[ ! -d "$script_path_builds" ]]; then
-        echo "not found $script_path_builds, create it..."
+    if [[ ! -d "$me_path_builds" ]]; then
+        echo "not found $me_path_builds, create it..."
         mkdir -p builds
     fi
-    local path_git_clone="$script_path_builds/${arg_svn_co_url##*/}"
+    local path_git_clone="$me_path_builds/${arg_svn_co_url##*/}"
     echo 'coming soon...'
 }
 
 _git_clone_repo() {
-    if [[ ! -d "$script_path_builds" ]]; then
-        echo "not found $script_path_builds, create it..."
+    if [[ ! -d "$me_path_builds" ]]; then
+        echo "not found $me_path_builds, create it..."
         mkdir -p builds
     fi
-    local path_git_clone="$script_path_builds/${arg_git_clone_url##*/}"
+    local path_git_clone="$me_path_builds/${arg_git_clone_url##*/}"
     path_git_clone="${path_git_clone%.git}"
     if [ ! -d "$path_git_clone" ]; then
         echo "Clone git repo: $arg_git_clone_url"
@@ -1035,9 +1035,9 @@ _git_clone_repo() {
 
 _create_k8s() {
     ## create k8s with terraform
-    if [ -d "$script_path_data/terraform" ]; then
+    if [ -d "$me_path_data/terraform" ]; then
         echo "create k8s [terraform]..."
-        cd "$script_path_data/terraform" && terraform init && terraform apply -auto-approve
+        cd "$me_path_data/terraform" && terraform init && terraform apply -auto-approve
         exit $?
     fi
 }
@@ -1169,27 +1169,27 @@ main() {
     ## Process parameters / 处理传入的参数
     _process_args "$@"
 
-    script_name="$(basename "$0")"
-    script_path="$(dirname "$(readlink -f "$0")")"
-    script_path_conf="${script_path}/conf"
-    script_path_bin="${script_path}/bin"
-    script_path_data="${script_path}/data" ## deploy.sh data folder
-    script_path_data_bin="${script_path}/data/bin"
-    script_path_builds="${script_path}/builds"
-    script_conf="${script_path_conf}/deploy.conf"       ## deploy to app server 发布到目标服务器的配置信息
-    script_yaml="${script_path_conf}/deploy.yml"        ## deploy to app server 发布到目标服务器的配置信息
-    script_env="${script_path_conf}/deploy.env"         ## deploy.sh ENV 发布配置信息(密)
-    script_log="${script_path_data}/${script_name}.log" ## deploy.sh run loger
-    script_dockerfile="${script_path_conf}/dockerfile"  ## deploy.sh dependent dockerfile
+    me_name="$(basename "$0")"
+    me_path="$(dirname "$(readlink -f "$0")")"
+    me_path_conf="${me_path}/conf"
+    me_path_bin="${me_path}/bin"
+    me_path_data="${me_path}/data" ## deploy.sh data folder
+    me_path_data_bin="${me_path}/data/bin"
+    me_path_builds="${me_path}/builds"
+    me_conf="${me_path_conf}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
+    me_yml="${me_path_conf}/deploy.yml"        ## deploy to app server 发布到目标服务器的配置信息
+    me_env="${me_path_conf}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
+    me_log="${me_path_data}/${me_name}.log"    ## deploy.sh run loger
+    me_dockerfile="${me_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
 
-    [[ ! -f "$script_conf" ]] && cp "${script_path_conf}/example-deploy.conf" "$script_conf"
-    [[ ! -f "$script_yaml" ]] && cp "${script_path_conf}/example-deploy.yml" "$script_yaml"
-    [[ ! -f "$script_env" ]] && cp "${script_path_conf}/example-deploy.env" "$script_env"
-    [[ ! -f "$script_log" ]] && touch "$script_log"
+    [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"
+    [[ -f "$me_yml" ]] || cp "${me_path_conf}/example-deploy.yml" "$me_yml"
+    [[ -f "$me_env" ]] || cp "${me_path_conf}/example-deploy.env" "$me_env"
+    [[ -f "$me_log" ]] || touch "$me_log"
 
     PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
-    PATH="$PATH:$script_path_data/jdk/bin:$script_path_data/jmeter/bin:$script_path_data/ant/bin:$script_path_data/maven/bin"
-    PATH="$PATH:$script_path_bin:$script_path_data_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
+    PATH="$PATH:$me_path_data/jdk/bin:$me_path_data/jmeter/bin:$me_path_data/ant/bin:$me_path_data/maven/bin"
+    PATH="$PATH:$me_path_bin:$me_path_data_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
     export PATH
 
     docker_run="docker run --interactive --rm -u 1000:1000"
@@ -1209,7 +1209,7 @@ main() {
     ## run deploy.sh by hand / 手动执行 deploy.sh
     _setup_gitlab_vars
     ## source ENV, 获取 ENV_ 开头的所有全局变量
-    source "$script_env"
+    source "$me_env"
     ## curl use proxy / curl 使用代理
     curl_opt="curl -L"
     [ -n "$ENV_HTTP_PROXY" ] && curl_opt="$curl_opt -x$ENV_HTTP_PROXY"
@@ -1256,8 +1256,8 @@ main() {
     _preprocess_file
 
     ## code style check / 代码风格检查
-    code_style_sh="$script_path/langs/style.${project_lang}.sh"
-    build_langs_sh="$script_path/langs/build.${project_lang}.sh"
+    code_style_sh="$me_path/langs/style.${project_lang}.sh"
+    build_langs_sh="$me_path/langs/build.${project_lang}.sh"
 
     ################################################################################
     ## exec single task / 执行单个任务，适用于gitlab-ci/jenkins等自动化部署工具的单个job任务执行
