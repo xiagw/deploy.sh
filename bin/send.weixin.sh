@@ -7,6 +7,7 @@ get_token_cache() {
     expires_in=$(awk -F":" '{print $2}' "$file_local_cache")
     token_time=$(awk -F":" '{print $3}' "$file_local_cache")
 }
+
 get_token_online() {
     echo "get from online https://api.weixin.qq.com"
     content=$(curl "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=$appID&secret=$appsecret")
@@ -18,7 +19,8 @@ get_token_online() {
     echo "expires_in = $expires_in"
     echo "$access_token:$expires_in:$token_time" >"$file_local_cache"
 }
-getAccessToken() {
+
+_get_access_token() {
     file_local_cache="$HOME/.wechat_accesstoken"
     if [ -f "$file_local_cache" ]; then
         get_token_cache
@@ -36,7 +38,7 @@ getAccessToken() {
 }
 
 #发送消息函数
-sendMessage() {
+_send_message() {
     #消息json体
     message=$(
         cat <<EOF
@@ -72,18 +74,21 @@ EOF
 }
 
 #帮助信息函数
-usage() {
+_usage() {
     cat <<EOF
-usage: $0 [-u openids -s summary -n name -t time -d detail -l link] [-h]
-    u   wechat user openid , multiple comma separated
-    s   message summary
-    n   project name
-    t   alarm time
-    d   message detail
-    l   link address
-    h   output this help and exit
+Usage: $0 [Options] [Parameter]
+    -u   wechat user openid, multiple comma separated
+    -s   message summary
+    -n   project name
+    -t   alarm time
+    -d   message detail
+    -l   link address
+    -h   output this help and exit
+Examples:
+    $0 -u openid-1,openid-2,openid-3 -s summary -n name -t time -d detail -l link
 EOF
 }
+
 
 main() {
     # 微信消息发送脚本
@@ -98,7 +103,6 @@ main() {
     #   {{first.DATA}}
     #   项目名称：{{name.DATA}}
     #   报警时间：{{date.DATA}}
-    #
     #   {{remark.DATA}}
 
     #获取脚本执行参数
@@ -123,7 +127,7 @@ main() {
             url="$OPTARG"
             ;;
         *)
-            usage
+            _usage
             return 0
             ;;
         esac
@@ -131,19 +135,19 @@ main() {
 
     #判断条件满足发送消息
     if [[ -n $openids && -n $first && -n $name && -n $date ]]; then
-        getAccessToken
-        OLD_IFS="$IFS"
-        IFS=","
-        IFS="$OLD_IFS"
-        for openid in $openids; do
-            sendMessage
+        _get_access_token
+        for openid in ${openids//,/  }; do
+            _send_message
         done
         return $?
     else
         echo "params error."
-        usage
+        _usage
         return 1
     fi
 }
 
 main "$@"
+
+# 使用shell通过微信公众号发送模板消息_slimina的博客-CSDN博客
+# https://blog.csdn.net/zhu_tianwei/article/details/71246627
