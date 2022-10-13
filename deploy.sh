@@ -545,7 +545,7 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo "[notify] skip message send."
+        echo "skip message send."
     fi
 }
 
@@ -825,8 +825,9 @@ _generate_apidoc() {
     fi
 }
 
-_preprocess_file() {
-    echo_msg step "copy from [runner/data/project_conf] to project dir...start"
+_inject_files() {
+    echo_msg step "[inject] copy from runner/data/project_conf to project_dir/...start"
+    echo "ops can put files to project_dir, replace Dockerfile/env/config/application.yml etc."
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -882,7 +883,7 @@ _preprocess_file() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_msg time "copy from [runner/data/project_conf] to project dir...end"
+    echo_msg time "[inject] copy from runner/data/project_conf to project_dir/...end"
 }
 
 _setup_deploy_conf() {
@@ -1253,8 +1254,8 @@ main() {
     _setup_deploy_conf
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
-    echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
     if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+        echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
         _renew_cert
         [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && return
     fi
@@ -1263,7 +1264,7 @@ main() {
     _probe_langs
 
     ## preprocess project config files / 预处理业务项目配置文件
-    _preprocess_file
+    _inject_files
 
     ## code style check / 代码风格检查
     code_style_sh="$me_path/langs/style.${project_lang}.sh"
