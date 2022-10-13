@@ -238,12 +238,11 @@ _build_image_docker() {
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
     docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" ${image_uuid}
-    echo "If you want to push the image to ttl.sh, please execute the following command:"
-    echo "run on gitlab-runner:"
-    echo "docker push $image_uuid"
+    echo "If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
+    echo "#  docker push $image_uuid"
     echo "Then execute the following command on remote server:"
-    echo "docker pull $image_uuid"
-    echo "docker tag $image_uuid deploy/<your_app>"
+    echo "#  docker pull $image_uuid"
+    echo "#  docker tag $image_uuid deploy/<your_app>"
 
     echo_msg time "[docker] build image...end"
 }
@@ -363,14 +362,21 @@ _deploy_k8s() {
         echo_msg question "Not found helm files, skip deploy k8s."
     else
         echo "Found helm files: $path_helm"
-        set -x
+        cat <<EOF
+$helm_opt upgrade ${helm_release} $path_helm/ \
+--install --history-max 1 \
+--namespace ${env_namespace} --create-namespace \
+--set image.repository=${ENV_DOCKER_REGISTRY} \
+--set image.tag=${image_tag} \
+--set image.pullPolicy=Always \
+--timeout 90s
+EOF
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' \
             --timeout 90s >/dev/null
-        [[ "${debug_on:-0}" -ne 1 ]] && set +x
         ## Clean up rs 0 0 / 清理 rs 0 0
         $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
         $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
@@ -497,11 +503,12 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 }
 
 _deploy_notify() {
-    echo_msg step "[chat/email] notify message for deploy result..."
+    echo_msg step "[notify] message for deploy result..."
 
     _deploy_notify_msg
     if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
         ## work chat / 发送至 企业微信
+        echo "to work wxchat"
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
         curl -s "$weixin_api" -H 'Content-Type: application/json' \
             -d "
@@ -513,17 +520,20 @@ _deploy_notify() {
         }"
     elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
         ## Telegram / 发送至 Telegram
+        echo "to Telegram"
         telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendMessage"
         # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
         $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$telegram_api_msg"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         ## element / 发送至 element
+        echo "to Element"
         python3 "$me_path_data_bin/element.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_EMAIL:-0}" -eq 1 ]]; then
         ## email / 发送至 email
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
+        echo "to Email"
         "$me_path_bin/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
@@ -535,7 +545,7 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo "skip message send."
+        echo "[notify] skip message send."
     fi
 }
 
@@ -1297,6 +1307,7 @@ main() {
     _test_unit
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
+    echo_msg step "[flyway] deploy sql with flyway...start"
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_deploy_flyway=0
     if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
@@ -1304,6 +1315,7 @@ main() {
     else
         [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
     fi
+    echo_msg time "[flyway] deploy sql with flyway...end"
 
     ## generate api docs
     # _generate_apidoc
