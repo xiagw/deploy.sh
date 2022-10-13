@@ -214,7 +214,6 @@ _docker_login() {
 _build_image_docker() {
     echo_msg step "[docker] build image...start"
     _docker_login
-
     ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     ## When the image does not exist, build the image / 判断模版是否存在,模版不存在，构建模板
@@ -234,16 +233,14 @@ _build_image_docker() {
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
-
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
     docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" ${image_uuid}
     echo "If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
-    echo "#  docker push $image_uuid"
+    echo "#    docker push $image_uuid"
     echo "Then execute the following command on remote server:"
-    echo "#  docker pull $image_uuid"
-    echo "#  docker tag $image_uuid deploy/<your_app>"
-
+    echo "#    docker pull $image_uuid"
+    echo "#    docker tag $image_uuid deploy/<your_app>"
     echo_msg time "[docker] build image...end"
 }
 
