@@ -15,24 +15,12 @@ set -e ## 出现错误自动退出
 echo_msg() {
     color_off='\033[0m' # Text Reset
     case "$1" in
-    red | error | erro)
-        color_on='\033[0;31m' # Red
-        ;;
-    green | info)
-        color_on='\033[0;32m' # Green
-        ;;
-    yellow | warning | warn)
-        color_on='\033[0;33m' # Yellow
-        ;;
-    blue)
-        color_on='\033[0;34m' # Blue
-        ;;
-    purple | question | ques)
-        color_on='\033[0;35m' # Purple
-        ;;
-    cyan)
-        color_on='\033[0;36m' # Cyan
-        ;;
+    red | error | erro) color_on='\033[0;31m' ;;       # Red
+    green | info) color_on='\033[0;32m' ;;             # Green
+    yellow | warning | warn) color_on='\033[0;33m' ;;  # Yellow
+    blue) color_on='\033[0;34m' ;;                     # Blue
+    purple | question | ques) color_on='\033[0;35m' ;; # Purple
+    cyan) color_on='\033[0;36m' ;;                     # Cyan
     time)
         color_on="[$(date +%Y%m%d-%T-%u)], " ## datetime
         color_off=''
@@ -55,7 +43,7 @@ echo_msg() {
 
 ## install phpunit
 _test_unit() {
-    echo_msg step "[unit test]...start"
+    echo_msg step "[test] unit test...start"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
     if [[ "${PIPELINE_UNIT_TEST:-0}" -eq 0 ]]; then
@@ -72,12 +60,12 @@ _test_unit() {
     else
         echo_msg question "not found tests/unit_test.sh, skip unit test."
     fi
-    echo_msg time "[unit test]...end"
+    echo_msg time "[test] unit test...end"
 }
 
 ## install jdk/ant/jmeter
 _test_function() {
-    echo_msg step "[function test]...start"
+    echo_msg step "[test] function test...start"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
     if [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 0 ]]; then
@@ -93,11 +81,11 @@ _test_function() {
     else
         echo "not found tests/func_test.sh, skip function test."
     fi
-    echo_msg time "[function test]...end"
+    echo_msg time "[test] function test...end"
 }
 
 _code_quality_sonar() {
-    echo_msg step "[sonarqube] check code quality...start"
+    echo_msg step "[quality] check code with sonarqube...start"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_SONAR:-0}" -eq 0 ]]; then
@@ -132,7 +120,7 @@ EOF
     $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
-    echo_msg time "[sonarqube] check code quality...end"
+    echo_msg time "[quality] check code with sonarqube...end"
     exit
 }
 
@@ -1179,6 +1167,7 @@ main() {
 
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
+    me_log="${me_path_data}/${me_name}.log"
     me_path_conf="${me_path}/conf"
     me_path_bin="${me_path}/bin"
     me_path_data="${me_path}/data" ## deploy.sh data folder
@@ -1187,7 +1176,6 @@ main() {
     me_conf="${me_path_conf}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
     me_yml="${me_path_conf}/deploy.yml"        ## deploy to app server 发布到目标服务器的配置信息
     me_env="${me_path_conf}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
-    me_log="${me_path_data}/${me_name}.log"    ## deploy.sh run loger
     me_dockerfile="${me_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
 
     [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"
