@@ -15,8 +15,10 @@ sudo chmod +x $path_gr
 sudo $path_gr install --user="$USER" --working-directory="$HOME"/runner
 sudo $path_gr start
 
+# git clone --depth 1 https://gitee.com/xiagw/deploy.sh.git "$HOME"/runner
 git clone --depth 1 https://github.com/xiagw/deploy.sh.git "$HOME"/runner
 ## gitlab-runner register token from gitlab-admin-runner: register an instance runner
+read -rp "[+] Enter your gitlab url [https://git.example.com]: " reg_url
 read -rp "[+] Enter your gitlab-runner token: " reg_token
 # reg_token='xxxxxxxx'
 # sudo $path_gr register --url "$DOMAIN_NAME_GIT_EXT" --registration-token "${reg_token:?empty var}" --executor docker --docker-image gitlab/gitlab-runner:latest --docker-volumes /var/run/docker.sock:/var/run/docker.sock --docker-privileged
@@ -32,9 +34,9 @@ read -rp "[+] Enter your gitlab-runner token: " reg_token
 #     --access-level=not_protected
 
 sudo $path_gr register \
-    -n \
-    --url "$DOMAIN_NAME_GIT_EXT" \
-    --registration-token "${reg_token:?empty var}" \
+    --non-interactive \
+    --url "${reg_url:?empty url}" \
+    --registration-token "${reg_token:?empty token}" \
     --executor shell \
     --tag-list docker,linux \
     --run-untagged \
