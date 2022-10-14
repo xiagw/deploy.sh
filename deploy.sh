@@ -1167,10 +1167,10 @@ main() {
 
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
-    me_log="${me_path_data}/${me_name}.log"
     me_path_conf="${me_path}/conf"
     me_path_bin="${me_path}/bin"
     me_path_data="${me_path}/data" ## deploy.sh data folder
+    me_log="${me_path_data}/${me_name}.log"
     me_path_data_bin="${me_path}/data/bin"
     me_path_builds="${me_path}/builds"
     me_conf="${me_path_conf}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
