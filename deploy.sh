@@ -200,7 +200,7 @@ _docker_login() {
 }
 
 _build_image_docker() {
-    echo_msg step "[docker] build image...start"
+    echo_msg step "[container] docker build image...start"
     _docker_login
     ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
@@ -229,16 +229,16 @@ _build_image_docker() {
     echo "Then execute the following command on remote server:"
     echo "#    docker pull $image_uuid"
     echo "#    docker tag $image_uuid deploy/<your_app>"
-    echo_msg time "[docker] build image...end"
+    echo_msg time "[container] docker build image...end"
 }
 
 _build_image_podman() {
-    echo_msg step "[podman] build image...<skip>"
+    echo_msg step "[container] podman build image...<skip>"
     # echo_msg time "[TODO] [podman] build image...end"
 }
 
 _push_image() {
-    echo_msg step "[docker] push image...start"
+    echo_msg step "[container] docker push image...start"
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "$demo_mode" == 1 ]]; then
@@ -254,11 +254,11 @@ _push_image() {
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway" || echo_msg error "got an error here, probably caused by network..."
     fi
-    echo_msg time "[docker] push image...end"
+    echo_msg time "[container] docker push image...end"
 }
 
 _deploy_single_host() {
-    echo_msg step "[docker-compose] deploy with docker-compose to singl host...start"
+    echo_msg step "[docker-compose] deploy to singl host...start"
     docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
     docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
     while read -r line; do
@@ -277,7 +277,7 @@ _deploy_single_host() {
         echo "${conf_ssh_host:?if stop here, check runner/conf/deploy.conf}"
         ssh -n -p $conf_ssh_port $conf_ssh_host "cd ~/docker/laradock && docker pull "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" && docker compose up -d $conf_project_name"
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
-    echo_msg time "[docker-compose] deploy with docker-compose to singl host...end"
+    echo_msg time "[docker-compose] deploy to singl host...end"
 }
 
 _deploy_k8s() {
@@ -535,7 +535,7 @@ _deploy_notify() {
 }
 
 _renew_cert() {
-    echo_msg step "[acme.sh] renew cert with acme.sh using dns+api...start"
+    echo_msg step "[cert] renew cert with acme.sh using dns+api...start"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
@@ -597,7 +597,7 @@ _renew_cert() {
         echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}"/custom.acme.sh
     fi
-    echo_msg time "[acme.sh] renew cert with acme.sh using dns+api...end"
+    echo_msg time "[cert] renew cert with acme.sh using dns+api...end"
     # [[ "${github_action:-0}" -eq 1 ]] || exit
 }
 
@@ -697,9 +697,9 @@ _install_jmeter() {
 _install_flarectl() {
     command -v flarectl >/dev/null && return
     echo_msg info "install flarectl"
-    ver_flarectl='0.28.0'
+    local ver='0.52.0'
     path_temp=$(mktemp -d)
-    $curl_opt -o "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver_flarectl}/flarectl_${ver_flarectl}_linux_amd64.tar.xz
+    $curl_opt -o "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz
     tar xf "$path_temp"/flarectl.zip -C "${me_path_data_bin}/"
 }
 
