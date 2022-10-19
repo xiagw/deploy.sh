@@ -1,5 +1,5 @@
 1. flameshot.%Y%m%d.%H%M%S
-1. grub 
+1. grub
 As such your /etc/default/grub should contain:
 
 GRUB_RECORDFAIL_TIMEOUT=10
@@ -17,7 +17,7 @@ curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo 
 x11vnc on Ubuntu 22.04 desktop seems broken - Ask Ubuntu
 https://askubuntu.com/questions/1412009/x11vnc-on-ubuntu-22-04-desktop-seems-broken
 
-$ cat /lib/systemd/system/x11vnc-login.service 
+$ cat /lib/systemd/system/x11vnc-login.service
 [Unit]
 Description=Start x11vnc at startup.
 After=multi-user.target
@@ -29,7 +29,7 @@ ExecStart=/usr/bin/x11vnc -auth /run/user/126/gdm/Xauthority -forever -loop -rep
 [Install]
 WantedBy=multi-user.target
 
-$ cat /lib/systemd/system/x11vnc.service 
+$ cat /lib/systemd/system/x11vnc.service
 [Unit]
 Description=Start x11vnc at startup.
 After=multi-user.target
@@ -50,3 +50,34 @@ WantedBy=multi-user.target
 # sudo systemctl enable x11vnc
 # sudo systemctl start x11vnc-login
 # sudo systemctl start x11vnc
+
+So the question is how to improve them to have the following:
+
+    built-in logging
+    better error handling
+    better portability
+    smaller footprint
+    built-in execution time tracking
+
+bash - Shell script common template - Stack Overflow
+https://stackoverflow.com/questions/14008125/shell-script-common-template
+
+
+# [翻译/搬运] 写出安全 bash script 的简洁模板 – Evil-EXEC
+# https://evex.one/posts/linux/safe-bash-script/
+
+virt-install \
+--name centos7 \
+--ram 4096 \
+--disk path=ubuntu16.img,size=30 \
+--vcpus 4 \
+--os-type linux \
+--os-variant ubuntu16.04 \
+--network bridge=br0 \
+--graphics none \
+--console pty,target_type=serial \
+--location ubuntu-16.04.7-server-amd64.iso \
+--extra-args 'console=ttyS0,115200n8 serial' \
+--host-device 3b:00.0 \
+--features kvm_hidden=on \
+--machine q35
