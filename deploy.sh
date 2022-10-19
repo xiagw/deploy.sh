@@ -835,13 +835,10 @@ _inject_files() {
     fi
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
-    ## Java, Dockerfile and maven settings.xml
+    ## Java, Dockerfile run.sh settings.xml
     if [[ "$project_lang" =~ (java) ]]; then
-        [[ "$ENV_CHANGE_SOURCE" == 'true' && -f "${me_path_conf}/dockerfile/settings.xml" ]] &&
-            rsync -av "${me_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}"/
-        path_template="${me_path_data}/common.java"
-        [ -d "$path_template" ] &&
-            rsync -av "$path_template"/ "${gitlab_project_dir}"/
+        path_java_common="${me_path_data}/dockerfile.java"
+        [ -d "$path_java_common" ] && rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
     fi
     ## cert file for nginx
     if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
