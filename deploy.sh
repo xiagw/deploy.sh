@@ -828,17 +828,21 @@ _inject_files() {
         copy_flyway_file=0
     fi
     ## backend (PHP/Java/Python) project_conf files
-    path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}/"
+    path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
     if [ -d "$path_project_conf" ]; then
         echo_msg warning "found custom config files, sync it."
-        rsync -av "$path_project_conf" "${gitlab_project_dir}/"
+        rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
     fi
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
-    ## maven settings.xml
-    [[ "$ENV_CHANGE_SOURCE" == 'true' && -f "${me_path_conf}/dockerfile/settings.xml" ]] &&
-        rsync -av "${me_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}/"
-
+    ## Java, Dockerfile and maven settings.xml
+    if [[ "$project_lang" =~ (java) ]]; then
+        [[ "$ENV_CHANGE_SOURCE" == 'true' && -f "${me_path_conf}/dockerfile/settings.xml" ]] &&
+            rsync -av "${me_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}"/
+        path_template="${me_path_data}/common.java"
+        [ -d "$path_template" ] &&
+            rsync -av "$path_template"/ "${gitlab_project_dir}"/
+    fi
     ## cert file for nginx
     if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
         rsync -av "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
