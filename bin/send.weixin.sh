@@ -25,8 +25,8 @@ _get_access_token() {
     if [ -f "$file_local_cache" ]; then
         get_token_cache
     fi
-    remain=$(($(date +%s) - $token_time))
-    limit=$(($expires_in - 60))
+    remain=$(($(date +%s) - token_time))
+    limit=$((expires_in - 60))
     if [ -z "$access_token" ] || [ -z "$expires_in" ] || [ -z "$token_time" ] || [ $remain -gt $limit ]; then
         rm -f "$file_local_cache"
         get_token_online
@@ -69,7 +69,7 @@ EOF
     )
     echo "send message : $message"
     curl -X POST -H "Content-Type: application/json" \
-        https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=$access_token \
+        https://api.weixin.qq.com/cgi-bin/message/template/send?access_token="$access_token" \
         -d "$message"
 }
 
@@ -89,7 +89,6 @@ Examples:
 EOF
 }
 
-
 main() {
     # 微信消息发送脚本
     #全局配置--
@@ -108,24 +107,12 @@ main() {
     #获取脚本执行参数
     while getopts ":u:s:n:t:d:h:l:" op; do
         case $op in
-        u)
-            openids="$OPTARG"
-            ;;
-        s)
-            first="$OPTARG"
-            ;;
-        n)
-            name="$OPTARG"
-            ;;
-        t)
-            date="$OPTARG"
-            ;;
-        d)
-            remark="$OPTARG"
-            ;;
-        l)
-            url="$OPTARG"
-            ;;
+        u) openids="$OPTARG" ;;
+        s) first="$OPTARG" ;;
+        n) name="$OPTARG" ;;
+        t) date="$OPTARG" ;;
+        d) remark="$OPTARG" ;;
+        l) url="$OPTARG" ;;
         *)
             _usage
             return 0
