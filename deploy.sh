@@ -837,6 +837,7 @@ _inject_files() {
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## Java, Dockerfile run.sh settings.xml
     if [[ "$project_lang" =~ (java) ]]; then
+        echo "runner/data/dockerfile.java: Dockerfile, run.sh, settings.xml"
         path_java_common="${me_path_data}/dockerfile.java"
         [ -d "$path_java_common" ] && rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
     fi
