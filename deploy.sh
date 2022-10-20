@@ -1005,6 +1005,7 @@ _probe_langs() {
 }
 
 _svn_checkout_repo() {
+    [[ "${arg_svn_co:-0}" -eq 1 ]] || return
     if [[ ! -d "$me_path_builds" ]]; then
         echo "not found $me_path_builds, create it..."
         mkdir -p builds
@@ -1014,6 +1015,7 @@ _svn_checkout_repo() {
 }
 
 _git_clone_repo() {
+    [[ "${arg_git_clone:-0}" -eq 1 ]] || return
     if [[ ! -d "$me_path_builds" ]]; then
         echo "not found $me_path_builds, create it..."
         mkdir -p builds
@@ -1032,6 +1034,7 @@ _git_clone_repo() {
 }
 
 _create_k8s() {
+    [[ "$create_k8s" -eq 1 ]] || return
     ## create k8s with terraform
     if [ -d "$me_path_data/terraform" ]; then
         echo "create k8s [terraform]..."
@@ -1199,19 +1202,19 @@ main() {
     _detect_os
 
     ## git clone repo / 克隆 git 仓库
-    [[ "${arg_git_clone:-0}" -eq 1 ]] && _git_clone_repo
+    _git_clone_repo
 
     ## svn checkout repo / 克隆 svn 仓库
-    [[ "${arg_svn_co:-0}" -eq 1 ]] && _svn_checkout_repo
+    _svn_checkout_repo
 
     ## run deploy.sh by hand / 手动执行 deploy.sh
     _setup_gitlab_vars
+
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$me_env"
     ## curl use proxy / curl 使用代理
     curl_opt="curl -L"
     [ -n "$ENV_HTTP_PROXY" ] && curl_opt="$curl_opt -x$ENV_HTTP_PROXY"
-
     ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
         echo_msg question "Found default username/password, skip docker login / push image / deploy k8s..."
@@ -1219,7 +1222,6 @@ main() {
     fi
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
-
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && _install_aws
     [[ "${ENV_INSTALL_ALIYUN}" == 'true' ]] && _install_aliyun_cli
@@ -1232,7 +1234,7 @@ main() {
     [[ "${ENV_INSTALL_FLARECTL}" == 'true' ]] && _install_flarectl
 
     ## create k8s
-    [[ "$create_k8s" -eq 1 ]] && _create_k8s
+    _create_k8s
 
     ## clean up disk space / 清理磁盘空间
     _clean_disk
@@ -1287,9 +1289,8 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo_msg step "[style] check code style...start"
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
+    [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]] &&
         source "$code_style_sh"
-    fi
     echo_msg time "[style] check code style...end"
 
     _test_unit
