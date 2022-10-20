@@ -58,7 +58,7 @@ $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>
 ```
 ```
 ## run in screen or tmux
-while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --cron); done; sleep 300; done
+while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --loop); done; sleep 300; done
 ```
 
 ### option [3]. Running applications with GitLab-Runner

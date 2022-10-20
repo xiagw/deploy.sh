@@ -55,11 +55,11 @@ $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>
 ### 可选方式 [2], 通过 crontab 或 Screen/tmux 等方式全自动运行程序
 ```
 ## crontab
-*/5 * * * * for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done
+*/5 * * * * for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --cron); done
 ```
 ```
 ## run in screen or tmux
-while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh); done; sleep 300; done
+while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --loop); done; sleep 300; done
 ```
 
 ### 可选方式 [3], 配合 GitLab-Runner 运行程序

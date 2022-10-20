@@ -1083,7 +1083,7 @@ _process_args() {
             debug_on=1
             quiet_flag=
             ;;
-        --cron)
+        --cron | --loop)
             run_crontab=1
             ;;
         --create-k8s)
