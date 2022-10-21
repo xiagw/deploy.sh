@@ -7,7 +7,7 @@ _cleanup() {
 }
 
 _color() {
-    if [[ -t 2 ]] && [[ -z "${NO_COLOR-}" ]] && [[ "${TERM-}" != "dumb" ]]; then
+    if [[ -t 2 ]] && [[ -z "${no_color-}" ]] && [[ "${TERM-}" != "dumb" ]]; then
         NOFORMAT='\033[0m' RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m'
         BLUE='\033[0;34m' PURPLE='\033[0;35m' CYAN='\033[0;36m' YELLOW='\033[1;33m'
     else
@@ -36,11 +36,14 @@ _parse_params() {
     param=''
     while :; do
         case "${1-}" in
+        --no-color) no_color=1 ;;
         -h | --help) usage ;;
-        -v | --verbose) set -x ;;
-        --no-color) NO_COLOR=1 ;;
         -f | --flag) flag=1 ;; # example flag
-        -p | --param)          # example named parameter
+        -v | --verbose)
+            set -x
+            enable_log=1
+            ;;
+        -p | --param) # example named parameter
             param="${2-}"
             shift
             ;;
@@ -76,19 +79,18 @@ EOF
 }
 
 _myself() {
-    # script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
-    me_name="$(basename "$0")"
+    me_name="$(basename "${BASH_SOURCE[0]}")"
     me_path="$(dirname "$(readlink -f "$0")")"
     if [ -w "$me_path" ]; then
         me_log="${me_path}/${me_name}.log"
     else
         me_log="/tmp/${me_name}.log"
     fi
-    echo "Log file is \"$me_log\""
+    [[ "$enable_log" -eq 1 ]] && echo "Log file is \"$me_log\""
 }
 
-_demo() {
-    _msg "demo function."
+_func_demo() {
+    _msg "demo function 1."
     _msg "${RED}Read parameters:${NOFORMAT}"
     _msg "  - ${YELLOW}flag${NOFORMAT}: ${flag}"
     _msg "  - ${BLUE}param:${NOFORMAT} ${param}"
@@ -96,15 +98,14 @@ _demo() {
 }
 
 main() {
-    _parse_params "$@"
     _color
+    _parse_params "$@"
     _myself
     set -Eeuo pipefail
     trap _cleanup SIGINT SIGTERM ERR EXIT
 
     ## script logic here
-    _demo
-
+    _func_demo
 }
 
 main "$@"
