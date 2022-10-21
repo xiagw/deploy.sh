@@ -223,8 +223,9 @@ _build_image_docker() {
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
-    docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" ${image_uuid}
+
     echo "If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
+    echo "#    docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
     echo "#    docker push $image_uuid"
     echo "Then execute the following command on remote server:"
     echo "#    docker pull $image_uuid"
@@ -246,8 +247,8 @@ _push_image() {
         return 0
     fi
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        echo "remove docker image "
-        echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}"
+        echo "safe remove docker image "
+        echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}" >>"$me_log"
     else
         echo_msg error "got an error here, probably caused by network..."
     fi
@@ -363,7 +364,7 @@ EOF
             --set image.pullPolicy='Always' \
             --timeout 90s >/dev/null
         ## Clean up rs 0 0 / 清理 rs 0 0
-        $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
+        $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs &>/dev/null || true
         $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
         sleep 3
         $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 90s || deploy_result=1
@@ -837,7 +838,7 @@ _inject_files() {
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## Java, Dockerfile run.sh settings.xml
     if [[ "$project_lang" =~ (java) ]]; then
-        echo "runner/data/dockerfile.java: Dockerfile, run.sh, settings.xml"
+        echo "runner/data/dockerfile.java/"
         path_java_common="${me_path_data}/dockerfile.java"
         [ -d "$path_java_common" ] && rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
     fi
@@ -1186,7 +1187,6 @@ main() {
     [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"
     [[ -f "$me_yml" ]] || cp "${me_path_conf}/example-deploy.yml" "$me_yml"
     [[ -f "$me_env" ]] || cp "${me_path_conf}/example-deploy.env" "$me_env"
-    [[ -f "$me_log" ]] || touch "$me_log"
 
     PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
     PATH="$PATH:$me_path_data/jdk/bin:$me_path_data/jmeter/bin:$me_path_data/ant/bin:$me_path_data/maven/bin"
