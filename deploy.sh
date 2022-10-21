@@ -1008,7 +1008,7 @@ _probe_langs() {
 }
 
 _svn_checkout_repo() {
-    [[ "${arg_svn_co:-0}" -eq 1 ]] || return
+    [[ "${arg_svn_co:-0}" -eq 1 ]] || return 0
     if [[ ! -d "$me_path_builds" ]]; then
         echo "not found $me_path_builds, create it..."
         mkdir -p builds
@@ -1018,7 +1018,7 @@ _svn_checkout_repo() {
 }
 
 _git_clone_repo() {
-    [[ "${arg_git_clone:-0}" -eq 1 ]] || return
+    [[ "${arg_git_clone:-0}" -eq 1 ]] || return 0
     if [[ ! -d "$me_path_builds" ]]; then
         echo "not found $me_path_builds, create it..."
         mkdir -p builds
@@ -1037,7 +1037,7 @@ _git_clone_repo() {
 }
 
 _create_k8s() {
-    [[ "$create_k8s" -eq 1 ]] || return
+    [[ "$create_k8s" -eq 1 ]] || return 0
     ## create k8s with terraform
     if [ -d "$me_path_data/terraform" ]; then
         echo "create k8s [terraform]..."
