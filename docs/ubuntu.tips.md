@@ -81,3 +81,6 @@ virt-install \
 --host-device 3b:00.0 \
 --features kvm_hidden=on \
 --machine q35
+
+gitmoji | An emoji guide for your commit messages
+https://gitmoji.dev/
