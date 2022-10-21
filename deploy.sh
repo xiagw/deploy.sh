@@ -300,6 +300,8 @@ _deploy_k8s() {
         path_helm="${me_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}"
     elif [ -d "${me_path_data}/helm/${gitlab_project_name}" ]; then
         path_helm="${me_path_data}/helm/${gitlab_project_name}"
+    elif [ -d "${me_path_data}/helm.common/" ]; then
+        path_helm="${me_path_data}/helm.common"
     fi
 
     ## update gitops files / 更新 gitops 文件
