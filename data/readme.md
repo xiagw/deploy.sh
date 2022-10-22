@@ -14,10 +14,10 @@ aws Access Key 管理配置文件机密（运维部门/管理者）
 k8s集群 机密配置文件（运维部门/管理者）
 
 ### project_conf/
-各个业务 Git 项目的配置 .env/config 等机密文件 （运维部门/管理者）
+需要注入到各个业务 Git 项目的配置 .env/config 等机密文件 （运维部门/管理者）
 
 ### .ssh/
-gitlab-runner login 所有服务器需要的 ssh private key 文件（运维部门/管理者）
+gitlab-runner login 所有服务器需要的config ， ssh private key 等文件（运维部门/管理者）
 
 ### helm/
 各个业务 Git 项目基于 helm 自动发布部署到 k8s 集群的配置文件（运维部门/研发部门可配置）
@@ -27,9 +27,6 @@ gitlab-runner login 所有服务器需要的 ssh private key 文件（运维部�
 
 ### .python-gitlab.cfg
 config 文件 （python-gitlab），用于 deploy notify, 通过 gitlab API 获取 gitlab 服务器 项目/用户等信息
-
-### .cloudflare.conf
-DNS api config file, [cloudflare]
 
 ### .aliyun.dnsapi.conf
 DNS api config file, [aliyun]
@@ -61,10 +58,10 @@ DNS api config file, [qcloud/dnspod]
 自动启动 gitlab-runner  systemctl config 文件 （自定义路径/非默认配置）
 
 ### deploy.conf
-deploy.sh 的项目配置文件 （运维部门/研发部门可配置）
+deploy.sh 的业务 git 项目配置文件 （运维部门/研发部门可配置）
 
 ### deploy.env
-deploy.sh 的秘密配置文件 （运维部门/管理者）
+deploy.sh 的机密配置文件 （运维部门/管理者）
 
 ### microk8s 自定义配置
 文件路径：/var/snap/microk8s/current/args/containerd-template.toml
