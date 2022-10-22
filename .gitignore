@@ -7,9 +7,8 @@
 builds/
 cache/
 etc/
-conf/deploy.env
-conf/deploy.conf
-conf/deploy.yml
+conf/deploy.*
+## deploy.sh data/
 data/**
 !data/readme.md
 ## custome folder
