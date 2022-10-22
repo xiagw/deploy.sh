@@ -1,33 +1,32 @@
 #!/usr/bin/env bash
 
-me_path="$(dirname "$(readlink -f "$0")")"
-## 修改内存占用值，
-if [ -z "$JAVA_OPTS" ]; then
-    JAVA_OPTS='java -Xms256m -Xmx384m'
-fi
-## 设置启动调用参数或配置文件
-profile_name=
-## 自动探测环境变量，默认值 profile.test，(Dockerfile.maven ARG MVN_PROFILE=test)
-for f in "$me_path"/profile.*; do
-    if [[ -f "$f" ]]; then
-        echo "found $f"
-        profile_name="--spring.profiles.active=${f##*.}"
-        break
+_start_jar() {
+    ## 修改内存占用值，
+    if [ -z "$JAVA_OPTS" ]; then
+        JAVA_OPTS='java -Xms256m -Xmx384m'
     fi
-done
-## 自动探测 yml 配置文件，覆盖上面的 profile.*
-for y in "$me_path"/application*.yml; do
-    if [[ -f "$y" ]]; then
-        echo "Found $y, rewrite profile_name"
-        profile_name="-Dspring.config.additional-location=${y##*/}"
-        break
-    fi
-done
+    ## 设置启动调用参数或配置文件
+    profile_name=
+    ## 自动探测环境变量，默认值 profile.test，(Dockerfile.maven ARG MVN_PROFILE=test)
+    for f in "$me_path"/profile.*; do
+        if [[ -f "$f" ]]; then
+            echo "found $f"
+            profile_name="--spring.profiles.active=${f##*.}"
+            break
+        fi
+    done
+    ## 自动探测 yml 配置文件，覆盖上面的 profile.*
+    for y in "$me_path"/application*.yml; do
+        if [[ -f "$y" ]]; then
+            echo "Found $y, rewrite profile_name"
+            profile_name="-Dspring.config.additional-location=${y##*/}"
+            break
+        fi
+    done
 
-[ -d /app/log ] || mkdir /app/log
-date >>/app/log/run.log
+    [ -d /app/log ] || mkdir /app/log
+    date >>/app/log/run.log
 
-_start() {
     ## start *.jar / 启动所有 jar 包
     for jar in "$me_path"/*.jar; do
         [[ -f "$jar" ]] || continue
@@ -40,6 +39,20 @@ _start() {
     pids="$pids $!"
 }
 
+_start_php() {
+    ## schedule task
+    [ -f /var/www/schedule.sh ] && bash /var/www/schedule.sh &
+    [ -f /app/schedule.sh ] && bash /app/schedule.sh &
+
+    if [ -f easyswoole ]; then
+        exec php easyswoole server start -mode=config
+    elif command -v php-fpm >/dev/null 2>&1; then
+        exec php-fpm -F
+    else
+        echo "No easyswoole/php-fpm found, give up php."
+    fi
+}
+
 _kill() {
     echo "[INFO] Receive SIGTERM"
     for pid in $pids; do
@@ -48,8 +61,13 @@ _kill() {
     done
 }
 
-trap _kill HUP INT QUIT TERM
+main() {
+    me_path="$(dirname "$(readlink -f "$0")")"
 
-_start
+    trap _kill HUP INT QUIT TERM
+    _start_php
+    _start_jar
+    wait
+}
 
-wait
+main "$@"

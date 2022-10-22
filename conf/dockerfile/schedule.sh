@@ -3,7 +3,7 @@
 
 main() {
     for d in /app/*/ /var/www/*/; do
-        [[ -f "$d"/task.sh ]] && bash "$d"/task.sh
+        [[ -f "$d"/cron.sh ]] && bash "$d"/cron.sh
     done
 }
 
