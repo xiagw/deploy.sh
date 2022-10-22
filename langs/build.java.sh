@@ -4,8 +4,9 @@ if [[ "${project_docker}" -eq 1 ]]; then
     return 0
 fi
 
-path_for_rsync='jar_file/'
+path_for_rsync="$gitlab_project_dir/jar_file"
 MVN_PROFILE="${gitlab_project_branch}"
+maven_cache="${script_path_data}"/cache.maven
 
 if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
     echo_msg step "java build [gradle]..."
@@ -17,11 +18,11 @@ else
     else
         MVN_SET=''
     fi
-    [ -d "${script_path_data}"/maven ] || mkdir -p "${script_path_data}"/maven
+    [ -d "${maven_cache}" ] || mkdir -p "${maven_cache}"
 
     docker run -i --rm --user "$(id -u):$(id -g)" \
         -e MAVEN_CONFIG=/var/maven/.m2 \
-        -v "$script_path_data"/maven:/var/maven/.m2:rw \
+        -v "$maven_cache":/var/maven/.m2:rw \
         -v "$gitlab_project_dir":/app:rw \
         -w /app \
         maven:3.6-jdk-8 \
@@ -33,7 +34,7 @@ else
         --activate-profiles "$MVN_PROFILE" $MVN_SET
 fi
 
-[ -d $path_for_rsync ] || mkdir "$gitlab_project_dir/${path_for_rsync%/}"
+[ -d $path_for_rsync ] || mkdir "${path_for_rsync}"
 
-find "${gitlab_project_dir}" -path "${gitlab_project_dir}/${path_for_rsync%/}" -prune -o -type f \
-    -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' -exec cp {} "$gitlab_project_dir/$path_for_rsync" \;
+find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
+    -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' -exec cp -vf {} "$path_for_rsync" \;

@@ -1259,6 +1259,8 @@ main() {
 
     ## code style check / 代码风格检查
     code_style_sh="$me_path/langs/style.${project_lang}.sh"
+
+    ## code build / 代码编译打包
     build_langs_sh="$me_path/langs/build.${project_lang}.sh"
 
     ################################################################################
