@@ -630,11 +630,12 @@ _install_aliyun_cli() {
 _install_terraform() {
     command -v terraform >/dev/null && return
     echo_msg info "install terraform..."
-    sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
-    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    [[ $UID -eq 0 ]] || use_sudo=sudo
+    $use_sudo apt-get update && $use_sudo apt-get install -y gnupg software-properties-common curl
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
-        sudo tee /etc/apt/sources.list.d/hashicorp.list
-    sudo apt update && sudo apt install -y terraform
+        $use_sudo tee /etc/apt/sources.list.d/hashicorp.list
+    $use_sudo apt update && $use_sudo apt install -y terraform
     # terraform version
 }
 
