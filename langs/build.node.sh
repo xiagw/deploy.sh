@@ -4,7 +4,7 @@
 path_rsync_src='dist/'
 file_json="${gitlab_project_dir}/package.json"
 file_json_md5="$gitlab_project_path/$env_namespace/$(md5sum "$file_json" | awk '{print $1}')"
-if grep -q "$file_json_md5" "${script_log}"; then
+if grep -q "$file_json_md5" "${me_log}"; then
     echo "The same checksum for ${file_json}, skip yarn install."
 else
     echo "New checksum for ${file_json}, run yarn install."
@@ -34,7 +34,7 @@ fi
 
 if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
     $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install" &&
-        echo "$file_json_md5" >>"${script_log}"
+        echo "$file_json_md5" >>"${me_log}"
 else
     echo_msg time "skip node yarn install..."
 fi
