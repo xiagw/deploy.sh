@@ -6,7 +6,7 @@ fi
 
 path_for_rsync="$gitlab_project_dir/jar_file"
 MVN_PROFILE="${gitlab_project_branch}"
-maven_cache="${script_path_data}"/cache.maven
+maven_cache="${me_path_data}"/cache.maven
 
 if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
     echo_msg step "java build [gradle]..."
