@@ -89,7 +89,7 @@ _code_quality_sonar() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_SONAR:-0}" -eq 0 ]]; then
-        echo "<skip>"
+        echo "default skip check."
         return 0
     fi
     sonar_url="${ENV_SONAR_URL:?empty}"
@@ -815,8 +815,8 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    echo_msg step "[inject] copy from runner/data/project_conf to project_dir/...start"
-    echo "ops can put files to project_dir, replace Dockerfile/env/config/application.yml etc."
+    echo_msg step "[inject] copy from runner/data/project_dir/...start"
+    echo "ops can put files to project_dir/<project_name>, replace Dockerfile/env/config/application.yml etc."
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -874,7 +874,7 @@ _inject_files() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_msg time "[inject] copy from runner/data/project_conf to project_dir/...end"
+    echo_msg time "[inject] copy from runner/data/project_dir/...end"
 }
 
 _setup_deploy_conf() {
@@ -952,8 +952,7 @@ _probe_langs() {
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
         Dockerfile)
-            echo "Found Dockerfile, enable docker build / helm deploy."
-            echo "disable [rsync+ssh]"
+            echo "Found Dockerfile, enable docker build / helm deploy, disable [rsync+ssh]"
             echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
             echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
             if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
