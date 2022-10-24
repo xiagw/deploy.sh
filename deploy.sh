@@ -843,7 +843,7 @@ _inject_files() {
     if [[ "$project_lang" =~ (java) ]]; then
         echo "runner/data/dockerfile.java/"
         path_java_common="${me_path_data}/dockerfile.java"
-        [ -d "$path_java_common" ] && rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
+        [[ -d "$path_java_common" && ${ENV_ENABLE_INJECT:-1} -eq 1 ]] && rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
     fi
     ## cert file for nginx
     if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
