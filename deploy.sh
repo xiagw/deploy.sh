@@ -247,7 +247,7 @@ _push_image() {
         return 0
     fi
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        echo "safe remove docker image "
+        echo "safe remove the above image"
         echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}" >>"$me_log"
     else
         echo_msg error "got an error here, probably caused by network..."

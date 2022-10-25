@@ -117,7 +117,7 @@ bash $HOME/runner/bin/helm-new.sh
 ### How to resolve gitlab-runner fail
 If you use Ubuntu, just `rm -f ~/.bash_logout`
 
-# Flow
+# Diagram
 ```mermaid
 graph TB;
 

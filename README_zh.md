@@ -113,7 +113,7 @@ bash $HOME/runner/bin/helm-new.sh
 ## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
 
-# Flow
+# 流程图
 ```mermaid
 graph TB;
 
