@@ -815,8 +815,8 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    echo_msg step "[inject] copy from runner/data/project_dir/...start"
-    echo "ops can put files to project_dir/<project_name>, replace Dockerfile/env/config/application.yml etc."
+    echo_msg step "[inject] copy from runner/data/project_conf/...start"
+    echo "ops can put files to project_conf/<project_name>, replace Dockerfile/env/config/application.yml etc."
     ## frontend (VUE) .env file
     if [[ "$project_lang" =~ (node) ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -874,7 +874,7 @@ _inject_files() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_msg time "[inject] copy from runner/data/project_dir/...end"
+    echo_msg time "[inject] copy from runner/data/project_conf/...end"
 }
 
 _setup_deploy_conf() {
