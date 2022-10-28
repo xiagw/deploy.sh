@@ -608,14 +608,12 @@ _install_python_gitlab() {
     python3 -m pip list 2>/dev/null | grep -q python-gitlab && return
     echo_msg info "install python3 gitlab api..."
     python3 -m pip install --user --upgrade python-gitlab
-
 }
 
 _install_python_element() {
     python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
     echo_msg info "install python3 element api..."
     python3 -m pip install --user --upgrade matrix-nio
-
 }
 
 _install_aliyun_cli() {
@@ -708,12 +706,9 @@ _install_flarectl() {
 }
 
 _detect_os() {
-    if [[ $UID == 0 ]]; then
-        exec_sudo=''
-    else
+    if [[ "$UID" != 0 ]]; then
         exec_sudo=sudo
     fi
-
     if [[ -e /etc/debian_version ]]; then
         source /etc/os-release
         OS="${ID}" # debian or ubuntu
@@ -781,8 +776,7 @@ _detect_os() {
 
 _clean_disk() {
     ## clean cache of docker build / 清理 docker 构建缓存
-    disk_usage="$(df / | awk 'NR>1 {print $5}')"
-    disk_usage="${disk_usage/\%/}"
+    disk_usage="$(df / | awk 'NR>1 {print $5}' | sed 's/%//')"
     if ((disk_usage < 80)); then
         return
     fi
