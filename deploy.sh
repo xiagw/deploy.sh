@@ -364,7 +364,7 @@ EOF
             --set image.repository="${ENV_DOCKER_REGISTRY}" \
             --set image.tag="${image_tag}" \
             --set image.pullPolicy='Always' \
-            --timeout 90s >/dev/null
+            --timeout 120s >/dev/null
         ## Clean up rs 0 0 / 清理 rs 0 0
         $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs &>/dev/null || true
         $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
