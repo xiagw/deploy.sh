@@ -357,7 +357,7 @@ $helm_opt upgrade ${helm_release} $path_helm/ \
 --set image.repository=${ENV_DOCKER_REGISTRY} \
 --set image.tag=${image_tag} \
 --set image.pullPolicy=Always \
---timeout 90s
+--timeout 120s
 EOF
         $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
