@@ -9,10 +9,10 @@ MVN_PROFILE="${gitlab_project_branch}"
 maven_cache="${me_path_data}"/cache.maven
 
 if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
-    echo_msg step "java build [gradle]..."
+    echo_msg step "[build] java build with gradle..."
     gradle -q
 else
-    echo_msg step "java build [maven]..."
+    echo_msg step "[build] java build with maven..."
     if [[ -f settings.xml ]]; then
         MVN_SET='--settings settings.xml'
     else
@@ -38,3 +38,5 @@ fi
 
 find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
     -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' -exec cp -vf {} "$path_for_rsync" \;
+
+(cd "$path_for_rsync" && rm -f framework* gdp-module* sdk*.jar)

@@ -1245,11 +1245,11 @@ main() {
         [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && return
     fi
 
-    ## probe program lang / 探测程序语言
-    _probe_langs
-
     ## preprocess project config files / 预处理业务项目配置文件
     _inject_files
+
+    ## probe program lang / 探测程序语言
+    _probe_langs
 
     ## code style check / 代码风格检查
     code_style_sh="$me_path/langs/style.${project_lang}.sh"
