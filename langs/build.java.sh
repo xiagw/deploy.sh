@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=2154
 
 if [[ "${project_docker}" -eq 1 ]]; then
     return 0
@@ -16,7 +17,7 @@ else
     if [[ -f settings.xml ]]; then
         MVN_SET='--settings settings.xml'
     else
-        MVN_SET=''
+        MVN_SET=
     fi
     [ -d "${maven_cache}" ] || mkdir -p "${maven_cache}"
 
@@ -34,7 +35,7 @@ else
         --activate-profiles "$MVN_PROFILE" $MVN_SET
 fi
 
-[ -d $path_for_rsync ] || mkdir "${path_for_rsync}"
+[ -d "$path_for_rsync" ] || mkdir "${path_for_rsync}"
 
 find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
     -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' -exec cp -vf {} "$path_for_rsync" \;
