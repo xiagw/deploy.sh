@@ -809,10 +809,10 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    echo_msg step "[inject] copy from runner/data/project_conf/...start"
-    echo "ops can put files to project_conf/<project_name>, replace Dockerfile/env/config/application.yml etc."
+    echo_msg step "[inject] from runner/data/project_conf/...start"
+    echo "put files to project_conf/<project_name>, replace Dockerfile/env/config/application.yml etc."
     ## frontend (VUE) .env file
-    if [[ "$project_lang" =~ (node) ]]; then
+    if [[ -f ${gitlab_project_dir}/package.json ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
         for file in $config_env_path; do
             [[ -f "$file" ]] || continue
@@ -834,7 +834,7 @@ _inject_files() {
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## Java, Dockerfile run.sh settings.xml
-    if [[ "$project_lang" =~ (java) ]]; then
+    if [[ -f ${gitlab_project_dir}/pom.xml ]]; then
         echo "runner/data/dockerfile.java/"
         path_java_common="${me_path_data}/dockerfile.java"
         [[ -d "$path_java_common" && ${ENV_ENABLE_INJECT:-1} -eq 1 ]] && rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
@@ -844,7 +844,7 @@ _inject_files() {
         rsync -av "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## Docker build from / 是否从模板构建
-    if [[ "${project_docker}" -eq 1 && -n "$build_image_from" ]]; then
+    if [[ -n "$build_image_from" ]]; then
         file_docker_tmpl="${me_dockerfile}/Dockerfile.${build_image_from##*:}"
         [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
     fi
@@ -951,10 +951,8 @@ _probe_langs() {
             echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
             if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
                 echo "Force disable docker build and helm deploy, default enable rsync+ssh."
-                project_docker=0
                 exec_deploy_rsync_ssh=1
             else
-                project_docker=1
                 exec_build_image=1
                 exec_push_image=1
                 exec_deploy_k8s=1
@@ -962,7 +960,7 @@ _probe_langs() {
                 build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}" | head -n 1)"
                 if [[ -f "${gitlab_project_dir}/docker-compose.yml" || -f "${gitlab_project_dir}/docker-compose.yaml" ]]; then
                     exec_deploy_k8s=0
-                    exec_deploy_single_host=1
+                    exec_deploy_docker_compose=1
                 fi
             fi
             ;;
@@ -1245,13 +1243,10 @@ main() {
         [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && return
     fi
 
-    ## probe program lang / 探测程序语言
-    _probe_langs
-
     ## preprocess project config files / 预处理业务项目配置文件
     _inject_files
 
-    ## probe program lang again / 再次探测程序语言
+    ## probe program lang / 探测程序语言
     _probe_langs
 
     ## code style check / 代码风格检查
@@ -1317,7 +1312,7 @@ main() {
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
     # [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
-    [[ "${exec_deploy_single_host:-0}" -eq 1 ]] && _deploy_single_host
+    [[ "${exec_deploy_docker_compose:-0}" -eq 1 ]] && _deploy_single_host
     [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
 
     ## deploy with rsync / 使用 rsync 发布
