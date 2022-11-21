@@ -252,29 +252,6 @@ _push_image() {
     echo_msg time "[container] docker push image...end"
 }
 
-_deploy_single_host() {
-    echo_msg step "[docker-compose] deploy to singl host...start"
-    docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
-    docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
-    while read -r line; do
-        # shellcheck disable=2116
-        read -ra array <<<"$(echo "$line")"
-        conf_project_name=${array[0]}
-        # conf_namespace=${array[1]}
-        conf_ssh_host=${array[2]}
-        conf_ssh_port=${array[3]}
-        # conf_rsync_src=${array[4]}
-        # conf_rsync_dest=${array[5]}
-        # conf_db_user=${array[6]}
-        # conf_db_host=${array[7]}
-        # conf_db_name=${array[8]}
-        ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo "${conf_ssh_host:?if stop here, check runner/conf/deploy.conf}"
-        ssh -n -p $conf_ssh_port $conf_ssh_host "cd ~/docker/laradock && docker pull "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" && docker compose up -d $conf_project_name"
-    done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
-    echo_msg time "[docker-compose] deploy to singl host...end"
-}
-
 _deploy_k8s() {
     echo_msg step "[helm] deploy to k8s cluster...start"
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
@@ -428,13 +405,17 @@ _deploy_rsync_ssh() {
             return
         fi
         $ssh_opt -n "${ssh_host}" "[[ -d $rsync_dest ]] || mkdir -p $rsync_dest"
-        ## rsync to remote server / rsync 到远程服务器
         echo "deploy to ${ssh_host}:${rsync_dest}"
+        ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
         if [ -f "$me_path_data_bin/custom.deploy.sh" ]; then
             echo_msg time "custom deploy..."
             bash "$me_path_data_bin/custom.deploy.sh" ${ssh_host} ${rsync_dest}
             echo_msg time "end custom deploy."
+        fi
+        if [[ $exec_deploy_single_host -eq 1 ]]; then
+            echo_msg step "[docker-compose] deploy to singl host...start"
+            $ssh_opt -n "$ssh_host" "cd ~/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
     echo_msg time "[rsync+ssh] deploy code files...end"
@@ -935,10 +916,10 @@ _probe_langs() {
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
         docker-compose.yml)
-            exec_deploy_single_host=1
-            exec_build_image=1
-            exec_push_image=1
+            exec_build_image=0
+            exec_push_image=0
             exec_deploy_k8s=0
+            exec_deploy_single_host=1
             ;;
         Dockerfile)
             echo "Found Dockerfile, enable docker build / helm deploy, disable [rsync+ssh]"
@@ -946,7 +927,6 @@ _probe_langs() {
             echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
             if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -ne 0 || "${ENV_DISABLE_DOCKER:-0}" -ne 0 ]]; then
                 echo "Force disable docker build and helm deploy, default enable rsync+ssh."
-                exec_deploy_rsync_ssh=1
             else
                 exec_build_image=1
                 exec_push_image=1
@@ -1297,23 +1277,22 @@ main() {
 
     ## build
     [[ "${exec_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
-
-    ## deploy k8s
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
     # [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
-    [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
-    [[ "${exec_deploy_single_host:-0}" -eq 1 ]] && _deploy_single_host
-    [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
 
-    ## deploy with rsync / 使用 rsync 发布
-    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync_ssh=0
-    [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
+    [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
+
+    ## deploy k8s
+    [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
     ## rsync server
     [[ "${exec_deploy_rsync:-0}" -eq 1 ]] && _deploy_rsync
     ## ftp server
     [[ "${exec_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
     ## sftp server
     [[ "${exec_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
+    ## deploy with rsync / 使用 rsync 发布
+    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync_ssh=0
+    [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
 
     _test_function
     _scan_ZAP
