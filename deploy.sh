@@ -809,13 +809,32 @@ _inject_files() {
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## Java, Dockerfile run.sh settings.xml
-    if [[ -f ${gitlab_project_dir}/pom.xml ]]; then
-        echo "runner/data/dockerfile.java/"
-        path_java_common="${me_path_data}/dockerfile.java"
-        [[ -d "$path_java_common" && ${ENV_ENABLE_INJECT:-1} -eq 1 ]] && rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
+    path_java_common="${me_path_data}/dockerfile.java"
+    if [[ -f ${gitlab_project_dir}/pom.xml && -d "$path_java_common" ]]; then
+        echo "from runner/data/dockerfile.java/"
+        # 1, 覆盖 ENV_ENABLE_INJECT=1
+        # 2, 不覆盖 ENV_ENABLE_INJECT=2
+        # 3, 删除 Dockerfile ENV_ENABLE_INJECT=3
+        # 4, 创建 docker-compose.yml ENV_ENABLE_INJECT=4
+        case ${ENV_ENABLE_INJECT:-1} in
+        1)
+            echo "overwrite from runner/data/dockerfile.java/ "
+            rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
+            ;;
+        2)
+            echo 'Not overwritten'
+            ;;
+        3)
+            echo 'Delete Dockerfile'
+            rm -f "${gitlab_project_dir}"/Dockerfile
+            ;;
+        4)
+            echo '## deploy with docker-compose ' "${gitlab_project_dir}"/docker-compose.yml
+            ;;
+        esac
     fi
     ## cert file for nginx
-    if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
+    if [[ "${gitlab_project_name}" == *"$ENV_NGINX_GIT_NAME"* && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
         rsync -av "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
     ## flyway files sql & conf
