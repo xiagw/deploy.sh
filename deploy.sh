@@ -931,9 +931,15 @@ _setup_gitlab_vars() {
 
 _probe_langs() {
     echo_msg step "[langs] probe language..."
-    for f in Dockerfile composer.json package.json pom.xml requirements.txt README.md readme.md README.txt readme.txt; do
+    for f in pom.xml composer.json package.json requirements.txt README.md readme.md README.txt readme.txt Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
+        docker-compose.yml)
+            exec_deploy_single_host=1
+            exec_build_image=1
+            exec_push_image=1
+            exec_deploy_k8s=0
+            ;;
         Dockerfile)
             echo "Found Dockerfile, enable docker build / helm deploy, disable [rsync+ssh]"
             echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
@@ -1296,7 +1302,7 @@ main() {
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
     # [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
-    [[ "${exec_deploy_docker_compose:-0}" -eq 1 ]] && _deploy_single_host
+    [[ "${exec_deploy_single_host:-0}" -eq 1 ]] && _deploy_single_host
     [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
 
     ## deploy with rsync / 使用 rsync 发布
