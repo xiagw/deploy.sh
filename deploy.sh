@@ -204,12 +204,6 @@ _build_image_docker() {
     _docker_login
     ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    ## When the image does not exist, build the image / 判断模版是否存在,模版不存在，构建模板
-    # if [ -n "$build_image_from" ]; then
-    #     docker images | grep -q "${build_image_from%%:*}.*${build_image_from##*:}" ||
-    #         DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${build_image_from}" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
-    #             -f "${gitlab_project_dir}/Dockerfile.${build_image_from##*:}" "${gitlab_project_dir}"
-    # fi
 
     ## docker build flyway image / 构建 flyway 模板
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
@@ -843,11 +837,6 @@ _inject_files() {
     if [[ "${gitlab_project_name}" == "$ENV_NGINX_GIT_NAME" && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
         rsync -av "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
-    ## Docker build from / 是否从模板构建
-    if [[ -n "$build_image_from" ]]; then
-        file_docker_tmpl="${me_dockerfile}/Dockerfile.${build_image_from##*:}"
-        [ -f "${file_docker_tmpl}" ] && rsync -av "${file_docker_tmpl}" "${gitlab_project_dir}/"
-    fi
     ## flyway files sql & conf
     for sql in ${ENV_FLYWAY_SQL:-docs/sql} flyway_sql doc/sql sql; do
         if [[ -d "${gitlab_project_dir}/$sql" ]]; then
@@ -949,7 +938,7 @@ _probe_langs() {
             echo "Found Dockerfile, enable docker build / helm deploy, disable [rsync+ssh]"
             echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
             echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
-            if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -eq 1 || "${ENV_DISABLE_DOCKER:-0}" -eq 1 ]]; then
+            if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -ne 0 || "${ENV_DISABLE_DOCKER:-0}" -ne 0 ]]; then
                 echo "Force disable docker build and helm deploy, default enable rsync+ssh."
                 exec_deploy_rsync_ssh=1
             else
@@ -957,11 +946,6 @@ _probe_langs() {
                 exec_push_image=1
                 exec_deploy_k8s=1
                 exec_deploy_rsync_ssh=0
-                build_image_from="$(awk '/^FROM/ {print $2}' Dockerfile | grep "${ENV_DOCKER_REGISTRY}" | head -n 1)"
-                if [[ -f "${gitlab_project_dir}/docker-compose.yml" || -f "${gitlab_project_dir}/docker-compose.yaml" ]]; then
-                    exec_deploy_k8s=0
-                    exec_deploy_docker_compose=1
-                fi
             fi
             ;;
         composer.json)
