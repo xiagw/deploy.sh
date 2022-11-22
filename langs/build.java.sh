@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=2154
 
-if [[ "${project_docker}" -eq 1 ]]; then
-    return 0
-fi
-
-path_for_rsync="$gitlab_project_dir/jar_file"
+path_for_rsync="jar_file"
 MVN_PROFILE="${gitlab_project_branch}"
 maven_cache="${me_path_data}"/cache.maven
 
@@ -35,9 +31,9 @@ else
         --activate-profiles "$MVN_PROFILE" $MVN_SET
 fi
 
-[ -d "$path_for_rsync" ] || mkdir "${path_for_rsync}"
+[ -d "$gitlab_project_dir/$path_for_rsync" ] || mkdir "$gitlab_project_dir/${path_for_rsync}"
 
 find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
-    -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' -exec cp -vf {} "$path_for_rsync" \;
-
-(cd "$path_for_rsync" && rm -f framework* gdp-module* sdk*.jar)
+    -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' \
+    -exec rsync -avz --exclude='framework*' --exclude='gdp-module*' --exclude='sdk*.jar' --exclude='core*.jar' {} "$path_for_rsync/" \;
+[ -f "$gitlab_project_dir/run.sh" ] && cp -vf "$gitlab_project_dir/run.sh" "$path_for_rsync/"

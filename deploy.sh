@@ -809,17 +809,16 @@ _inject_files() {
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## Java, Dockerfile run.sh settings.xml
-    path_java_common="${me_path_data}/dockerfile.java"
-    if [[ -f ${gitlab_project_dir}/pom.xml && -d "$path_java_common" ]]; then
-        echo "from runner/data/dockerfile.java/"
-        # 1, 覆盖 ENV_ENABLE_INJECT=1
-        # 2, 不覆盖 ENV_ENABLE_INJECT=2
-        # 3, 删除 Dockerfile ENV_ENABLE_INJECT=3
-        # 4, 创建 docker-compose.yml ENV_ENABLE_INJECT=4
+    if [[ -f ${gitlab_project_dir}/pom.xml && -f "${me_dockerfile}/Dockerfile.java" ]]; then
+        # 1, 覆盖 ENV_ENABLE_INJECT=1 [default]
+        # 2, 不覆盖 ENV_ENABLE_INJECT=2 [使用项目自身的文件]
+        # 3, 删除 Dockerfile ENV_ENABLE_INJECT=3 [不使用 docker build]
+        # 4, 创建 docker-compose.yml ENV_ENABLE_INJECT=4 [使用 docker-compose 发布]
         case ${ENV_ENABLE_INJECT:-1} in
         1)
-            echo "overwrite from runner/data/dockerfile.java/ "
-            rsync -av "$path_java_common"/ "${gitlab_project_dir}"/
+            echo "overwrite source: runner/data/dockerfile/Dockerfile.java"
+            rsync -av "${me_dockerfile}"/Dockerfile.java "${gitlab_project_dir}"/Dockerfile
+            rsync -av --include=settings.xml --include=run.sh --exclude='*' "${me_dockerfile}"/ "${gitlab_project_dir}"/
             ;;
         2)
             echo 'Not overwritten'
@@ -935,17 +934,24 @@ _probe_langs() {
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
         docker-compose.yml)
+            echo "Found docker-compose.yml"
             exec_build_image=0
             exec_push_image=0
             exec_deploy_k8s=0
             exec_deploy_single_host=1
             ;;
         Dockerfile)
-            echo "Found Dockerfile, enable docker build / helm deploy, disable [rsync+ssh]"
+            echo "Found Dockerfile, enable docker build / helm deploy, disable [deploy_rsync_ssh]"
+            if [[ "$project_lang" =~ (java) ]]; then
+                exec_build_langs=1
+            else
+                exec_build_langs=0
+            fi
             echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
             echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
             if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -ne 0 || "${ENV_DISABLE_DOCKER:-0}" -ne 0 ]]; then
-                echo "Force disable docker build and helm deploy, default enable rsync+ssh."
+                echo "Force disable build with docker"
+                echo "Force disable deploy with helm"
             else
                 exec_build_image=1
                 exec_push_image=1
@@ -956,25 +962,18 @@ _probe_langs() {
         composer.json)
             echo "Found composer.json, probe lang: php"
             project_lang=php
-            exec_build_langs=1
-            break
             ;;
         package.json)
             echo "Found package.json, probe lang: node"
             project_lang=node
-            exec_build_langs=1
-            break
             ;;
         pom.xml)
             echo "Found pom.xml, probe lang: java"
             project_lang=java
-            exec_build_langs=1
-            break
             ;;
         requirements.txt)
             echo "Found requirements.txt, probe lang: python"
             project_lang=python
-            break
             ;;
         *)
             project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
@@ -982,7 +981,6 @@ _probe_langs() {
             project_lang=${project_lang,,}
             project_lang=${project_lang:-other}
             echo "Probe lang: $project_lang"
-            break
             ;;
         esac
     done
@@ -1295,19 +1293,19 @@ main() {
     # _generate_apidoc
 
     ## build
-    [[ "${exec_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
+    [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
     # [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
 
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
 
     ## deploy k8s
-    [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
-    ## rsync server
+    [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s1
+    ## deploy rsync server
     [[ "${exec_deploy_rsync:-0}" -eq 1 ]] && _deploy_rsync
-    ## ftp server
+    ## deploy ftp server
     [[ "${exec_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
-    ## sftp server
+    ## deploy sftp server
     [[ "${exec_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
     ## deploy with rsync / 使用 rsync 发布
     [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync_ssh=0

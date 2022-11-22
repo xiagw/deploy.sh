@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=2154,2034
 
-path_rsync_src='dist/'
+path_for_rsync='dist/'
 file_json="${gitlab_project_dir}/package.json"
 file_json_md5="$gitlab_project_path/$env_namespace/$(md5sum "$file_json" | awk '{print $1}')"
 if grep -q "$file_json_md5" "${me_log}"; then
