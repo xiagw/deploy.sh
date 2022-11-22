@@ -137,6 +137,11 @@ _scan_vulmap() {
 
 _deploy_flyway_docker() {
     echo_msg step "[flyway] deploy database SQL files...start"
+    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
+    if [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]]; then
+        echo '<skip>'
+        return
+    fi
     flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
@@ -161,6 +166,9 @@ _deploy_flyway_docker() {
 
 _deploy_flyway_helm_job() {
     ## docker build flyway
+    if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 0 ]]; then
+        return
+    fi
     echo "$image_tag_flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
@@ -1249,11 +1257,8 @@ main() {
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
-        if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
-            [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-        else
-            [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
-        fi
+        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
+        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
@@ -1280,15 +1285,8 @@ main() {
     _test_unit
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
-    echo_msg step "[flyway] deploy sql with flyway...start"
-    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
-    [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]] && exec_deploy_flyway=0
-    if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]]; then
-        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-    else
-        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
-    fi
-    echo_msg time "[flyway] deploy sql with flyway...end"
+    [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
+    [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
 
     ## generate api docs
     # _generate_apidoc
