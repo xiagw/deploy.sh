@@ -809,16 +809,17 @@ _inject_files() {
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## Java, Dockerfile run.sh settings.xml
-    if [[ -f ${gitlab_project_dir}/pom.xml && -f "${me_dockerfile}/Dockerfile.java" ]]; then
+    if [[ -f ${gitlab_project_dir}/pom.xml && -f "${me_path_data}/dockerfile/Dockerfile.java" ]]; then
         # 1, 覆盖 ENV_ENABLE_INJECT=1 [default]
         # 2, 不覆盖 ENV_ENABLE_INJECT=2 [使用项目自身的文件]
         # 3, 删除 Dockerfile ENV_ENABLE_INJECT=3 [不使用 docker build]
         # 4, 创建 docker-compose.yml ENV_ENABLE_INJECT=4 [使用 docker-compose 发布]
+        echo "found ${me_path_data}/dockerfile/Dockerfile.java"
         case ${ENV_ENABLE_INJECT:-1} in
         1)
             echo "overwrite source: runner/data/dockerfile/Dockerfile.java"
-            rsync -av "${me_dockerfile}"/Dockerfile.java "${gitlab_project_dir}"/Dockerfile
-            rsync -av --include=settings.xml --include=run.sh --exclude='*' "${me_dockerfile}"/ "${gitlab_project_dir}"/
+            rsync -av "${me_path_data}/dockerfile/Dockerfile.java" "${gitlab_project_dir}"/Dockerfile
+            rsync -av --include=settings.xml --include=run.sh --exclude='*' "${me_path_data}/dockerfile"/ "${gitlab_project_dir}"/
             ;;
         2)
             echo 'Not overwritten'
@@ -1300,7 +1301,7 @@ main() {
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
 
     ## deploy k8s
-    [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s1
+    [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
     ## deploy rsync server
     [[ "${exec_deploy_rsync:-0}" -eq 1 ]] && _deploy_rsync
     ## deploy ftp server
