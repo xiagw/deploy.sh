@@ -10,7 +10,7 @@ if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
     gradle -q
 else
     echo_msg step "[build] java build with maven..."
-    if [[ -f settings.xml ]]; then
+    if [[ -f $gitlab_project_dir/settings.xml ]]; then
         MVN_SET='--settings settings.xml'
     else
         MVN_SET=
@@ -35,5 +35,12 @@ fi
 
 find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
     -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' \
-    -exec rsync -avz --exclude='framework*' --exclude='gdp-module*' --exclude='sdk*.jar' --exclude='core*.jar' {} "$path_for_rsync/" \;
-[ -f "$gitlab_project_dir/run.sh" ] && cp -vf "$gitlab_project_dir/run.sh" "$path_for_rsync/"
+    -exec rsync -a --exclude='framework*' --exclude='gdp-module*' --exclude='sdk*.jar' --exclude='core*.jar' {} "$path_for_rsync/" \;
+
+if [ -f "$gitlab_project_dir/run.sh" ]; then
+    cp -vf "$gitlab_project_dir/run.sh" "$path_for_rsync/"
+else
+    true
+fi
+
+echo_msg time "[build] java build ... end"
