@@ -279,51 +279,8 @@ _deploy_k8s() {
         path_helm="${me_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}"
     elif [ -d "${me_path_data}/helm/${gitlab_project_name}" ]; then
         path_helm="${me_path_data}/helm/${gitlab_project_name}"
-    elif [ -d "${me_path_data}/helm.common/" ]; then
-        path_helm="${me_path_data}/helm.common"
     fi
 
-    ## update gitops files / 更新 gitops 文件
-    if [[ "$ENV_BRANCH_GITOPS" =~ $gitlab_project_branch ]]; then
-        file_gitops="$me_path_data"/gitops_${gitlab_project_branch}/helm/${gitlab_project_name}/values.yaml
-        if [ -f "$file_gitops" ]; then
-            echo "Found $file_gitops"
-            echo_msg step "[helm] update gitops files...start"
-            echo_msg question "Note: only update 'gitops', skip deploy to k8s."
-            sed -i \
-                -e "s@repository:.*@repository:\ \"${ENV_DOCKER_REGISTRY_GITOPS:-registry}/${ENV_DOCKER_REPO_GITOPS:-repo}\"@" \
-                -e "s@tag:.*@tag:\ \"${image_tag}\"@" \
-                "$file_gitops"
-            (
-                cd "$me_path_data/gitops_$gitlab_project_branch"
-                if [ -f "$ENV_GITOPS_SSH_KEY" ]; then
-                    GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git pull
-                    git add .
-                    git commit -m "gitops files $gitlab_project_name"
-                    GIT_SSH_COMMAND="ssh -i $ENV_GITOPS_SSH_KEY" git push origin "$gitlab_project_branch"
-                else
-                    git pull
-                    git add .
-                    git commit -m "gitops files $gitlab_project_name"
-                    git push origin "$gitlab_project_branch"
-                fi
-
-            )
-            echo_msg time "[helm] update gitops files...end"
-        else
-            echo_msg "not found: $file_gitops, skip update gitops files."
-        fi
-        [[ "${ENV_ENABLE_HELM_AFTER_GITOPS:-1}" -eq 0 ]] && return 0
-    fi
-
-    ## Custom deployment method / 自定义部署方式
-    if [ -f "$me_path_data_bin/custom-deploy.sh" ]; then
-        echo_msg time "[shell] custom deploy...start"
-        docker tag "${ENV_DOCKER_REGISTRY}:${image_tag}" "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}"
-        docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${gitlab_project_name}" || echo_msg error "got an error here, probably caused by network..."
-        bash "$me_path_data_bin/custom-deploy.sh" "$env_namespace" "${gitlab_project_name}" "${image_tag}"
-        echo_msg time "[shell] custom deploy...end"
-    fi
     ## helm install / helm 安装
     if [ -z "$path_helm" ]; then
         echo_msg question "Not found helm files, skip deploy k8s."
