@@ -395,7 +395,7 @@ _deploy_rsync_ssh() {
         ## define path_for_rsync in langs/build.*.sh / 在 langs/build.*.sh 中定义 path_for_rsync
         ## default: path_for_rsync=''
         # shellcheck disable=2154
-        rsync_src="${gitlab_project_dir}/$path_for_rsync"
+        rsync_src="${gitlab_project_dir}/$path_for_rsync/"
 
         ## rsycn dest folder / rsync 目标目录
         if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
