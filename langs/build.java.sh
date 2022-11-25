@@ -38,7 +38,7 @@ find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
     -exec rsync -a --exclude='framework*' --exclude='gdp-module*' --exclude='sdk*.jar' --exclude='core*.jar' {} "$path_for_rsync/" \;
 
 if [ -f "$gitlab_project_dir/run.sh" ]; then
-    cp -vf "$gitlab_project_dir/run.sh" "$path_for_rsync/"
+    cp -f "$gitlab_project_dir/run.sh" "$path_for_rsync/"
 else
     true
 fi
