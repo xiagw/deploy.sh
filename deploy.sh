@@ -138,7 +138,7 @@ _scan_vulmap() {
 _deploy_flyway_docker() {
     echo_msg step "[flyway] deploy database SQL files...start"
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
-    if [[ "${PIPELINE_FLYWAY:-0}" -eq 0 ]]; then
+    if [[ "${PIPELINE_FLYWAY:-0}" -ne 1 || "${exec_deploy_flyway:-0}" -ne 1 ]]; then
         echo '<skip>'
         return
     fi
@@ -165,7 +165,7 @@ _deploy_flyway_docker() {
 }
 
 _deploy_flyway_helm_job() {
-    ## docker build flyway
+    echo_msg step "[flyway] deploy database SQL files...start"
     if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 0 ]]; then
         return
     fi
@@ -1214,7 +1214,7 @@ main() {
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
+        _deploy_flyway_docker
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
@@ -1242,7 +1242,7 @@ main() {
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
     [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-    [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
+    _deploy_flyway_docker
 
     ## generate api docs
     # _generate_apidoc
