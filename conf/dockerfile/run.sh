@@ -8,11 +8,10 @@ _start_jar() {
     ## 自动探测环境变量，默认值 profile.test，(Dockerfile ARG MVN_PROFILE=test)
     ## Dockerfile 内生成文件 profile.test, profile.main 等分支名结尾
     for f in "$me_path"/profile.*; do
-        if [[ -f "$f" ]]; then
-            echo "found $f"
-            profile_name="--spring.profiles.active=${f##*.}"
-            break
-        fi
+        [[ -f "$f" ]] || continue
+        echo "found $f"
+        profile_name="--spring.profiles.active=${f##*.}"
+        break
     done
     cj=0
     for jar in "$me_path"/*.jar; do
@@ -26,17 +25,17 @@ _start_jar() {
             cy=$((cy + 1))
             [[ "$cj" -eq "$cy" ]] && config_yml="-Dspring.config.location=${y}"
         done
-        echo "${cj}. start $jar ..."
         if [ -z "$profile_name" ]; then
+            echo "${cj}. start $jar with $profile_name ..."
             $JAVA_OPTS -jar "$jar" $profile_name &
         else
+            echo "${cj}. start $jar with $config_yml ..."
             $JAVA_OPTS $config_yml -jar "$jar" &
         fi
-        pids="$pids $!"
+        java_pids="${java_pids} $!"
     done
-    ## allow debug / 方便开发者调试，可以直接kill java, 不会停止容器
+    ## allow debug / 方便开发者调试，可以直接 kill java, 不会停止容器
     tail -f "$me_log" "$me_path"/log/*.log &
-    pids="$pids $!"
 }
 
 _start_php() {
@@ -54,7 +53,7 @@ _start_php() {
 
 _kill() {
     echo "[INFO] Receive SIGTERM"
-    for pid in $pids; do
+    for pid in $java_pids; do
         kill "$pid"
         wait "$pid"
     done
