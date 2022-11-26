@@ -749,8 +749,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    echo_msg step "[inject] from runner/data/project_conf/...start"
-    echo "put files to project_conf/<project_name>, replace Dockerfile/env/config/application.yml etc."
+    echo_msg step "[inject] from runner/data/project_conf/<project_name> ...start"
     ## frontend (VUE) .env file
     if [[ -f ${gitlab_project_dir}/package.json ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -773,8 +772,9 @@ _inject_files() {
     fi
     ## docker ignore file
     [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
-    ## Java, Dockerfile run.sh settings.xml
+    ## Java, 公用的模版文件 Dockerfile, run.sh, settings.xml
     if [[ -f ${gitlab_project_dir}/pom.xml && -f "${me_path_data}/dockerfile/Dockerfile.java" ]]; then
+        ## from deploy.env
         # 1, 覆盖 ENV_ENABLE_INJECT=1 [default]
         # 2, 不覆盖 ENV_ENABLE_INJECT=2 [使用项目自身的文件]
         # 3, 删除 Dockerfile ENV_ENABLE_INJECT=3 [不使用 docker build]
@@ -793,7 +793,7 @@ _inject_files() {
             rm -f "${gitlab_project_dir}"/Dockerfile
             ;;
         4)
-            echo '## deploy with docker-compose ' "${gitlab_project_dir}"/docker-compose.yml
+            echo '## deploy with docker-compose' "${gitlab_project_dir}"/docker-compose.yml
             ;;
         esac
     fi
@@ -803,8 +803,8 @@ _inject_files() {
     fi
     ## flyway files sql & conf
     for sql in ${ENV_FLYWAY_SQL:-docs/sql} flyway_sql doc/sql sql; do
-        if [[ -d "${gitlab_project_dir}/$sql" ]]; then
-            path_flyway_sql_proj="${gitlab_project_dir}/$sql"
+        path_flyway_sql_proj="${gitlab_project_dir}/$sql"
+        if [[ -d "${path_flyway_sql_proj}" ]]; then
             exec_deploy_flyway=1
             copy_flyway_file=1
             break
