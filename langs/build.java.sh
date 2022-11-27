@@ -37,10 +37,16 @@ find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
     -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' \
     -exec rsync -a --exclude='framework*' --exclude='gdp-module*' --exclude='sdk*.jar' --exclude='core*.jar' {} "$path_for_rsync/" \;
 
+if [[ "${exec_deploy_k8s:-0}" -ne 1 ]]; then
+   find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
+    -regextype egrep -iregex ".*resources.*${gitlab_project_branch}.*\.(yml)" \
+    -exec rsync -a {} "$path_for_rsync/" \;
+fi
+
 if [ -f "$gitlab_project_dir/run.sh" ]; then
     cp -f "$gitlab_project_dir/run.sh" "$path_for_rsync/"
 else
-    true
+    :
 fi
 
 echo_msg time "[build] java build ... end"

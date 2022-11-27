@@ -259,7 +259,7 @@ _push_image() {
 }
 
 _deploy_k8s() {
-    echo_msg step "[helm] deploy to k8s cluster...start"
+    echo_msg step "[deploy] deploy to k8s cluster with helm ...start"
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
         echo "remove project prefix."
         helm_release=${gitlab_project_name#*-}
@@ -314,11 +314,11 @@ EOF
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    echo_msg time "[helm] deploy to k8s cluster...end"
+    echo_msg time "[deploy] deploy to k8s cluster...end"
 }
 
 _deploy_rsync_ssh() {
-    echo_msg step "[rsync+ssh] deploy code files...start"
+    echo_msg step "[deploy] deploy code files with rsync+ssh ...start"
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | while read -r line; do
     # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf"); do
@@ -377,23 +377,23 @@ _deploy_rsync_ssh() {
             echo_msg time "end custom deploy."
         fi
         if [[ $exec_deploy_single_host -eq 1 ]]; then
-            echo_msg step "[docker-compose] deploy to singl host...start"
+            echo_msg step "deploy to singl host with docker-compose ...start"
             $ssh_opt -n "$ssh_host" "cd ~/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
-    echo_msg time "[rsync+ssh] deploy code files...end"
+    echo_msg time "[deploy] deploy code files...end"
 }
 
 _deploy_aliyun_oss() {
-    echo_msg step "[aliyun+oss] deploy code files to aliyun oss...start"
+    echo_msg step "[deploy] deploy code files to aliyun oss...start"
 }
 
 _deploy_rsync() {
-    echo_msg step "[rsyncd] deploy code files to rsyncd server...start"
+    echo_msg step "[deploy] deploy code files to rsyncd server...start"
 }
 
 _deploy_ftp() {
-    echo_msg step "[ftp] deploy code files to ftp server...start"
+    echo_msg step "[deploy] deploy code files to ftp server...start"
     return
     upload_file="${gitlab_project_dir}/ftp.tgz"
     tar czvf "${upload_file}" -C "${gitlab_project_dir}" .
@@ -406,11 +406,11 @@ put $upload_file
 passive off
 bye
 EOF
-    echo_msg time "[ftp] deploy code files to ftp server...end"
+    echo_msg time "[deploy] deploy code files to ftp server...end"
 }
 
 _deploy_sftp() {
-    echo_msg step "[sftp] deploy code files to sftp server...start"
+    echo_msg step "[deploy] deploy code files to sftp server...start"
 }
 
 _deploy_notify_msg() {
