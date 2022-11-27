@@ -893,7 +893,7 @@ _setup_gitlab_vars() {
 
 _probe_langs() {
     echo_msg step "[langs] probe language..."
-    for f in pom.xml composer.json package.json requirements.txt README.md readme.md README.txt readme.txt Dockerfile docker-compose.yml; do
+    for f in pom.xml composer.json package.json requirements.txt README.md readme.md README.txt readme.txt; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
         composer.json)
