@@ -136,7 +136,7 @@ _scan_vulmap() {
 }
 
 _deploy_flyway_docker() {
-    echo_msg step "[flyway] deploy database SQL files...start"
+    echo_msg step "[flyway] deploy database SQL with docker ...start"
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     if [[ "${PIPELINE_FLYWAY:-0}" -ne 1 || "${exec_deploy_flyway:-0}" -ne 1 ]]; then
         echo '<skip>'
@@ -165,10 +165,8 @@ _deploy_flyway_docker() {
 }
 
 _deploy_flyway_helm_job() {
-    echo_msg step "[flyway] deploy database SQL files...start"
-    if [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 0 ]]; then
-        return
-    fi
+    [[ "${ENV_FLYWAY_HELM_JOB:-0}" -ne 1 ]] && return
+    echo_msg step "[flyway] deploy database SQL with helm job ...start"
     echo "$image_tag_flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
@@ -751,7 +749,7 @@ _generate_apidoc() {
 _inject_files() {
     echo_msg step "[inject] from runner/data/project_conf/<project_name> ...start"
     ## frontend (VUE) .env file
-    if [[ -f ${gitlab_project_dir}/package.json ]]; then
+    if [[ "$project_lang" == node ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
         for file in $config_env_path; do
             [[ -f "$file" ]] || continue
@@ -765,15 +763,16 @@ _inject_files() {
         copy_flyway_file=0
     fi
     ## backend (PHP/Java/Python) project_conf files
-    path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
+    path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}.${env_namespace}"
     if [ -d "$path_project_conf" ]; then
         echo_msg warning "found custom config files, sync it."
         rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
     fi
     ## docker ignore file
-    [ -f "${gitlab_project_dir}/.dockerignore" ] || rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
+    [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]] &&
+        rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     ## Java, 公用的模版文件 Dockerfile, run.sh, settings.xml
-    if [[ -f ${gitlab_project_dir}/pom.xml && -f "${me_path_data}/dockerfile/Dockerfile.java" ]]; then
+    if [[ "$project_lang" == java && -f "${me_path_data}/dockerfile/Dockerfile.java" ]]; then
         ## from deploy.env
         # 1, 覆盖 ENV_ENABLE_INJECT=1 [default]
         # 2, 不覆盖 ENV_ENABLE_INJECT=2 [使用项目自身的文件]
@@ -840,11 +839,10 @@ _setup_deploy_conf() {
         [ -d "$HOME/.ssh" ] || ln -sf "$path_conf_ssh" "$HOME/"
     fi
     for file in "$path_conf_ssh"/*; do
-        if [ ! -f "$HOME/.ssh/${file##*/}" ]; then
-            echo "link $file to $HOME/.ssh/"
-            chmod 600 "${file}"
-            ln -sf "${file}" "$HOME/.ssh/"
-        fi
+        [ -f "$HOME/.ssh/${file##*/}" ] && continue
+        echo "link $file to $HOME/.ssh/"
+        chmod 600 "${file}"
+        ln -sf "${file}" "$HOME/.ssh/"
     done
     ## acme.sh/aws/kube/aliyun/python-gitlab
     [[ ! -d "${HOME}/.acme.sh" && -d "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
@@ -898,32 +896,6 @@ _probe_langs() {
     for f in pom.xml composer.json package.json requirements.txt README.md readme.md README.txt readme.txt Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
-        docker-compose.yml)
-            echo "Found docker-compose.yml"
-            exec_build_image=0
-            exec_push_image=0
-            exec_deploy_k8s=0
-            exec_deploy_single_host=1
-            ;;
-        Dockerfile)
-            echo "Found Dockerfile, enable docker build / helm deploy, disable [deploy_rsync_ssh]"
-            if [[ "$project_lang" =~ (java) ]]; then
-                exec_build_langs=1
-            else
-                exec_build_langs=0
-            fi
-            echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
-            echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
-            if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -ne 0 || "${ENV_DISABLE_DOCKER:-0}" -ne 0 ]]; then
-                echo "Force disable build with docker"
-                echo "Force disable deploy with helm"
-            else
-                exec_build_image=1
-                exec_push_image=1
-                exec_deploy_k8s=1
-                exec_deploy_rsync_ssh=0
-            fi
-            ;;
         composer.json)
             echo "Found composer.json, probe lang: php"
             project_lang=php
@@ -946,6 +918,43 @@ _probe_langs() {
             project_lang=${project_lang,,}
             project_lang=${project_lang:-other}
             echo "Probe lang: $project_lang"
+            ;;
+        esac
+    done
+}
+
+_probe_deploy_method() {
+    echo_msg step "[deploy] probe deploy method..."
+    for f in Dockerfile docker-compose.yml; do
+        [[ -f "${gitlab_project_dir}"/${f} ]] || continue
+        case $f in
+        docker-compose.yml)
+            echo "Found docker-compose.yml"
+            exec_build_image=0
+            exec_push_image=0
+            exec_deploy_k8s=0
+            exec_deploy_single_host=1
+            ;;
+        Dockerfile)
+            echo "Found Dockerfile"
+            echo "enable build with docker, deploy with helm, disable [deploy_rsync_ssh]"
+            if [[ "$project_lang" =~ (java) ]]; then
+                ## 可以加快 docker build 速度
+                exec_build_langs=1
+            else
+                exec_build_langs=0
+            fi
+            echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
+            echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
+            if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -ne 0 || "${ENV_DISABLE_DOCKER:-0}" -ne 0 ]]; then
+                echo "Force disable build with docker"
+                echo "Force disable deploy with helm"
+            else
+                exec_build_image=1
+                exec_push_image=1
+                exec_deploy_k8s=1
+                exec_deploy_rsync_ssh=0
+            fi
             ;;
         esac
     done
@@ -1195,11 +1204,14 @@ main() {
         [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && return
     fi
 
+    ## probe program lang / 探测程序语言
+    _probe_langs
+
     ## preprocess project config files / 预处理业务项目配置文件
     _inject_files
 
-    ## probe program lang / 探测程序语言
-    _probe_langs
+    ## probe deploy method / 探测文件确定发布方法
+    _probe_deploy_method
 
     ## code style check / 代码风格检查
     code_style_sh="$me_path/langs/style.${project_lang}.sh"
@@ -1213,7 +1225,7 @@ main() {
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
-        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
+        # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
         _deploy_flyway_docker
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
@@ -1241,7 +1253,7 @@ main() {
     _test_unit
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
-    [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
+    # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
     _deploy_flyway_docker
 
     ## generate api docs
