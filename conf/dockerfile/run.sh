@@ -2,12 +2,14 @@
 
 _start_jar() {
     ## 修改内存占用值，
-    if [ -z "$JAVA_OPTS" ]; then
-        JAVA_OPTS='java -Xms256m -Xmx384m'
+    if [ -z "$1" ]; then
+        JAVA_OPTS='java -Xms256m -Xmx512m'
+    else
+        JAVA_OPTS='nohup java -Xms256m -Xmx512m'
     fi
     ## 启动方式一， jar 内置配置文件 yml，
     ## Dockerfile ARG MVN_PROFILE=test （此处对应 git 分支名）
-    ## Dockerfile 镜像内生成文件 profile.分支名
+    ## Dockerfile 镜像内生成文件 profile.<分支名>
     for f in "$me_path"/profile.*; do
         [[ -f "$f" ]] || continue
         echo "found $f"
@@ -29,10 +31,10 @@ _start_jar() {
         done
         if [ -n "$profile_name" ]; then
             echo "${cj}. start $jar with $profile_name ..."
-            $JAVA_OPTS -jar "$jar" $profile_name &
+            $JAVA_OPTS -jar "$jar" $profile_name &>>"$me_log" &
         else
             echo "${cj}. start $jar with $config_yml ..."
-            $JAVA_OPTS $config_yml -jar "$jar" &
+            $JAVA_OPTS $config_yml -jar "$jar" &>>"$me_log" &
         fi
         pids="${pids} $!"
     done
@@ -48,14 +50,16 @@ _start_php() {
         pids="${pids} $!"
     elif command -v php-fpm >/dev/null 2>&1; then
         ## 前台启动
-        exec php-fpm -F
+        # exec php-fpm -F
+        ## 后台启动 background
+        exec php-fpm
     else
         echo "Give up php."
     fi
 }
 
 _kill() {
-    echo "[INFO] Receive SIGTERM"
+    echo "[INFO] Receive SIGTERM, kill $pids"
     for pid in $pids; do
         kill "$pid"
         wait "$pid"
@@ -73,11 +77,13 @@ main() {
     ## 统一兼容启动 start php
     _start_php
     ## 统一兼容启动 start java
-    _start_jar
+    _start_jar $1
     ## allow debug / 方便开发者调试，可以直接 kill java, 不会停止容器
     tail -f "$me_log" "$me_path"/log/*.log &
     ## 适用于 docker 中启动
-    wait
+    if [[ -z "$1" ]]; then
+        wait
+    fi
 }
 
 main "$@"
