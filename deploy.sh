@@ -657,6 +657,9 @@ _detect_os() {
         OS=centos
     elif [[ -e /etc/arch-release ]]; then
         OS=arch
+    elif [[ -e /etc/os-release ]]; then
+        source /etc/os-release
+        OS="${ID}"
     else
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
         echo_msg error "Not support. exit."
@@ -703,6 +706,19 @@ _detect_os() {
             bash get-docker.sh
         )
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
+        ;;
+    alpine)
+        command -v openssl >/dev/null || install_pkg=openssl
+        command -v git >/dev/null || install_pkg=git
+        git lfs version >/dev/null 2>&1 || install_pkg="$install_pkg git-lfs"
+        command -v curl >/dev/null || install_pkg="$install_pkg curl"
+        command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
+        command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
+        [[ -n "$install_pkg" ]] && $exec_sudo apk add $install_pkg >/dev/null
+        command -v docker >/dev/null || (
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            bash get-docker.sh
+        )
         ;;
     *)
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
@@ -840,6 +856,10 @@ _setup_deploy_conf() {
     fi
     for file in "$path_conf_ssh"/*; do
         [ -f "$HOME/.ssh/${file##*/}" ] && continue
+        if [ ! -d "$HOME"/.ssh ]; then
+            mkdir "$HOME"/.ssh
+            chmod 700 "$HOME"/.ssh
+        fi
         echo "link $file to $HOME/.ssh/"
         chmod 600 "${file}"
         ln -sf "${file}" "$HOME/.ssh/"
@@ -1134,9 +1154,9 @@ main() {
     me_log="${me_path_data}/${me_name}.log"
     me_path_data_bin="${me_path}/data/bin"
     me_path_builds="${me_path}/builds"
-    me_conf="${me_path_conf}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
-    me_yml="${me_path_conf}/deploy.yml"        ## deploy to app server 发布到目标服务器的配置信息
-    me_env="${me_path_conf}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
+    me_conf="${me_path_data}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
+    me_yml="${me_path_data}/deploy.yml"        ## deploy to app server 发布到目标服务器的配置信息
+    me_env="${me_path_data}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
     me_dockerfile="${me_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
 
     [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"

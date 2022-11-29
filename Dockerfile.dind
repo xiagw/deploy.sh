@@ -1,0 +1,22 @@
+FROM docker:dind
+WORKDIR /runner
+COPY . /runner/
+ARG CHANGE_SOURCE=true
+ARG PATH_SSL=/etc/nginx/conf.d/ssl
+RUN set -xe \
+    && if [ ${CHANGE_SOURCE} = true ]; then sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories; fi \
+    && apk update \
+    && apk upgrade \
+    && apk add --no-cache openssl \
+    && apk add --no-cache git \
+    && apk add --no-cache git-lfs \
+    && apk add --no-cache curl \
+    && apk add --no-cache unzip \
+    && apk add --no-cache rsync
+RUN set -xe \
+    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && curl -LO "https://dl.k8s.io/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl.sha256" \
+    && echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check \
+    && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
+    && kubectl version --client \
+    && curl -L https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
