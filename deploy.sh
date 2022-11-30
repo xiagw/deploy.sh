@@ -919,19 +919,19 @@ _probe_langs() {
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
         composer.json)
-            echo "Found composer.json, probe lang: php"
+            echo "Found composer.json"
             project_lang=php
             ;;
         package.json)
-            echo "Found package.json, probe lang: node"
+            echo "Found package.json"
             project_lang=node
             ;;
         pom.xml)
-            echo "Found pom.xml, probe lang: java"
+            echo "Found pom.xml"
             project_lang=java
             ;;
         requirements.txt)
-            echo "Found requirements.txt, probe lang: python"
+            echo "Found requirements.txt"
             project_lang=python
             ;;
         *)
@@ -939,10 +939,10 @@ _probe_langs() {
             project_lang=${project_lang// /}
             project_lang=${project_lang,,}
             project_lang=${project_lang:-other}
-            echo "Probe lang: $project_lang"
             ;;
         esac
     done
+    echo "Probe lang: $project_lang"
 }
 
 _probe_deploy_method() {
