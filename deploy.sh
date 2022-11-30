@@ -779,39 +779,41 @@ _inject_files() {
         copy_flyway_file=0
     fi
     ## backend (PHP/Java/Python) project_conf files
+    ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}.${env_namespace}"
     if [ -d "$path_project_conf" ]; then
         echo_msg warning "found custom config files, sync it."
         rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
     fi
-    ## docker ignore file
+    ## from deploy.env， 使用全局模板文件替换项目文件
+    # ENV_ENABLE_INJECT=1, 覆盖 [default action]
+    # ENV_ENABLE_INJECT=2, 不覆盖 [使用项目自身的文件]
+    # ENV_ENABLE_INJECT=3, 删除 Dockerfile [不使用 docker build]
+    # ENV_ENABLE_INJECT=4, 创建 docker-compose.yml [使用 docker-compose 发布]
+    case ${ENV_ENABLE_INJECT:-1} in
+    1)
+        echo "Overwritten Dockerfile"
+        ## Java, 公用的模版文件 Dockerfile, run.sh, settings.xml
+        [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]] &&
+            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}"/Dockerfile
+        if [[ "$project_lang" == java ]]; then
+            rsync -a --include=settings.xml --include=run.sh --exclude='*' "${me_path_data}/dockerfile"/ "${gitlab_project_dir}"/
+        fi
+        ;;
+    2)
+        echo 'Not overwritten Dockerfile'
+        ;;
+    3)
+        echo 'Remove Dockerfile (disable docker build)'
+        rm -f "${gitlab_project_dir}"/Dockerfile
+        ;;
+    4)
+        echo '## deploy with docker-compose' "${gitlab_project_dir}"/docker-compose.yml
+        ;;
+    esac
+    ## docker ignore file / 使用全局模板文件替换项目文件
     [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]] &&
         rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
-    ## Java, 公用的模版文件 Dockerfile, run.sh, settings.xml
-    if [[ "$project_lang" == java && -f "${me_path_data}/dockerfile/Dockerfile.java" ]]; then
-        ## from deploy.env
-        # 1, 覆盖 ENV_ENABLE_INJECT=1 [default]
-        # 2, 不覆盖 ENV_ENABLE_INJECT=2 [使用项目自身的文件]
-        # 3, 删除 Dockerfile ENV_ENABLE_INJECT=3 [不使用 docker build]
-        # 4, 创建 docker-compose.yml ENV_ENABLE_INJECT=4 [使用 docker-compose 发布]
-        case ${ENV_ENABLE_INJECT:-1} in
-        1)
-            echo "Overwritten Dockerfile"
-            rsync -av "${me_path_data}/dockerfile/Dockerfile.java" "${gitlab_project_dir}"/Dockerfile
-            rsync -av --include=settings.xml --include=run.sh --exclude='*' "${me_path_data}/dockerfile"/ "${gitlab_project_dir}"/
-            ;;
-        2)
-            echo 'Not overwritten'
-            ;;
-        3)
-            echo 'Delete Dockerfile'
-            rm -f "${gitlab_project_dir}"/Dockerfile
-            ;;
-        4)
-            echo '## deploy with docker-compose' "${gitlab_project_dir}"/docker-compose.yml
-            ;;
-        esac
-    fi
     ## cert file for nginx
     if [[ "${gitlab_project_name}" == *"$ENV_NGINX_GIT_NAME"* && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
         rsync -av "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
