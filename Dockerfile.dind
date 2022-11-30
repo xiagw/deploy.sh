@@ -8,17 +8,18 @@ RUN set -xe \
     && apk update \
     && apk upgrade \
     && apk add --no-cache openssl \
-    && apk add --no-cache bash \
-    && apk add --no-cache git \
-    && apk add --no-cache git-lfs \
-    && apk add --no-cache curl \
-    && apk add --no-cache unzip \
-    && apk add --no-cache rsync
+    && apk add --no-cache bash git git-lfs \
+    && apk add --no-cache curl unzip rsync uuidgen \
+    && apk add --no-cache python3 py3-pip \
+    && python3 -m pip install --user --upgrade python-gitlab \
+    && git config --global --add safe.directory /app \
+    && rm -rf /var/cache/apk/*
+
 RUN set -xe \
     && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
     && curl -LO "https://dl.k8s.io/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl.sha256" \
     && echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c \
     && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
     && rm -f kubectl* \
-    && kubectl version --client \
+    && kubectl version --client --output=yaml \
     && curl -L https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash

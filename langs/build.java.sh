@@ -11,13 +11,13 @@ if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
 else
     echo_msg step "[build] java build with maven..."
     if [[ -f $gitlab_project_dir/settings.xml ]]; then
-        MVN_SET='--settings settings.xml'
+        MVN_SET="--settings $gitlab_project_dir/settings.xml"
     else
         MVN_SET=
     fi
     [ -d "${maven_cache}" ] || mkdir -p "${maven_cache}"
 
-    docker run -i --rm --user "$(id -u):$(id -g)" \
+    docker run --rm -i --user "$(id -u):$(id -g)" \
         -e MAVEN_CONFIG=/var/maven/.m2 \
         -v "$maven_cache":/var/maven/.m2:rw \
         -v "$gitlab_project_dir":/app:rw \
