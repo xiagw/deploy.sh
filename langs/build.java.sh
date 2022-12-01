@@ -11,7 +11,7 @@ if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
 else
     echo_msg step "[build] java build with maven..."
     if [[ -f $gitlab_project_dir/settings.xml ]]; then
-        MVN_SET="--settings $gitlab_project_dir/settings.xml"
+        MVN_SET="--settings settings.xml"
     else
         MVN_SET=
     fi
