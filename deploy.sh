@@ -261,7 +261,7 @@ _push_image() {
 _deploy_k8s() {
     echo_msg step "[deploy] deploy to k8s cluster with helm ...start"
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
-        echo "remove project prefix."
+        echo "remove project name prefix"
         helm_release=${gitlab_project_name#*-}
     else
         helm_release=${gitlab_project_name}
@@ -281,10 +281,13 @@ _deploy_k8s() {
 
     ## helm install / helm 安装
     if [ -z "$path_helm" ]; then
-        echo_msg question "Not found helm files, skip deploy k8s."
-    else
-        echo "Found helm files: $path_helm"
-        cat <<EOF
+        echo_msg question "Not found helm files"
+        echo "Try to generate helm files with bin/helm-new.sh"
+        path_helm="${me_path_data}/helm/${helm_release}"
+        bash "$me_path_bin/helm-new.sh" ${helm_release}
+    fi
+    echo "Found helm files: $path_helm"
+    cat <<EOF
 $helm_opt upgrade ${helm_release} $path_helm/ \
 --install --history-max 1 \
 --namespace ${env_namespace} --create-namespace \
@@ -293,18 +296,17 @@ $helm_opt upgrade ${helm_release} $path_helm/ \
 --set image.pullPolicy=Always \
 --timeout 120s
 EOF
-        $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
-            --namespace "${env_namespace}" --create-namespace \
-            --set image.repository="${ENV_DOCKER_REGISTRY}" \
-            --set image.tag="${image_tag}" \
-            --set image.pullPolicy='Always' \
-            --timeout 120s >/dev/null
-        ## Clean up rs 0 0 / 清理 rs 0 0
-        $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs &>/dev/null || true
-        $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
-        sleep 3
-        $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s || deploy_result=1
-    fi
+    $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
+        --namespace "${env_namespace}" --create-namespace \
+        --set image.repository="${ENV_DOCKER_REGISTRY}" \
+        --set image.tag="${image_tag}" \
+        --set image.pullPolicy='Always' \
+        --timeout 120s >/dev/null
+    ## Clean up rs 0 0 / 清理 rs 0 0
+    $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs &>/dev/null || true
+    $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
+    sleep 3
+    $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s || deploy_result=1
 
     ## helm install flyway jobs / helm 安装 flyway 任务
     if [[ "$ENV_FLYWAY_HELM_JOB" == 1 && -d "${me_path_conf}"/helm/flyway ]]; then

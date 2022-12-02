@@ -12,14 +12,14 @@ if [[ -z "$1" ]]; then
     read -rp "another port number? " -e -i '8081' port_number2
     read -rp "http or tcp? " -e -i 'tcp' protocol
 else
-    release_name="$1"
+    release_name="${1:? ERR empty release_name}"
     port_number='8080'
     port_number2='8081'
     protocol='tcp'
 fi
 
 ## 创建 helm chart
-path_release="$path_data_helm/${release_name:?ERR: empty release_name}"
+path_release="$path_data_helm/${release_name}"
 helm create "$path_release"
 echo "$(date), helm create $path_release" >>"$me_log"
 
