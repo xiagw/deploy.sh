@@ -8,10 +8,10 @@ _cleanup() {
 
 _color() {
     if [[ -t 2 ]] && [[ -z "${no_color-}" ]] && [[ "${TERM-}" != "dumb" ]]; then
-        NOFORMAT='\033[0m' RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m'
+        COLOROFF='\033[0m' RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m'
         BLUE='\033[0;34m' PURPLE='\033[0;35m' CYAN='\033[0;36m' YELLOW='\033[1;33m'
     else
-        NOFORMAT='' RED='' GREEN='' ORANGE='' BLUE='' PURPLE='' CYAN='' YELLOW=''
+        COLOROFF='' RED='' GREEN='' ORANGE='' BLUE='' PURPLE='' CYAN='' YELLOW=''
     fi
 }
 
@@ -28,6 +28,15 @@ _die() {
     local code=${2-1} # default exit status 1
     _msg "$msg"
     exit "$code"
+}
+
+_get_yes_no() {
+    read -rp "${1:-Confirm the action? [y/N]} " read_yes_no
+    if [[ ${read_yes_no:-n} =~ ^(y|Y|yes|YES)$ ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 _parse_params() {
@@ -81,20 +90,17 @@ EOF
 _myself() {
     me_name="$(basename "${BASH_SOURCE[0]}")"
     me_path="$(dirname "$(readlink -f "$0")")"
-    if [ -w "$me_path" ]; then
-        me_log="${me_path}/${me_name}.log"
-    else
-        me_log="/tmp/${me_name}.log"
-    fi
+    me_log="${me_path}/${me_name}.log"
+    [ -w "$me_path" ] || me_log="/tmp/${me_name}.log"
     [[ "$enable_log" -eq 1 ]] && echo "Log file is \"$me_log\""
 }
 
 _func_demo() {
     _msg "demo function 1."
-    _msg "${RED}Read parameters:${NOFORMAT}"
-    _msg "  - ${YELLOW}flag${NOFORMAT}: ${flag}"
-    _msg "  - ${BLUE}param:${NOFORMAT} ${param}"
-    _msg "  - ${GREEN}arguments:${NOFORMAT} ${args[*]-}"
+    _msg "${RED}Read parameters:${COLOROFF}"
+    _msg "  - ${YELLOW}flag${COLOROFF}: ${flag}"
+    _msg "  - ${BLUE}param:${COLOROFF} ${param}"
+    _msg "  - ${GREEN}arguments:${COLOROFF} ${args[*]-}"
 }
 
 main() {
