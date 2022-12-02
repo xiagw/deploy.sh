@@ -31,7 +31,7 @@ _die() {
 }
 
 _get_yes_no() {
-    read -rp "${1:-Confirm the action? [y/N]} " read_yes_no
+    read -rp "${1:-Confirm the action?} [y/N] " read_yes_no
     if [[ ${read_yes_no:-n} =~ ^(y|Y|yes|YES)$ ]]; then
         return 0
     else

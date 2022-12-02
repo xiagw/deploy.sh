@@ -89,7 +89,7 @@ _code_quality_sonar() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_SONAR:-0}" -eq 0 ]]; then
-        echo "default skip check."
+        echo "<skip>"
         return 0
     fi
     sonar_url="${ENV_SONAR_URL:?empty}"
@@ -790,9 +790,10 @@ _inject_files() {
     # ENV_ENABLE_INJECT=2, 不覆盖 [使用项目自身的文件]
     # ENV_ENABLE_INJECT=3, 删除 Dockerfile [不使用 docker build]
     # ENV_ENABLE_INJECT=4, 创建 docker-compose.yml [使用 docker-compose 发布]
+    echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-1}
     case ${ENV_ENABLE_INJECT:-1} in
     1)
-        echo "Overwritten Dockerfile"
+        echo "Overwritten from data/dockerfile/Dockerfile.${project_lang}"
         ## Java, 公用的模版文件 Dockerfile, run.sh, settings.xml
         [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]] &&
             rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}"/Dockerfile
@@ -808,7 +809,8 @@ _inject_files() {
         rm -f "${gitlab_project_dir}"/Dockerfile
         ;;
     4)
-        echo '## deploy with docker-compose' "${gitlab_project_dir}"/docker-compose.yml
+        echo "Generate docker-compose.yml (enable deply with docker-compose)"
+        echo '## deploy with docker-compose' >>"${gitlab_project_dir}"/docker-compose.yml
         ;;
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
@@ -959,24 +961,19 @@ _probe_deploy_method() {
             ;;
         Dockerfile)
             echo "Found Dockerfile"
-            echo "enable build with docker, deploy with helm, disable [deploy_rsync_ssh]"
+            echo "enable build with docker"
+            echo "enable deploy with helm"
+            echo "disable [deploy_rsync_ssh]"
             if [[ "$project_lang" =~ (java) ]]; then
-                ## 可以加快 docker build 速度
+                ## 使用本机目录缓存 maven ，可以加快 docker build 速度
                 exec_build_langs=1
             else
                 exec_build_langs=0
             fi
-            echo "PIPELINE_DISABLE_DOCKER: ${PIPELINE_DISABLE_DOCKER:-0}"
-            echo "ENV_DISABLE_DOCKER: ${ENV_DISABLE_DOCKER:-0}"
-            if [[ "${PIPELINE_DISABLE_DOCKER:-0}" -ne 0 || "${ENV_DISABLE_DOCKER:-0}" -ne 0 ]]; then
-                echo "Force disable build with docker"
-                echo "Force disable deploy with helm"
-            else
-                exec_build_image=1
-                exec_push_image=1
-                exec_deploy_k8s=1
-                exec_deploy_rsync_ssh=0
-            fi
+            exec_build_image=1
+            exec_push_image=1
+            exec_deploy_k8s=1
+            exec_deploy_rsync_ssh=0
             ;;
         esac
     done
