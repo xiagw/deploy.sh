@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
-_start_jar() {
+_start_java() {
     ## 修改内存占用值，
-    if [ -z "$1" ]; then
-        JAVA_OPTS='java -Xms256m -Xmx512m'
-    else
-        JAVA_OPTS='nohup java -Xms256m -Xmx512m'
+    if [ -z "$JAVA_OPTS" ]; then
+        JAVA_OPTS='java -Xms256m -Xmx384m'
+    fi
+    if [[ "$1" == nohup ]]; then
+        JAVA_OPTS="nohup $JAVA_OPTS"
     fi
     ## 启动方式一， jar 内置配置文件 yml，
     ## Dockerfile ARG MVN_PROFILE=test （此处对应 git 分支名）
@@ -31,12 +32,15 @@ _start_jar() {
         done
         if [ -n "$profile_name" ]; then
             echo "${cj}. start $jar with $profile_name ..."
-            $JAVA_OPTS -jar "$jar" $profile_name &>>"$me_log" &
-        else
+            $JAVA_OPTS -jar "$jar" $profile_name &>>$me_log &
+        elif [ -n "$config_yml" ]; then
             echo "${cj}. start $jar with $config_yml ..."
-            $JAVA_OPTS $config_yml -jar "$jar" &>>"$me_log" &
+            $JAVA_OPTS $config_yml -jar "$jar" &>>$me_log &
+        else
+            echo "${cj}. start $jar ..."
+            $JAVA_OPTS -jar "$jar" &>>$me_log &
         fi
-        pids="${pids} $!"
+        pids="$pids $!"
     done
 }
 
@@ -77,7 +81,7 @@ main() {
     ## 统一兼容启动 start php
     _start_php
     ## 统一兼容启动 start java
-    _start_jar $1
+    _start_java $1
     ## allow debug / 方便开发者调试，可以直接 kill java, 不会停止容器
     tail -f "$me_log" "$me_path"/log/*.log &
     ## 适用于 docker 中启动
