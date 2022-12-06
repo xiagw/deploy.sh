@@ -22,12 +22,12 @@ echo_msg() {
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
     time)
-        color_on="[$(date +%Y%m%d-%T-%u)], " ## datetime
+        color_on="[+] $(date +%Y%m%d-%T-%u), " ## datetime
         color_off=''
         ;;
     step | timestep)
-        color_on="\033[0;33m[$(date +%Y%m%d-%T-%u)] step-$((STEP + 1)), \033[0m"
-        STEP=$((STEP + 1))
+        color_on="\033[0;33m[$((${STEP:-0} + 1))] $(date +%Y%m%d-%T-%u), \033[0m"
+        STEP=$((${STEP:-0} + 1))
         color_off=''
         ;;
     *)
@@ -58,7 +58,7 @@ _test_unit() {
         echo "Found $me_path_data/tests/unit_test.sh"
         bash "$me_path_data"/tests/unit_test.sh
     else
-        echo_msg question "not found tests/unit_test.sh, skip unit test."
+        echo_msg purple "not found tests/unit_test.sh, skip unit test."
     fi
     echo_msg time "[test] unit test...end"
 }
@@ -196,7 +196,7 @@ _docker_login() {
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
         if [[ "${demo_mode:-0}" == 1 ]]; then
-            echo_msg question "demo mode, skip docker login."
+            echo_msg purple "demo mode, skip docker login."
             return 0
         fi
         [[ -f "$lock_docker_login" ]] && return 0
@@ -243,11 +243,11 @@ _push_image() {
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "$demo_mode" == 1 ]]; then
-        echo_msg question "Demo mode, skip push image."
+        echo_msg purple "Demo mode, skip push image."
         return 0
     fi
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        echo "safe remove the above image"
+        echo_msg time "safe remove the above image"
         echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}" >>"$me_log"
     else
         echo_msg error "got an error here, probably caused by network..."
@@ -281,7 +281,7 @@ _deploy_k8s() {
 
     ## helm install / helm 安装
     if [ -z "$path_helm" ]; then
-        echo_msg question "Not found helm files"
+        echo_msg purple "Not found helm files"
         echo "Try to generate helm files with bin/helm-new.sh"
         path_helm="${me_path_data}/helm/${helm_release}"
         bash "$me_path_bin/helm-new.sh" ${helm_release}
@@ -336,7 +336,7 @@ _deploy_rsync_ssh() {
         # db_host=${array[7]}
         # db_name=${array[8]}
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo "${ssh_host:?if stop here, check runner/conf/deploy.conf}"
+        echo_msg time "${ssh_host:?if stop here, check runner/conf/deploy.conf}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
         ## rsync exclude some files / rsync 排除某些文件
         if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
@@ -436,7 +436,7 @@ _deploy_notify() {
     _deploy_notify_msg
     if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
         ## work chat / 发送至 企业微信
-        echo "to work wxchat"
+        echo_msg time "to work wxchat"
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
         curl -s "$weixin_api" -H 'Content-Type: application/json' \
             -d "
@@ -448,20 +448,20 @@ _deploy_notify() {
         }"
     elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
         ## Telegram / 发送至 Telegram
-        echo "to Telegram"
+        echo_msg time "to Telegram"
         telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendMessage"
         # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
         $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$telegram_api_msg"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         ## element / 发送至 element
-        echo "to Element"
+        echo_msg time "to Element"
         python3 "$me_path_data_bin/element.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_EMAIL:-0}" -eq 1 ]]; then
         ## email / 发送至 email
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
-        echo "to Email"
+        echo_msg time "to Email"
         "$me_path_bin/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
@@ -473,7 +473,7 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo "skip message send."
+        echo_msg time "skip message send."
     fi
 }
 
@@ -861,7 +861,7 @@ _setup_deploy_conf() {
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
         echo_msg warning "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
-        echo_msg question "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
+        echo_msg purple "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
         [ -d "$HOME/.ssh" ] || ln -sf "$path_conf_ssh" "$HOME/"
     fi
@@ -1198,7 +1198,7 @@ main() {
     [ -n "$ENV_HTTP_PROXY" ] && curl_opt="$curl_opt -x$ENV_HTTP_PROXY"
     ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
-        echo_msg question "Found default username/password, skip docker login / push image / deploy k8s..."
+        echo_msg purple "Found default username/password, skip docker login / push image / deploy k8s..."
         demo_mode=1
     fi
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
