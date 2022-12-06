@@ -481,7 +481,7 @@ _renew_cert() {
     if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
         echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
     else
-        return
+        return 0
     fi
     echo_msg step "[cert] renew cert with acme.sh using dns+api...start"
     acme_home="${HOME}/.acme.sh"
