@@ -478,6 +478,11 @@ _deploy_notify() {
 }
 
 _renew_cert() {
+    if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+        echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
+    else
+        return
+    fi
     echo_msg step "[cert] renew cert with acme.sh using dns+api...start"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
@@ -503,7 +508,7 @@ _renew_cert() {
         [ -f "$account" ] || continue
         if [ -f "$conf_dns_cloudflare" ]; then
             if ! command -v flarectl; then
-                echo_msg warning "not found: flarectl "
+                echo_msg warning "command not found: flarectl "
                 return 1
             fi
             source "$conf_dns_cloudflare" "${account##*.}"
@@ -511,7 +516,7 @@ _renew_cert() {
             dnsType='dns_cf'
         elif [ -f "$conf_dns_aliyun" ]; then
             if ! command -v aliyun; then
-                echo_msg warning "not found: aliyun "
+                echo_msg warning "command not found: aliyun "
                 return 1
             fi
             source "$conf_dns_aliyun" "${account##*.}"
@@ -541,7 +546,7 @@ _renew_cert() {
         bash "${acme_home}"/custom.acme.sh
     fi
     echo_msg time "[cert] renew cert with acme.sh using dns+api...end"
-    # [[ "${github_action:-0}" -eq 1 ]] || exit
+    [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && exit 0
 }
 
 _install_python_gitlab() {
@@ -1219,11 +1224,7 @@ main() {
     _setup_deploy_conf
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
-    if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
-        echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-        _renew_cert
-        [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && return
-    fi
+    _renew_cert
 
     ## probe program lang / 探测程序语言
     _probe_langs
@@ -1267,8 +1268,9 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
     echo_msg step "[style] check code style...start"
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]] &&
+    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
         source "$code_style_sh"
+    fi
     echo_msg time "[style] check code style...end"
 
     _test_unit
