@@ -14,7 +14,7 @@ set -e ## 出现错误自动退出
 
 echo_msg() {
     color_off='\033[0m' # Text Reset
-    case "$1" in
+    case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
     green | info) color_on='\033[0;32m' ;;             # Green
     yellow | warning | warn) color_on='\033[0;33m' ;;  # Yellow
@@ -22,20 +22,25 @@ echo_msg() {
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
     time)
-        color_on="[+] $(date +%Y%m%d-%T-%u), " ## datetime
+        color_on="[+] $(date +%Y%m%d-%T-%u), "
         color_off=''
+        ;;
+    stepend)
+        color_on="[+] $(date +%Y%m%d-%T-%u), "
+        color_off=' ... end'
         ;;
     step | timestep)
         color_on="\033[0;33m[$((${STEP:-0} + 1))] $(date +%Y%m%d-%T-%u), \033[0m"
         STEP=$((${STEP:-0} + 1))
-        color_off=''
+        color_off=' ... start'
         ;;
     *)
         color_on=''
         color_off=''
+        need_shift=0
         ;;
     esac
-    shift
+    [ "${need_shift:-1}" -eq 1 ] && shift
     echo -e "${color_on}$*${color_off}"
 }
 
@@ -43,7 +48,7 @@ echo_msg() {
 
 ## install phpunit
 _test_unit() {
-    echo_msg step "[test] unit test...start"
+    echo_msg step "[test] unit test"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
     if [[ "${PIPELINE_UNIT_TEST:-0}" -eq 0 ]]; then
@@ -60,12 +65,12 @@ _test_unit() {
     else
         echo_msg purple "not found tests/unit_test.sh, skip unit test."
     fi
-    echo_msg time "[test] unit test...end"
+    echo_msg stepend "[test] unit test"
 }
 
 ## install jdk/ant/jmeter
 _test_function() {
-    echo_msg step "[test] function test...start"
+    echo_msg step "[test] function test"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
     if [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 0 ]]; then
@@ -79,13 +84,13 @@ _test_function() {
         echo "Found $me_path_data/tests/func_test.sh"
         bash "$me_path_data"/tests/func_test.sh
     else
-        echo "not found tests/func_test.sh, skip function test."
+        echo "Not found tests/func_test.sh, skip function test."
     fi
-    echo_msg time "[test] function test...end"
+    echo_msg stepend "[test] function test"
 }
 
 _code_quality_sonar() {
-    echo_msg step "[quality] check code with sonarqube...start"
+    echo_msg step "[quality] check code with sonarqube"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_SONAR:-0}" -eq 0 ]]; then
@@ -120,7 +125,7 @@ EOF
     $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
-    echo_msg time "[quality] check code with sonarqube...end"
+    echo_msg stepend "[quality] check code with sonarqube"
     exit
 }
 
@@ -136,7 +141,7 @@ _scan_vulmap() {
 }
 
 _deploy_flyway_docker() {
-    echo_msg step "[flyway] deploy database SQL with docker ...start"
+    echo_msg step "[flyway] deploy database SQL with docker"
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     if [[ "${PIPELINE_FLYWAY:-0}" -ne 1 || "${exec_deploy_flyway:-0}" -ne 1 ]]; then
         echo '<skip>'
@@ -161,12 +166,12 @@ _deploy_flyway_docker() {
     else
         echo_msg error "Result = FAIL"
     fi
-    echo_msg time "[flyway] deploy database SQL files...end"
+    echo_msg stepend "[flyway] deploy database SQL files"
 }
 
 _deploy_flyway_helm_job() {
     [[ "${ENV_FLYWAY_HELM_JOB:-0}" -ne 1 ]] && return
-    echo_msg step "[flyway] deploy database SQL with helm job ...start"
+    echo_msg step "[flyway] deploy database SQL with helm job"
     echo "$image_tag_flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
@@ -176,6 +181,7 @@ _deploy_flyway_helm_job() {
     else
         echo_msg error "Result = FAIL"
     fi
+    echo_msg stepend "[flyway] deploy database SQL with helm job"
 }
 
 # python-gitlab list all projects / 列出所有项目
@@ -206,7 +212,7 @@ _docker_login() {
 }
 
 _build_image_docker() {
-    echo_msg step "[container] docker build image...start"
+    echo_msg step "[container] docker build image"
     _docker_login
     ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
@@ -230,16 +236,16 @@ _build_image_docker() {
     echo "Then execute the following command on remote server:"
     echo "#    docker pull $image_uuid"
     echo "#    docker tag $image_uuid deploy/<your_app>"
-    echo_msg time "[container] docker build image...end"
+    echo_msg stepend "[container] docker build image"
 }
 
 _build_image_podman() {
     echo_msg step "[container] podman build image...<skip>"
-    # echo_msg time "[TODO] [podman] build image...end"
+    # echo_msg stepend "[TODO] [podman] build image"
 }
 
 _push_image() {
-    echo_msg step "[container] docker push image...start"
+    echo_msg step "[container] docker push image"
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "$demo_mode" == 1 ]]; then
@@ -248,18 +254,18 @@ _push_image() {
     fi
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
         echo_msg time "safe remove the above image"
-        echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}" >>"$me_log"
+        echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}" | tee -a "$me_log"
     else
         echo_msg error "got an error here, probably caused by network..."
     fi
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway" || echo_msg error "got an error here, probably caused by network..."
     fi
-    echo_msg time "[container] docker push image...end"
+    echo_msg stepend "[container] docker push image"
 }
 
 _deploy_k8s() {
-    echo_msg step "[deploy] deploy to k8s cluster with helm ...start"
+    echo_msg step "[deploy] deploy to k8s cluster with helm"
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
         echo "remove project name prefix"
         helm_release=${gitlab_project_name#*-}
@@ -316,11 +322,11 @@ EOF
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    echo_msg time "[deploy] deploy to k8s cluster...end"
+    echo_msg stepend "[deploy] deploy to k8s cluster"
 }
 
 _deploy_rsync_ssh() {
-    echo_msg step "[deploy] deploy code files with rsync+ssh ...start"
+    echo_msg step "[deploy] deploy code files with rsync+ssh"
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | while read -r line; do
     # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf"); do
@@ -370,7 +376,7 @@ _deploy_rsync_ssh() {
             return
         fi
         $ssh_opt -n "${ssh_host}" "[[ -d $rsync_dest ]] || mkdir -p $rsync_dest"
-        echo "deploy to ${ssh_host}:${rsync_dest}"
+        echo "Deploy to ${ssh_host}:${rsync_dest}"
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
         if [ -f "$me_path_data_bin/custom.deploy.sh" ]; then
@@ -379,23 +385,23 @@ _deploy_rsync_ssh() {
             echo_msg time "end custom deploy."
         fi
         if [[ $exec_deploy_single_host -eq 1 ]]; then
-            echo_msg step "deploy to singl host with docker-compose ...start"
+            echo_msg step "deploy to singl host with docker-compose"
             $ssh_opt -n "$ssh_host" "cd ~/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
-    echo_msg time "[deploy] deploy code files...end"
+    echo_msg stepend "[deploy] deploy code files"
 }
 
 _deploy_aliyun_oss() {
-    echo_msg step "[deploy] deploy code files to aliyun oss...start"
+    echo_msg step "[deploy] deploy code files to aliyun oss"
 }
 
 _deploy_rsync() {
-    echo_msg step "[deploy] deploy code files to rsyncd server...start"
+    echo_msg step "[deploy] deploy code files to rsyncd server"
 }
 
 _deploy_ftp() {
-    echo_msg step "[deploy] deploy code files to ftp server...start"
+    echo_msg step "[deploy] deploy code files to ftp server"
     return
     upload_file="${gitlab_project_dir}/ftp.tgz"
     tar czvf "${upload_file}" -C "${gitlab_project_dir}" .
@@ -408,11 +414,11 @@ put $upload_file
 passive off
 bye
 EOF
-    echo_msg time "[deploy] deploy code files to ftp server...end"
+    echo_msg stepend "[deploy] deploy code files to ftp server"
 }
 
 _deploy_sftp() {
-    echo_msg step "[deploy] deploy code files to sftp server...start"
+    echo_msg step "[deploy] deploy code files to sftp server"
 }
 
 _deploy_notify_msg() {
@@ -431,8 +437,7 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 }
 
 _deploy_notify() {
-    echo_msg step "[notify] message for deploy result..."
-
+    echo_msg step "[notify] message for result"
     _deploy_notify_msg
     if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
         ## work chat / 发送至 企业微信
@@ -475,6 +480,7 @@ _deploy_notify() {
     else
         echo_msg time "skip message send."
     fi
+    echo_msg stepend "[notify] message for result"
 }
 
 _renew_cert() {
@@ -483,7 +489,7 @@ _renew_cert() {
     else
         return 0
     fi
-    echo_msg step "[cert] renew cert with acme.sh using dns+api...start"
+    echo_msg step "[cert] renew cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
@@ -545,7 +551,7 @@ _renew_cert() {
         echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}"/custom.acme.sh
     fi
-    echo_msg time "[cert] renew cert with acme.sh using dns+api...end"
+    echo_msg stepend "[cert] renew cert with acme.sh using dns+api"
     [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && exit 0
 }
 
@@ -670,7 +676,7 @@ _detect_os() {
     else
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
         echo_msg error "Not support. exit."
-        exit 1
+        return 1
     fi
 
     case "$OS" in
@@ -730,7 +736,7 @@ _detect_os() {
     *)
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
         echo_msg error "Not support. exit."
-        exit 1
+        return 1
         ;;
     esac
 }
@@ -739,7 +745,7 @@ _clean_disk() {
     ## clean cache of docker build / 清理 docker 构建缓存
     disk_usage="$(df / | awk 'NR>1 {print $5}' | sed 's/%//')"
     if ((disk_usage < 80)); then
-        return
+        return 0
     fi
     echo_msg warning "Disk space is less than 80%, remove docker images..."
     docker images "${ENV_DOCKER_REGISTRY}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
@@ -770,7 +776,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    echo_msg step "[inject] from runner/data/project_conf/<project_name> ...start"
+    echo_msg step "[inject] from runner/data/project_conf/<project_name>"
     ## frontend (VUE) .env file
     if [[ "$project_lang" == node ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -847,7 +853,7 @@ _inject_files() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_msg time "[inject] copy from runner/data/project_conf/...end"
+    echo_msg stepend "[inject] copy from runner/data/project_conf/"
 }
 
 _setup_deploy_conf() {
@@ -871,7 +877,7 @@ _setup_deploy_conf() {
             mkdir "$HOME"/.ssh
             chmod 700 "$HOME"/.ssh
         fi
-        echo "link $file to $HOME/.ssh/"
+        echo "Link $file to $HOME/.ssh/"
         chmod 600 "${file}"
         ln -sf "${file}" "$HOME/.ssh/"
     done
@@ -913,7 +919,7 @@ _setup_gitlab_vars() {
         cron_save_file="$(find ${me_path_data} -name "crontab.${gitlab_project_id}.*" | head -n 1)"
         cron_save_id="${cron_save_file##*.}"
         if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
-            echo warning "no code change found, skip."
+            echo warning "no code change found, <skip>."
             exit 0
         else
             rm -f "${me_path_data}/crontab.${gitlab_project_id}".*
@@ -923,7 +929,7 @@ _setup_gitlab_vars() {
 }
 
 _probe_langs() {
-    echo_msg step "[langs] probe language..."
+    echo_msg step "[langs] probe language"
     for f in pom.xml composer.json package.json requirements.txt README.md readme.md README.txt readme.txt; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
@@ -952,10 +958,11 @@ _probe_langs() {
         esac
     done
     echo "Probe lang: $project_lang"
+    echo_msg stepend "[langs] probe language"
 }
 
 _probe_deploy_method() {
-    echo_msg step "[deploy] probe deploy method..."
+    echo_msg step "[deploy] probe deploy method"
     for f in Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
@@ -968,9 +975,9 @@ _probe_deploy_method() {
             ;;
         Dockerfile)
             echo "Found Dockerfile"
-            echo "enable build with docker"
-            echo "enable deploy with helm"
-            echo "disable [deploy_rsync_ssh]"
+            echo "Enable build with docker"
+            echo "Enable deploy with helm"
+            echo "Disable deploy with rsync+ssh"
             if [[ "$project_lang" =~ (java) ]]; then
                 ## 使用本机目录缓存 maven ，可以加快 docker build 速度
                 exec_build_langs=1
@@ -984,22 +991,23 @@ _probe_deploy_method() {
             ;;
         esac
     done
+    echo_msg stepend "[deploy] probe deploy method"
 }
 
 _svn_checkout_repo() {
     [[ "${arg_svn_co:-0}" -eq 1 ]] || return 0
     if [[ ! -d "$me_path_builds" ]]; then
-        echo "not found $me_path_builds, create it..."
+        echo "Not found $me_path_builds, create it..."
         mkdir -p builds
     fi
     local path_git_clone="$me_path_builds/${arg_svn_co_url##*/}"
-    echo 'coming soon...'
+    echo 'Coming soon...'
 }
 
 _git_clone_repo() {
     [[ "${arg_git_clone:-0}" -eq 1 ]] || return 0
     if [[ ! -d "$me_path_builds" ]]; then
-        echo "not found $me_path_builds, create it..."
+        echo "Not found $me_path_builds, create it..."
         mkdir -p builds
     fi
     local path_git_clone="$me_path_builds/${arg_git_clone_url##*/}"
@@ -1019,7 +1027,7 @@ _create_k8s() {
     [[ "$create_k8s" -eq 1 ]] || return 0
     ## create k8s with terraform
     if [ -d "$me_path_data/terraform" ]; then
-        echo "create k8s [terraform]..."
+        echo "Create k8s [terraform]..."
         cd "$me_path_data/terraform" && terraform init && terraform apply -auto-approve
         exit $?
     fi
@@ -1266,12 +1274,12 @@ main() {
     _code_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-    echo_msg step "[style] check code style...start"
+    echo_msg step "[style] check code style"
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
         source "$code_style_sh"
     fi
-    echo_msg time "[style] check code style...end"
+    echo_msg stepend "[style] check code style"
 
     _test_unit
 
