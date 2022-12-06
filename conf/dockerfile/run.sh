@@ -57,6 +57,7 @@ _start_php() {
         # exec php-fpm -F
         ## 后台启动 background
         exec php-fpm
+        pids="${pids} $!"
     else
         echo "Give up php."
     fi
