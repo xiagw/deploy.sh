@@ -6,10 +6,10 @@ MVN_PROFILE="${gitlab_project_branch}"
 maven_cache="${me_path_data}"/cache.maven
 
 if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
-    echo_msg step "[build] java build with gradle..."
+    echo_msg step "[build] java build with gradle"
     gradle -q
 else
-    echo_msg step "[build] java build with maven..."
+    echo_msg step "[build] java build with maven"
     if [[ -f $gitlab_project_dir/settings.xml ]]; then
         MVN_SET="--settings settings.xml"
     else
@@ -49,4 +49,4 @@ else
     :
 fi
 
-echo_msg time "[build] java build ... end"
+echo_msg stepend "[build] java build"
