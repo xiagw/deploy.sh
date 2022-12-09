@@ -228,14 +228,13 @@ _build_image_docker() {
         --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     ## docker push to ttl.sh
-    image_uuid="ttl.sh/$(uuidgen):1h"
-
-    echo "If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
-    echo "#    docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
-    echo "#    docker push $image_uuid"
-    echo "Then execute the following command on remote server:"
-    echo "#    docker pull $image_uuid"
-    echo "#    docker tag $image_uuid deploy/<your_app>"
+    # image_uuid="ttl.sh/$(uuidgen):1h"
+    # echo "If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
+    # echo "#    docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
+    # echo "#    docker push $image_uuid"
+    # echo "Then execute the following command on remote server:"
+    # echo "#    docker pull $image_uuid"
+    # echo "#    docker tag $image_uuid deploy/<your_app>"
     echo_msg stepend "[container] docker build image"
 }
 
@@ -253,7 +252,7 @@ _push_image() {
         return 0
     fi
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        echo_msg time "safe remove the above image"
+        echo_msg "safe remove the above image"
         echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}" | tee -a "$me_log"
     else
         echo_msg error "got an error here, probably caused by network..."
@@ -478,7 +477,7 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo_msg time "skip message send."
+        echo_msg "skip message send."
     fi
     echo_msg stepend "[notify] message for result"
 }
@@ -776,7 +775,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    echo_msg step "[inject] from runner/data/project_conf/<project_name>"
+    echo_msg step "[inject] from runner/data/project_conf/"
     ## frontend (VUE) .env file
     if [[ "$project_lang" == node ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -853,7 +852,6 @@ _inject_files() {
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
         [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    echo_msg stepend "[inject] copy from runner/data/project_conf/"
 }
 
 _setup_deploy_conf() {
@@ -958,11 +956,10 @@ _probe_langs() {
         esac
     done
     echo "Probe lang: $project_lang"
-    echo_msg stepend "[langs] probe language"
 }
 
 _probe_deploy_method() {
-    echo_msg step "[deploy] probe deploy method"
+    echo_msg step "[probe] probe deploy method"
     for f in Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
@@ -991,7 +988,6 @@ _probe_deploy_method() {
             ;;
         esac
     done
-    echo_msg stepend "[deploy] probe deploy method"
 }
 
 _svn_checkout_repo() {
@@ -1278,8 +1274,9 @@ main() {
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
         source "$code_style_sh"
+    else
+        echo '<skip>'
     fi
-    echo_msg stepend "[style] check code style"
 
     _test_unit
 
