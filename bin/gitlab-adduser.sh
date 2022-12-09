@@ -62,8 +62,8 @@ main() {
     fi
     me_path="$(dirname "$($bin_readlink -f "$0")")"
     me_name="$(basename "$0")"
-    file_passwd="$me_path/data/${me_name}.txt"
-    file_deploy_env="$me_path/data/deploy.env"
+    file_passwd="$me_path/../data/${me_name}.txt"
+    file_deploy_env="$me_path/../data/deploy.env"
     [ -f $file_deploy_env ] && source $file_deploy_env
 
     _create_user "$@"
