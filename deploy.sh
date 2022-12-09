@@ -41,6 +41,7 @@ echo_msg() {
         ;;
     esac
     [ "${need_shift:-1}" -eq 1 ] && shift
+    need_shift=1
     echo -e "${color_on}$*${color_off}"
 }
 
@@ -130,12 +131,14 @@ EOF
 }
 
 _scan_ZAP() {
-    echo_msg step "[ZAP] scan ... <skip>"
+    echo_msg step "[ZAP] scan"
+    echo '<skip>'
     # docker pull owasp/zap2docker-stable
 }
 
 _scan_vulmap() {
-    echo_msg step "[vulmap] scan...<skip>"
+    echo_msg step "[vulmap] scan"
+    echo '<skip>'
     # https://github.com/zhzyker/vulmap
     # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
 }
