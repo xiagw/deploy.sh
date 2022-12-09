@@ -127,7 +127,7 @@ EOF
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
     echo_msg stepend "[quality] check code with sonarqube"
-    exit
+    exit 0
 }
 
 _scan_ZAP() {
@@ -144,7 +144,7 @@ _scan_vulmap() {
 }
 
 _deploy_flyway_docker() {
-    echo_msg step "[flyway] deploy database SQL with docker"
+    echo_msg step "[flyway] deploy database SQL files"
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     if [[ "${PIPELINE_FLYWAY:-0}" -ne 1 || "${exec_deploy_flyway:-0}" -ne 1 ]]; then
         echo '<skip>'
@@ -215,7 +215,7 @@ _docker_login() {
 }
 
 _build_image_docker() {
-    echo_msg step "[container] docker build image"
+    echo_msg step "[container] build image with docker"
     _docker_login
     ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
@@ -238,16 +238,17 @@ _build_image_docker() {
     # echo "Then execute the following command on remote server:"
     # echo "#    docker pull $image_uuid"
     # echo "#    docker tag $image_uuid deploy/<your_app>"
-    echo_msg stepend "[container] docker build image"
+    echo_msg stepend "[container] build image with docker"
 }
 
 _build_image_podman() {
-    echo_msg step "[container] podman build image...<skip>"
+    echo_msg step "[container] build image with podman"
+    echo '<skip>'
     # echo_msg stepend "[TODO] [podman] build image"
 }
 
 _push_image() {
-    echo_msg step "[container] docker push image"
+    echo_msg step "[container] push image with docker"
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "$demo_mode" == 1 ]]; then
@@ -255,19 +256,18 @@ _push_image() {
         return 0
     fi
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        echo_msg "safe remove the above image"
-        echo "docker image rm ${ENV_DOCKER_REGISTRY}:${image_tag}" | tee -a "$me_log"
+        echo_msg "safe remove the above image with 'docker rmi'"
     else
         echo_msg error "got an error here, probably caused by network..."
     fi
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway" || echo_msg error "got an error here, probably caused by network..."
     fi
-    echo_msg stepend "[container] docker push image"
+    echo_msg stepend "[container] push image"
 }
 
 _deploy_k8s() {
-    echo_msg step "[deploy] deploy to k8s cluster with helm"
+    echo_msg step "[deploy] deploy with helm"
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
         echo "remove project name prefix"
         helm_release=${gitlab_project_name#*-}
@@ -324,14 +324,12 @@ EOF
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    echo_msg stepend "[deploy] deploy to k8s cluster"
+    echo_msg stepend "[deploy] deploy with helm"
 }
 
 _deploy_rsync_ssh() {
-    echo_msg step "[deploy] deploy code files with rsync+ssh"
+    echo_msg step "[deploy] deploy files with rsync+ssh"
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
-    # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | while read -r line; do
-    # for line in $(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf"); do
     while read -r line; do
         # shellcheck disable=2116
         read -ra array <<<"$(echo "$line")"
@@ -344,7 +342,7 @@ _deploy_rsync_ssh() {
         # db_host=${array[7]}
         # db_name=${array[8]}
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo_msg time "${ssh_host:?if stop here, check runner/conf/deploy.conf}"
+        echo_msg time "${ssh_host:?if stop here, check $me_conf}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
         ## rsync exclude some files / rsync 排除某些文件
         if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
@@ -391,19 +389,19 @@ _deploy_rsync_ssh() {
             $ssh_opt -n "$ssh_host" "cd ~/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
-    echo_msg stepend "[deploy] deploy code files"
+    echo_msg stepend "[deploy] deploy files"
 }
 
 _deploy_aliyun_oss() {
-    echo_msg step "[deploy] deploy code files to aliyun oss"
+    echo_msg step "[deploy] deploy files to aliyun oss"
 }
 
 _deploy_rsync() {
-    echo_msg step "[deploy] deploy code files to rsyncd server"
+    echo_msg step "[deploy] deploy files to rsyncd server"
 }
 
 _deploy_ftp() {
-    echo_msg step "[deploy] deploy code files to ftp server"
+    echo_msg step "[deploy] deploy files to ftp server"
     return
     upload_file="${gitlab_project_dir}/ftp.tgz"
     tar czvf "${upload_file}" -C "${gitlab_project_dir}" .
@@ -416,11 +414,11 @@ put $upload_file
 passive off
 bye
 EOF
-    echo_msg stepend "[deploy] deploy code files to ftp server"
+    echo_msg stepend "[deploy] deploy files to ftp server"
 }
 
 _deploy_sftp() {
-    echo_msg step "[deploy] deploy code files to sftp server"
+    echo_msg step "[deploy] deploy files to sftp server"
 }
 
 _deploy_notify_msg() {
@@ -444,7 +442,7 @@ _deploy_notify() {
     if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
         ## work chat / 发送至 企业微信
         echo_msg time "to work wxchat"
-        weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?undefine var}"
+        weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:? ERR: empty api key}"
         curl -s "$weixin_api" -H 'Content-Type: application/json' \
             -d "
         {
@@ -456,10 +454,10 @@ _deploy_notify() {
     elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
         ## Telegram / 发送至 Telegram
         echo_msg time "to Telegram"
-        telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendMessage"
-        # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:?undefine var}/sendDocument"
+        telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:? ERR: empty api key}/sendMessage"
+        # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:? ERR: empty api key}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
-        $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:?undefine var}&text=$msg_body" "$telegram_api_msg"
+        $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:? ERR: empty api key}&text=$msg_body" "$telegram_api_msg"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         ## element / 发送至 element
         echo_msg time "to Element"
@@ -749,7 +747,7 @@ _clean_disk() {
     if ((disk_usage < 80)); then
         return 0
     fi
-    echo_msg warning "Disk space is less than 80%, remove docker images..."
+    echo_msg warning "Disk space is less than 80%, remove docker images"
     docker images "${ENV_DOCKER_REGISTRY}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
     docker system prune -f >/dev/null || true
 }
@@ -772,7 +770,7 @@ get_maxmind_ip() {
 
 _generate_apidoc() {
     if [[ -f "${gitlab_project_dir}/apidoc.json" ]]; then
-        echo_msg step "[apidoc] generate API Docs with apidoc..."
+        echo_msg step "[apidoc] generate API Docs with apidoc"
         $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
     fi
 }
