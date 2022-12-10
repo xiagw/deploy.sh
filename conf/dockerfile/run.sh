@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-_start() {
+_start_java() {
     ## 修改内存占用值，
     [ -z "$JAVA_OPTS" ] && JAVA_OPTS='java -Xms256m -Xmx384m'
     [[ "$1" == nohup || -f "$app_path"/.run.nohup ]] && JAVA_OPTS="nohup $JAVA_OPTS"
@@ -23,11 +23,11 @@ _start() {
         done
         echo "${cj}. start $jar ..."
         if [ -n "$profile_name" ]; then
-            $JAVA_OPTS -jar "$jar" "$profile_name" &>>"$me_log" &
+            $JAVA_OPTS -jar "$jar" "$profile_name" &>>"$app_log" &
         elif [ -n "$config_yml" ]; then
-            $JAVA_OPTS "$config_yml" -jar "$jar" &>>"$me_log" &
+            $JAVA_OPTS "$config_yml" -jar "$jar" &>>"$app_log" &
         else
-            $JAVA_OPTS -jar "$jar" &>>"$me_log" &
+            $JAVA_OPTS -jar "$jar" &>>"$app_log" &
         fi
         pids="$pids $!"
     done
@@ -64,16 +64,22 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
-    app_path=/app
+    if [ -d /app ]; then
+        app_path=/app
+    else
+        app_path=${me_path}
+    fi
     app_log=$app_path/${me_name}.log
-    echo "$(date), start..." | tee -a "$app_log"
     [ -d "$app_path"/log ] || mkdir "$app_path"/log
+    echo "$(date), startup ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT QUIT TERM
+    ## 统一兼容启动 start php
     _start_php
-    ## 启动 java
-    _start "$@"
+    ## 统一兼容启动 start java
+    _start_java "$@"
     ## allow debug / 方便开发者调试，可以直接 kill java, 不会停止容器
+    # tail -f "$me_log" "$app_path"/log/*.log
     tail -f "$me_log" "$app_path"/log/*.log &
     ## 适用于 docker 中启动
     if [[ -z "$1" || ! -f "$app_path"/.run.nohup ]]; then
