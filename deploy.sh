@@ -1022,12 +1022,10 @@ _git_clone_repo() {
 
 _create_k8s() {
     [[ "$create_k8s" -eq 1 ]] || return 0
-    ## create k8s with terraform
-    if [ -d "$me_path_data/terraform" ]; then
-        echo "Create k8s [terraform]..."
-        cd "$me_path_data/terraform" && terraform init && terraform apply -auto-approve
-        exit $?
-    fi
+    [ -d "$me_path_data/terraform" ] || return 0
+    echo_msg step "[terraform] create k8s"
+    cd "$me_path_data/terraform" && terraform init && terraform apply -auto-approve
+    exit $?
 }
 
 _usage() {
@@ -1200,7 +1198,6 @@ main() {
     source "$me_env"
     ## curl use proxy / curl 使用代理
     curl_opt="curl -L"
-    [ -n "$ENV_HTTP_PROXY" ] && curl_opt="$curl_opt -x$ENV_HTTP_PROXY"
     ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
         echo_msg purple "Found default username/password, skip docker login / push image / deploy k8s..."
