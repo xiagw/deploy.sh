@@ -69,7 +69,11 @@ main() {
     else
         app_path=${me_path}
     fi
-    app_log=$app_path/${me_name}.log
+    if [ -w "$app_path" ]; then
+        app_log=$app_path/${me_name}.log
+    else
+        app_log=/tmp/${me_name}.log
+    fi
     [ -d "$app_path"/log ] || mkdir "$app_path"/log
     echo "$(date), startup ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
