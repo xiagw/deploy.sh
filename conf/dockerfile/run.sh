@@ -75,14 +75,15 @@ main() {
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT QUIT TERM
     ## 统一兼容启动 start php
-    _start_php
+    _start_php "$@"
     ## 统一兼容启动 start java
     _start_java "$@"
-    ## allow debug / 方便开发者调试，可以直接 kill java, 不会停止容器
-    # tail -f "$me_log" "$app_path"/log/*.log
-    tail -f "$me_log" "$app_log" "$app_path"/log/*.log &
+
     ## 适用于 docker 中启动
     if [[ -z "$1" || ! -f "$app_path"/.run.nohup ]]; then
+        tail -f "$me_log" "$app_log" "$app_path"/log/*.log &
+        ## allow debug / 如果不使用 wait ，方便开发者调试，可以直接 kill java, 不会停止容器
+        # tail -f "$me_log" "$app_path"/log/*.log
         wait
     fi
 }
