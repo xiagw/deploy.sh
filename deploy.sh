@@ -811,7 +811,7 @@ _inject_files() {
         [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]] &&
             rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}"/Dockerfile
         if [[ "$project_lang" == java && "$ENV_CHANGE_SOURCE" == true ]]; then
-            curl -Lo "$gitlab_project_dir"/settings.xml https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml
+            curl -fsSLo "$gitlab_project_dir"/settings.xml https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml
         fi
         ;;
     2)
