@@ -478,9 +478,8 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo_msg "skip message send."
+        echo_msg "<skip>"
     fi
-    echo_msg stepend "[notify] message for result"
 }
 
 _renew_cert() {
@@ -975,7 +974,6 @@ _probe_deploy_method() {
             echo "Found Dockerfile"
             echo "Enable build with docker"
             echo "Enable deploy with helm"
-            echo "Disable deploy with rsync+ssh"
             if [[ "$project_lang" =~ (java) ]]; then
                 ## 使用本机目录缓存 maven ，可以加快 docker build 速度
                 exec_build_langs=1

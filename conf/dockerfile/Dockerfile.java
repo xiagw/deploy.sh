@@ -36,7 +36,7 @@ RUN set -x; \
     && fc-cache --force \
     && curl -Lo /tmp/fonts.tgz --referer http://www.flyh6.com/ http://cdn.flyh6.com/docker/fonts-2022.tgz \
     && tar -zxf /tmp/fonts.tgz -C /usr/share \
-    && rm -f fonts.tgz; \
+    && rm -f /tmp/fonts.tgz; \
     fi; \
     if [ "$INSTALL_FFMPEG" = true ]; then \
     apt-get update && apt-get install -y --no-install-recommends ffmpeg; \
