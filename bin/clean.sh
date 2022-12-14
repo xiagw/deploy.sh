@@ -12,6 +12,7 @@ LANG=en_US.UTF-8 snap list --all | awk '/disabled/{print $1, $3}' |
 ## clean thinkphp runtime/log
 find . -type d -name runtime |
     while read -r line; do
+        echo "$line"
         sudo rm -rf "$line"/log/*
         ## fix thinkphp runtime perm
         sudo chown 33:33 "$line"
