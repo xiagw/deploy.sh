@@ -1,0 +1,46 @@
+# Install the OpenSSH Client
+Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+
+# Install the OpenSSH Server
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+
+# Start the sshd service
+Start-Service sshd
+
+# OPTIONAL but recommended:
+Set-Service -Name sshd -StartupType 'Automatic'
+
+# Confirm the Firewall rule is configured. It should be created automatically by setup. Run the following to verify
+if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled)) {
+    Write-Output "Firewall Rule 'OpenSSH-Server-In-TCP' does not exist, creating it..."
+    New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+} else {
+    Write-Output "Firewall rule 'OpenSSH-Server-In-TCP' has been created and exists."
+}
+
+New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -PropertyType String -Force
+
+New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
+echo '<public_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
+icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
+
+New-Item -Path $HOME\.ssh -Type Directory -Force
+echo '<public_key>'>$HOME\.ssh\authorized_keys
+
+## powershell 7
+winget install --id Microsoft.Powershell --source winget
+
+## oh my posh
+winget install JanDeDobbeleer.OhMyPosh --source winget
+
+New-Item -Path $PROFILE -Type File -Force
+
+echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression' >$PROFILE
+
+## Not Admin console
+# iwr -useb get.scoop.sh | iex
+
+# $env:HTTP_PROXY="http://192.168.1.154:1080"
+# $env:HTTPS_PROXY="http://192.168.1.154:1080"
+
+# winget settings
