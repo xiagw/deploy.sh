@@ -805,10 +805,11 @@ _inject_files() {
     echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-1}
     case ${ENV_ENABLE_INJECT:-1} in
     1)
-        echo "Overwritten from data/dockerfile/Dockerfile.${project_lang}"
         ## Java, 公用的模版文件 Dockerfile, run.sh, settings.xml
-        [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]] &&
+        if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
+            echo "Overwritten from data/dockerfile/Dockerfile.${project_lang}"
             rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}"/Dockerfile
+        fi
         if [[ "$project_lang" == java && "$ENV_CHANGE_SOURCE" == true ]]; then
             curl -fsSLo "$gitlab_project_dir"/settings.xml https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml
         fi
