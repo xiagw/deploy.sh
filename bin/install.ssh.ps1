@@ -17,18 +17,33 @@ if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyCon
 } else {
     Write-Output "Firewall rule 'OpenSSH-Server-In-TCP' has been created and exists."
 }
-
+# 默认 shell 设置为 powershell.exe：
 New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -PropertyType String -Force
 
-New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
-echo '<public_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
-icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
+# By default the ssh-agent service is disabled. Allow it to be manually started for the next step to work.
+# Make sure you're running as an Administrator.
+# Get-Service ssh-agent | Set-Service -StartupType Manual
+# Start the service
+# Start-Service ssh-agent
+# This should return a status of Running
+# Get-Service ssh-agent
+# Now load your key files into ssh-agent
+# ssh-add ~\.ssh\id_ed25519
+
+# Make sure that the .ssh directory exists in your server's user account home folder
+# ssh username@domain1@contoso.com mkdir C:\Users\username\.ssh\
+# Use scp to copy the public key file generated previously on your client to the authorized_keys file on your server
+# scp C:\Users\username\.ssh\id_ed25519.pub user1@domain1@contoso.com:C:\Users\username\.ssh\authorized_keys
 
 New-Item -Path $HOME\.ssh -Type Directory -Force
-echo '<public_key>'>$HOME\.ssh\authorized_keys
+echo '<pub_key>' >$HOME\.ssh\authorized_keys
+New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
+icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
+echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
+
 
 ## powershell 7
-winget install --id Microsoft.Powershell --source winget
+#winget install --id Microsoft.Powershell --source winget
 
 ## oh my posh
 winget install JanDeDobbeleer.OhMyPosh --source winget
