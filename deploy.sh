@@ -952,11 +952,11 @@ _probe_langs() {
             project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
             project_lang=${project_lang// /}
             project_lang=${project_lang,,}
-            project_lang=${project_lang:-other}
+            project_lang=${project_lang:-unknown}
             ;;
         esac
     done
-    echo "Probe lang: $project_lang"
+    echo "Probe lang: ${project_lang:-unknown}"
 }
 
 _probe_deploy_method() {
