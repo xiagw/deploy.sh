@@ -47,6 +47,10 @@ echo_msg() {
 
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
+_log() {
+    echo "$(date +%Y%m%d-%T-%u), $*" >>$me_log
+}
+
 ## install phpunit
 _test_unit() {
     echo_msg step "[test] unit test"
@@ -746,6 +750,7 @@ _clean_disk() {
     if ((disk_usage < 80)); then
         return 0
     fi
+    _log "$(df /)"
     echo_msg warning "Disk space is less than 80%, remove docker images"
     docker images "${ENV_DOCKER_REGISTRY}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
     docker system prune -f >/dev/null || true
@@ -1171,9 +1176,24 @@ main() {
     [[ -f "$me_yml" ]] || cp "${me_path_conf}/example-deploy.yml" "$me_yml"
     [[ -f "$me_env" ]] || cp "${me_path_conf}/example-deploy.env" "$me_env"
 
-    PATH="/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin:/usr/local/sbin:/snap/bin"
-    PATH="$PATH:$me_path_data/jdk/bin:$me_path_data/jmeter/bin:$me_path_data/ant/bin:$me_path_data/maven/bin"
-    PATH="$PATH:$me_path_bin:$me_path_data_bin:$HOME/.config/composer/vendor/bin:$HOME/.local/bin"
+    if [[ -d /usr/local/sbin && ! $PATH == */usr/local/sbin* ]]; then
+        PATH=${PATH:+${PATH}}:/usr/local/sbin
+    fi
+    if [[ -d /snap/bin && ! $PATH == */snap/bin* ]]; then
+        PATH=${PATH:+${PATH}}:/snap/bin
+    fi
+    if [[ -d $me_path_bin && ! $PATH == *${me_path_bin}* ]]; then
+        PATH=${PATH:+${PATH}}:$me_path_bin
+    fi
+    if [[ -d $me_path_data_bin && ! $PATH == *${me_path_data_bin}* ]]; then
+        PATH=${PATH:+${PATH}}:$me_path_data_bin
+    fi
+    if [[ -d $HOME/.local/bin && ! $PATH == *$HOME/.local/bin* ]]; then
+        PATH=${PATH:+${PATH}}:$HOME/.local/bin
+    fi
+    if [[ -d $HOME/.config/composer/vendor/bin && ! $PATH == *$HOME/.config/composer/vendor/bin* ]]; then
+        PATH=${PATH:+${PATH}}:$HOME/.config/composer/vendor/bin
+    fi
     export PATH
 
     docker_run="docker run --interactive --rm -u 1000:1000"
