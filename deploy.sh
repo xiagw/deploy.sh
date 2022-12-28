@@ -1249,7 +1249,7 @@ main() {
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-        _deploy_flyway_docker
+        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
