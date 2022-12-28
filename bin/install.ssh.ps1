@@ -1,3 +1,5 @@
+Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH*'
+
 # Install the OpenSSH Client
 Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
 
@@ -43,7 +45,7 @@ echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
 
 
 ## powershell 7
-#winget install --id Microsoft.Powershell --source winget
+# winget install --id Microsoft.Powershell --source winget
 
 ## oh my posh
 winget install JanDeDobbeleer.OhMyPosh --source winget

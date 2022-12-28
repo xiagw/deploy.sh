@@ -1,17 +1,51 @@
 #!/bin/bash
 
+_add_host() {
+    read -rp "[1/4]. Enter ssh name: (alias name) " read_ssh_name
+    read -rp "[2/4]. Enter ssh ip: (ip/dns) " read_ssh_ip
+    read -rp "[3/4]. Enter ssh user: [root] " read_ssh_user
+    read -rp "[4/4]. Enter ssh port: [22] " read_ssh_port
+
+    cat >>"$HOME/.ssh/config" <<EOF
+
+Host ${read_ssh_name}
+    HostName ${read_ssh_ip}
+    User ${read_ssh_user:-root}
+    Port ${read_ssh_port:-22}
+EOF
+
+    # echo "${read_ssh_name}" >>/etc/ansible/hosts
+}
+
+_update_host() {
+    echo 'TODO update'
+}
+
+_delete_host() {
+    echo 'TODO delete'
+}
+
 main() {
     file_conf=("$HOME/.ssh/config"*)
-    select ssh_host in $(awk 'NR>1 && /^Host/ {print $2}' "${file_conf[@]}") quit; do
+    select ssh_host in $(awk 'NR>1 && /^Host/ {print $2}' "${file_conf[@]}") add update delete quit; do
         case "${ssh_host:-quit}" in
         'quit')
             break
             ;;
+        'add')
+            _add_host
+            ;;
+        'update')
+            _update_host
+            ;;
+        'delete')
+            _delete_host
+            ;;
         *)
-            if grep -B 2 "${ssh_host}" "${file_conf[@]}" | grep -q 'nobyobu'; then
-                use_byobu=''
-            else
+            if grep -B 2 "${ssh_host}" "${file_conf[@]}" | grep -q 'byobu'; then
                 use_byobu='byobu'
+            else
+                use_byobu=''
             fi
             [ -n "${1}" ] && ssh_host="${1}@${ssh_host}"
             ssh -A -t "${ssh_host}" $use_byobu
