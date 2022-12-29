@@ -1,28 +1,44 @@
 #!/bin/bash
 
-_add_host() {
+_get_input() {
     read -rp "[1/4]. Enter ssh name: (alias name) " read_ssh_name
     read -rp "[2/4]. Enter ssh ip: (ip/dns) " read_ssh_ip
     read -rp "[3/4]. Enter ssh user: [root] " read_ssh_user
     read -rp "[4/4]. Enter ssh port: [22] " read_ssh_port
 
-    cat >>"$HOME/.ssh/config" <<EOF
+    select c in "$HOME/.ssh/config"*; do
+        ssh_conf="$(readlink -f "$c")"
+        break
+    done
+    select a in "$HOME"/src/*devops*/ansible/hosts; do
+        ansible_conf="$(readlink -f "$a")"
+        break
+    done
+}
 
+_add_host() {
+    grep -q "^Host.*${read_ssh_name}$" "$ssh_conf" && host_exist=1
+    grep -q "### ${read_ssh_name} begin$" "$ssh_conf" && host_exist=1
+    if [[ $host_exist ]]; then
+        echo "host ${read_ssh_name} exist, skip"
+        return 1
+    fi
+    ## ssh config
+    cat >>"$ssh_conf" <<EOF
+### ${read_ssh_name} begin
 Host ${read_ssh_name}
     HostName ${read_ssh_ip}
     User ${read_ssh_user:-root}
     Port ${read_ssh_port:-22}
+### ${read_ssh_name} end
 EOF
-
-    # echo "${read_ssh_name}" >>/etc/ansible/hosts
-}
-
-_update_host() {
-    echo 'TODO update'
+    ## ansible config
+    echo "${read_ssh_name}" >>"$ansible_conf"
 }
 
 _delete_host() {
-    echo 'TODO delete'
+    sed -i "/^### ${read_ssh_name} begin/,/^### ${read_ssh_name} end/d" "$ssh_conf"
+    sed -i "/^${read_ssh_name}/d" "$ansible_conf"
 }
 
 main() {
@@ -33,12 +49,16 @@ main() {
             break
             ;;
         'add')
+            _get_input
             _add_host
             ;;
         'update')
-            _update_host
+            _get_input
+            _delete_host
+            _add_host
             ;;
         'delete')
+            _get_input
             _delete_host
             ;;
         *)

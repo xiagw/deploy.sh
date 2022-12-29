@@ -37,7 +37,7 @@ git clone --depth 1 https://github.com/xiagw/deploy.sh.git "$HOME"/runner
 read -rp "[+] Enter your gitlab url [https://git.example.com]: " read_url_git
 read -rp "[+] Enter your gitlab-runner token: " read_token
 url_git="${read_url_git:? ERR read_url_git}"
-reg_token="${read_token:? Err read_token}"
+reg_token="${read_token:? ERR read_token}"
 sudo $bin_runner register \
     --non-interactive \
     --url "${url_git:?empty url}" \
@@ -56,11 +56,11 @@ if _get_yes_no "[+] Do you want install python-gitlab? "; then
     if [ ! -f ~/.python-gitlab.cfg ]; then
         cat >~/.python-gitlab.cfg <<EOF
 [global]
-default = abc
+default = example
 ssl_verify = true
 timeout = 5
 
-[abc]
+[example]
 url = $url_git
 private_token = $reg_token
 api_version = 4
