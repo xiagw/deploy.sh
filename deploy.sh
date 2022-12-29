@@ -308,6 +308,7 @@ $helm_opt upgrade ${helm_release} $path_helm/ \
 --set image.pullPolicy=Always \
 --timeout 120s
 EOF
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
     $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
         --namespace "${env_namespace}" --create-namespace \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \

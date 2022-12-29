@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://github.com/xiagw/deploy.sh/raw/master/docs/logo.png" alt="deploy.sh" width="200">
+  <img src="https://github.com/xiagw/deploy.sh/raw/main/docs/logo.png" alt="deploy.sh" width="200">
   <br>deploy.sh<br>
 </h1>
 
@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/xiagw/deploy.sh/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/xiagw/deploy.sh/release.yml?branch=master&style=flat-square" alt="Github Actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/xiagw/deploy.sh/release.yml?branch=main&style=flat-square" alt="Github Actions">
   </a>
 </p>
 
