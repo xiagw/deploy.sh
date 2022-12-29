@@ -5,6 +5,8 @@ me_path="$(dirname "$(readlink -f "$0")")"
 me_log="${me_path}/${me_name}.log"
 path_data_helm=$me_path/../data/helm
 
+[ -d "$path_data_helm" ] || mkdir -p "$path_data_helm"
+
 if [[ -z "$1" ]]; then
     ## 获取 release名称 端口 协议信息
     read -rp "release name? " -e -i fly-$RANDOM release_name
