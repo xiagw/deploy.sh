@@ -6,14 +6,12 @@ MVN_PROFILE="${gitlab_project_branch}"
 maven_cache="${me_path_data}"/cache.maven
 
 if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
-    echo_msg step "[build] java build with gradle"
+    echo_msg step "[build] with gradle"
     gradle -q
 else
-    echo_msg step "[build] java build with maven"
+    echo_msg step "[build] with maven"
     if [[ -f $gitlab_project_dir/settings.xml ]]; then
         MVN_SET="--settings settings.xml"
-    else
-        MVN_SET=
     fi
     [ -d "${maven_cache}" ] || mkdir -p "${maven_cache}"
 
@@ -22,7 +20,7 @@ else
         -v "$maven_cache":/var/maven/.m2:rw \
         -v "$gitlab_project_dir":/app:rw \
         -w /app \
-        maven:3.6-jdk-8 \
+        maven:"${ENV_MAVEN_VER:-3.6-jdk-8}" \
         mvn -T 1C clean --quiet \
         --update-snapshots package \
         --define skipTests \
