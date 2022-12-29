@@ -1172,6 +1172,7 @@ main() {
     me_env="${me_path_data}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
     me_dockerfile="${me_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
 
+    [[ -d $me_path_data ]] || mkdir -p $me_path_data
     [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"
     [[ -f "$me_yml" ]] || cp "${me_path_conf}/example-deploy.yml" "$me_yml"
     [[ -f "$me_env" ]] || cp "${me_path_conf}/example-deploy.env" "$me_env"
