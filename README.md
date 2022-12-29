@@ -1,4 +1,15 @@
-# deploy.sh for CI/CD
+<h1 align="center">
+  <img src="https://github.com/xiagw/deploy.sh/raw/master/docs/logo.png" alt="deploy.sh" width="200">
+  <br>deploy.sh<br>
+</h1>
+
+<h4 align="center">An open source CI/CD system</h4>
+
+<p align="center">
+  <a href="https://github.com/xiagw/deploy.sh/actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/xiagw/deploy.sh/release.yml?branch=master&style=flat-square" alt="Github Actions">
+  </a>
+</p>
 
 # 中文 [README_zh.md](README_zh.md)
 

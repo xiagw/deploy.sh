@@ -555,7 +555,11 @@ _renew_cert() {
         bash "${acme_home}"/custom.acme.sh
     fi
     echo_msg stepend "[cert] renew cert with acme.sh using dns+api"
-    [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] && exit 0
+    if [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+        exit 0
+    else
+        :
+    fi
 }
 
 _install_python_gitlab() {
@@ -583,11 +587,11 @@ _install_terraform() {
     command -v terraform >/dev/null && return
     echo_msg info "install terraform..."
     [[ $UID -eq 0 ]] || use_sudo=sudo
-    $use_sudo apt-get update && $use_sudo apt-get install -y gnupg software-properties-common curl
+    $use_sudo apt-get update && $use_sudo apt-get install -qq -y gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
         $use_sudo tee /etc/apt/sources.list.d/hashicorp.list
-    $use_sudo apt update && $use_sudo apt install -y terraform
+    $use_sudo apt-get update && $use_sudo apt-get install -qq -y terraform
     # terraform version
 }
 
@@ -693,8 +697,10 @@ _detect_os() {
         command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
         command -v pip3 >/dev/null || install_pkg="$install_pkg python3-pip"
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
+
         if [[ -n "$install_pkg" ]]; then
             $exec_sudo apt-get update -qq
+            $exec_sudo apt-get install -qq -y apt-utils
             # shellcheck disable=SC2086
             $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
         fi
