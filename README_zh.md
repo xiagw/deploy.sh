@@ -1,4 +1,15 @@
-# deploy.sh for CI/CD
+<h1 align="center">
+  <img src="https://github.com/xiagw/deploy.sh/raw/main/docs/logo.png" alt="deploy.sh" width="200">
+  <br>deploy.sh<br>
+</h1>
+
+<h4 align="center">An open source CI/CD system</h4>
+
+<p align="center">
+  <a href="https://github.com/xiagw/deploy.sh/actions">
+    <img src="https://github.com/xiagw/deploy.sh/actions/workflows/main.yml/badge.svg?event=push" alt="Github Actions">
+  </a>
+</p>
 
 # 英文 [README.md](README.md)
 

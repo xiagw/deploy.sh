@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/xiagw/deploy.sh/actions">
-    <img src="https://github.com/xiagw/deploy.sh/actions/workflows/main.yml/badge.svg" alt="Github Actions">
+    <img src="https://github.com/xiagw/deploy.sh/actions/workflows/main.yml/badge.svg?event=push" alt="Github Actions">
   </a>
 </p>
 

@@ -5,7 +5,7 @@
 # information on Anchore's container image scanning tool Grype, see
 # https://github.com/anchore/grype
 
-name: Gitlab Runner Deploy Tests
+name: Github Actions Status
 
 # on: pull_request
 # on:
@@ -17,7 +17,7 @@ on: push
 
 jobs:
 
-  Gitlab-Runner-Deploy-Tests:
+  GithubActionsStatus:
     runs-on: ubuntu-latest
     steps:
 
