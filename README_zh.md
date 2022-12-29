@@ -77,8 +77,8 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. 准备 Gitlab 服务器和 Gitlab-runner 服务器
 1. [安装 Gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), 按照文档注册 Gitlab-runner 到 Gitlab 服务器，并启动 Gitlab-runner
 1. cd $HOME/runner
-1. cp conf/example-deploy.conf conf/deploy.conf      ## ！！！修改为你的自定义配置！！！
-1. cp conf/example-deploy.env conf/deploy.env        ## ！！！修改为你的自定义配置！！！
+1. cp conf/example-deploy.conf data/deploy.conf      ## ！！！修改为你的自定义配置！！！
+1. cp conf/example-deploy.env data/deploy.env        ## ！！！修改为你的自定义配置！！！
 1. 参考本项目的配置文件 conf/.gitlab-ci.yaml， 设置你的应用 git 仓库当中的文件 \<your_project.git\>.gitlab-ci.yaml
 
 
@@ -95,7 +95,7 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 
 并且确认一下运行状态。 `sudo gitlab-runner status`
 ### Step 3: 准备应用程序服务器 (*nix/k8s/microk8s/k3s)
-如果您打算使用 rsync+ssh 的方式发布：准备好 ssh public key, 并可以无密码登录到应用程序服务器 (ssh private key 可以存放于 $HOME/.ssh/ 或 deploy.sh/data/.ssh/)
+如果您打算使用 rsync+ssh 的方式发布：准备好 ssh public key, 并可以无密码登录到应用程序服务器 (ssh private key 可以存放于 $HOME/.ssh/ 或 $HOME/runner/data/.ssh/)
 
 如果您打算使用 k8s 的方式发布：准备好 ~/.kube/config 等配置文件
 ### Step 4: 安装 deploy.sh
@@ -103,12 +103,12 @@ ssh 登录进入 Gitlab-runner 服务器，并执行以下命令用来安装 dep
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
-### Step 5: 更新配置文件 conf/deploy.conf， conf/deploy.env
+### Step 5: 更新配置文件 data/deploy.conf， data/deploy.env
 参考 conf/example-deploy.conf, conf/example-deploy.env, 修改为你的自定义配置
 ```
 cd $HOME/runner
-cp conf/example-deploy.conf conf/deploy.conf      ## 修改为你的自定义配置
-cp conf/example-deploy.env conf/deploy.env        ## 修改为你的自定义配置
+cp conf/example-deploy.conf data/deploy.conf      ## 修改为你的自定义配置
+cp conf/example-deploy.env data/deploy.env        ## 修改为你的自定义配置
 ```
 ### Step 6: 创建 Gitlab git 仓库
 登录进入 Gitlab 服务器，并创建一个 git 仓库 `project-A` (例如 root/project-A)
@@ -118,7 +118,7 @@ cp conf/example-deploy.env conf/deploy.env        ## 修改为你的自定义配
 
 
 # 如何创建 helm 项目文件
-如果你使用helm来部署到k8s
+如果你使用 helm 来部署到 k8s, 可以修改 helm-new.sh 匹配你的需求 （默认开启 8080 和 8081 端口）
 ```
 bash $HOME/runner/bin/helm-new.sh
 ## change to yours [$HOME/runner/data/helm/<your_project>]

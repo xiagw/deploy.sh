@@ -76,8 +76,8 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. Prepare a gitlab-server and gitlab-runner-server
 1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
 1. cd $HOME/runner
-1. cp conf/example-deploy.conf conf/deploy.conf      ## !!!change to yours!!!
-1. cp conf/example-deploy.env conf/deploy.env        ## !!!change to yours!!!
+1. cp conf/example-deploy.conf data/deploy.conf      ## !!!change to yours!!!
+1. cp conf/example-deploy.env data/deploy.env        ## !!!change to yours!!!
 1. Refer to conf/.gitlab-ci.yaml of this project, setup \<your_project.git\>/.gitlab-ci.yaml
 
 ### option [4]. Running applications with Jenkins
@@ -95,7 +95,7 @@ There is already a server that has installed gitlab-runner and register to Gitla
 and make sure gitlab-runner is running properly. `sudo gitlab-runner status`
 
 ### Step 3: Prepair Application server (Linux/k8s/microk8s/k3s)
-if use rsync+ssh to deploy: The ssh key file had been prepared, and you can login to the Application server without a password from the gitlab-runner server (the key file can be in $HOME/.ssh/, or in the deploy.sh/data/.ssh/)
+if use rsync+ssh to deploy: The ssh key file had been prepared, and you can login to the Application server without a password from the gitlab-runner server (the key file can be in $HOME/.ssh/, or in the $HOME/runner/data/.ssh/)
 
 if use k8s to deploy: on the gitlab-runner server, prepare ~/.kube/config
 
@@ -104,12 +104,12 @@ SSH login to the gitlab-runner server
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
-### Step 5: Update $HOME/runner/conf/deploy.conf, $HOME/runner/conf/deploy.env
+### Step 5: Update $HOME/runner/data/deploy.conf, $HOME/runner/data/deploy.env
 Refer to the conf/example-deploy.conf, conf/example-deploy.env, change to yours configure
 ```
 cd $HOME/runner
-cp conf/example-deploy.conf conf/deploy.conf      ## change to yours
-cp conf/example-deploy.env conf/deploy.env        ## change to yours
+cp conf/example-deploy.conf data/deploy.conf      ## change to yours
+cp conf/example-deploy.env data/deploy.env        ## change to yours
 ```
 ### Step 6: Create Gitlab project on gitlab server
 Example: created `project-A` under the root account on gitlab-server (root/project-A)
@@ -120,13 +120,13 @@ Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 
 # FAQ
 ### How to create Helm files for applications project
-If you use helm to deploy to k8s.
+If you use helm to deploy to k8s, change helm-new.sh for yours (default open port 8080 and 8081)
 ```
 bash $HOME/runner/bin/helm-new.sh
 ## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
 ### How to resolve gitlab-runner fail
-If you use Ubuntu, just `rm -f ~/.bash_logout`
+If you use Ubuntu, just `rm -f $HOME/.bash_logout`
 
 # Diagram
 ```mermaid
