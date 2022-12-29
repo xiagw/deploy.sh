@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/xiagw/deploy.sh/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/xiagw/deploy.sh/release.yml?branch=main&style=flat-square" alt="Github Actions">
+    <img src="https://github.com/xiagw/deploy.sh/actions/workflows/main.yml/badge.svg" alt="Github Actions">
   </a>
 </p>
 
@@ -199,7 +199,7 @@ Alipay, WeChat Pay, BitCoin are avaliable for donation. You can chose any of the
 
 | Alipay                                                 | WeChat Pay                                                |
 |--------------------------------------------------------|-----------------------------------------------------------|
-| <img src=docs/pay-alipay.jpg width="250" height="250"> | <img src=docs/pay-wechatpay.jpg width="250" height="250"> |
+| <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/pay-alipay.jpg width="250" height="250"> | <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/pay-wechatpay.jpg width="250" height="250"> |
 
 ### Digital Currency:
 **BitCoin**
