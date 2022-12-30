@@ -462,7 +462,7 @@ _deploy_notify() {
         telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:? ERR: empty api key}/sendMessage"
         # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:? ERR: empty api key}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
-        $curl_opt -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:? ERR: empty api key}&text=$msg_body" "$telegram_api_msg"
+        curl -L -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:? ERR: empty api key}&text=$msg_body" "$telegram_api_msg"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         ## element / 发送至 element
         echo_msg time "to Element"
@@ -599,27 +599,27 @@ _install_terraform() {
 _install_aws() {
     command -v aws >/dev/null && return
     echo_msg info "install aws cli..."
-    $curl_opt -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    curl -Lo "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
     ./aws/install --bin-dir "${me_path_data_bin}" --install-dir "${me_path_data}" --update
     ## install eksctl / 安装 eksctl
-    $curl_opt "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+    curl -L "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
     mv /tmp/eksctl "${me_path_data_bin}/"
 }
 
 _install_kubectl() {
     command -v kubectl >/dev/null && return
     echo_msg info "install kubectl..."
-    kube_ver="$($curl_opt --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
+    kube_ver="$(curl -L --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    $curl_opt -o "${me_path_data_bin}/kubectl" "$kube_url"
+    curl -Lo "${me_path_data_bin}/kubectl" "$kube_url"
     chmod +x "${me_path_data_bin}/kubectl"
 }
 
 _install_helm() {
     command -v helm >/dev/null && return
     echo_msg info "install helm..."
-    $curl_opt https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+    curl -L https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
 _install_jmeter() {
@@ -646,7 +646,7 @@ _install_jmeter() {
         $exec_sudo apt-get install -y openjdk-16-jdk
     fi
     url_jmeter="https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
-    $curl_opt --retry -C - -o "$path_temp"/jmeter.zip $url_jmeter
+    curl --retry -C - -Lo "$path_temp"/jmeter.zip $url_jmeter
     (
         cd "$me_path_data"
         unzip "$path_temp"/jmeter.zip
@@ -660,7 +660,7 @@ _install_flarectl() {
     echo_msg info "install flarectl"
     local ver='0.52.0'
     path_temp=$(mktemp -d)
-    $curl_opt -o "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz
+    curl -Lo "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz
     tar xf "$path_temp"/flarectl.zip -C "${me_path_data_bin}/"
 }
 
@@ -770,8 +770,8 @@ get_maxmind_ip() {
     t="$(mktemp -d)"
     t1="$t/maxmind-Country.dat.gz"
     t2="$t/maxmind-City.dat.gz"
-    $curl_opt -qs -o "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
-    $curl_opt -qs -o "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
+    curl -Lqso "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
+    curl -Lqso "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
     gunzip "$t1" "$t2"
     for ip in ${ENV_NGINX_IPS:?undefine var}; do
         echo "$ip"
@@ -1223,8 +1223,6 @@ main() {
 
     ## source ENV, 获取 ENV_ 开头的所有全局变量
     source "$me_env"
-    ## curl use proxy / curl 使用代理
-    curl_opt="curl -L"
     ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
         echo_msg purple "Found default username/password, skip docker login / push image / deploy k8s..."
@@ -1243,11 +1241,11 @@ main() {
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && _install_jmeter
     [[ "${ENV_INSTALL_FLARECTL}" == 'true' ]] && _install_flarectl
 
-    ## create k8s
-    _create_k8s
-
     ## clean up disk space / 清理磁盘空间
     _clean_disk
+
+    ## create k8s
+    _create_k8s
 
     ## setup ssh config/ acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     _setup_deploy_conf
