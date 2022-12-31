@@ -3,7 +3,7 @@
 _start_java() {
     ## 修改内存占用值，
     [ -z "$JAVA_OPTS" ] && JAVA_OPTS='java -Xms256m -Xmx384m'
-    [[ "$1" == nohup || -f "$app_path"/.run.nohup ]] && JAVA_OPTS="nohup $JAVA_OPTS"
+    [[ "${start_nohup:-0}" -eq 1 ]] && JAVA_OPTS="nohup $JAVA_OPTS"
     ## 启动方式一， jar 内置配置文件 yml，
     ## Dockerfile ARG MVN_PROFILE=test （此处对应 git 分支名） 镜像内生成文件 profile.<分支名>
     for f in "$app_path"/profile.*; do
@@ -74,6 +74,10 @@ main() {
     else
         app_log=/tmp/${me_name}.log
     fi
+    ## 适用于 nohup 独立启动
+    if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then
+        start_nohup=1
+    fi
     [ -d "$app_path"/log ] || mkdir "$app_path"/log
     echo "$(date), startup ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
@@ -84,7 +88,7 @@ main() {
     _start_java "$@"
 
     ## 适用于 docker 中启动
-    if [[ -z "$1" || ! -f "$app_path"/.run.nohup ]]; then
+    if [[ "${start_nohup:-0}" -eq 0 ]]; then
         tail -f "$me_log" "$app_log" "$app_path"/log/*.log &
         ## allow debug / 如果不使用 wait ，方便开发者调试，可以直接 kill java, 不会停止容器
         # tail -f "$me_log" "$app_path"/log/*.log

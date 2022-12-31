@@ -87,9 +87,9 @@ deploy:
     - testing
     - uat
     - release
+    - prod
     - master
     - main
-    - prod
   interruptible: true
 
 # test_function:

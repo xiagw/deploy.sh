@@ -15,7 +15,7 @@ if [ ! -d "${gitlab_project_dir}/node_modules" ]; then
 fi
 
 # https://github.com/nodesource/distributions#debinstall
-echo_msg step "node build [yarn]..."
+echo_msg step "[build] yarn..."
 
 # rm -f package-lock.json
 [[ "${github_action:-0}" -eq 1 ]] && return 0
@@ -36,11 +36,11 @@ if [[ ${YARN_INSTALL:-false} == 'true' ]]; then
     $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn install" &&
         echo "$file_json_md5" >>"${me_log}"
 else
-    echo_msg time "skip node yarn install..."
+    echo_msg time "skip yarn install..."
 fi
 
 $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "yarn run build"
 
 [ -d "${gitlab_project_dir}"/build ] && rsync -a --delete "${gitlab_project_dir}"/build/ "${gitlab_project_dir}"/dist/
 
-echo_msg time "end node build [yarn]."
+echo_msg time "[build] yarn"

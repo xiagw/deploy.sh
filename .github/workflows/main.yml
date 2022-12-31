@@ -22,7 +22,7 @@ jobs:
     steps:
 
       - name: Checkout the code
-        uses: actions/checkout@master
+        uses: actions/checkout@main
 
       - name: Build the Docker image
         run: docker build . --file Dockerfile --tag deploy/gitlab-runner:latest
