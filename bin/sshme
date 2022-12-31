@@ -2,10 +2,11 @@
 
 _get_input() {
     read -rp "[1/4]. Enter ssh name: (alias name) " read_ssh_name
-    read -rp "[2/4]. Enter ssh ip: (ip/dns) " read_ssh_ip
-    read -rp "[3/4]. Enter ssh user: [root] " read_ssh_user
-    read -rp "[4/4]. Enter ssh port: [22] " read_ssh_port
-
+    if [[ "${delete_flag:-0}" -eq 0 ]]; then
+        read -rp "[2/4]. Enter ssh ip: (ip/dns) " read_ssh_ip
+        read -rp "[3/4]. Enter ssh user: [root] " read_ssh_user
+        read -rp "[4/4]. Enter ssh port: [22] " read_ssh_port
+    fi
     select c in "$HOME/.ssh/config"*; do
         ssh_conf="$(readlink -f "$c")"
         break
@@ -58,6 +59,7 @@ main() {
             _add_host
             ;;
         'delete')
+            delete_flag=1
             _get_input
             _delete_host
             ;;
