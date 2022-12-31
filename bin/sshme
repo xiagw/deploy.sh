@@ -43,7 +43,7 @@ _delete_host() {
 
 main() {
     file_conf=("$HOME/.ssh/config"*)
-    select ssh_host in $(awk 'NR>1 && /^Host/ {print $2}' "${file_conf[@]}") add update delete quit; do
+    select ssh_host in add update delete $(awk 'NR>1 && /^Host/ {print $2}' "${file_conf[@]}") quit; do
         case "${ssh_host:-quit}" in
         'quit')
             break
