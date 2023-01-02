@@ -16,23 +16,11 @@
 # Introduction
 deploy.sh is a general CI/CD program, better than "Buddy".
 
-project_lang=shell
-
-Platform: Unix/Linux/MacOS...
-
 It can be executed manually/automated.
 
 It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 
-# How to automatically detect the programming language
-- node: exist package.json or include `project_lang=node` in README.md of your project
-- php: exist composer.json or include `project_lang=php` in README.md of your project
-- java: exist pom.xml or include `project_lang=java` in README.md of your project
-- python: exist requirements.txt or include `project_lang=python` in README.md of your project
-- [other]: include `project_lang=[other]` in README.md of your project
-
 # Features
-* Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
 * Code style: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
 * Code quality: sonarqube scan, OWASP, ZAP, vulmap...
 * Unit test: phpunit, junit...
@@ -42,16 +30,23 @@ It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 * Performance test: stress test, jmeter, loadrunner
 * Notify deploy result: work-weixin, Telegram, Element(Matrix), dingding...
 * Renew cert: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
-
+* Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
 
 # Installation
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
+# How to automatically detect the programming language
+- node: exist package.json or include `project_lang=node` in README.md of your project
+- php: exist composer.json or include `project_lang=php` in README.md of your project
+- java: exist pom.xml or include `project_lang=java` in README.md of your project
+- python: exist requirements.txt or include `project_lang=python` in README.md of your project
+- [other]: include `project_lang=[other]` in README.md of your project
+project_lang=shell
 
 # Quickstart
-### option [1]. Running deploy.sh manually
+### option [1]. deploy.sh manually
 ```
 ## If your project repository already exists
 cd /path/to/<your_project.git>
@@ -62,7 +57,7 @@ $HOME/runner/deploy.sh
 ## If your project repository dose not exist. (deploy.sh will clone it)
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
-### option [2]. Running deploy.sh automated
+### option [2]. deploy.sh automated
 ```
 ## crontab
 */5 * * * * for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --cron); done
@@ -72,7 +67,7 @@ $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>
 while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --loop); done; sleep 300; done
 ```
 
-### option [3]. Running applications with GitLab-Runner
+### option [3]. deploy.sh with GitLab-Runner
 1. Prepare a gitlab-server and gitlab-runner-server
 1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
 1. cd $HOME/runner
@@ -80,7 +75,7 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. cp conf/example-deploy.env data/deploy.env        ## !!!change to yours!!!
 1. Refer to conf/.gitlab-ci.yaml of this project, setup \<your_project.git\>/.gitlab-ci.yaml
 
-### option [4]. Running applications with Jenkins
+### option [4]. deploy.sh with Jenkins
 1. Create job,
 1. setup job, run custom shell, `bash $HOME/runner/deploy.sh`
 

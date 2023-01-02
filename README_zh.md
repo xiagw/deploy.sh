@@ -16,23 +16,11 @@
 # 描述信息
 deploy.sh 是一个通用的持续集成/持续发布系统，胜过"Buddy"。
 
-project_lang=shell
-
-运行平台： Unix/Linux/MacOS...
-
 可以手动单独运行/或全自动运行。
 
 亦可以配合 GitLab/GitLab-Runner, Jenkins, crontab 等全自动运行。
 
-# deploy.sh 如何探测程序开发语言
-- node: git库存在`package.json`或在 README.md 包含文本 `project_lang=node`
-- php: git库存在`composer.json`或在 README.md 包含文本 `project_lang=php`
-- java: git库存在`pom.xml`或在 README.md 包含文本 `project_lang=java`
-- python: git库存在`requirements.txt`或在 README.md 包含文本 `project_lang=python`
-- [other]: git库内 README.md 包含文本 `project_lang=[other]`
-
 # 支持
-* 云厂商: AWS, Aliyun, Qcloud, Huaweicloud...
 * 代码格式规范: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
 * 代码质量扫描/探测: sonarqube scan, OWASP, ZAP, vulmap...
 * 单元测试: phpunit, junit...
@@ -42,7 +30,7 @@ project_lang=shell
 * 性能测试: stress test, jmeter, loadrunner
 * 发布结果提醒到聊天软件: 企业微信, Telegram, Element(Matrix), 钉钉...
 * 全自动更新证书: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
-
+* 云厂商: AWS, Aliyun, Qcloud, Huaweicloud...
 
 
 # 安装
@@ -50,9 +38,17 @@ project_lang=shell
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
+# deploy.sh 如何探测程序开发语言
+- node: git库存在`package.json`或在 README.md 包含文本 `project_lang=node`
+- php: git库存在`composer.json`或在 README.md 包含文本 `project_lang=php`
+- java: git库存在`pom.xml`或在 README.md 包含文本 `project_lang=java`
+- python: git库存在`requirements.txt`或在 README.md 包含文本 `project_lang=python`
+- [other]: git库内 README.md 包含文本 `project_lang=[other]`
+project_lang=shell
+
 
 ## 快速开始
-### 可选方式 [1], 手动单独运行程序
+### 可选方式 [1], 手动单独运行
 ```
 ## 您的应用程序 git 仓库已预先存在，在仓库目录直接运行 deploy.sh
 cd /path/to/<your_project.git>
@@ -63,7 +59,7 @@ $HOME/runner/deploy.sh
 ## 如果您的应用程序 git 仓库不存在，使用 [deploy.sh] 克隆 git 仓库
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
-### 可选方式 [2], 通过 crontab 或 Screen/tmux 等方式全自动运行程序
+### 可选方式 [2], 通过 crontab 或 Screen/tmux 等方式自动运行
 ```
 ## crontab
 */5 * * * * for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --cron); done
@@ -73,7 +69,7 @@ $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>
 while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --loop); done; sleep 300; done
 ```
 
-### 可选方式 [3], 配合 GitLab-Runner 运行程序
+### 可选方式 [3], 配合 GitLab-Runner 运行
 1. 准备 Gitlab 服务器和 Gitlab-runner 服务器
 1. [安装 Gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), 按照文档注册 Gitlab-runner 到 Gitlab 服务器，并启动 Gitlab-runner
 1. cd $HOME/runner
@@ -82,7 +78,7 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. 参考本项目的配置文件 conf/.gitlab-ci.yaml， 设置你的应用 git 仓库当中的文件 \<your_project.git\>.gitlab-ci.yaml
 
 
-### 可选方式 [4], 配合 Jenkins 运行程序
+### 可选方式 [4], 配合 Jenkins 运行
 1. Create job,
 1. 设置任务, run custom shell, `bash $HOME/runner/deploy.sh`
 
