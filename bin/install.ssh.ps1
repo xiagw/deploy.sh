@@ -39,9 +39,10 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 
 New-Item -Path $HOME\.ssh -Type Directory -Force
 echo '<pub_key>' >$HOME\.ssh\authorized_keys
-New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
-icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
-echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
+#New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
+
+# icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
+# echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
 
 
 ## powershell 7
@@ -49,9 +50,7 @@ echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
 
 ## oh my posh
 winget install JanDeDobbeleer.OhMyPosh --source winget
-
 New-Item -Path $PROFILE -Type File -Force
-
 echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression' >$PROFILE
 
 ## Not Admin console

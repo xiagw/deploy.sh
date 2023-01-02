@@ -1175,13 +1175,11 @@ main() {
     me_path_data_bin="${me_path}/data/bin"
     me_path_builds="${me_path}/builds"
     me_conf="${me_path_data}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
-    me_yml="${me_path_data}/deploy.yml"        ## deploy to app server 发布到目标服务器的配置信息
     me_env="${me_path_data}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
     me_dockerfile="${me_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
 
     [[ -d $me_path_data ]] || mkdir -p $me_path_data
     [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"
-    [[ -f "$me_yml" ]] || cp "${me_path_conf}/example-deploy.yml" "$me_yml"
     [[ -f "$me_env" ]] || cp "${me_path_conf}/example-deploy.env" "$me_env"
 
     if [[ -d /usr/local/sbin && ! $PATH == */usr/local/sbin* ]]; then
