@@ -55,16 +55,14 @@ _send_msg() {
 }
 
 main() {
-    if [[ $OSTYPE == darwin* ]]; then
-        bin_readlink=greadlink
-    else
-        bin_readlink=readlink
-    fi
+    bin_readlink=readlink
+    [[ $OSTYPE == darwin* ]] && bin_readlink=greadlink
     me_path="$(dirname "$($bin_readlink -f "$0")")"
     me_name="$(basename "$0")"
-    file_passwd="$me_path/../data/${me_name}.txt"
-    file_deploy_env="$me_path/../data/deploy.env"
-    [ -f $file_deploy_env ] && source $file_deploy_env
+    data_path="$me_path/../data"
+    file_passwd="$data_path/${me_name}.txt"
+    file_deploy_env="$data_path/deploy.env"
+    [ -f "$file_deploy_env" ] && source "$file_deploy_env"
 
     _create_user "$@"
     _send_msg
