@@ -334,6 +334,12 @@ EOF
 
 _deploy_rsync_ssh() {
     echo_msg step "[deploy] deploy files with rsync+ssh"
+    ## rsync exclude some files / rsync 排除某些文件
+    if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
+        rsync_exclude="${gitlab_project_dir}/rsync.exclude"
+    else
+        rsync_exclude="${me_path_conf}/rsync.exclude"
+    fi
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     while read -r line; do
         # shellcheck disable=2116
@@ -349,12 +355,7 @@ _deploy_rsync_ssh() {
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
         echo_msg time "${ssh_host:?if stop here, check $me_conf}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
-        ## rsync exclude some files / rsync 排除某些文件
-        if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
-            rsync_exclude="${gitlab_project_dir}/rsync.exclude"
-        else
-            rsync_exclude="${me_path_conf}/rsync.exclude"
-        fi
+
         ## node/java use rsync --delete / node/java 使用 rsync --delete
         [[ "${project_lang}" =~ (node|other) ]] && rsync_delete='--delete'
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=10 --no-times --exclude-from=${rsync_exclude} $rsync_delete"
@@ -371,10 +372,7 @@ _deploy_rsync_ssh() {
         fi
         ## deploy to aliyun oss / 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
-            command -v aliyun &>/dev/null || {
-                echo_msg warning "command not exist: aliyun"
-                exit 1
-            }
+            _install_aliyun_cli
             aliyun oss cp "${rsync_src}" "$rsync_dest" --recursive --force
             ## 如果使用 rclone， 则需要安装和配置
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
@@ -525,10 +523,7 @@ _renew_cert() {
             domains="$(flarectl zone list | awk '/active/ {print $3}')"
             dnsType='dns_cf'
         elif [ -f "$conf_dns_aliyun" ]; then
-            if ! command -v aliyun; then
-                echo_msg warning "command not found: aliyun "
-                return 1
-            fi
+            _install_aliyun_cli
             source "$conf_dns_aliyun" "${account##*.}"
             aliyun configure set --profile "deploy${account##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
             domains="$(aliyun --profile "deploy${account##*.}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
