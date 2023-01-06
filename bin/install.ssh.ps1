@@ -39,8 +39,7 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 
 New-Item -Path $HOME\.ssh -Type Directory -Force
 echo '<pub_key>' >$HOME\.ssh\authorized_keys
-#New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
-
+# New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
 # icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 # echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
 
@@ -50,6 +49,8 @@ echo '<pub_key>' >$HOME\.ssh\authorized_keys
 
 ## oh my posh
 winget install JanDeDobbeleer.OhMyPosh --source winget
+# scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
+# Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
 New-Item -Path $PROFILE -Type File -Force
 echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression' >$PROFILE
 
@@ -60,3 +61,6 @@ echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke
 # $env:HTTPS_PROXY="http://192.168.1.154:1080"
 
 # winget settings
+
+## windows server 2022 install Windows Terminal
+# https://4sysops.com/archives/install-windows-terminal-without-the-store-on-windows-server/
