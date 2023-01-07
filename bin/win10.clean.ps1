@@ -1,39 +1,41 @@
 # Disk Cleanup Using Powershell Scripts
 # https://www.c-sharpcorner.com/blogs/disk-cleanup-using-powershell-scripts
 ##################################################################################
-#DiskCleanUp
+# DiskCleanUp
 ##################################################################################
 
-##Variables####
+## Variables ####
 
-$objShell=New-Object-ComObjectShell.Application
-$objFolder=$objShell.Namespace(0xA)
+    $objShell = New-Object -ComObject Shell.Application
+    $objFolder = $objShell.Namespace(0xA)
 
-$temp=get-ChildItem"env:\TEMP"
-$temp2=$temp.Value
+    $temp = get-ChildItem "env:\TEMP"
+    $temp2 = $temp.Value
 
-$WinTemp="C:\Windows\Temp\*"
+    $WinTemp = "C:\Windows\Temp\*"
 
-#Removetempfileslocatedin"C:\Users\USERNAME\AppData\Local\Temp"
-write-Host"RemovingJunkfilesin$temp2."-ForegroundColorMagenta
-Remove-Item-Recurse"$temp2\*"-Force-Verbose
 
-#EmptyRecycleBin#http://demonictalkingskull.com/2010/06/empty-users-recycle-bin-with-powershell-and-gpo/
-write-Host"EmptyingRecycleBin."-ForegroundColorCyan
-$objFolder.items()|%{remove-item$_.path-Recurse-Confirm:$false}
 
-#RemoveWindowsTempDirectory
-write-Host"RemovingJunkfilesin$WinTemp."-ForegroundColorGreen
-Remove-Item-Recurse$WinTemp-Force
+# Remove temp files located in "C:\Users\USERNAME\AppData\Local\Temp"
+    write-Host "Removing Junk files in $temp2." -ForegroundColor Magenta
+    Remove-Item -Recurse  "$temp2\*" -Force -Verbose
 
-#6#RunningDiskCleanupTool
-write-Host"Finallynow,RunningWindowsdiskCleanupTool"-ForegroundColorCyan
-cleanmgr/sagerun:1|out-Null
+# Empty Recycle Bin # http://demonictalkingskull.com/2010/06/empty-users-recycle-bin-with-powershell-and-gpo/
+    write-Host "Emptying Recycle Bin." -ForegroundColor Cyan
+    $objFolder.items() | %{ remove-item $_.path -Recurse -Confirm:$false}
 
-$([char]7)
-Sleep1
-$([char]7)
-Sleep1
+# Remove Windows Temp Directory
+    write-Host "Removing Junk files in $WinTemp." -ForegroundColor Green
+    Remove-Item -Recurse $WinTemp -Force
 
-write-Host "Clean Up Task Finished !!!"
-#####EndoftheScript#####ad
+#6# Running Disk Clean up Tool
+    write-Host "Finally now , Running Windows disk Clean up Tool" -ForegroundColor Cyan
+    cleanmgr /sagerun:1 | out-Null
+
+    $([char]7)
+    Sleep 1
+    $([char]7)
+    Sleep 1
+
+    write-Host "Clean Up Task Finished !!!"
+##### End of the Script ##### ad
