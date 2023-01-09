@@ -1,3 +1,6 @@
+# Get-ExecutionPolicy -List #查看当前的执行策略
+# Set-ExecutionPolicy -Scope CurrentUser RemoteSigned #设置执行策略为要求远程脚本签名，范围为当前用户
+
 Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH*'
 
 # Install the OpenSSH Client
@@ -44,21 +47,22 @@ echo '<pub_key>' >$HOME\.ssh\authorized_keys
 # echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
 
 
+# $env:HTTP_PROXY="http://192.168.1.154:1080"
+# $env:HTTPS_PROXY="http://192.168.1.154:1080"
+
 ## powershell 7
 # winget install --id Microsoft.Powershell --source winget
 
 ## oh my posh
 winget install JanDeDobbeleer.OhMyPosh --source winget
 # scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
-# Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
+# Set-ExecutionPolicy Bypass -Scope Process -Force;
+# Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
 New-Item -Path $PROFILE -Type File -Force
 echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression' >$PROFILE
 
 ## Not Admin console
 # iwr -useb get.scoop.sh | iex
-
-# $env:HTTP_PROXY="http://192.168.1.154:1080"
-# $env:HTTPS_PROXY="http://192.168.1.154:1080"
 
 # winget settings
 
