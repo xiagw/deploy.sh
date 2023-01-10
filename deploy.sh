@@ -333,7 +333,7 @@ EOF
 }
 
 _deploy_rsync_ssh() {
-    echo_msg step "[deploy] deploy files with rsync+ssh"
+    echo_msg step "[deploy] with rsync+ssh"
     ## rsync exclude some files / rsync 排除某些文件
     if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
         rsync_exclude="${gitlab_project_dir}/rsync.exclude"
@@ -353,11 +353,11 @@ _deploy_rsync_ssh() {
         # db_host=${array[7]}
         # db_name=${array[8]}
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo_msg time "${ssh_host:?if stop here, check $me_conf}"
+        echo_msg time "ssh host is: ${ssh_host:?if stop here, check $me_conf}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
         ## node/java use rsync --delete / node/java 使用 rsync --delete
-        [[ "${project_lang}" =~ (node|other) ]] && rsync_delete='--delete'
+        [[ "${project_lang}" =~ (node) ]] && rsync_delete='--delete'
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=10 --no-times --exclude-from=${rsync_exclude} $rsync_delete"
 
         ## rsync source folder / rsync 源目录
@@ -379,7 +379,7 @@ _deploy_rsync_ssh() {
             return
         fi
         $ssh_opt -n "${ssh_host}" "[[ -d $rsync_dest ]] || mkdir -p $rsync_dest"
-        echo "Deploy to ${ssh_host}:${rsync_dest}"
+        echo "to ${ssh_host}:${rsync_dest}"
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
         if [ -f "$me_path_data_bin/custom.deploy.sh" ]; then
