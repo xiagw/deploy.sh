@@ -115,7 +115,7 @@ delete($drivers)
 delete($swsetup)
 
 # Remove content of download folder of administrator account
-delete($downloads)
+# delete($downloads)
 
 # Empty Recycle Bin
 write-Host "Emptying Recycle Bin." -ForegroundColor Cyan
@@ -134,6 +134,7 @@ delete($Prefetch)
 #delete($DowloadeUpdate)
 
 #6# Running Disk Clean up Tool
+# cleanmgr /sagerun:1 | out-Null
 write-Host "starting Windows disk Clean up Tool" -ForegroundColor Cyan
 cleanmgr.exe /SAGESET:50
 sleep 30

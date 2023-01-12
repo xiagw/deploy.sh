@@ -68,3 +68,7 @@ echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke
 
 ## windows server 2022 install Windows Terminal
 # https://4sysops.com/archives/install-windows-terminal-without-the-store-on-windows-server/
+
+## enable/disable proxy
+# Set-ItemProperty -Path "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 0
+# Set-ItemProperty -Path "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 1

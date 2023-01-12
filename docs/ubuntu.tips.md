@@ -84,3 +84,17 @@ virt-install \
 
 gitmoji | An emoji guide for your commit messages
 https://gitmoji.dev/
+
+#How to get rid of the 3 second delay ? · Issue #102 · LibVNC/x11vnc
+#https://github.com/LibVNC/x11vnc/issues/102
+
+case "${1:-0}" in
+	0)
+    xfconf-query -c xfwm4 -p /general/use_compositing -s false
+    ;;
+    1)
+    xfconf-query -c xfwm4 -p /general/use_compositing -s true
+esac
+
+#networking - x11vnc Headless on Ubuntu is very slow until monitor connected - Ask Ubuntu
+#https://askubuntu.com/questions/950252/x11vnc-headless-on-ubuntu-is-very-slow-until-monitor-connected
