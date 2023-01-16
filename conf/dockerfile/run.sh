@@ -3,6 +3,7 @@
 _start_java() {
     ## 修改内存占用值，
     [ -z "$JAVA_OPTS" ] && JAVA_OPTS='java -Xms256m -Xmx384m'
+    ## 启动方式三，nohup 后台启动
     [[ "${start_nohup:-0}" -eq 1 ]] && JAVA_OPTS="nohup $JAVA_OPTS"
     ## 启动方式一， jar 内置配置文件 yml，
     ## Dockerfile ARG MVN_PROFILE=test （此处对应 git 分支名） 镜像内生成文件 profile.<分支名>
@@ -17,15 +18,19 @@ _start_java() {
         ## 启动方式二，配置文件 yml 在 jar 包外，非内置
         ## !!!! 注意 !!!!, 自动探测 yml 配置文件, 按文件名自动排序对应 a.jar--a.yml, b.jar--b.yml
         cy=0
+        config_yml=''
         for y in "$app_path"/*.yml; do
             [[ -f "$y" ]] || continue
-            cy=$((${cy:-0} + 1))
-            [[ "$cj" -eq "$cy" ]] && config_yml="-Dspring.config.location=${y}"
+            cy=$((cy + 1))
+            if [[ "$cj" -eq "$cy" ]]; then
+                config_yml="-Dspring.config.location=${y}"
+                break
+            fi
         done
-        echo "${cj}. start $jar ..."
-        if [ -n "$profile_name" ]; then
+        echo "${cj}. start $jar $config_yml ..."
+        if [ "$profile_name" ]; then
             $JAVA_OPTS -jar "$jar" "$profile_name" &>>"$app_log" &
-        elif [ -n "$config_yml" ]; then
+        elif [ "$config_yml" ]; then
             $JAVA_OPTS "$config_yml" -jar "$jar" &>>"$app_log" &
         else
             $JAVA_OPTS -jar "$jar" &>>"$app_log" &
