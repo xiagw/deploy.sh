@@ -19,7 +19,10 @@ _start_java() {
         for y in "$app_path"/*.yml; do
             [[ -f "$y" ]] || continue
             cy=$((${cy:-0} + 1))
-            [[ "$cj" -eq "$cy" ]] && config_yml="-Dspring.config.location=${y}"
+            if [[ "$cj" -eq "$cy" ]]; then
+                config_yml="-Dspring.config.location=${y}"
+                cy=0
+            fi
         done
         echo "${cj}. start $jar ..."
         if [ -n "$profile_name" ]; then
