@@ -16,13 +16,11 @@ _start_java() {
         cj=$((${cj:-0} + 1))
         ## 启动方式二，配置文件 yml 在 jar 包外，非内置
         ## !!!! 注意 !!!!, 自动探测 yml 配置文件, 按文件名自动排序对应 a.jar--a.yml, b.jar--b.yml
+        cy=0
         for y in "$app_path"/*.yml; do
             [[ -f "$y" ]] || continue
             cy=$((${cy:-0} + 1))
-            if [[ "$cj" -eq "$cy" ]]; then
-                config_yml="-Dspring.config.location=${y}"
-                cy=0
-            fi
+            [[ "$cj" -eq "$cy" ]] && config_yml="-Dspring.config.location=${y}"
         done
         echo "${cj}. start $jar ..."
         if [ -n "$profile_name" ]; then
