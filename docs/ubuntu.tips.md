@@ -98,3 +98,12 @@ esac
 
 #networking - x11vnc Headless on Ubuntu is very slow until monitor connected - Ask Ubuntu
 #https://askubuntu.com/questions/950252/x11vnc-headless-on-ubuntu-is-very-slow-until-monitor-connected
+
+PXE Boot & Install Windows 10 from a Samba Share
+https://docs.j7k6.org/windows-10-pxe-installation/
+
+PiKVM - Open and inexpensive DIY IP-KVM on Raspberry Pi
+https://pikvm.org/
+
+pikvm/pikvm: Open and inexpensive DIY IP-KVM based on Raspberry Pi
+https://github.com/pikvm/pikvm

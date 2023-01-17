@@ -1,0 +1,15 @@
+ENU TITLE Network Boot Menu
+TIMEOUT 3
+DEFAULT menu.c32
+
+LABEL wind10
+TIMEOUT 3
+MENU LABEL Network Install Windows 10
+KERNEL /memdisk
+INITRD /winpe.iso
+APPEND iso raw
+
+LABEL kali
+MENU LABEL Install Kali Linux
+KERNEL /kali/vmlinuz
+APPEND initrd=/kali/initrd boot=live username=root hostname=kali gfxpayload=1024x768x16,1024x768 components netboot=nfs nfsroot=192.168.2.1:/tftpboot/kaliiso live-media-path=/
