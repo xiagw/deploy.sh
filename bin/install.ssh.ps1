@@ -24,6 +24,7 @@ if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyCon
 }
 # 默认 shell 设置为 powershell.exe：
 New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -PropertyType String -Force
+Restart-Service sshd
 
 # By default the ssh-agent service is disabled. Allow it to be manually started for the next step to work.
 # Make sure you're running as an Administrator.
@@ -54,10 +55,10 @@ echo '<pub_key>' >$HOME\.ssh\authorized_keys
 # winget install --id Microsoft.Powershell --source winget
 
 ## oh my posh
-winget install JanDeDobbeleer.OhMyPosh --source winget
+# winget install JanDeDobbeleer.OhMyPosh --source winget
 # scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
-# Set-ExecutionPolicy Bypass -Scope Process -Force;
-# Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
+# Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
 New-Item -Path $PROFILE -Type File -Force
 echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression' >$PROFILE
 
