@@ -486,9 +486,11 @@ _deploy_notify() {
 }
 
 _reload_nginx_gitlab() {
+    [ -f ${acme_home}/.reload.nginx ] || return 0
     for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
         gitlab project-pipeline create --project-id $id --ref main
     done
+    rm -f ${acme_home}/.reload.nginx
 }
 
 _renew_cert() {
@@ -542,7 +544,7 @@ _renew_cert() {
         for domain in ${domains}; do
             if [ -d "${acme_home}/$domain" ]; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" --renew-hook _reload_nginx_gitlab || true
+                "${acme_cmd}" --renew -d "${domain}" --renew-hook "touch ${acme_home}/.reload.nginx" || true
             else
                 ## create cert / 创建证书
                 "${acme_cmd}" --issue --dns $dnsType -d "$domain" -d "*.$domain"
@@ -550,6 +552,8 @@ _renew_cert() {
             "${acme_cmd}" --install-cert -d "$domain" --key-file "$acme_cert/$domain".key --fullchain-file "$acme_cert/$domain".crt
         done
     done
+
+    _reload_nginx_gitlab
 
     ## Custom deployment method / 自定义部署方式
     if [ -f "${acme_home}"/custom.acme.sh ]; then
