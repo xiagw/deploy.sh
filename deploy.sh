@@ -485,6 +485,12 @@ _deploy_notify() {
     fi
 }
 
+_reload_nginx_gitlab() {
+    for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
+        gitlab project-pipeline create --project-id $id --ref main
+    done
+}
+
 _renew_cert() {
     if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
         echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
@@ -536,7 +542,7 @@ _renew_cert() {
         for domain in ${domains}; do
             if [ -d "${acme_home}/$domain" ]; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" || true
+                "${acme_cmd}" --renew -d "${domain}" --renew-hook _reload_nginx_gitlab || true
             else
                 ## create cert / 创建证书
                 "${acme_cmd}" --issue --dns $dnsType -d "$domain" -d "*.$domain"
