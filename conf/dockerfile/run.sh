@@ -87,8 +87,7 @@ _schedule_upgrade() {
         tar -C "$app_path" -zxf /tmp/spring.tgz
         _kill
         _start_java
-        sed -i "/^project_id=/d" "$file_env"
-        echo "project_id=$remote_ver" | tee -a "$file_env"
+        sed -i "/^project_id=/s/=.*/=$remote_ver/" "$file_env"
         rm -f /tmp/spring.tgz*
     fi
 }
@@ -113,7 +112,7 @@ main() {
 
     while true; do
         _schedule_upgrade
-        sleep 10
+        sleep 60
     done &
 
     ## 适用于 docker 中启动
