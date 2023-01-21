@@ -12,13 +12,14 @@ _start_java() {
         profile_name="--spring.profiles.active=${f##*.}"
         break
     done
+
     for jar in "$app_path"/*.jar; do
         [[ -f "$jar" ]] || continue
         cj=$((${cj:-0} + 1))
         ## 启动方式二，配置文件 yml 在 jar 包外，非内置
-        ## !!!! 注意 !!!!, 自动探测 yml 配置文件, 按文件名自动排序对应 a.jar--a.yml, b.jar--b.yml
+        ## !!!! 注意 !!!!, 自动探测 yml 配置文件, 按文件名自动排序对应 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
         cy=0
-        config_yml=''
+        config_yml=
         for y in "$app_path"/*.yml; do
             [[ -f "$y" ]] || continue
             cy=$((cy + 1))
@@ -40,22 +41,26 @@ _start_java() {
 }
 
 _start_php() {
-    ## 容器内代替 crontab
-    [ -f /var/www/schedule.sh ] && bash /var/www/schedule.sh &
-    [ -f "$app_path"/schedule.sh ] && bash "$app_path"/schedule.sh &
-    if [ -f easyswoole ]; then
-        ## 前台启动需配置到 config 文件内
-        exec php easyswoole server start -mode=config
+    [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
+    [ -d /run/php ] || mkdir -p /run/php
+    [ -d /var/www/html ] || mkdir /var/www/html
+    [ -f /var/www/html/index.html ] || date >>/var/www/html/index.html
+
+    ## start php-fpm*
+    for i in /usr/sbin/php-fpm*; do
+        [ -x "$i" ] && exec $i ## php-fpm -F, 前台启动
+    done
+    if nginx -t &>/dev/null; then
+        exec nginx -g "daemon off;"
         pids="${pids} $!"
-    elif command -v php-fpm >/dev/null 2>&1; then
-        ## 前台启动
-        # exec php-fpm -F
-        ## 后台启动 background
-        exec php-fpm
+    elif apachectl -t &>/dev/null; then
+        exec apachectl -k start -D FOREGROUND
         pids="${pids} $!"
     else
         echo "Not found php."
     fi
+    ## 容器内代替 crontab
+    [ -f /var/www/schedule.sh ] && bash /var/www/schedule.sh &
 }
 
 _kill() {
@@ -66,24 +71,37 @@ _kill() {
     done
 }
 
+_schedule_upgrade() {
+    file_env="$app_path/.env"
+    ## project_id=1.1
+    ## project_upgrade_url=http://u.xxx.com/
+    [ -f "$file_env" ] && source "$file_env"
+    curl -fsSLo /tmp/u.html "${project_upgrade_url:-localhost}" 2>/dev/null
+    remote_ver=$(awk -F= '/^project_id=/ {print $2}' /tmp/u.html)
+
+    [[ ${project_id:-1.1} == "$remote_ver" ]] && return 0
+
+    curl -fsSLo /tmp/spring.tgz "${project_upgrade_url%/}/spring.tgz"
+    curl -fsSLo /tmp/spring.tgz.sha "${project_upgrade_url%/}/spring.tgz.sha"
+    if sha256sum -c /tmp/spring.tgz.sha &>/dev/null; then
+        tar -C "$app_path" -zxf /tmp/spring.tgz
+        _kill
+        _start_java
+        sed -i "/^project_id=/d" "$file_env"
+        echo "project_id=$remote_ver" >>"$file_env"
+        rm -f /tmp/spring.tgz*
+    fi
+}
+
 main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
-    if [ -d /app ]; then
-        app_path=/app
-    else
-        app_path=${me_path}
-    fi
-    if [ -w "$app_path" ]; then
-        app_log=$app_path/${me_name}.log
-    else
-        app_log=/tmp/${me_name}.log
-    fi
+    app_path=$(if [ -d /app ]; then echo "/app"; else echo "$me_path"; fi)
+    app_log=$(if [ -w "$app_path" ]; then echo "$app_path/${me_name}.log"; else echo "/tmp/${me_name}.log"; fi)
+
     ## 适用于 nohup 独立启动
-    if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then
-        start_nohup=1
-    fi
+    if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then start_nohup=1; fi
     [ -d "$app_path"/log ] || mkdir "$app_path"/log
     echo "$(date), startup ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
@@ -93,11 +111,17 @@ main() {
     ## 统一兼容启动 start java
     _start_java "$@"
 
+    while true; do
+        _schedule_upgrade
+        sleep 10
+    done &
+
     ## 适用于 docker 中启动
     if [[ "${start_nohup:-0}" -eq 0 ]]; then
-        tail -f "$me_log" "$app_log" "$app_path"/log/*.log &
-        ## allow debug / 如果不使用 wait ，方便开发者调试，可以直接 kill java, 不会停止容器
-        # tail -f "$me_log" "$app_path"/log/*.log
+        ## method 1: allow debug / use tail -f，方便开发者调试，可以直接 kill java, 不会停止容器
+        # exec tail -f "$me_log" "$app_path"/log/*.log
+        ## method 2: use wait, kill java, stop container
+        exec tail -f "$me_log" "$app_log" "$app_path"/log/*.log &
         wait
     fi
 }
