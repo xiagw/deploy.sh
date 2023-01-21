@@ -88,7 +88,7 @@ _schedule_upgrade() {
         _kill
         _start_java
         sed -i "/^project_id=/d" "$file_env"
-        echo "project_id=$remote_ver" >>"$file_env"
+        echo "project_id=$remote_ver" | tee -a "$file_env"
         rm -f /tmp/spring.tgz*
     fi
 }
