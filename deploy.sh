@@ -486,8 +486,14 @@ _deploy_notify() {
 }
 
 _reload_nginx_gitlab() {
-    [ -f ${acme_home}/.reload.nginx ] || return 0
+    if [ -f ${acme_home}/.reload.nginx ]; then
+        echo_msg info "found .reload.nginx"
+    else
+        echo_msg yellow "not found .reload.nginx"
+        return 0
+    fi
     for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
+        echo_msg "gitlab create pipeline, project id is $id"
         gitlab project-pipeline create --project-id $id --ref main
     done
     rm -f ${acme_home}/.reload.nginx
