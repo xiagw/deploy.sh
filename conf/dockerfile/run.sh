@@ -75,9 +75,14 @@ _schedule_upgrade() {
     file_env="$app_path/.env"
     ## project_id=1.1
     ## project_upgrade_url=http://u.xxx.com/
-    [ -f "$file_env" ] && source "$file_env"
-    curl -fsSLo /tmp/u.html "${project_upgrade_url:-localhost}" 2>/dev/null
-    remote_ver=$(awk -F= '/^project_id=/ {print $2}' /tmp/u.html)
+    if [ -f "$file_env" ]; then
+        source "$file_env"
+    else
+        return 0
+    fi
+    file_temp=/tmp/u.html
+    curl -fsSLo "$file_temp" "${project_upgrade_url:-localhost}" 2>/dev/null
+    remote_ver=$(awk -F= '/^project_id=/ {print $2}' "$file_temp")
 
     [[ ${project_id:-1.1} == "$remote_ver" ]] && return 0
 

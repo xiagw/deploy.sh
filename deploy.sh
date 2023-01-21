@@ -486,7 +486,7 @@ _deploy_notify() {
 }
 
 _reload_nginx_gitlab() {
-    if [ -f ${acme_home}/.reload.nginx ]; then
+    if [ -f "$file_reload_nginx" ]; then
         echo_msg info "found .reload.nginx"
     else
         echo_msg yellow "not found .reload.nginx"
@@ -494,9 +494,9 @@ _reload_nginx_gitlab() {
     fi
     for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
         echo_msg "gitlab create pipeline, project id is $id"
-        gitlab project-pipeline create --project-id $id --ref main
+        gitlab project-pipeline create --ref main --project-id $id
     done
-    rm -f ${acme_home}/.reload.nginx
+    rm -f "$file_reload_nginx"
 }
 
 _renew_cert() {
@@ -509,6 +509,7 @@ _renew_cert() {
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
+    file_reload_nginx="${acme_home}/.reload.nginx"
     ## content: export CF_Key="sdfsdfsdfljlbjkljlkjsdfoiwje" export CF_Email="xxxx@sss.com"
     conf_dns_cloudflare="${me_path_data}/.cloudflare.conf"
     ## export Ali_Key="sdfsdfsdfljlbjkljlkjsdfoiwje" export Ali_Secret="jlsdflanljkljlfdsaklkjflsa"
@@ -550,7 +551,7 @@ _renew_cert() {
         for domain in ${domains}; do
             if [ -d "${acme_home}/$domain" ]; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" --renew-hook "touch ${acme_home}/.reload.nginx" || true
+                "${acme_cmd}" --renew -d "${domain}" --renew-hook "touch $file_reload_nginx" || true
             else
                 ## create cert / 创建证书
                 "${acme_cmd}" --issue --dns $dnsType -d "$domain" -d "*.$domain"
