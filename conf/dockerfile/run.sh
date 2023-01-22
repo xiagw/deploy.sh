@@ -73,27 +73,25 @@ _kill() {
 
 _schedule_upgrade() {
     file_env="$app_path/.env"
-    ## project_id=1.1
-    ## project_upgrade_url=http://u.xxx.com/
-    if [ -f "$file_env" ]; then
-        source "$file_env"
-    else
-        return 0
-    fi
+    ## project_id=1 ; project_ver=hash
+    [ -f "$file_env" ] || return 0
+    source "$file_env"
     file_temp=/tmp/u.html
-    curl -fsSLo "$file_temp" "${project_upgrade_url:-localhost}" 2>/dev/null
-    remote_ver=$(awk -F= '/^project_id=/ {print $2}' "$file_temp")
-
-    [[ ${project_id:-1.1} == "$remote_ver" ]] && return 0
-
-    curl -fsSLo /tmp/spring.tgz "${project_upgrade_url%/}/spring.tgz"
-    curl -fsSLo /tmp/spring.tgz.sha "${project_upgrade_url%/}/spring.tgz.sha"
-    if sha256sum -c /tmp/spring.tgz.sha &>/dev/null; then
-        tar -C "$app_path" -zxf /tmp/spring.tgz
-        _kill
-        _start_java
-        sed -i "/^project_id=/s/=.*/=$remote_ver/" "$file_env"
-        rm -f /tmp/spring.tgz*
+    project_upgrade_url='http://oss.flyh6.com/docker'
+    curl -fsSLo "$file_temp" "${project_upgrade_url}" 2>/dev/null
+    remote_id=$(awk -F= '/^project_id=/ {print $2}' "$file_temp")
+    remote_ver=$(awk -F= '/^project_ver=/ {print $2}' "$file_temp")
+    file_update=spring.tgz
+    if [[ "${project_id:-1}" == "$remote_id" && "${project_ver:-1}" != "$remote_ver" ]]; then
+        curl -fsSLo /tmp/$file_update "${project_upgrade_url%/}/$file_update"
+        curl -fsSLo /tmp/${file_update}.sha "${project_upgrade_url%/}/${file_update}.sha"
+        if (cd /tmp && sha256sum -c $file_update.sha) &>/dev/null; then
+            tar -C "$app_path" -zxf /tmp/$file_update
+            _kill
+            _start_java
+            sed -i "/^project_ver=/s/=.*/=$remote_ver/" "$file_env"
+            rm -f /tmp/${file_update}*
+        fi
     fi
 }
 
