@@ -42,7 +42,7 @@ _start_java() {
 
 _start_php() {
     [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
-    [ -d /run/php ] || mkdir -p /run/php
+    [ -d /run/php ] || mkdir -p /run/php 2>/dev/null
     [ -d /var/www/html ] || mkdir /var/www/html
     [ -f /var/www/html/index.html ] || date >>/var/www/html/index.html
 
@@ -59,12 +59,10 @@ _start_php() {
     else
         echo "Not found php."
     fi
-    ## 容器内代替 crontab
-    [ -f /var/www/schedule.sh ] && bash /var/www/schedule.sh &
 }
 
 _kill() {
-    echo "[INFO] Receive SIGTERM, kill $pids"
+    echo "[WARN] Receive SIGTERM, kill $pids"
     for pid in $pids; do
         kill "$pid"
         wait "$pid"
@@ -72,13 +70,12 @@ _kill() {
 }
 
 _schedule_upgrade() {
-    file_env="$app_path/.env"
-    ## project_id=1 ; project_ver=hash
-    [ -f "$file_env" ] || return 0
-    source "$file_env"
+    file_up="$app_path/.up"
+    ## project_id=1 ; project_ver=hash; project_upgrade_url=http://update.xxx.com
+    [ -f "$file_up" ] || return 0
+    source "$file_up"
     file_temp=/tmp/u.html
-    project_upgrade_url='http://oss.flyh6.com/docker'
-    curl -fsSLo "$file_temp" "${project_upgrade_url}" 2>/dev/null
+    curl -fsSLo "$file_temp" "${project_upgrade_url:-localhost}" 2>/dev/null
     remote_id=$(awk -F= '/^project_id=/ {print $2}' "$file_temp")
     remote_ver=$(awk -F= '/^project_ver=/ {print $2}' "$file_temp")
     file_update=spring.tgz
@@ -89,7 +86,7 @@ _schedule_upgrade() {
             tar -C "$app_path" -zxf /tmp/$file_update
             _kill
             _start_java
-            sed -i "/^project_ver=/s/=.*/=$remote_ver/" "$file_env"
+            sed -i "/^project_ver=/s/=.*/=$remote_ver/" "$file_up"
             rm -f /tmp/${file_update}*
         fi
     fi
@@ -99,8 +96,8 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
-    app_path=$(if [ -d /app ]; then echo "/app"; else echo "$me_path"; fi)
-    app_log=$(if [ -w "$app_path" ]; then echo "$app_path/${me_name}.log"; else echo "/tmp/${me_name}.log"; fi)
+    if [ -d /app ]; then app_path="/app"; else app_path="$me_path"; fi
+    if [ -w "$app_path" ]; then app_log="$app_path/${me_name}.log"; else app_log="/tmp/${me_name}.log"; fi
 
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then start_nohup=1; fi
