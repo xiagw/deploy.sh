@@ -32,6 +32,13 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 
 Restart-Service sshd
 
+New-Item -Path $HOME\.ssh -Type Directory -Force
+(irm 'https://api.github.com/users/xiagw/keys').key | Set-Content -Path $HOME\.ssh\authorized_keys
+# (Invoke-WebRequest 'https://api.github.com/users/xiagw/keys' | ConvertFrom-Json).key | Set-Content -Path $HOME\.ssh\authorized_keys
+# New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
+# icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
+# echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
+
 # By default the ssh-agent service is disabled. Allow it to be manually started for the next step to work.
 # Make sure you're running as an Administrator.
 # Get-Service ssh-agent | Set-Service -StartupType Manual
@@ -46,13 +53,6 @@ Restart-Service sshd
 # ssh username@domain1@contoso.com mkdir C:\Users\username\.ssh\
 # Use scp to copy the public key file generated previously on your client to the authorized_keys file on your server
 # scp C:\Users\username\.ssh\id_ed25519.pub user1@domain1@contoso.com:C:\Users\username\.ssh\authorized_keys
-
-New-Item -Path $HOME\.ssh -Type Directory -Force
-(Invoke-WebRequest 'https://api.github.com/users/xiagw/keys' | ConvertFrom-Json).key | Set-Content -Path $HOME\.ssh\authorized_keys
-# New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
-# icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
-# echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
-
 
 # $env:HTTP_PROXY="http://192.168.1.154:1080"
 # $env:HTTPS_PROXY="http://192.168.1.154:1080"
@@ -69,7 +69,7 @@ New-Item -Path $PROFILE -Type File -Force
 echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression' >$PROFILE
 
 ## Not Admin console
-# iwr -useb get.scoop.sh | iex
+# irm get.scoop.sh | iex
 
 # winget settings
 
