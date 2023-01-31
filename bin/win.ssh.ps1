@@ -1,5 +1,7 @@
-# Get-ExecutionPolicy -List #查看当前的执行策略
-# Set-ExecutionPolicy -Scope CurrentUser RemoteSigned #设置执行策略为要求远程脚本签名，范围为当前用户
+## 查看当前的执行策略
+# Get-ExecutionPolicy -List
+## 设置执行策略为要求远程脚本签名，范围为当前用户
+# Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 # irm https://github.com/xiagw/deploy.sh/raw/main/bin/install.ssh.ps1 | iex
 # irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/install.ssh.ps1 | iex
 
@@ -32,20 +34,20 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 
 Restart-Service sshd
 
-New-Item -Path $HOME\.ssh -Type Directory -Force
-(irm 'https://api.github.com/users/xiagw/keys').key | Set-Content -Path $HOME\.ssh\authorized_keys
+New-Item -Path "$HOME\.ssh\authorized_keys" -Type File -Force
+(irm 'https://api.github.com/users/xiagw/keys').key | Set-Content -Path "$HOME\.ssh\authorized_keys"
+icacls.exe "$HOME\.ssh\authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 # (Invoke-WebRequest 'https://api.github.com/users/xiagw/keys' | ConvertFrom-Json).key | Set-Content -Path $HOME\.ssh\authorized_keys
-# New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
-# icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
-# echo '<pub_key>' >"C:\ProgramData\ssh\administrators_authorized_keys"
+New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
+(irm 'https://api.github.com/users/xiagw/keys').key | Set-Content -Path "C:\ProgramData\ssh\administrators_authorized_keys"
+icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 
 # By default the ssh-agent service is disabled. Allow it to be manually started for the next step to work.
 # Make sure you're running as an Administrator.
 # Get-Service ssh-agent | Set-Service -StartupType Manual
-# Start the service
-# Start-Service ssh-agent
-# This should return a status of Running
-# Get-Service ssh-agent
+Get-Service ssh-agent | Set-Service -StartupType Automatic
+Start-Service ssh-agent
+Get-Service ssh-agent
 # Now load your key files into ssh-agent
 # ssh-add ~\.ssh\id_ed25519
 
@@ -66,7 +68,7 @@ New-Item -Path $HOME\.ssh -Type Directory -Force
 # Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
 New-Item -Path $PROFILE -Type File -Force
-echo 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression' >$PROFILE
+Set-Content -Path $PROFILE -Value 'clear; oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
 
 ## Not Admin console
 # irm get.scoop.sh | iex
