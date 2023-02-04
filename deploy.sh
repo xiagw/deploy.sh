@@ -575,6 +575,43 @@ _renew_cert() {
     fi
 }
 
+_get_balance_aliyun() {
+    if [[ "${github_action:-0}" -ne 1 || "${arg_get_balance:-0}" -eq 1 || "${PIPELINE_GET_BALANCE:-0}" -eq 1 ]]; then
+        echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-0}"
+    else
+        return 0
+    fi
+    # command -v jq || sudo apt install jq
+    # aliyun bssopenapi QueryMonthlyBill --region cn-hangzhou --BillingCycle 2022-08
+    # cmd_aliyun="aliyun --config-path ~/runner/data/.aliyun/config.json"
+    echo "Check balance for aliyun."
+    alarm_balance=$ENV_ALARM_BALANCE_ALIYUN
+    for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
+        if [[ $ENV_TAKE_ALIYUN_PROFILE =~ $p ]]; then
+            echo "Aliyun profile is: $p"
+        else
+            continue
+        fi
+        # if [[ $ENV_SKIP_ALIYUN_PROFILE =~ $p ]]; then
+        #     continue
+        # fi
+        amount="$(aliyun -p "$p" bssopenapi QueryAccountBalance 2>/dev/null | jq -r .Data.AvailableAmount | sed 's/,//')"
+        [[ -z "$amount" ]] && continue
+        if [[ $(echo "$amount < $alarm_balance" | bc) -eq 1 ]]; then
+            msg_body="Aliyun账号:$p 当前余额 $amount, 需要充值。"
+            weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$ENV_ALARM_WEIXIN_KEY"
+            curl -s "$weixin_api" -H 'Content-Type: application/json' \
+                -d "
+        {
+            \"msgtype\": \"text\",
+            \"text\": {
+                \"content\": \"$msg_body\"
+            }
+        }"
+        fi
+    done
+}
+
 _install_python_gitlab() {
     python3 -m pip list 2>/dev/null | grep -q python-gitlab && return
     echo_msg info "install python3 gitlab api..."
@@ -594,6 +631,13 @@ _install_aliyun_cli() {
     tar -C /tmp -zxf /tmp/aliyun.tgz
     # install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
     install -m 0755 /tmp/aliyun "${me_path_data_bin}/aliyun"
+}
+
+_install_jq_cli() {
+    command -v jq >/dev/null && return
+    echo_msg info "install jq cli..."
+    [[ $UID -eq 0 ]] || pre_sudo=sudo
+    $pre_sudo apt-get install jq
 }
 
 _install_terraform() {
@@ -1243,6 +1287,7 @@ main() {
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     [[ "${ENV_INSTALL_AWS}" == 'true' ]] && _install_aws
     [[ "${ENV_INSTALL_ALIYUN}" == 'true' ]] && _install_aliyun_cli
+    [[ "${ENV_INSTALL_JQ}" == 'true' ]] && _install_jq_cli
     [[ "${ENV_INSTALL_TERRAFORM}" == 'true' ]] && _install_terraform
     [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && _install_kubectl
     [[ "${ENV_INSTALL_HELM}" == 'true' ]] && _install_helm
@@ -1262,6 +1307,9 @@ main() {
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     _renew_cert
+
+    ## get balance of aliyun
+    _get_balance_aliyun
 
     ## probe program lang / 探测程序语言
     _probe_langs
