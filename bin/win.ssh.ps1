@@ -35,11 +35,11 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 Restart-Service sshd
 
 New-Item -Path "$HOME\.ssh\authorized_keys" -Type File -Force
-(irm 'https://api.github.com/users/xiagw/keys').key | Set-Content -Path "$HOME\.ssh\authorized_keys"
+(irm 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "$HOME\.ssh\authorized_keys"
 icacls.exe "$HOME\.ssh\authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
-# (Invoke-WebRequest 'https://api.github.com/users/xiagw/keys' | ConvertFrom-Json).key | Set-Content -Path $HOME\.ssh\authorized_keys
+# (Invoke-WebRequest 'https://api.github.com/users/xiagw/keys' | ConvertFrom-Json).key | Add-Content -Path $HOME\.ssh\authorized_keys
 New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
-(irm 'https://api.github.com/users/xiagw/keys').key | Set-Content -Path "C:\ProgramData\ssh\administrators_authorized_keys"
+(irm 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "C:\ProgramData\ssh\administrators_authorized_keys"
 icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 
 # By default the ssh-agent service is disabled. Allow it to be manually started for the next step to work.

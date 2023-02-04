@@ -1,7 +1,7 @@
 # PowerShell: Windows Automated Disk Cleanup - KimConnect.com
 # https://kimconnect.com/powershell-windows-automated-disk-cleanup/
-# irm https://github.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
-# irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
+# irm https://github.com/xiagw/deploy.sh/raw/main/bin/win.clean.ps1 | iex
+# irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/win.clean.ps1 | iex
 
 ##################################################################################
 <#
