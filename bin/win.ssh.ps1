@@ -68,7 +68,7 @@ Get-Service ssh-agent
 # Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
 New-Item -Path $PROFILE -Type File -Force
-Set-Content -Path $PROFILE -Value 'clear; oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
+Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
 
 ## Not Admin console
 # irm get.scoop.sh | iex
