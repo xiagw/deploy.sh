@@ -585,7 +585,7 @@ _get_balance_aliyun() {
     # command -v jq || sudo apt install jq
     # aliyun bssopenapi QueryMonthlyBill --region cn-hangzhou --BillingCycle 2022-08
     # cmd_aliyun="aliyun --config-path ~/runner/data/.aliyun/config.json"
-    echo "Check balance for aliyun."
+    echo_msg step "Check balance for aliyun."
     alarm_balance=$ENV_ALARM_BALANCE_ALIYUN
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
         if [[ $ENV_TAKE_ALIYUN_PROFILE =~ $p ]]; then
@@ -611,6 +611,7 @@ _get_balance_aliyun() {
         }"
         fi
     done
+    echo_msg stepend "check balance for aliyun."
 }
 
 _install_python_gitlab() {
