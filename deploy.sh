@@ -576,7 +576,8 @@ _renew_cert() {
 }
 
 _get_balance_aliyun() {
-    if [[ "${github_action:-0}" -ne 1 || "${arg_get_balance:-0}" -eq 1 || "${PIPELINE_GET_BALANCE:-0}" -eq 1 ]]; then
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
+    if [[ "${PIPELINE_GET_BALANCE:-0}" -eq 1 || "${arg_get_balance:-0}" -eq 1 ]]; then
         echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-0}"
     else
         return 0
