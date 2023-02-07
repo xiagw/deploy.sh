@@ -50,6 +50,10 @@ sudo $bin_runner register \
 
 ## install python-gitlab (GitLab API)
 if _get_yes_no "[+] Do you want install python-gitlab? "; then
+    read -rp "[+] Enter your gitlab url [https://git.example.com]: " read_url_git
+    read -rp "[+] Enter your Access Token: " read_access_token
+    url_git="${read_url_git:? ERR read_url_git}"
+    access_token="${read_access_token:? ERR read_access_token}"
     python3 -m pip install --upgrade pip
     python3 -m pip install --upgrade python-gitlab
     ## config ~/.python-gitlab.cfg
@@ -62,7 +66,7 @@ timeout = 5
 
 [example]
 url = $url_git
-private_token = $reg_token
+private_token = $access_token
 api_version = 4
 per_page = 100
 EOF

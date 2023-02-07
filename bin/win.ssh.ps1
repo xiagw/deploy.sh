@@ -2,8 +2,8 @@
 # Get-ExecutionPolicy -List
 ## 设置执行策略为要求远程脚本签名，范围为当前用户
 # Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-# irm https://github.com/xiagw/deploy.sh/raw/main/bin/install.ssh.ps1 | iex
-# irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/install.ssh.ps1 | iex
+# irm https://github.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
+# irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
 
 Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH*'
 
