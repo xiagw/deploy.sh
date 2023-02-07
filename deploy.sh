@@ -1149,6 +1149,9 @@ _process_args() {
             quiet_flag=
             github_action=1
             ;;
+        --get-balance)
+            arg_get_balance=1 && exec_single=$((exec_single + 1))
+            ;;
         --renew-cert | -r)
             arg_renew_cert=1 && exec_single=$((exec_single + 1))
             ;;
