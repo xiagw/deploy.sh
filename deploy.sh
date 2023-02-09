@@ -568,7 +568,7 @@ _renew_cert() {
         bash "${acme_home}"/custom.acme.sh
     fi
     echo_msg stepend "[cert] renew cert with acme.sh using dns+api"
-    if [[ "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+    if [[ "${exec_single:-0}" -gt 0 ]]; then
         exit 0
     else
         :
@@ -611,7 +611,11 @@ _get_balance_aliyun() {
         }"
         fi
     done
+    echo
     echo_msg stepend "check balance for aliyun."
+    if [[ "${exec_single:-0}" -gt 0 ]]; then
+        exit 0
+    fi
 }
 
 _install_python_gitlab() {
