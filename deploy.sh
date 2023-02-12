@@ -446,14 +446,7 @@ _deploy_notify() {
         ## work chat / 发送至 企业微信
         echo_msg time "to work wxchat"
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:? ERR: empty api key}"
-        curl -s "$weixin_api" -H 'Content-Type: application/json' \
-            -d "
-        {
-            \"msgtype\": \"text\",
-            \"text\": {
-                \"content\": \"$msg_body\"
-            }
-        }"
+        curl -s "$weixin_api" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}"
     elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
         ## Telegram / 发送至 Telegram
         echo_msg time "to Telegram"
@@ -582,9 +575,6 @@ _get_balance_aliyun() {
     else
         return 0
     fi
-    # command -v jq || sudo apt install jq
-    # aliyun bssopenapi QueryMonthlyBill --region cn-hangzhou --BillingCycle 2022-08
-    # cmd_aliyun="aliyun --config-path ~/runner/data/.aliyun/config.json"
     echo_msg step "Check balance for aliyun."
     alarm_balance=$ENV_ALARM_BALANCE_ALIYUN
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
@@ -601,14 +591,9 @@ _get_balance_aliyun() {
         if [[ $(echo "$amount < $alarm_balance" | bc) -eq 1 ]]; then
             msg_body="Aliyun账号:$p 当前余额 $amount, 需要充值。"
             weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$ENV_ALARM_WEIXIN_KEY"
-            curl -s "$weixin_api" -H 'Content-Type: application/json' \
-                -d "
-        {
-            \"msgtype\": \"text\",
-            \"text\": {
-                \"content\": \"$msg_body\"
-            }
-        }"
+            curl -s "$weixin_api" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}"
+        else
+            echo_msg red "Current balance: $amount"
         fi
     done
     echo
