@@ -12,6 +12,11 @@ _create_user() {
     fi
     ## generate password
     password_rand="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
+    if [ -z "$password_rand" ]; then
+        command -v md5sum >/dev/null && bin_hash=md5sum
+        command -v sha256sum >/dev/null && bin_hash=sha256sum
+        password_rand="$(date | ${bin_hash:?empty} | base64 | cut -c 1-10)"
+    fi
     ## create user
     gitlab user create \
         --name "$user_name" \
@@ -24,34 +29,28 @@ _create_user() {
     ## save to password file
     msg_user_pass="username=$user_name  /  password=$password_rand"
     echo "$msg_user_pass" | tee -a "$file_passwd"
-    ## message body
-    url_git="https://git.$domain_name"
-    url_wiki="https://docs.$domain_name"
-    send_msg="
-$url_git  /  $msg_user_pass
 
-must-read for newcomers:  $url_wiki
-"
+}
+
+_add_group_member() {
     ## add to group
     gitlab group list
     read -rp "Enter group id: " group_id
 
     user_id="$(gitlab user list | grep -B1 "$user_name" | awk '/^id:/ {print $2}')"
     gitlab group-member create --group-id "${group_id:? ERR: empty group id}" --access-level 30 --user-id "$user_id"
+
 }
 
 _send_msg() {
-    api_key=${ENV_WEIXIN_KEY:? ERR: empty api key}
-    api_weixin="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$api_key"
-    curl -s "$api_weixin" -H 'Content-Type: application/json' -d "{
-        \"msgtype\": \"text\",
-        \"text\": {
-            \"content\": \"$send_msg\"
-        },
-        \"at\": {
-            \"isAtAll\": true
-        }
-    }"
+    ## message body
+    send_msg="
+https://git.$domain_name  /  $msg_user_pass
+
+must-read for newcomers:  https://docs.$domain_name
+"
+    api_weixin="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?ERR: empty api key}"
+    curl -fsSL "$api_weixin" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$send_msg\"},\"at\": {\"isAtAll\": true}}"
 }
 
 main() {
@@ -65,7 +64,8 @@ main() {
     [ -f "$file_deploy_env" ] && source "$file_deploy_env"
 
     _create_user "$@"
-    _send_msg
+    # _add_group_member
+    # _send_msg
 }
 
 main "$@"
