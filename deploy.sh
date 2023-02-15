@@ -134,6 +134,16 @@ EOF
     exit 0
 }
 
+_check_style() {
+    echo_msg step "[style] check code style"
+    echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
+    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
+        source "$code_style_sh"
+    else
+        echo '<skip>'
+    fi
+}
+
 _scan_ZAP() {
     _msg step "[ZAP] scan"
     echo '<skip>'
@@ -801,7 +811,7 @@ _detect_os() {
 _clean_disk() {
     ## clean cache of docker build / 清理 docker 构建缓存
     disk_usage="$(df / | awk 'NR>1 {print $5}' | sed 's/%//')"
-    if ((disk_usage < 80)); then
+    if ((disk_usage < ${ENV_CLEAN_DISK:-80})); then
         return 0
     fi
     _log "$(df /)"
@@ -914,7 +924,7 @@ _inject_files() {
     fi
 }
 
-_setup_deploy_conf() {
+_set_deploy_conf() {
     path_conf_ssh="${me_path_data}/.ssh"
     path_conf_acme="${me_path_data}/.acme.sh"
     path_conf_aws="${me_path_data}/.aws"
@@ -1049,7 +1059,7 @@ _probe_deploy_method() {
     done
 }
 
-_svn_checkout_repo() {
+_checkout_svn_repo() {
     [[ "${arg_svn_co:-0}" -eq 1 ]] || return 0
     if [[ ! -d "$me_path_builds" ]]; then
         echo "Not found $me_path_builds, create it..."
@@ -1059,7 +1069,7 @@ _svn_checkout_repo() {
     echo 'Coming soon...'
 }
 
-_git_clone_repo() {
+_clone_git_repo() {
     [[ "${arg_git_clone:-0}" -eq 1 ]] || return 0
     if [[ ! -d "$me_path_builds" ]]; then
         echo "Not found $me_path_builds, create it..."
@@ -1139,10 +1149,10 @@ _process_args() {
             github_action=1
             ;;
         --get-balance)
-            arg_get_balance=1 && exec_single=$((exec_single + 1))
+            arg_get_balance=1
             ;;
         --renew-cert | -r)
-            arg_renew_cert=1 && exec_single=$((exec_single + 1))
+            arg_renew_cert=1
             ;;
         --svn-co)
             arg_svn_co=1
@@ -1227,11 +1237,12 @@ main() {
     me_conf="${me_path_data}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
     me_env="${me_path_data}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
     me_dockerfile="${me_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
-
+    ## create deploy.sh/data dir  /  创建 data 目录
     [[ -d $me_path_data ]] || mkdir -p $me_path_data
+    ## 准备配置文件
     [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"
     [[ -f "$me_env" ]] || cp "${me_path_conf}/example-deploy.env" "$me_env"
-
+    ## 设定 PATH
     if [[ -d /usr/local/sbin && ! $PATH == */usr/local/sbin* ]]; then
         PATH=${PATH:+${PATH}}:/usr/local/sbin
     fi
@@ -1261,15 +1272,15 @@ main() {
     _detect_os
 
     ## git clone repo / 克隆 git 仓库
-    _git_clone_repo
+    _clone_git_repo
 
     ## svn checkout repo / 克隆 svn 仓库
-    _svn_checkout_repo
+    _checkout_svn_repo
 
-    ## run deploy.sh by hand / 手动执行 deploy.sh
+    ## run deploy.sh by hand / 手动执行 deploy.sh 时假定的 gitlab 配置
     _setup_gitlab_vars
 
-    ## source ENV, 获取 ENV_ 开头的所有全局变量
+    ## source ENV, get global variables / 获取 ENV_ 开头的所有全局变量
     source "$me_env"
     ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
@@ -1293,37 +1304,37 @@ main() {
     ## clean up disk space / 清理磁盘空间
     _clean_disk
 
-    ## create k8s
+    ## create k8s / 创建 kubernetes 集群
     _create_k8s
 
-    ## setup ssh config/ acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
-    _setup_deploy_conf
+    ## setup ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
+    _set_deploy_conf
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     _renew_cert
 
-    ## get balance of aliyun
+    ## get balance of aliyun / 获取 aliyun 账户现金余额
     _get_balance_aliyun
 
-    ## probe program lang / 探测程序语言
+    ## probe program lang / 探测项目的程序语言
     _probe_langs
 
-    ## preprocess project config files / 预处理业务项目配置文件
+    ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
     _inject_files
 
-    ## probe deploy method / 探测文件确定发布方法
+    ## probe deploy method / 探测文件并确定发布方式
     _probe_deploy_method
 
-    ## code style check / 代码风格检查
+    ## code style check / 代码格式检查
     code_style_sh="$me_path/langs/style.${project_lang}.sh"
 
     ## code build / 代码编译打包
     build_langs_sh="$me_path/langs/build.${project_lang}.sh"
 
     ################################################################################
-    ## exec single task / 执行单个任务，适用于gitlab-ci/jenkins等自动化部署工具的单个job任务执行
+    ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
     if [[ "${exec_single:-0}" -gt 0 ]]; then
-        [[ "${arg_code_quality:-0}" -eq 1 ]] && _code_quality_sonar
+        [[ "${arg_code_quality:-0}" -eq 1 ]] && _check_quality_sonar
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
@@ -1342,24 +1353,19 @@ main() {
     ################################################################################
 
     ## default exec all tasks / 默认执行所有任务
-    _code_quality_sonar
+    _check_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-    _msg step "[style] check code style"
-    echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
-        source "$code_style_sh"
-    else
-        echo '<skip>'
-    fi
+    _check_style
 
+    ## unit test / 单元测试
     _test_unit
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
     # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
     _deploy_flyway_docker
 
-    ## generate api docs
+    ## generate api docs / 利用 apidoc 产生 api 文档
     # _generate_apidoc
 
     ## build
@@ -1367,6 +1373,7 @@ main() {
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
     # [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
 
+    ## docker push image
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
 
     ## deploy k8s
@@ -1381,7 +1388,10 @@ main() {
     [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync_ssh=0
     [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
 
+    ## function test / 功能测试
     _test_function
+
+    ## 安全扫描
     _scan_ZAP
     _scan_vulmap
 
