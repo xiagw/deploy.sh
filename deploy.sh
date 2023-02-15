@@ -94,7 +94,7 @@ _test_function() {
     _msg stepend "[test] function test"
 }
 
-_code_quality_sonar() {
+_check_quality_sonar() {
     _msg step "[quality] check code with sonarqube"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
