@@ -135,7 +135,7 @@ EOF
 }
 
 _check_style() {
-    echo_msg step "[style] check code style"
+    _msg step "[style] check code style"
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
         source "$code_style_sh"
