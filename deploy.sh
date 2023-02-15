@@ -12,7 +12,7 @@
 set -e ## 出现错误自动退出
 # set -u ## 变量未定义报错
 
-echo_msg() {
+_msg() {
     color_off='\033[0m' # Text Reset
     case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
@@ -30,7 +30,7 @@ echo_msg() {
         color_off=' ... end'
         ;;
     step | timestep)
-        color_on="\033[0;33m[$((${STEP:-0} + 1))] $(date +%Y%m%d-%T-%u), \033[0m"
+        color_on="\033[0;36m[$((${STEP:-0} + 1))] $(date +%Y%m%d-%T-%u), \033[0m"
         STEP=$((${STEP:-0} + 1))
         color_off=' ... start'
         ;;
@@ -53,7 +53,7 @@ _log() {
 
 ## install phpunit
 _test_unit() {
-    echo_msg step "[test] unit test"
+    _msg step "[test] unit test"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
     if [[ "${PIPELINE_UNIT_TEST:-0}" -eq 0 ]]; then
@@ -68,14 +68,14 @@ _test_unit() {
         echo "Found $me_path_data/tests/unit_test.sh"
         bash "$me_path_data"/tests/unit_test.sh
     else
-        echo_msg purple "not found tests/unit_test.sh, skip unit test."
+        _msg purple "not found tests/unit_test.sh, skip unit test."
     fi
-    echo_msg stepend "[test] unit test"
+    _msg stepend "[test] unit test"
 }
 
 ## install jdk/ant/jmeter
 _test_function() {
-    echo_msg step "[test] function test"
+    _msg step "[test] function test"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
     if [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 0 ]]; then
@@ -91,11 +91,11 @@ _test_function() {
     else
         echo "Not found tests/func_test.sh, skip function test."
     fi
-    echo_msg stepend "[test] function test"
+    _msg stepend "[test] function test"
 }
 
 _code_quality_sonar() {
-    echo_msg step "[quality] check code with sonarqube"
+    _msg step "[quality] check code with sonarqube"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_SONAR:-0}" -eq 0 ]]; then
@@ -105,7 +105,7 @@ _code_quality_sonar() {
     sonar_url="${ENV_SONAR_URL:?empty}"
     sonar_conf="$gitlab_project_dir/sonar-project.properties"
     if ! curl "$sonar_url" >/dev/null 2>&1; then
-        echo_msg warning "Could not found sonarqube server, exit."
+        _msg warning "Could not found sonarqube server, exit."
         return
     fi
 
@@ -130,25 +130,25 @@ EOF
     $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
-    echo_msg stepend "[quality] check code with sonarqube"
+    _msg stepend "[quality] check code with sonarqube"
     exit 0
 }
 
 _scan_ZAP() {
-    echo_msg step "[ZAP] scan"
+    _msg step "[ZAP] scan"
     echo '<skip>'
     # docker pull owasp/zap2docker-stable
 }
 
 _scan_vulmap() {
-    echo_msg step "[vulmap] scan"
+    _msg step "[vulmap] scan"
     echo '<skip>'
     # https://github.com/zhzyker/vulmap
     # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
 }
 
 _deploy_flyway_docker() {
-    echo_msg step "[flyway] deploy database SQL files"
+    _msg step "[flyway] deploy database SQL files"
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     if [[ "${PIPELINE_FLYWAY:-0}" -ne 1 || "${exec_deploy_flyway:-0}" -ne 1 ]]; then
         echo '<skip>'
@@ -169,26 +169,26 @@ _deploy_flyway_docker() {
         echo "Nothing to do."
     fi
     if [ ${deploy_result:-0} = 0 ]; then
-        echo_msg green "Result = OK"
+        _msg green "Result = OK"
     else
-        echo_msg error "Result = FAIL"
+        _msg error "Result = FAIL"
     fi
-    echo_msg stepend "[flyway] deploy database SQL files"
+    _msg stepend "[flyway] deploy database SQL files"
 }
 
 _deploy_flyway_helm_job() {
     [[ "${ENV_FLYWAY_HELM_JOB:-0}" -ne 1 ]] && return
-    echo_msg step "[flyway] deploy database SQL with helm job"
+    _msg step "[flyway] deploy database SQL with helm job"
     echo "$image_tag_flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     docker run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
-        echo_msg green "Result = OK"
+        _msg green "Result = OK"
     else
-        echo_msg error "Result = FAIL"
+        _msg error "Result = FAIL"
     fi
-    echo_msg stepend "[flyway] deploy database SQL with helm job"
+    _msg stepend "[flyway] deploy database SQL with helm job"
 }
 
 # python-gitlab list all projects / 列出所有项目
@@ -204,12 +204,12 @@ _docker_login() {
         time_last="$(stat -t -c %Y "$lock_docker_login")"
         ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
         [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]] && return 0
-        echo_msg time "[login] docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
+        _msg time "[login] docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
         str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*}"
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
     else
         if [[ "${demo_mode:-0}" == 1 ]]; then
-            echo_msg purple "demo mode, skip docker login."
+            _msg purple "demo mode, skip docker login."
             return 0
         fi
         [[ -f "$lock_docker_login" ]] && return 0
@@ -219,7 +219,7 @@ _docker_login() {
 }
 
 _build_image_docker() {
-    echo_msg step "[container] build image with docker"
+    _msg step "[container] build image with docker"
     _docker_login
     ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
@@ -242,36 +242,36 @@ _build_image_docker() {
     # echo "Then execute the following command on remote server:"
     # echo "#    docker pull $image_uuid"
     # echo "#    docker tag $image_uuid deploy/<your_app>"
-    echo_msg stepend "[container] build image with docker"
+    _msg stepend "[container] build image with docker"
 }
 
 _build_image_podman() {
-    echo_msg step "[container] build image with podman"
+    _msg step "[container] build image with podman"
     echo '<skip>'
-    # echo_msg stepend "[TODO] [podman] build image"
+    # _msg stepend "[TODO] [podman] build image"
 }
 
 _push_image() {
-    echo_msg step "[container] push image with docker"
+    _msg step "[container] push image with docker"
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "$demo_mode" == 1 ]]; then
-        echo_msg purple "Demo mode, skip push image."
+        _msg purple "Demo mode, skip push image."
         return 0
     fi
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        echo_msg "safe remove the above image with 'docker rmi'"
+        _msg "safe remove the above image with 'docker rmi'"
     else
-        echo_msg error "got an error here, probably caused by network..."
+        _msg error "got an error here, probably caused by network..."
     fi
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        docker push ${quiet_flag} "$image_tag_flyway" || echo_msg error "got an error here, probably caused by network..."
+        docker push ${quiet_flag} "$image_tag_flyway" || _msg error "got an error here, probably caused by network..."
     fi
-    echo_msg stepend "[container] push image"
+    _msg stepend "[container] push image with docker"
 }
 
 _deploy_k8s() {
-    echo_msg step "[deploy] deploy with helm"
+    _msg step "[deploy] deploy with helm"
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
         echo "remove project name prefix"
         helm_release=${gitlab_project_name#*-}
@@ -293,7 +293,7 @@ _deploy_k8s() {
 
     ## helm install / helm 安装
     if [ -z "$path_helm" ]; then
-        echo_msg purple "Not found helm files"
+        _msg purple "Not found helm files"
         echo "Try to generate helm files with bin/helm-new.sh"
         path_helm="${me_path_data}/helm/${helm_release}"
         bash "$me_path_bin/helm-new.sh" ${helm_release}
@@ -329,11 +329,11 @@ EOF
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    echo_msg stepend "[deploy] deploy with helm"
+    _msg stepend "[deploy] deploy with helm"
 }
 
 _deploy_rsync_ssh() {
-    echo_msg step "[deploy] with rsync+ssh"
+    _msg step "[deploy] with rsync+ssh"
     ## rsync exclude some files / rsync 排除某些文件
     if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
         rsync_exclude="${gitlab_project_dir}/rsync.exclude"
@@ -353,7 +353,7 @@ _deploy_rsync_ssh() {
         # db_host=${array[7]}
         # db_name=${array[8]}
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo_msg time "ssh host is: ${ssh_host:?if stop here, check $me_conf}"
+        _msg time "ssh host is: ${ssh_host:?if stop here, check $me_conf}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
         ## node/java use rsync --delete / node/java 使用 rsync --delete
@@ -383,28 +383,28 @@ _deploy_rsync_ssh() {
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
         if [ -f "$me_path_data_bin/custom.deploy.sh" ]; then
-            echo_msg time "custom deploy..."
+            _msg time "custom deploy..."
             bash "$me_path_data_bin/custom.deploy.sh" ${ssh_host} ${rsync_dest}
-            echo_msg time "end custom deploy."
+            _msg time "end custom deploy."
         fi
         if [[ $exec_deploy_single_host -eq 1 ]]; then
-            echo_msg step "deploy to singl host with docker-compose"
+            _msg step "deploy to singl host with docker-compose"
             $ssh_opt -n "$ssh_host" "cd ~/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
-    echo_msg stepend "[deploy] deploy files"
+    _msg stepend "[deploy] deploy files"
 }
 
 _deploy_aliyun_oss() {
-    echo_msg step "[deploy] deploy files to aliyun oss"
+    _msg step "[deploy] deploy files to aliyun oss"
 }
 
 _deploy_rsync() {
-    echo_msg step "[deploy] deploy files to rsyncd server"
+    _msg step "[deploy] deploy files to rsyncd server"
 }
 
 _deploy_ftp() {
-    echo_msg step "[deploy] deploy files to ftp server"
+    _msg step "[deploy] deploy files to ftp server"
     return
     upload_file="${gitlab_project_dir}/ftp.tgz"
     tar czvf "${upload_file}" -C "${gitlab_project_dir}" .
@@ -417,11 +417,11 @@ put $upload_file
 passive off
 bye
 EOF
-    echo_msg stepend "[deploy] deploy files to ftp server"
+    _msg stepend "[deploy] deploy files to ftp server"
 }
 
 _deploy_sftp() {
-    echo_msg step "[deploy] deploy files to sftp server"
+    _msg step "[deploy] deploy files to sftp server"
 }
 
 _deploy_notify_msg() {
@@ -440,29 +440,29 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 }
 
 _deploy_notify() {
-    echo_msg step "[notify] message for result"
+    _msg step "[notify] message for result"
     _deploy_notify_msg
     if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
         ## work chat / 发送至 企业微信
-        echo_msg time "to work wxchat"
+        _msg time "to work wxchat"
         weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:? ERR: empty api key}"
         curl -s "$weixin_api" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}"
     elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
         ## Telegram / 发送至 Telegram
-        echo_msg time "to Telegram"
+        _msg time "to Telegram"
         telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:? ERR: empty api key}/sendMessage"
         # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:? ERR: empty api key}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
         curl -L -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:? ERR: empty api key}&text=$msg_body" "$telegram_api_msg"
     elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
         ## element / 发送至 element
-        echo_msg time "to Element"
+        _msg time "to Element"
         python3 "$me_path_data_bin/element.py" "$msg_body"
     elif [[ "${ENV_NOTIFY_EMAIL:-0}" -eq 1 ]]; then
         ## email / 发送至 email
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
-        echo_msg time "to Email"
+        _msg time "to Email"
         "$me_path_bin/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
@@ -474,19 +474,19 @@ _deploy_notify() {
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
     else
-        echo_msg "<skip>"
+        _msg "<skip>"
     fi
 }
 
 _reload_nginx_gitlab() {
     if [ -f "$file_reload_nginx" ]; then
-        echo_msg info "found .reload.nginx"
+        _msg info "found .reload.nginx"
     else
-        echo_msg yellow "not found .reload.nginx"
+        _msg warn "not found .reload.nginx"
         return 0
     fi
     for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
-        echo_msg "gitlab create pipeline, project id is $id"
+        _msg "gitlab create pipeline, project id is $id"
         gitlab project-pipeline create --ref main --project-id $id
     done
     rm -f "$file_reload_nginx"
@@ -498,7 +498,7 @@ _renew_cert() {
     else
         return 0
     fi
-    echo_msg step "[cert] renew cert with acme.sh using dns+api"
+    _msg step "[cert] renew cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
@@ -524,7 +524,7 @@ _renew_cert() {
         [ -f "$account" ] || continue
         if [ -f "$conf_dns_cloudflare" ]; then
             if ! command -v flarectl; then
-                echo_msg warning "command not found: flarectl "
+                _msg warning "command not found: flarectl "
                 return 1
             fi
             source "$conf_dns_cloudflare" "${account##*.}"
@@ -537,7 +537,7 @@ _renew_cert() {
             domains="$(aliyun --profile "deploy${account##*.}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
             dnsType='dns_ali'
         elif [ -f "$conf_dns_qcloud" ]; then
-            echo_msg warning "[TODO] use dnspod api."
+            _msg warning "[TODO] use dnspod api."
         fi
         \cp -vf "$account" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
@@ -560,7 +560,7 @@ _renew_cert() {
         echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}"/custom.acme.sh
     fi
-    echo_msg stepend "[cert] renew cert with acme.sh using dns+api"
+    _msg stepend "[cert] renew cert with acme.sh using dns+api"
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         exit 0
     else
@@ -575,7 +575,7 @@ _get_balance_aliyun() {
     else
         return 0
     fi
-    echo_msg step "Check balance for aliyun."
+    _msg step "Check balance for aliyun."
     alarm_balance=$ENV_ALARM_BALANCE_ALIYUN
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
         if [[ $ENV_TAKE_ALIYUN_PROFILE =~ $p ]]; then
@@ -593,11 +593,11 @@ _get_balance_aliyun() {
             weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$ENV_ALARM_WEIXIN_KEY"
             curl -s "$weixin_api" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}"
         else
-            echo_msg red "Current balance: $amount"
+            _msg red "Current balance: $amount"
         fi
     done
     echo
-    echo_msg stepend "check balance for aliyun."
+    _msg stepend "check balance for aliyun."
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         exit 0
     fi
@@ -605,19 +605,19 @@ _get_balance_aliyun() {
 
 _install_python_gitlab() {
     python3 -m pip list 2>/dev/null | grep -q python-gitlab && return
-    echo_msg info "install python3 gitlab api..."
+    _msg info "install python3 gitlab api..."
     python3 -m pip install --user --upgrade python-gitlab
 }
 
 _install_python_element() {
     python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
-    echo_msg info "install python3 element api..."
+    _msg info "install python3 element api..."
     python3 -m pip install --user --upgrade matrix-nio
 }
 
 _install_aliyun_cli() {
     command -v aliyun >/dev/null && return
-    echo_msg info "install aliyun cli..."
+    _msg info "install aliyun cli..."
     curl -Lo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
     tar -C /tmp -zxf /tmp/aliyun.tgz
     # install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
@@ -626,14 +626,14 @@ _install_aliyun_cli() {
 
 _install_jq_cli() {
     command -v jq >/dev/null && return
-    echo_msg info "install jq cli..."
+    _msg info "install jq cli..."
     [[ $UID -eq 0 ]] || pre_sudo=sudo
     $pre_sudo apt-get install jq
 }
 
 _install_terraform() {
     command -v terraform >/dev/null && return
-    echo_msg info "install terraform..."
+    _msg info "install terraform..."
     [[ $UID -eq 0 ]] || use_sudo=sudo
     $use_sudo apt-get update && $use_sudo apt-get install -qq -y gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
@@ -645,7 +645,7 @@ _install_terraform() {
 
 _install_aws() {
     command -v aws >/dev/null && return
-    echo_msg info "install aws cli..."
+    _msg info "install aws cli..."
     curl -Lo "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq awscliv2.zip
     ./aws/install --bin-dir "${me_path_data_bin}" --install-dir "${me_path_data}" --update
@@ -656,7 +656,7 @@ _install_aws() {
 
 _install_kubectl() {
     command -v kubectl >/dev/null && return
-    echo_msg info "install kubectl..."
+    _msg info "install kubectl..."
     kube_ver="$(curl -L --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
     curl -Lo "${me_path_data_bin}/kubectl" "$kube_url"
@@ -665,13 +665,13 @@ _install_kubectl() {
 
 _install_helm() {
     command -v helm >/dev/null && return
-    echo_msg info "install helm..."
+    _msg info "install helm..."
     curl -L https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
 _install_jmeter() {
     command -v jmeter >/dev/null && return
-    echo_msg info "install jmeter..."
+    _msg info "install jmeter..."
     ver_jmeter='5.4.1'
     path_temp=$(mktemp -d)
 
@@ -704,7 +704,7 @@ _install_jmeter() {
 
 _install_flarectl() {
     command -v flarectl >/dev/null && return
-    echo_msg info "install flarectl"
+    _msg info "install flarectl"
     local ver='0.52.0'
     path_temp=$(mktemp -d)
     curl -Lo "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz
@@ -730,7 +730,7 @@ _detect_os() {
         OS="${ID}"
     else
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        echo_msg error "Not support. exit."
+        _msg error "Not support. exit."
         return 1
     fi
 
@@ -792,7 +792,7 @@ _detect_os() {
         ;;
     *)
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        echo_msg error "Not support. exit."
+        _msg error "Not support. exit."
         return 1
         ;;
     esac
@@ -805,7 +805,7 @@ _clean_disk() {
         return 0
     fi
     _log "$(df /)"
-    echo_msg warning "Disk space is less than 80%, remove docker images"
+    _msg warning "Disk space is less than 80%, remove docker images"
     docker images "${ENV_DOCKER_REGISTRY}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
     docker system prune -f >/dev/null || true
 }
@@ -828,13 +828,13 @@ get_maxmind_ip() {
 
 _generate_apidoc() {
     if [[ -f "${gitlab_project_dir}/apidoc.json" ]]; then
-        echo_msg step "[apidoc] generate API Docs with apidoc"
+        _msg step "[apidoc] generate API Docs with apidoc"
         $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
     fi
 }
 
 _inject_files() {
-    echo_msg step "[inject] from runner/data/project_conf/"
+    _msg step "[inject] from runner/data/project_conf/"
     ## frontend (VUE) .env file
     if [[ "$project_lang" == node ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -853,7 +853,7 @@ _inject_files() {
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}.${env_namespace}"
     if [ -d "$path_project_conf" ]; then
-        echo_msg warning "found custom config files, sync it."
+        _msg warning "found custom config files, sync it."
         rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
     fi
     ## from deploy.env， 使用全局模板文件替换项目文件
@@ -924,8 +924,8 @@ _setup_deploy_conf() {
     ## ssh config and key files
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
-        echo_msg warning "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
-        echo_msg purple "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
+        _msg warning "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
+        _msg purple "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
         [ -d "$HOME/.ssh" ] || ln -sf "$path_conf_ssh" "$HOME/"
     fi
@@ -987,7 +987,7 @@ _setup_gitlab_vars() {
 }
 
 _probe_langs() {
-    echo_msg step "[langs] probe language"
+    _msg step "[langs] probe language"
     for f in pom.xml composer.json package.json requirements.txt README.md readme.md README.txt readme.txt; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
@@ -1019,7 +1019,7 @@ _probe_langs() {
 }
 
 _probe_deploy_method() {
-    echo_msg step "[probe] probe deploy method"
+    _msg step "[probe] probe deploy method"
     for f in Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
@@ -1081,7 +1081,7 @@ _git_clone_repo() {
 _create_k8s() {
     [[ "$create_k8s" -eq 1 ]] || return 0
     [ -d "$me_path_data/terraform" ] || return 0
-    echo_msg step "[terraform] create k8s"
+    _msg step "[terraform] create k8s"
     cd "$me_path_data/terraform" && terraform init && terraform apply -auto-approve
     exit $?
 }
@@ -1273,7 +1273,7 @@ main() {
     source "$me_env"
     ## demo mode: default docker login password / docker 登录密码
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
-        echo_msg purple "Found default username/password, skip docker login / push image / deploy k8s..."
+        _msg purple "Found default username/password, skip docker login / push image / deploy k8s..."
         demo_mode=1
     fi
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
@@ -1345,7 +1345,7 @@ main() {
     _code_quality_sonar
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-    echo_msg step "[style] check code style"
+    _msg step "[style] check code style"
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
     if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
         source "$code_style_sh"
