@@ -48,7 +48,7 @@ _msg() {
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
 _log() {
-    echo "$(date +%Y%m%d-%T-%u), $*" >>$me_log
+    echo "$(date +%Y%m%d-%T-%u), $*" | tee -a $me_log
 }
 
 ## install phpunit
@@ -987,7 +987,7 @@ _setup_gitlab_vars() {
         cron_save_file="$(find ${me_path_data} -name "crontab.${gitlab_project_id}.*" | head -n 1)"
         cron_save_id="${cron_save_file##*.}"
         if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
-            echo warning "no code change found, <skip>."
+            _msg warn "no code change found, <skip>."
             exit 0
         else
             rm -f "${me_path_data}/crontab.${gitlab_project_id}".*
@@ -1104,6 +1104,7 @@ Parameters:
     -h, --help               Show this help message.
     -v, --version            Show version info.
     -r, --renew-cert         Renew all the certs.
+    --get-balance            get balance from aliyun.
     --code-style             Check code style.
     --code-quality           Check code quality.
     --build-langs            Build all the languages.
