@@ -638,7 +638,7 @@ _install_jq_cli() {
     command -v jq >/dev/null && return
     _msg info "install jq cli..."
     [[ $UID -eq 0 ]] || pre_sudo=sudo
-    $pre_sudo apt-get install jq
+    $pre_sudo apt-get install -y jq
 }
 
 _install_terraform() {
