@@ -2,7 +2,7 @@
 
 # https://docs.fastlane.tools/
 
-echo_msg step "build iOS [fastlane]..."
+_msg step "build iOS [fastlane]..."
 case $gitlab_project_branch in
 main | master)
     fastlane release

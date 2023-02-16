@@ -21,7 +21,7 @@ if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
 fi
 
 if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
-    echo_msg step "[build] php composer install"
+    _msg step "[build] php composer install"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     # if ! docker images | grep -q "deploy/composer"; then
     #     DOCKER_BUILDKIT=1 docker build $quiet_flag --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
@@ -34,7 +34,7 @@ if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
         bash -c "composer install ${quiet_flag}" &&
         echo "$file_json_md5 ${file_json}" >>"${me_log}" || true
     [ -d "$gitlab_project_dir"/vendor ] && chown -R 1000:1000 "$gitlab_project_dir"/vendor
-    echo_msg stepend "[build] php composer install"
+    _msg stepend "[build] php composer install"
 else
-    echo_msg time "skip php composer install."
+    _msg time "skip php composer install."
 fi

@@ -6,10 +6,10 @@ MVN_PROFILE="${gitlab_project_branch}"
 maven_cache="${me_path_data}"/cache.maven
 
 if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
-    echo_msg step "[build] with gradle"
+    _msg step "[build] with gradle"
     gradle -q
 else
-    echo_msg step "[build] with maven"
+    _msg step "[build] with maven"
     if [[ -f $gitlab_project_dir/settings.xml ]]; then
         MVN_SET="--settings settings.xml"
     fi
@@ -41,4 +41,4 @@ if [[ "${exec_deploy_k8s:-0}" -ne 1 ]]; then
         -exec rsync -a {} "$path_for_rsync/" \;
 fi
 
-echo_msg stepend "[build] java build"
+_msg stepend "[build] java build"

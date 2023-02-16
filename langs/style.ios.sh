@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
 
-echo_msg step "[TODO] swift code style..."
+_msg step "[TODO] swift code style..."
