@@ -26,14 +26,17 @@ if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyCon
 } else {
     Write-Output "Firewall rule 'OpenSSH-Server-In-TCP' has been created and exists."
 }
+
 ## 默认 shell 设置为 powershell.exe：
 New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -PropertyType String -Force
-## comment authorized_keys
+
+## comment authorized_keys for administrators
 (Get-Content -Path C:\ProgramData\ssh\sshd_config -Raw) -replace 'Match Group administrators','#Match Group administrators' | Set-Content -Path C:\ProgramData\ssh\sshd_config
 (Get-Content -Path C:\ProgramData\ssh\sshd_config -Raw) -replace 'AuthorizedKeysFile __PROGRAMDATA__','#AuthorizedKeysFile __PROGRAMDATA__' | Set-Content -Path C:\ProgramData\ssh\sshd_config
 
 Restart-Service sshd
 
+## add $HOME\.ssh\authorized_keys
 New-Item -Path "$HOME\.ssh\authorized_keys" -Type File -Force
 (irm 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "$HOME\.ssh\authorized_keys"
 icacls.exe "$HOME\.ssh\authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
@@ -51,27 +54,15 @@ Get-Service ssh-agent
 # Now load your key files into ssh-agent
 # ssh-add ~\.ssh\id_ed25519
 
-# Make sure that the .ssh directory exists in your server's user account home folder
-# ssh username@domain1@contoso.com mkdir C:\Users\username\.ssh\
-# Use scp to copy the public key file generated previously on your client to the authorized_keys file on your server
-# scp C:\Users\username\.ssh\id_ed25519.pub user1@domain1@contoso.com:C:\Users\username\.ssh\authorized_keys
-
-# $env:HTTP_PROXY="http://192.168.1.154:1080"
-# $env:HTTPS_PROXY="http://192.168.1.154:1080"
-
-## powershell 7
-# winget install --id Microsoft.Powershell --source winget
+## install scoop, not Admin console
+# irm get.scoop.sh | iex
 
 ## oh my posh
-# winget install JanDeDobbeleer.OhMyPosh --source winget
-# scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
-# Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
 New-Item -Path $PROFILE -Type File -Force
 Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
-
-## Not Admin console
-# irm get.scoop.sh | iex
+# winget install JanDeDobbeleer.OhMyPosh --source winget
+# scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
 
 # winget settings
 
@@ -81,3 +72,9 @@ Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEM
 ## enable/disable proxy
 # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 0
 # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 1
+
+# $env:HTTP_PROXY="http://192.168.1.154:1080"
+# $env:HTTPS_PROXY="http://192.168.1.154:1080"
+
+## install powershell 7
+# winget install --id Microsoft.Powershell --source winget
