@@ -64,11 +64,10 @@ main() {
             _delete_host
             ;;
         *)
-            if grep -B 2 "${ssh_host}" "${file_conf[@]}" | grep -q 'byobu'; then
+            if grep -B2 "${ssh_host}" "${file_conf[@]}" | grep -q 'byobu'; then
                 use_byobu='byobu'
-            else
-                use_byobu=''
             fi
+            ## get username from $1
             [ -n "${1}" ] && ssh_host="${1}@${ssh_host}"
             ssh -A -t "${ssh_host}" $use_byobu
             break
