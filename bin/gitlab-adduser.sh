@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-_create_user() {
+_new_user() {
     if [[ -z "$1" ]]; then
         read -rp 'Enter username: ' -e -i 'user001' read_user_name
         read -rp 'Enter domain name: ' -e -i"${ENV_GITLAB_DOMAIN:-example.com}" read_domain_name
@@ -35,19 +35,22 @@ _create_user() {
 _add_group_member() {
     ## add to group
     gitlab group list
-    read -rp "Enter group id: " group_id
-
+    # read -rp "Enter group id: " group_id
     user_id="$(gitlab user list | grep -B1 "$user_name" | awk '/^id:/ {print $2}')"
-    gitlab group-member create --group-id "${group_id:? ERR: empty group id}" --access-level 30 --user-id "$user_id"
+    select group_id in $(gitlab group list | awk '/^id:/ {print $2}') quit; do
+        gitlab group-member create --group-id "$group_id" --access-level 30 --user-id "$user_id"
+    done
 
 }
 
 _send_msg() {
     ## message body
     send_msg="
-https://git.$domain_name  /  $msg_user_pass
+https://git.$domain_name
+$msg_user_pass
 
-must-read for newcomers:  https://docs.$domain_name
+https://docs.$domain_name
+
 "
     api_weixin="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:?ERR: empty api key}"
     curl -fsSL "$api_weixin" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$send_msg\"},\"at\": {\"isAtAll\": true}}"
@@ -63,9 +66,9 @@ main() {
     file_deploy_env="$data_path/deploy.env"
     [ -f "$file_deploy_env" ] && source "$file_deploy_env"
 
-    _create_user "$@"
-    # _add_group_member
-    # _send_msg
+    _new_user "$@"
+    _add_group_member
+    _send_msg
 }
 
 main "$@"
