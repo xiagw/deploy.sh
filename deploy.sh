@@ -1150,10 +1150,10 @@ _process_args() {
             github_action=1
             ;;
         --get-balance)
-            arg_get_balance=1
+            arg_get_balance=1 && exec_single=$((exec_single + 1))
             ;;
         --renew-cert | -r)
-            arg_renew_cert=1
+            arg_renew_cert=1 && exec_single=$((exec_single + 1))
             ;;
         --svn-co)
             arg_svn_co=1
