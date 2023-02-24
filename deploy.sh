@@ -585,7 +585,7 @@ _get_balance_aliyun() {
     else
         return 0
     fi
-    _msg step "Check balance for aliyun."
+    _msg step "check balance of aliyun"
     alarm_balance=$ENV_ALARM_BALANCE_ALIYUN
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
         if [[ $ENV_TAKE_ALIYUN_PROFILE =~ $p ]]; then
@@ -607,7 +607,7 @@ _get_balance_aliyun() {
         fi
     done
     echo
-    _msg stepend "check balance for aliyun."
+    _msg stepend "check balance of aliyun"
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         exit 0
     fi
