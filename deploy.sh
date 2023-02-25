@@ -1403,6 +1403,7 @@ main() {
     [[ "$ENV_DISABLE_MSG_BRANCH" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
     [[ "${exec_deploy_notify:-1}" -eq 1 ]] && _deploy_notify
 
+    echo "==== END ===="
     ## deploy result:  0 成功， 1 失败
     return ${deploy_result:-0}
 }

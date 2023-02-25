@@ -38,6 +38,7 @@ _add_group_member() {
     # read -rp "Enter group id: " group_id
     user_id="$(gitlab user list | grep -B1 "$user_name" | awk '/^id:/ {print $2}')"
     select group_id in $(gitlab group list | awk '/^id:/ {print $2}') quit; do
+        [ $group_id == quit ] && break
         gitlab group-member create --group-id "$group_id" --access-level 30 --user-id "$user_id"
     done
 
