@@ -598,12 +598,11 @@ _get_balance_aliyun() {
         # fi
         amount="$(aliyun -p "$p" bssopenapi QueryAccountBalance 2>/dev/null | jq -r .Data.AvailableAmount | sed 's/,//')"
         [[ -z "$amount" ]] && continue
+        _msg red "Current balance: $amount"
         if [[ $(echo "$amount < $alarm_balance" | bc) -eq 1 ]]; then
             msg_body="Aliyun账号:$p 当前余额 $amount, 需要充值。"
             weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$ENV_ALARM_WEIXIN_KEY"
             curl -s "$weixin_api" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}"
-        else
-            _msg red "Current balance: $amount"
         fi
     done
     echo
