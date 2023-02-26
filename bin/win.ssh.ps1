@@ -5,13 +5,12 @@
 # irm https://github.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
 # irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
 
-Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH*'
-
+# Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH*'
 # Install the OpenSSH Client
-Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
-
+# Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
 # Install the OpenSSH Server
-Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+# Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Get-WindowsCapability -online | Where-Object {$_.Name -like "OpenSSH*" -and $_.State -eq "NotPresent"} | Add-WindowsCapability -online
 
 # Start the sshd service
 Start-Service sshd
@@ -38,11 +37,11 @@ Restart-Service sshd
 
 ## add $HOME\.ssh\authorized_keys
 New-Item -Path "$HOME\.ssh\authorized_keys" -Type File -Force
-(irm 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "$HOME\.ssh\authorized_keys"
+(Invoke-RestMethod 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "$HOME\.ssh\authorized_keys"
 icacls.exe "$HOME\.ssh\authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 # (Invoke-WebRequest 'https://api.github.com/users/xiagw/keys' | ConvertFrom-Json).key | Add-Content -Path $HOME\.ssh\authorized_keys
 New-Item -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Type File -Force
-(irm 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "C:\ProgramData\ssh\administrators_authorized_keys"
+(Invoke-RestMethod 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "C:\ProgramData\ssh\administrators_authorized_keys"
 icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 
 # By default the ssh-agent service is disabled. Allow it to be manually started for the next step to work.
