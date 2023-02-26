@@ -242,7 +242,7 @@ _build_image_docker() {
     [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
     [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
-        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE:-false}" \
+        --build-arg CHANGE_SOURCE="${ENV_IN_CHINA:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     ## docker push to ttl.sh
     # image_uuid="ttl.sh/$(uuidgen):1h"
@@ -761,10 +761,6 @@ _detect_os() {
             # shellcheck disable=SC2086
             $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
         fi
-        command -v docker >/dev/null || (
-            curl -fsSL https://get.docker.com -o get-docker.sh
-            bash get-docker.sh
-        )
         ;;
     centos | amzn | rhel | fedora)
         rpm -q epel-release >/dev/null || {
@@ -780,10 +776,6 @@ _detect_os() {
         command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
         command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
         [[ -n "$install_pkg" ]] && $exec_sudo yum install -y $install_pkg >/dev/null
-        command -v docker >/dev/null || (
-            curl -fsSL https://get.docker.com -o get-docker.sh
-            bash get-docker.sh
-        )
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
         ;;
     alpine)
@@ -794,10 +786,7 @@ _detect_os() {
         command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
         command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
         [[ -n "$install_pkg" ]] && $exec_sudo apk add $install_pkg >/dev/null
-        command -v docker >/dev/null || (
-            curl -fsSL https://get.docker.com -o get-docker.sh
-            bash get-docker.sh
-        )
+
         ;;
     *)
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
@@ -805,6 +794,10 @@ _detect_os() {
         return 1
         ;;
     esac
+    if ! command -v docker &>/dev/null; then
+        [[ "${ENV_IN_CHINA:-false}" == 'true' ]] && install_arg='-s --mirror Aliyun'
+        curl -fsSL https://get.docker.com | bash $install_arg
+    fi
 }
 
 _clean_disk() {
@@ -878,7 +871,7 @@ _inject_files() {
             echo "Overwritten from data/dockerfile/Dockerfile.${project_lang}"
             rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}"/Dockerfile
         fi
-        if [[ "$project_lang" == java && "$ENV_CHANGE_SOURCE" == true ]]; then
+        if [[ "$project_lang" == java && "$ENV_IN_CHINA" == 'true' ]]; then
             curl -fsSLo "$gitlab_project_dir"/settings.xml https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml
         fi
         ;;
