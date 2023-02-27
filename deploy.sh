@@ -25,14 +25,14 @@ _msg() {
         color_on="[+] $(date +%Y%m%d-%T-%u), "
         color_off=''
         ;;
-    stepend)
-        color_on="[+] $(date +%Y%m%d-%T-%u), "
-        color_off=' ... end'
-        ;;
     step | timestep)
         color_on="\033[0;36m[$((${STEP:-0} + 1))] $(date +%Y%m%d-%T-%u), \033[0m"
         STEP=$((${STEP:-0} + 1))
         color_off=' ... start'
+        ;;
+    stepend | end)
+        color_on="[+] $(date +%Y%m%d-%T-%u), "
+        color_off=' ... end'
         ;;
     *)
         color_on=''
@@ -145,20 +145,20 @@ _check_style() {
 }
 
 _scan_ZAP() {
-    _msg step "[ZAP] scan"
+    _msg step "[security] ZAP scan"
     echo '<skip>'
     # docker pull owasp/zap2docker-stable
 }
 
 _scan_vulmap() {
-    _msg step "[vulmap] scan"
+    _msg step "[security] vulmap scan"
     echo '<skip>'
     # https://github.com/zhzyker/vulmap
     # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
 }
 
 _deploy_flyway_docker() {
-    _msg step "[flyway] deploy database SQL files"
+    _msg step "[database] deploy SQL files with flyway"
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
     if [[ "${PIPELINE_FLYWAY:-0}" -ne 1 || "${exec_deploy_flyway:-0}" -ne 1 ]]; then
         echo '<skip>'
@@ -183,12 +183,12 @@ _deploy_flyway_docker() {
     else
         _msg error "Result = FAIL"
     fi
-    _msg stepend "[flyway] deploy database SQL files"
+    _msg stepend "[database] deploy SQL files with flyway"
 }
 
 _deploy_flyway_helm_job() {
     [[ "${ENV_FLYWAY_HELM_JOB:-0}" -ne 1 ]] && return
-    _msg step "[flyway] deploy database SQL with helm job"
+    _msg step "[database] deploy SQL with flyway helm job"
     echo "$image_tag_flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
@@ -198,7 +198,7 @@ _deploy_flyway_helm_job() {
     else
         _msg error "Result = FAIL"
     fi
-    _msg stepend "[flyway] deploy database SQL with helm job"
+    _msg stepend "[database] deploy SQL with flyway helm job"
 }
 
 # python-gitlab list all projects / 列出所有项目
@@ -801,31 +801,39 @@ _detect_os() {
 }
 
 _clean_disk() {
-    ## clean cache of docker build / 清理 docker 构建缓存
-    disk_usage="$(df / | awk 'NR>1 {print $5}' | sed 's/%//')"
-    if ((disk_usage < ${ENV_CLEAN_DISK:-80})); then
+    # Check disk usage and exit if below the threshold
+    local disk_usage
+    disk_usage=$(df / | awk 'NR==2 {print int($5)}')
+    local clean_disk_threshold=${ENV_CLEAN_DISK:-80}
+    if ((disk_usage < clean_disk_threshold)); then
         return 0
     fi
+
+    # Log disk usage and clean up docker images
     _log "$(df /)"
-    _msg warning "Disk space is less than 80%, remove docker images"
-    docker images "${ENV_DOCKER_REGISTRY}" -q | sort | uniq | xargs -I {} docker rmi -f {} || true
+    _msg warning "Disk space is less than ${clean_disk_threshold}%, removing docker images..."
+    docker images "${ENV_DOCKER_REGISTRY}" -q | sort -u | xargs -r docker rmi -f || true
     docker system prune -f >/dev/null || true
 }
 
 # https://github.com/sherpya/geolite2legacy
 # https://www.miyuru.lk/geoiplegacy
 # https://github.com/leev/ngx_http_geoip2_module
-get_maxmind_ip() {
-    t="$(mktemp -d)"
-    t1="$t/maxmind-Country.dat.gz"
-    t2="$t/maxmind-City.dat.gz"
-    curl -Lqso "$t1" https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz
-    curl -Lqso "$t2" https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz
-    gunzip "$t1" "$t2"
-    for ip in ${ENV_NGINX_IPS:?undefine var}; do
+_get_maxmind_ip() {
+    tmp_dir="$(mktemp -d)"
+    tmp_country="$tmp_dir/maxmind-Country.dat"
+    tmp_city="$tmp_dir/maxmind-City.dat"
+    curl -LqsSf https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz | gunzip -c >"$tmp_country"
+    curl -LqsSf https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz | gunzip -c >"$tmp_city"
+    if [[ -z "${ENV_NGINX_IPS}" ]]; then
+        _msg error "ENV_NGINX_IPS is not defined or is empty"
+        return 1
+    fi
+    for ip in ${ENV_NGINX_IPS}; do
         echo "$ip"
-        rsync -av "${t}/" "root@$ip":/etc/nginx/conf.d/
+        rsync -av "${tmp_dir}/" "root@$ip":/etc/nginx/conf.d/
     done
+    rm -rf "$tmp_dir"
 }
 
 _generate_apidoc() {
@@ -851,6 +859,7 @@ _inject_files() {
         done
         copy_flyway_file=0
     fi
+
     ## backend (PHP/Java/Python) project_conf files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}.${env_namespace}"
@@ -866,25 +875,25 @@ _inject_files() {
     echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-1}
     case ${ENV_ENABLE_INJECT:-1} in
     1)
-        ## Java, 公用的模版文件 Dockerfile, run.sh, settings.xml
+        ## Java, shared template files Dockerfile, run.sh, settings.xml
         if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
-            echo "Overwritten from data/dockerfile/Dockerfile.${project_lang}"
-            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}"/Dockerfile
+            echo "Overwriting from data/dockerfile/Dockerfile.${project_lang}"
+            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         fi
         if [[ "$project_lang" == java && "$ENV_IN_CHINA" == 'true' ]]; then
-            curl -fsSLo "$gitlab_project_dir"/settings.xml https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml
+            curl -fsSLo "${gitlab_project_dir}/settings.xml" "https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
         fi
         ;;
     2)
-        echo 'Not overwritten Dockerfile'
+        echo 'Not overwriting Dockerfile'
         ;;
     3)
-        echo 'Remove Dockerfile (disable docker build)'
-        rm -f "${gitlab_project_dir}"/Dockerfile
+        echo 'Removing Dockerfile (disabling docker build)'
+        rm -f "${gitlab_project_dir}/Dockerfile"
         ;;
     4)
-        echo "Generate docker-compose.yml (enable deply with docker-compose)"
-        echo '## deploy with docker-compose' >>"${gitlab_project_dir}"/docker-compose.yml
+        echo "Generating docker-compose.yml (enabling deployment with docker-compose)"
+        echo '## deploy with docker-compose' >>"${gitlab_project_dir}/docker-compose.yml"
         ;;
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
@@ -1060,40 +1069,67 @@ _probe_deploy_method() {
 }
 
 _checkout_svn_repo() {
-    [[ "${arg_svn_co:-0}" -eq 1 ]] || return 0
+    [[ "${arg_svn_checkout:-0}" -eq 1 ]] || return 0
     if [[ ! -d "$me_path_builds" ]]; then
         echo "Not found $me_path_builds, create it..."
-        mkdir -p builds
+        mkdir -p "$me_path_builds"
     fi
-    local path_git_clone="$me_path_builds/${arg_svn_co_url##*/}"
-    echo 'Coming soon...'
+    local svn_repo_name
+    svn_repo_name=$(echo "$arg_svn_checkout_url" | awk -F '/' '{print $NF}')
+    local svn_repo_dir="${me_path_builds}/${svn_repo_name}"
+    if [ -d "$svn_repo_dir" ]; then
+        echo "\"$svn_repo_dir\" exists"
+        cd "$svn_repo_dir" && svn update
+    else
+        echo "checkout svn repo: $arg_svn_checkout_url"
+        svn checkout "$arg_svn_checkout_url" "$svn_repo_dir" || {
+            echo "Failed to checkout svn repo: $arg_svn_checkout_url"
+            exit 1
+        }
+    fi
 }
 
 _clone_git_repo() {
     [[ "${arg_git_clone:-0}" -eq 1 ]] || return 0
     if [[ ! -d "$me_path_builds" ]]; then
         echo "Not found $me_path_builds, create it..."
-        mkdir -p builds
+        mkdir -p "$me_path_builds"
     fi
-    local path_git_clone="$me_path_builds/${arg_git_clone_url##*/}"
-    path_git_clone="${path_git_clone%.git}"
-    if [ ! -d "$path_git_clone" ]; then
+    local git_repo_name
+    git_repo_name=$(echo "$arg_git_clone_url" | awk -F '/' '{print $NF}')
+    local git_repo_dir="${me_path_builds}/${git_repo_name%.git}"
+    if [ -d "$git_repo_dir" ]; then
+        echo "\"$git_repo_dir\" exists"
+        cd "$git_repo_dir"
+        if [[ -n "$arg_git_clone_branch" ]]; then
+            git checkout --quiet "$arg_git_clone_branch" || {
+                echo "Failed to checkout $arg_git_clone_branch"
+                exit 1
+            }
+        fi
+    else
         echo "Clone git repo: $arg_git_clone_url"
-        git clone "$arg_git_clone_url" "${path_git_clone}"
-    fi
-    # echo "\"$path_git_clone\" exists"
-    cd "${path_git_clone}" || return 1
-    if [[ -n "$arg_git_clone_branch" ]]; then
-        git checkout "${arg_git_clone_branch}" || return 1
+        git clone --quiet -b "$arg_git_clone_branch" "$arg_git_clone_url" "$git_repo_dir" || {
+            echo "Failed to clone git repo: $arg_git_clone_url"
+            exit 1
+        }
     fi
 }
 
 _create_k8s() {
     [[ "$create_k8s" -eq 1 ]] || return 0
-    [ -d "$me_path_data/terraform" ] || return 0
-    _msg step "[terraform] create k8s"
-    cd "$me_path_data/terraform" && terraform init && terraform apply -auto-approve
-    exit $?
+    local terraform_dir="$me_path_data/terraform"
+    if [ ! -d "$terraform_dir" ]; then
+        return 0
+    fi
+    _msg step "[PaaS] create k8s cluster"
+    cd "$terraform_dir" || return 1
+    if terraform init; then
+        terraform apply -auto-approve
+    else
+        _msg error "Terraform init failed"
+        exit $?
+    fi
 }
 
 _usage() {
@@ -1155,9 +1191,9 @@ _process_args() {
         --renew-cert | -r)
             arg_renew_cert=1 && exec_single=$((exec_single + 1))
             ;;
-        --svn-co)
-            arg_svn_co=1
-            arg_svn_co_url="${2:?empty svn url}"
+        --svn-checkout)
+            arg_svn_checkout=1
+            arg_svn_checkout_url="${2:?empty svn url}"
             shift
             ;;
         --git-clone)
