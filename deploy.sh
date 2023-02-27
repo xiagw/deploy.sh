@@ -580,13 +580,15 @@ _renew_cert() {
 
 _get_balance_aliyun() {
     [[ "${github_action:-0}" -eq 1 ]] && return 0
+
     if [[ "${PIPELINE_GET_BALANCE:-0}" -eq 1 || "${arg_get_balance:-0}" -eq 1 ]]; then
         echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-0}"
     else
         return 0
     fi
+
     _msg step "check balance of aliyun"
-    alarm_balance=$ENV_ALARM_BALANCE_ALIYUN
+    local alarm_balance=${ENV_ALARM_BALANCE_ALIYUN:-3000}
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
         if [[ $ENV_TAKE_ALIYUN_PROFILE =~ $p ]]; then
             echo "Aliyun profile is: $p"
@@ -596,10 +598,13 @@ _get_balance_aliyun() {
         # if [[ $ENV_SKIP_ALIYUN_PROFILE =~ $p ]]; then
         #     continue
         # fi
+        local amount
         amount="$(aliyun -p "$p" bssopenapi QueryAccountBalance 2>/dev/null | jq -r .Data.AvailableAmount | sed 's/,//')"
-        [[ -z "$amount" ]] && continue
+        if [[ -z "$amount" ]]; then
+            continue
+        fi
         _msg red "Current balance: $amount"
-        if [[ $(echo "$amount < $alarm_balance" | bc) -eq 1 ]]; then
+        if [[ "$amount" -lt "$alarm_balance" ]]; then
             msg_body="Aliyun账号:$p 当前余额 $amount, 需要充值。"
             weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$ENV_ALARM_WEIXIN_KEY"
             curl -s "$weixin_api" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}"
@@ -614,14 +619,23 @@ _get_balance_aliyun() {
 
 _install_python_gitlab() {
     python3 -m pip list 2>/dev/null | grep -q python-gitlab && return
-    _msg info "install python3 gitlab api..."
+    _msg info "installing python3 gitlab api..."
     python3 -m pip install --user --upgrade python-gitlab
+    if python3 -m pip install --user --upgrade python-gitlab; then
+        _msg info "python-gitlab is installed successfully"
+    else
+        _msg error "failed to install python-gitlab"
+    fi
 }
 
 _install_python_element() {
     python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
-    _msg info "install python3 element api..."
-    python3 -m pip install --user --upgrade matrix-nio
+    _msg info "installing python3 element api..."
+    if python3 -m pip install --user --upgrade matrix-nio; then
+        _msg info "matrix-nio is installed successfully"
+    else
+        _msg error "failed to install matrix-nio"
+    fi
 }
 
 _install_aliyun_cli() {
@@ -642,46 +656,53 @@ _install_jq_cli() {
 
 _install_terraform() {
     command -v terraform >/dev/null && return
-    _msg info "install terraform..."
+    _msg info "installing terraform..."
     [[ $UID -eq 0 ]] || use_sudo=sudo
-    $use_sudo apt-get update && $use_sudo apt-get install -qq -y gnupg software-properties-common curl
-    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    $use_sudo apt-get update -qq && $use_sudo apt-get install -qq -y gnupg software-properties-common curl
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null 2>&1
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
-        $use_sudo tee /etc/apt/sources.list.d/hashicorp.list
-    $use_sudo apt-get update && $use_sudo apt-get install -qq -y terraform
+        $use_sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null 2>&1
+    $use_sudo apt-get update -qq && $use_sudo apt-get install -qq -y terraform
     # terraform version
+    _msg info "terraform installed successfully!"
 }
 
 _install_aws() {
     command -v aws >/dev/null && return
-    _msg info "install aws cli..."
-    curl -Lo "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
-    unzip -qq awscliv2.zip
-    ./aws/install --bin-dir "${me_path_data_bin}" --install-dir "${me_path_data}" --update
+    _msg info "installing aws cli..."
+    curl -Lo "/tmp/awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    unzip -qq /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install --bin-dir "${me_path_data_bin}" --install-dir "${me_path_data}" --update
+    rm -rf /tmp/aws
     ## install eksctl / 安装 eksctl
     curl -L "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
     mv /tmp/eksctl "${me_path_data_bin}/"
+    chmod +x "${me_path_data_bin}/eksctl"
 }
 
 _install_kubectl() {
     command -v kubectl >/dev/null && return
-    _msg info "install kubectl..."
+    _msg info "installing kubectl..."
     kube_ver="$(curl -L --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    curl -Lo "${me_path_data_bin}/kubectl" "$kube_url"
+    if ! curl -Lo "${me_path_data_bin}/kubectl" "$kube_url"; then
+        _msg error "failed to download kubectl"
+        return 1
+    fi
     chmod +x "${me_path_data_bin}/kubectl"
 }
 
 _install_helm() {
     command -v helm >/dev/null && return
-    _msg info "install helm..."
-    curl -L https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+    _msg info "installing helm..."
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
 _install_jmeter() {
     command -v jmeter >/dev/null && return
     _msg info "install jmeter..."
-    ver_jmeter='5.4.1'
+    local ver_jmeter='5.4.1'
+    local path_temp
     path_temp=$(mktemp -d)
 
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
@@ -705,7 +726,7 @@ _install_jmeter() {
     curl --retry -C - -Lo "$path_temp"/jmeter.zip $url_jmeter
     (
         cd "$me_path_data"
-        unzip "$path_temp"/jmeter.zip
+        unzip -q "$path_temp"/jmeter.zip
         ln -sf apache-jmeter-${ver_jmeter} jmeter
     )
     rm -rf "$path_temp"
@@ -713,11 +734,15 @@ _install_jmeter() {
 
 _install_flarectl() {
     command -v flarectl >/dev/null && return
-    _msg info "install flarectl"
+    _msg info "installing flarectl"
     local ver='0.52.0'
-    path_temp=$(mktemp -d)
-    curl -Lo "$path_temp"/flarectl.zip https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz
-    tar xf "$path_temp"/flarectl.zip -C "${me_path_data_bin}/"
+    local download_url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz"
+
+    if ! curl -sSL "${download_url}" | tar xJf - -C "${me_path_data_bin}/" flarectl; then
+        _msg error "failed to download and install flarectl"
+        return 1
+    fi
+    _msg success "flarectl installed successfully"
 }
 
 _detect_os() {
