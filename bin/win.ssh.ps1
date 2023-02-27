@@ -77,3 +77,14 @@ Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEM
 
 ## install powershell 7
 # winget install --id Microsoft.Powershell --source winget
+
+## install Remote Server Administrator
+# Get-WindowsCapability -Online -Name 'Rsat.Server*' | Add-WindowsCapability -Online
+
+## windows auto login
+# $RegPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+# $DefaultUsername = "{windowsUser.user}"
+# $DefaultPassword = "{windowsUser.password}"
+# Set-ItemProperty $RegPath "AutoAdminLogon" -Value "1" -type String
+# Set-ItemProperty $RegPath "DefaultUsername" -Value "$DefaultUsername" -type String
+# Set-ItemProperty $RegPath "DefaultPassword" -Value "$DefaultPassword" -type String
