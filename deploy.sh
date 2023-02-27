@@ -1244,24 +1244,20 @@ main() {
     [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"
     [[ -f "$me_env" ]] || cp "${me_path_conf}/example-deploy.env" "$me_env"
     ## 设定 PATH
-    if [[ -d /usr/local/sbin && ! $PATH == */usr/local/sbin* ]]; then
-        PATH=${PATH:+${PATH}}:/usr/local/sbin
-    fi
-    if [[ -d /snap/bin && ! $PATH == */snap/bin* ]]; then
-        PATH=${PATH:+${PATH}}:/snap/bin
-    fi
-    if [[ -d $me_path_bin && ! $PATH == *${me_path_bin}* ]]; then
-        PATH=${PATH:+${PATH}}:$me_path_bin
-    fi
-    if [[ -d $me_path_data_bin && ! $PATH == *${me_path_data_bin}* ]]; then
-        PATH=${PATH:+${PATH}}:$me_path_data_bin
-    fi
-    if [[ -d $HOME/.local/bin && ! $PATH == *$HOME/.local/bin* ]]; then
-        PATH=${PATH:+${PATH}}:$HOME/.local/bin
-    fi
-    if [[ -d $HOME/.config/composer/vendor/bin && ! $PATH == *$HOME/.config/composer/vendor/bin* ]]; then
-        PATH=${PATH:+${PATH}}:$HOME/.config/composer/vendor/bin
-    fi
+    declare -a paths_to_append=(
+        "/usr/local/sbin"
+        "/snap/bin"
+        "$me_path_bin"
+        "$me_path_data_bin"
+        "$HOME/.local/bin"
+        "$HOME/.config/composer/vendor/bin"
+    )
+    for p in "${paths_to_append[@]}"; do
+        if [[ -d "$p" && "$PATH" != *":$p:"* ]]; then
+            PATH="${PATH:+"$PATH:"}$p"
+        fi
+    done
+
     export PATH
 
     docker_run="docker run --interactive --rm -u 1000:1000"
