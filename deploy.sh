@@ -724,22 +724,15 @@ _detect_os() {
     if [[ "$UID" != 0 ]]; then
         exec_sudo=sudo
     fi
-    if [[ -e /etc/debian_version ]]; then
-        source /etc/os-release
-        OS="${ID}" # debian or ubuntu
-    elif [[ -e /etc/fedora-release ]]; then
-        source /etc/os-release
-        OS="${ID}"
+    if [[ -e /etc/os-release ]]; then
+        OS="$(source /etc/os-release && echo ${ID})"
     elif [[ -e /etc/centos-release ]]; then
         OS=centos
     elif [[ -e /etc/arch-release ]]; then
         OS=arch
-    elif [[ -e /etc/os-release ]]; then
-        source /etc/os-release
-        OS="${ID}"
     else
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        _msg error "Not support. exit."
+        _msg error "Unsupported. exit."
         return 1
     fi
 
@@ -790,7 +783,7 @@ _detect_os() {
         ;;
     *)
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        _msg error "Not support. exit."
+        _msg error "Unsupported. exit."
         return 1
         ;;
     esac
