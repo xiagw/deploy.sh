@@ -894,18 +894,21 @@ _inject_files() {
     if [[ "${gitlab_project_name}" == *"$ENV_NGINX_GIT_NAME"* && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
         rsync -av "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
     fi
+
     ## flyway files sql & conf
     for sql in ${ENV_FLYWAY_SQL:-docs/sql} flyway_sql doc/sql sql; do
-        path_flyway_sql_proj="${gitlab_project_dir}/$sql"
+        path_flyway_sql_proj="${gitlab_project_dir}/${sql}"
         if [[ -d "${path_flyway_sql_proj}" ]]; then
             exec_deploy_flyway=1
             copy_flyway_file=1
             break
-        else
-            exec_deploy_flyway=0
-            copy_flyway_file=0
         fi
     done
+    if [[ -z "${exec_deploy_flyway}" ]]; then
+        exec_deploy_flyway=0
+        copy_flyway_file=0
+    fi
+
     if [[ "${copy_flyway_file:-0}" -eq 1 ]]; then
         path_flyway_conf="$gitlab_project_dir/flyway_conf"
         path_flyway_sql="$gitlab_project_dir/flyway_sql"
@@ -929,17 +932,13 @@ _set_deploy_conf() {
         _msg warning "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
         _msg purple "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
-        [ -d "$HOME/.ssh" ] || ln -sf "$path_conf_ssh" "$HOME/"
     fi
+    [ -d "$HOME"/.ssh ] || mkdir -m 700 "$HOME"/.ssh
     for file in "$path_conf_ssh"/*; do
-        [ -f "$HOME/.ssh/${file##*/}" ] && continue
-        if [ ! -d "$HOME"/.ssh ]; then
-            mkdir "$HOME"/.ssh
-            chmod 700 "$HOME"/.ssh
-        fi
+        [ -f "$HOME/.ssh/$(basename "${file}")" ] && continue
         echo "Link $file to $HOME/.ssh/"
         chmod 600 "${file}"
-        ln -sf "${file}" "$HOME/.ssh/"
+        ln -s "${file}" "$HOME/.ssh/"
     done
     ## acme.sh/aws/kube/aliyun/python-gitlab
     [[ ! -d "${HOME}/.acme.sh" && -d "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
@@ -962,8 +961,14 @@ _setup_gitlab_vars() {
     gitlab_project_branch=${gitlab_project_branch:-develop}
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
     if [[ -z "$gitlab_commit_short_sha" ]]; then
-        [[ "${github_action:-0}" -eq 1 ]] && gitlab_commit_short_sha=${gitlab_commit_short_sha:-1234567}
-        [[ "${debug_on:-0}" -eq 1 ]] && read -rp "Enter commit short hash: " -e -i 'xxxxxx' gitlab_commit_short_sha
+        if [[ "${github_action:-0}" -eq 1 ]]; then
+            gitlab_commit_short_sha=${gitlab_commit_short_sha:-1234567}
+        elif [[ "${debug_on:-0}" -eq 1 ]]; then
+            read -rp "Enter commit short hash: " -e -i '1234567' gitlab_commit_short_sha
+        else
+            _msg red "Error: gitlab_commit_short_sha is not set"
+            return 1
+        fi
     fi
     # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
     gitlab_project_id=${CI_PROJECT_ID:-1234}
@@ -975,15 +980,18 @@ _setup_gitlab_vars() {
     gitlab_user_id=${GITLAB_USER_ID:-1}
     gitlab_username="${GITLAB_USER_LOGIN:-unknown}"
     env_namespace=$gitlab_project_branch
+
     if [[ $run_crontab -eq 1 ]]; then
-        cron_save_file="$(find ${me_path_data} -name "crontab.${gitlab_project_id}.*" | head -n 1)"
-        cron_save_id="${cron_save_file##*.}"
-        if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
-            _msg warn "no code change found, <skip>."
-            exit 0
-        else
-            rm -f "${me_path_data}/crontab.${gitlab_project_id}".*
-            touch "${me_path_data}/crontab.${gitlab_project_id}.${gitlab_commit_short_sha}"
+        cron_save_file="$(find "${me_path_data}" -name "crontab.${gitlab_project_id}.*" -print -quit)"
+        if [[ -n "$cron_save_file" ]]; then
+            cron_save_id="${cron_save_file##*.}"
+            if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
+                _msg warn "no code change found, <skip>."
+                exit 0
+            else
+                rm -f "${me_path_data}/crontab.${gitlab_project_id}".*
+                touch "${me_path_data}/crontab.${gitlab_project_id}.${gitlab_commit_short_sha}"
+            fi
         fi
     fi
 }
