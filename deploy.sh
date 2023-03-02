@@ -531,9 +531,11 @@ _renew_cert() {
 
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     for account in "${acme_home}/"account.conf.*; do
-        [ -f "$account" ] || continue
+        if [ ! -f "$account" ]; then
+            continue
+        fi
         if [ -f "$conf_dns_cloudflare" ]; then
-            if ! command -v flarectl; then
+            if ! command -v flarectl >/dev/null 2>&1; then
                 _msg warning "command not found: flarectl "
                 return 1
             fi
@@ -542,6 +544,7 @@ _renew_cert() {
             dnsType='dns_cf'
         elif [ -f "$conf_dns_aliyun" ]; then
             _install_aliyun_cli
+
             source "$conf_dns_aliyun" "${account##*.}"
             aliyun configure set --profile "deploy${account##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
             domains="$(aliyun --profile "deploy${account##*.}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
@@ -566,16 +569,16 @@ _renew_cert() {
     _reload_nginx_gitlab
 
     ## Custom deployment method / 自定义部署方式
-    if [ -f "${acme_home}"/custom.acme.sh ]; then
+    if [[ -f "${acme_home}/custom.acme.sh" ]]; then
         echo "Found ${acme_home}/custom.acme.sh"
-        bash "${acme_home}"/custom.acme.sh
+        bash "${acme_home}/custom.acme.sh"
     fi
+
     _msg stepend "[cert] renew cert with acme.sh using dns+api"
-    if [[ "${exec_single:-0}" -gt 0 ]]; then
-        exit 0
-    else
-        :
-    fi
+
+    [[ "${exec_single:-0}" -gt 0 ]] && exit 0
+
+    return 0
 }
 
 _get_balance_aliyun() {

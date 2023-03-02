@@ -12,7 +12,7 @@ RUN set -xe \
 RUN set -xe && mvn -T 1C clean -U package -DskipTests -Dmaven.compile.fork=true
 RUN mkdir /jar_file \
     && find . -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' -exec cp {} /jar_file/ \; \
-    && rm -f /jar_file/framework* /jar_file/gdp-module* /jar_file/sdk*.jar
+    && rm -f /jar_file/framework* /jar_file/gdp-module* /jar_file/sdk*.jar /jar_file/*-common-*.jar /jar_file/*-dao-*.jar
 
 FROM openjdk:8u332 as RUNTIME
 ## set startup profile
