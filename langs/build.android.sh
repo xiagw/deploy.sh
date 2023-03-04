@@ -14,3 +14,21 @@ main | master)
     fastlane beta
     ;;
 esac
+
+# write shell function:
+# 1, build android code
+_build_android() {
+    # Set the Android SDK and NDK paths
+    export ANDROID_HOME=/path/to/android/sdk
+    export ANDROID_NDK_HOME=/path/to/android/ndk
+
+    # Set the build type and variant
+    local build_type="${1:-debug}"
+    local build_variant="${2:-dev}"
+
+    # Set the project directory
+    local project_dir="/path/to/android/project"
+
+    # Build the project
+    cd "$project_dir" && ./gradlew assemble${build_variant^}${build_type^}
+}
