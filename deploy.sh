@@ -145,17 +145,62 @@ _check_style() {
     fi
 }
 
-_scan_ZAP() {
-    _msg step "[security] ZAP scan"
-    echo '<skip>'
-    # docker pull owasp/zap2docker-stable
+_scan_zap() {
+    _msg step "[security] run ZAP scan"
+    echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-0}"
+    if [[ "${PIPELINE_SCAN_ZAP:-0}" -ne 1 ]]; then
+        echo '<skip>'
+        return
+    fi
+
+    local target_url="${ENV_TARGET_URL}"
+    local zap_docker_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
+    local zap_options="${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
+    local zap_report_file
+    zap_report_file="zap_report_$(date +%Y%m%d_%H%M%S).html"
+
+    # docker pull "$zap_docker_image"
+    docker run -t --rm -v "$(pwd):/zap/wrk" "$zap_docker_image" zap-full-scan.sh $zap_options
+    if [[ $? -eq 0 ]]; then
+        mv "$zap_report_file" "zap_report_latest.html"
+        _msg green "ZAP scan completed. Report saved to zap_report_latest.html"
+    else
+        _msg error "ZAP scan failed."
+    fi
+    _msg stepend "[security] run ZAP scan"
 }
+# _security_scan_zap "http://example.com" "my/zap-image" "-t http://example.com -r report.html -x report.xml"
 
 _scan_vulmap() {
     _msg step "[security] vulmap scan"
-    echo '<skip>'
+    echo "PIPELINE_SCAN_VULMAP: ${PIPELINE_SCAN_VULMAP:-0}"
+    if [[ "${PIPELINE_SCAN_VULMAP:-0}" -ne 1 ]]; then
+        echo '<skip>'
+        return
+    fi
     # https://github.com/zhzyker/vulmap
     # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
+    # Load environment variables from config file
+    source $me_path_data/config.cfg
+    # Run vulmap scan
+    docker run --rm -v "${PWD}:/work" vulmap \
+        -u "${ENV_TARGET_URL}" \
+        -o "/work/vulmap_report.html"
+
+    # Display scan results
+    if [[ -f "vulmap_report.html" ]]; then
+        echo "Vulmap scan complete. Results saved to 'vulmap_report.html'."
+    else
+        echo "Vulmap scan failed or no vulnerabilities found."
+    fi
+}
+
+# _check_gitleaks /path/to/repo /path/to/config.toml
+_check_gitleaks() {
+    local path="$1"
+    local config_file="$2"
+
+    docker run --rm -v "$path:/repo" -v "$config_file:/config.toml" zricethezav/gitleaks:v7.5.0 gitleaks --path=/repo --config=/config.toml
 }
 
 _deploy_flyway_docker() {
@@ -264,8 +309,19 @@ _build_image_docker() {
 
 _build_image_podman() {
     _msg step "[container] build image with podman"
-    echo '<skip>'
-    # _msg stepend "[TODO] [podman] build image"
+    local image_name="$1"
+    local image_tag="$2"
+    local dockerfile_path="$3"
+    local podman_registry="$4"
+
+    # Build image
+    podman build -f "$dockerfile_path" -t "$image_name:$image_tag" .
+
+    # Tag image for remote registry
+    podman tag "$image_name:$image_tag" "$podman_registry/$image_name:$image_tag"
+
+    # Push image to remote registry
+    podman push "$podman_registry/$image_name:$image_tag"
 }
 
 _push_image() {
@@ -414,19 +470,52 @@ _deploy_rsync_ssh() {
 
 _deploy_aliyun_oss() {
     _msg step "[deploy] deploy files to aliyun oss"
+    # Check if deployment is enabled
+    if [[ "${DEPLOYMENT_ENABLED:-0}" -ne 1 ]]; then
+        echo '<skip>'
+        return
+    fi
+
+    # Read config file
+    source $me_path_conf/aliyun.oss.conf
+
+    # Check if OSS CLI is installed
+    if ! command -v ossutil >/dev/null 2>&1; then
+        echo 'ossutil is not installed. Please install it before deploying to Aliyun OSS.'
+        return
+    fi
+
+    # Deploy files to Aliyun OSS
+    _msg step "[oss] deploy files to Aliyun OSS"
+    _msg time "Start time: $(date +'%F %T')"
+    ossutil cp -r "${LOCAL_DIR}" "oss://${BUCKET_NAME}/${REMOTE_DIR}" --config="${OSS_CONFIG_FILE}"
+    if [[ $? -eq 0 ]]; then
+        _msg green "Result = OK"
+    else
+        _msg error "Result = FAIL"
+    fi
+    _msg time "End time: $(date +'%F %T')"
+    _msg stepend "[oss] deploy files to Aliyun OSS"
 }
 
 _deploy_rsync() {
     _msg step "[deploy] deploy files to rsyncd server"
+    # Load configuration from file
+    CONFIG_FILE="$me_path_data/rsyncd.conf"
+    source "$CONFIG_FILE"
+
+    # Deploy files with rsync
+    RSYNC_OPTIONS="-avz"
+    rsync $RSYNC_OPTIONS --exclude-from="$EXCLUDE_FILE" "$SOURCE_DIR/" "$RSYNC_USER@$RSYNC_HOST::$TARGET_DIR"
 }
 
 _deploy_ftp() {
     _msg step "[deploy] deploy files to ftp server"
-    return
     upload_file="${gitlab_project_dir}/ftp.tgz"
     tar czvf "${upload_file}" -C "${gitlab_project_dir}" .
-    ftp -v -n "${ssh_host}" <<EOF
-user your_name your_pass
+    ftp -inv "${ssh_host}" <<EOF
+user $FTP_USERNAME $FTP_PASSWORD
+cd $FTP_DIRECTORY
 passive on
 binary
 delete $upload_file
@@ -454,6 +543,19 @@ Who = ${gitlab_user_id}/${gitlab_username}
 Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
 $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi)
 "
+}
+
+_deploy_notify_zoom() {
+    # Send message to Zoom channel
+    # ENV_ZOOM_CHANNEL="https://api.zoom.us/v2/im/chat/messages"
+    #
+    curl -X POST -H "Content-Type: application/json" -d '{"text": "'"${msg_body}"'"}' "${ENV_ZOOM_CHANNEL}"
+}
+
+_deploy_notify_feishu(){
+    # Send message to Feishu
+    # ENV_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-url"
+    curl -X POST -H "Content-Type: application/json" -d '{"text": "'"$msg_body"'"}' "$ENV_WEBHOOK_URL"
 }
 
 _deploy_notify() {
@@ -1453,7 +1555,7 @@ main() {
     _test_function
 
     ## 安全扫描
-    _scan_ZAP
+    _scan_zap
     _scan_vulmap
 
     ## deploy notify info / 发布通知信息
