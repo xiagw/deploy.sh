@@ -30,12 +30,12 @@ _die() {
     exit "$code"
 }
 
-_get_yes_no() {
-    read -rp "${1:-Confirm the action?} [y/N] " read_yes_no
-    if [[ ${read_yes_no:-n} =~ ^(y|Y|yes|YES)$ ]]; then
-        return 0
+_get_confirm() {
+    read -rp "${1:-Do you want to proceed?} [y/N] " confirm_choice
+    if [[ ${confirm_choice:-n} =~ ^(y|Y|yes|YES)$ ]]; then
+        return 0 # true
     else
-        return 1
+        return 1 # false
     fi
 }
 
@@ -89,7 +89,7 @@ EOF
 
 _myself() {
     me_name="$(basename "${BASH_SOURCE[0]}")"
-    me_path="$(dirname "$(readlink -f "$0")")"
+    me_path="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
     me_log="${me_path}/${me_name}.log"
     [ -w "$me_path" ] || me_log="/tmp/${me_name}.log"
     [[ "$enable_log" -eq 1 ]] && echo "Log file is \"$me_log\""
