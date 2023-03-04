@@ -13,7 +13,8 @@ set -e ## 出现错误自动退出
 # set -u ## 变量未定义报错
 
 _msg() {
-    color_off='\033[0m' # Text Reset
+    local color_on
+    local color_off='\033[0m' # Text Reset
     case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
     green | info) color_on='\033[0;32m' ;;             # Green
@@ -35,13 +36,13 @@ _msg() {
         color_off=' ... end'
         ;;
     *)
-        color_on=''
-        color_off=''
-        need_shift=0
+        color_on=
+        color_off=
         ;;
     esac
-    [ "${need_shift:-1}" -eq 1 ] && shift
-    need_shift=1
+    if [ "$#" -gt 1 ]; then
+        shift
+    fi
     echo -e "${color_on}$*${color_off}"
 }
 
@@ -102,15 +103,15 @@ _check_quality_sonar() {
         echo "<skip>"
         return 0
     fi
-    sonar_url="${ENV_SONAR_URL:?empty}"
-    sonar_conf="$gitlab_project_dir/sonar-project.properties"
-    if ! curl "$sonar_url" >/dev/null 2>&1; then
+    local sonar_url="${ENV_SONAR_URL:?empty}"
+    local sonar_conf="$gitlab_project_dir/sonar-project.properties"
+    if ! curl --silent --head --fail "$sonar_url" >/dev/null 2>&1; then
         _msg warning "Could not found sonarqube server, exit."
         return
     fi
 
     if [[ ! -f "$sonar_conf" ]]; then
-        echo "Not found $sonar_conf, create it"
+        _msg info "Creating $sonar_conf"
         cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
 sonar.projectKey=${gitlab_project_namespace}_${gitlab_project_name}
@@ -176,7 +177,7 @@ _deploy_flyway_docker() {
         $flyway_docker_run migrate || deploy_result=1
         $flyway_docker_run info | tail -n 10
     else
-        echo "Nothing to do."
+        _msg warning "No SQL migrations to apply."
     fi
     if [ ${deploy_result:-0} = 0 ]; then
         _msg green "Result = OK"
@@ -208,23 +209,29 @@ _deploy_flyway_helm_job() {
 
 _docker_login() {
     local lock_docker_login="$me_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
+    local time_last
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if [[ "${ENV_DOCKER_LOGIN_TYPE:-none}" == 'aws' ]]; then
-        # time_last="$(if [[ -f "$lock_docker_login" ]]; then cat "$lock_docker_login"; else echo 0; fi)"
-        time_last="$(stat -t -c %Y "$lock_docker_login")"
+    case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
+    aws)
+        time_last="$(stat -t -c %Y "$lock_docker_login" 2>/dev/null || echo 0)"
         ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
-        [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]] && return 0
+        if [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]]; then
+            return 0
+        fi
         _msg time "[login] docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
-        str_docker_login="docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*}"
-        aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | $str_docker_login >/dev/null
-    else
+        aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*} >/dev/null
+        ;;
+    *)
         if [[ "${demo_mode:-0}" == 1 ]]; then
             _msg purple "demo mode, skip docker login."
             return 0
         fi
-        [[ -f "$lock_docker_login" ]] && return 0
+        if [[ -f "$lock_docker_login" ]]; then
+            return 0
+        fi
         echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"
-    fi
+        ;;
+    esac
     touch "$lock_docker_login"
 }
 
