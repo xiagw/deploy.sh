@@ -19,11 +19,11 @@ Start-Service sshd
 Set-Service -Name sshd -StartupType 'Automatic'
 
 # Confirm the Firewall rule is configured. It should be created automatically by setup. Run the following to verify
-if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled)) {
+if (Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled) {
+    Write-Output "Firewall rule 'OpenSSH-Server-In-TCP' has been created and exists."
+} else {
     Write-Output "Firewall Rule 'OpenSSH-Server-In-TCP' does not exist, creating it..."
     New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
-} else {
-    Write-Output "Firewall rule 'OpenSSH-Server-In-TCP' has been created and exists."
 }
 
 ## 默认 shell 设置为 powershell.exe：
@@ -57,9 +57,13 @@ Get-Service ssh-agent
 # irm get.scoop.sh | iex
 
 ## oh my posh
-Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
-New-Item -Path $PROFILE -Type File -Force
-Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
+if (oh-my-posh.exe --version) {
+    Write-Host "oh-my-posh already installed"
+} else {
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
+    New-Item -Path $PROFILE -Type File -Force
+    Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
+}
 # winget install JanDeDobbeleer.OhMyPosh --source winget
 # scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
 
