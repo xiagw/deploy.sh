@@ -11,11 +11,10 @@ _new_user() {
         domain_name="${2:-example.com}"
     fi
     ## generate password
-    password_rand="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
+    # password_rand="$(date | $bin_hash | base64 | head -c10)"
+    password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
     if [ -z "$password_rand" ]; then
-        command -v md5sum >/dev/null && bin_hash=md5sum
-        command -v sha256sum >/dev/null && bin_hash=sha256sum
-        password_rand="$(date | ${bin_hash:?empty} | base64 | cut -c 1-10)"
+        password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c10)
     fi
     ## create user
     gitlab user create \

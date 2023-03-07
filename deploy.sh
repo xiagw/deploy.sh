@@ -1548,7 +1548,7 @@ main() {
     ## deploy sftp server
     [[ "${exec_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
     ## deploy with rsync / 使用 rsync 发布
-    [[ "$ENV_DISABLE_RSYNC" -eq 1 ]] && exec_deploy_rsync_ssh=0
+    [[ "${ENV_DISABLE_RSYNC:-0}" -eq 1 ]] && exec_deploy_rsync_ssh=0
     [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
 
     ## function test / 功能测试
