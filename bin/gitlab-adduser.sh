@@ -10,11 +10,14 @@ _new_user() {
         user_name="$1"
         domain_name="${2:-example.com}"
     fi
+    command -v md5sum >/dev/null && bin_hash=md5sum
+    command -v sha256sum >/dev/null && bin_hash=sha256sum
+    command -v md5 >/dev/null && bin_hash=md5
     ## generate password
-    # password_rand="$(date | $bin_hash | base64 | head -c10)"
-    password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
+    # password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
+    password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c10)
     if [ -z "$password_rand" ]; then
-        password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c10)
+        password_rand="$(echo "$RANDOM$(date)$RANDOM" | $bin_hash | base64 | head -c10)"
     fi
     ## create user
     gitlab user create \
@@ -36,6 +39,8 @@ _add_group_member() {
     gitlab group list
     # read -rp "Enter group id: " group_id
     user_id="$(gitlab user list | grep -B1 "$user_name" | awk '/^id:/ {print $2}')"
+    echo
+    echo "################"
     select group_id in $(gitlab group list | awk '/^id:/ {print $2}') quit; do
         [ $group_id == quit ] && break
         gitlab group-member create --group-id "$group_id" --access-level 30 --user-id "$user_id"
