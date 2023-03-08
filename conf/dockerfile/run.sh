@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+_msg(){
+    echo "[$(date)], $*"
+}
+_log(){
+    echo "[$(date)], $*" | tee -a "$app_log"
+}
+
 _start_java() {
     ## 修改内存占用值，
     [ -z "$JAVA_OPTS" ] && JAVA_OPTS='java -Xms256m -Xmx384m'
@@ -28,7 +35,7 @@ _start_java() {
                 break
             fi
         done
-        echo "${cj}. start $jar $config_yml ..."
+        _msg "${cj}. start $jar $config_yml ..."
         if [ "$profile_name" ]; then
             $JAVA_OPTS -jar "$jar" "$profile_name" &>>"$app_log" &
         elif [ "$config_yml" ]; then
@@ -57,12 +64,12 @@ _start_php() {
         exec apachectl -k start -D FOREGROUND
         pids="${pids} $!"
     else
-        echo "Not found php."
+        _msg "Not found php."
     fi
 }
 
 _kill() {
-    echo "[WARN] Receive SIGTERM, kill $pids"
+    _msg "[WARN] Receive SIGTERM, kill $pids"
     for pid in $pids; do
         kill "$pid"
         wait "$pid"
@@ -102,7 +109,7 @@ main() {
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then start_nohup=1; fi
     [ -d "$app_path"/log ] || mkdir "$app_path"/log
-    echo "$(date), startup ..." | tee -a "$app_log"
+    _msg "startup ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT QUIT TERM
     ## 统一兼容启动 start php
