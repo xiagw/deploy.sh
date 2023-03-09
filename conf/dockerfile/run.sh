@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-_msg(){
+_msg() {
     echo "[$(date)], $*"
 }
-_log(){
+
+_log() {
     echo "[$(date)], $*" | tee -a "$app_log"
 }
 
@@ -17,6 +18,7 @@ _start_java() {
     for f in "$app_path"/profile.*; do
         [[ -f "$f" ]] || continue
         profile_name="--spring.profiles.active=${f##*.}"
+        _msg "try using $profile_name"
         break
     done
 
@@ -50,7 +52,7 @@ _start_java() {
 _start_php() {
     [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
     [ -d /run/php ] || mkdir -p /run/php 2>/dev/null
-    [ -d /var/www/html ] || mkdir /var/www/html
+    [ -d /var/www/html ] || mkdir -p /var/www/html
     [ -f /var/www/html/index.html ] || date >>/var/www/html/index.html
 
     ## start php-fpm*
@@ -103,11 +105,17 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
-    if [ -d /app ]; then app_path="/app"; else app_path="$me_path"; fi
-    if [ -w "$app_path" ]; then app_log="$app_path/${me_name}.log"; else app_log="/tmp/${me_name}.log"; fi
+    app_path="/app"
+    if [ -w "$app_path" ]; then
+        app_log="$app_path/${me_name}.log"
+    else
+        app_log="/tmp/${me_name}.log"
+    fi
 
     ## 适用于 nohup 独立启动
-    if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then start_nohup=1; fi
+    if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then
+        start_nohup=1
+    fi
     [ -d "$app_path"/log ] || mkdir "$app_path"/log
     _msg "startup ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
