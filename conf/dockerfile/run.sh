@@ -50,11 +50,6 @@ _start_java() {
 }
 
 _start_php() {
-    [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
-    [ -d /run/php ] || mkdir -p /run/php 2>/dev/null
-    [ -d /var/www/html ] || mkdir -p /var/www/html
-    [ -f /var/www/html/index.html ] || date >>/var/www/html/index.html
-
     ## start php-fpm*
     for i in /usr/sbin/php-fpm*; do
         [ -x "$i" ] && exec $i ## php-fpm -F, 前台启动
