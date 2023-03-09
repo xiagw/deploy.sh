@@ -29,7 +29,7 @@ _start_java() {
         ## !!!! 注意 !!!!, 自动探测 yml 配置文件, 按文件名自动排序对应 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
         cy=0
         config_yml=
-        for y in "$app_path"/*.yml; do
+        for y in "$app_path"/*.yml "$app_path"/*.yaml; do
             [[ -f "$y" ]] || continue
             cy=$((cy + 1))
             if [[ "$cj" -eq "$cy" ]]; then
