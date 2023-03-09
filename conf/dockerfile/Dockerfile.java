@@ -11,7 +11,7 @@ RUN set -xe \
     # && curl -Lo /root/.m2/settings.xml $SETTINGS \
     && [ -f docs/settings.xml ] && cp -vf docs/settings.xml /root/.m2/ || true \
     && [ -f settings.xml ] && cp -vf settings.xml /root/.m2/ || true
-RUN set -xe && mvn -T 1C clean -U package -DskipTests -Dmaven.compile.fork=true
+RUN mvn -T 1C clean -U package -DskipTests -Dmaven.compile.fork=true
 WORKDIR /jar_file
 RUN find /src -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' -exec cp {} ./ \; \
     && rm -f ./framework* ./gdp-module* sdk*.jar ./*-commom-*.jar ./*-dao-*.jar ./lop-opensdk*.jar ./core-*.jar
@@ -39,7 +39,7 @@ ARG FONTS=http://cdn.flyh6.com/docker/fonts-2022.tgz
 
 RUN if [ "$INSTALL_FONTS" = true ]; then \
     sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
-    && apt-get update && apt-get install -y --no-install-recommends fontconfig \
+    && apt-get update -q && apt-get install -y -q --no-install-recommends fontconfig \
     && fc-cache --force \
     && curl -Lo /tmp/fonts.tgz --referer http://www.flyh6.com/ $FONTS \
     && tar -zxf /tmp/fonts.tgz -C /usr/share \

@@ -552,7 +552,7 @@ _deploy_notify_zoom() {
     curl -X POST -H "Content-Type: application/json" -d '{"text": "'"${msg_body}"'"}' "${ENV_ZOOM_CHANNEL}"
 }
 
-_deploy_notify_feishu(){
+_deploy_notify_feishu() {
     # Send message to Feishu
     # ENV_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-url"
     curl -X POST -H "Content-Type: application/json" -d '{"text": "'"$msg_body"'"}' "$ENV_WEBHOOK_URL"
@@ -1011,7 +1011,11 @@ _inject_files() {
             rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         fi
         if [[ "$project_lang" == java && "$ENV_IN_CHINA" == 'true' ]]; then
-            curl -fsSLo "${gitlab_project_dir}/settings.xml" "https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
+            # curl -fsSLo "${gitlab_project_dir}/settings.xml" "https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
+            curl -fsSLo "${gitlab_project_dir}/Dockerfile" "https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/Dockerfile.java"
+            if [[ -f "${me_path_data}/dockerfile/settings.xml" ]]; then
+                rsync -a "${me_path_data}/dockerfile/settings.xml" "${gitlab_project_dir}/"
+            fi
         fi
         ;;
     2)
@@ -1183,12 +1187,7 @@ _probe_deploy_method() {
             echo "Found Dockerfile"
             echo "Enable build with docker"
             echo "Enable deploy with helm"
-            if [[ "$project_lang" =~ (java) ]]; then
-                ## 使用本机目录缓存 maven ，可以加快 docker build 速度
-                exec_build_langs=1
-            else
-                exec_build_langs=0
-            fi
+            exec_build_langs=0
             exec_build_image=1
             exec_push_image=1
             exec_deploy_k8s=1
