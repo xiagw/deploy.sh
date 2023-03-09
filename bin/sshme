@@ -1,11 +1,13 @@
 #!/bin/bash
 
 _get_input() {
-    read -rp "[1/4]. Enter ssh name: (alias name) " read_ssh_name
+    count=0
+    read -rp "[$((count+1))]. Enter ssh name: (alias name) " read_ssh_name
     if [[ "${delete_flag:-0}" -eq 0 ]]; then
-        read -rp "[2/4]. Enter ssh ip: (ip/dns) " read_ssh_ip
-        read -rp "[3/4]. Enter ssh user: [root] " read_ssh_user
-        read -rp "[4/4]. Enter ssh port: [22] " read_ssh_port
+        read -rp "[$((count+1))]. Enter ssh ip: (ip/dns) " read_ssh_ip
+        read -rp "[$((count+1))]. Enter ssh user: [root] " read_ssh_user
+        read -rp "[$((count+1))]. Enter ssh port: [22] " read_ssh_port
+        read -rp "[$((count+1))]. Enable byobu? [Y/n] " read_byobu
     fi
     select c in "$HOME/.ssh/config"*; do
         ssh_conf="$(readlink -f "$c")"
@@ -27,6 +29,7 @@ _add_host() {
     ## ssh config
     cat >>"$ssh_conf" <<EOF
 ### ${read_ssh_name} begin
+$([[ $read_byobu ]] && echo "# byobu")
 Host ${read_ssh_name}
     HostName ${read_ssh_ip}
     User ${read_ssh_user:-root}
