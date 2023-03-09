@@ -25,9 +25,9 @@ create_mysql_user() {
         user_name="$1"
     fi
     # generate a random password
-    password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
+    password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c10)
     if [ -z "$password_rand" ]; then
-        password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c10)
+        password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
     fi
     # create user with the random password
     # mysql --defaults-extra-file=/path/to/${server}.cnf -e "CREATE USER '${user_name}'@'%' IDENTIFIED BY '${password_rand}'; GRANT ALL PRIVILEGES ON ${read_db_name}.* TO '${user_name}'@'%';"
