@@ -545,27 +545,35 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 "
 }
 
-_deploy_notify_zoom() {
+_notify_zoom() {
     # Send message to Zoom channel
     # ENV_ZOOM_CHANNEL="https://api.zoom.us/v2/im/chat/messages"
     #
     curl -X POST -H "Content-Type: application/json" -d '{"text": "'"${msg_body}"'"}' "${ENV_ZOOM_CHANNEL}"
 }
 
-_deploy_notify_feishu() {
+_notify_feishu() {
     # Send message to Feishu
     # ENV_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-url"
     curl -X POST -H "Content-Type: application/json" -d '{"text": "'"$msg_body"'"}' "$ENV_WEBHOOK_URL"
 }
 
+_notify_wechat_work() {
+    # Send message to weixin_work
+    local wechat_key=$1
+    wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wechat_key"
+    curl -s -H 'Content-Type: application/json' \
+        -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" \
+        "$wechat_api"
+}
+
 _deploy_notify() {
     _msg step "[notify] message for result"
     _deploy_notify_msg
-    if [[ "${ENV_NOTIFY_WEIXIN:-0}" -eq 1 ]]; then
+    if [[ "${ENV_NOTIFY_WECHAT:-0}" -eq 1 ]]; then
         ## work chat / 发送至 企业微信
-        _msg time "to work wxchat"
-        weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${ENV_WEIXIN_KEY:? ERR: empty api key}"
-        curl -s "$weixin_api" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}"
+        _msg time "to wechat work"
+        _notify_wechat_work ${ENV_WEIXIN_KEY}
     elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
         ## Telegram / 发送至 Telegram
         _msg time "to Telegram"
@@ -716,10 +724,9 @@ _get_balance_aliyun() {
             continue
         fi
         _msg red "Current balance: $amount"
-        if [[ "$amount" -lt "$alarm_balance" ]]; then
+        if [[ $(echo "$amount < $alarm_balance" | bc) -eq 1 ]]; then
             msg_body="Aliyun账号:$p 当前余额 $amount, 需要充值。"
-            weixin_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$ENV_ALARM_WEIXIN_KEY"
-            curl -s "$weixin_api" -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}"
+            _notify_wechat_work $ENV_WECHAT_KEY_ALARM
         fi
     done
     echo
