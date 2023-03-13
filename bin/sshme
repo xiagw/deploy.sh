@@ -29,7 +29,7 @@ _add_host() {
     ## ssh config
     cat >>"$ssh_conf" <<EOF
 ### ${read_ssh_name} begin
-$([[ $read_byobu ]] && echo "# byobu")
+$([[ "${read_byobu:-y}" == y ]] && echo "# byobu")
 Host ${read_ssh_name}
     HostName ${read_ssh_ip}
     User ${read_ssh_user:-root}
