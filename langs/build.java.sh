@@ -18,8 +18,8 @@ else
     docker run --rm -i --user "$(id -u):$(id -g)" \
         -e MAVEN_CONFIG=/var/maven/.m2 \
         -v "$maven_cache":/var/maven/.m2:rw \
-        -v "$gitlab_project_dir":/app:rw \
-        -w /app \
+        -v "$gitlab_project_dir":/src:rw \
+        -w /src \
         maven:"${ENV_MAVEN_VER:-3.6-jdk-8}" \
         mvn -T 1C clean --quiet \
         --update-snapshots package \

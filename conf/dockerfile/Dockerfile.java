@@ -11,7 +11,7 @@ RUN set -xe \
     # && curl -Lo /root/.m2/settings.xml $SETTINGS \
     && [ -f docs/settings.xml ] && cp -vf docs/settings.xml /root/.m2/ || true \
     && [ -f settings.xml ] && cp -vf settings.xml /root/.m2/ || true
-RUN mvn -T 1C clean -U package -DskipTests -Dmaven.compile.fork=true
+RUN mvn -q -T 1C clean -U package -DskipTests -Dmaven.compile.fork=true
 WORKDIR /jar_file
 RUN find /src -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' -exec cp {} ./ \; \
     && rm -f ./framework* ./gdp-module* sdk*.jar ./*-commom-*.jar ./*-dao-*.jar ./lop-opensdk*.jar ./core-*.jar
