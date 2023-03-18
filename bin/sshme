@@ -2,12 +2,12 @@
 
 _get_input() {
     count=0
-    read -rp "[$((count+1))]. Enter ssh name: (alias name) " read_ssh_name
+    read -rp "[$((count + 1))]. Enter ssh name: (alias name) " read_ssh_name
     if [[ "${delete_flag:-0}" -eq 0 ]]; then
-        read -rp "[$((count+1))]. Enter ssh ip: (ip/dns) " read_ssh_ip
-        read -rp "[$((count+1))]. Enter ssh user: [root] " read_ssh_user
-        read -rp "[$((count+1))]. Enter ssh port: [22] " read_ssh_port
-        read -rp "[$((count+1))]. Enable byobu? [Y/n] " read_byobu
+        read -rp "[$((count + 1))]. Enter ssh ip: (ip/dns) " read_ssh_ip
+        read -rp "[$((count + 1))]. Enter ssh user: [root] " read_ssh_user
+        read -rp "[$((count + 1))]. Enter ssh port: [22] " read_ssh_port
+        read -rp "[$((count + 1))]. Enable byobu? [Y/n] " read_byobu
     fi
     select c in "$HOME/.ssh/config"*; do
         ssh_conf="$(readlink -f "$c")"
@@ -46,6 +46,13 @@ _delete_host() {
 }
 
 main() {
+    LANG="en_US.UTF-8"
+    LC_COLLATE="en_US.UTF-8"
+    LC_CTYPE="en_US.UTF-8"
+    LC_MESSAGES="en_US.UTF-8"
+    LC_MONETARY="en_US.UTF-8"
+    LC_NUMERIC="en_US.UTF-8"
+    LC_TIME="en_US.UTF-8"
     file_conf=("$HOME/.ssh/config"*)
     select ssh_host in add update delete $(awk 'NR>1 && /^Host/ {print $2}' "${file_conf[@]}") quit; do
         case "${ssh_host:-quit}" in
