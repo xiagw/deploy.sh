@@ -63,8 +63,10 @@ if (oh-my-posh.exe --version) {
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
     New-Item -Path $PROFILE -Type File -Force
     Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
-    Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Alt+F4 -Function ViExit'
-    Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Ctrl+d -Function DeleteCharOrExit'
+    Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Key Tab -Function MenuComplete'
+    Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
+    # Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Alt+F4 -Function ViExit'
+    # Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Ctrl+d -Function DeleteCharOrExit'
 }
 # winget install JanDeDobbeleer.OhMyPosh --source winget
 # scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
@@ -94,3 +96,22 @@ if (oh-my-posh.exe --version) {
 # Set-ItemProperty $RegPath "AutoAdminLogon" -Value "1" -type String
 # Set-ItemProperty $RegPath "DefaultUsername" -Value "$DefaultUsername" -type String
 # Set-ItemProperty $RegPath "DefaultPassword" -Value "$DefaultPassword" -type String
+
+# Microsoft.PowerShell_profile.ps1
+# PowerShell Core7でもConsoleのデフォルトエンコーディングはsjisなので必要
+# [System.Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding("utf-8")
+# [System.Console]::InputEncoding = [System.Text.Encoding]::GetEncoding("utf-8")
+
+# git logなどのマルチバイト文字を表示させるため (絵文字含む)
+# $env:LESSCHARSET = "utf-8"
+
+# 音を消す
+# Set-PSReadlineOption -BellStyle None
+
+# 履歴検索
+# Set-PSReadLineKeyHandler -Chord Ctrl+r -ScriptBlock {
+    # いつからかawkの表示がされないようになったので、以下コマンドを実行
+    # Set-Alias awk C:\Users\saido\scoop\apps\msys2\current\usr\bin\awk.exe
+    # $command = Get-Content (Get-PSReadlineOption).HistorySavePath | awk '!a[$0]++' | fzf --tac
+    # [Microsoft.PowerShell.PSConsoleReadLine]::Insert($command)
+# }
