@@ -61,13 +61,14 @@ if (oh-my-posh.exe --version) {
     Write-Host "oh-my-posh already installed"
 } else {
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
-    New-Item -Path $PROFILE -Type File -Force
-    Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
-    Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Key Tab -Function MenuComplete'
-    Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
-    # Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Alt+F4 -Function ViExit'
-    # Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Ctrl+d -Function DeleteCharOrExit'
 }
+New-Item -Type File -Force -Path $PROFILE
+Clear-Content -Force $PROFILE
+Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
+Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Key Tab -Function MenuComplete'
+Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
+# Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Alt+F4 -Function ViExit'
+# Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Ctrl+d -Function DeleteCharOrExit'
 # winget install JanDeDobbeleer.OhMyPosh --source winget
 # scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
 
