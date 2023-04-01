@@ -1012,10 +1012,6 @@ _inject_files() {
     echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-1}
     case ${ENV_ENABLE_INJECT:-1} in
     1)
-        if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
-            echo "Overwriting from data/dockerfile/Dockerfile.${project_lang}"
-            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
-        fi
         ## Java, shared template files Dockerfile, run.sh, settings.xml
         if [[ "$project_lang" == java ]]; then
             local dockerfile_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/Dockerfile.java"
@@ -1026,6 +1022,10 @@ _inject_files() {
                 local settings_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
                 curl -fsSLo "${gitlab_project_dir}/settings.xml" $settings_url
             fi
+        fi
+        if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
+            echo "Overwriting from data/dockerfile/Dockerfile.${project_lang}"
+            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         fi
         ;;
     2)

@@ -55,6 +55,8 @@ Get-Service ssh-agent
 
 ## install scoop, not Admin console
 # irm get.scoop.sh | iex
+# win10 安装scoop的正确姿势 | impressionyang的个人分享站
+# https://impressionyang.gitee.io/2021/02/15/win10-install-scoop/
 
 ## oh my posh
 if (oh-my-posh.exe --version) {
