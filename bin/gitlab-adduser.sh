@@ -2,7 +2,7 @@
 
 _new_user() {
     if [[ -z "$1" ]]; then
-        read -rp 'Enter username: ' -e -i 'user001' read_user_name
+        read -rp 'Enter username: ' read_user_name
         read -rp 'Enter domain name: ' -e -i"${ENV_GITLAB_DOMAIN:-example.com}" read_domain_name
         user_name=${read_user_name:? ERR: empty user name}
         domain_name=${read_domain_name:? ERR: empty domain name}
