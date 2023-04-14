@@ -949,7 +949,7 @@ _clean_disk() {
     # Log disk usage and clean up docker images
     _log "$(df /)"
     _msg warning "Disk space is less than ${clean_disk_threshold}%, removing docker images..."
-    docker images "${ENV_DOCKER_REGISTRY}" -q | sort -u | xargs -r docker rmi -f || true
+    docker images "${ENV_DOCKER_REGISTRY}" -q | sort -u | xargs -r docker rmi -f >/dev/null || true
     docker system prune -f >/dev/null || true
 }
 
