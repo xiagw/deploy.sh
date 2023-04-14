@@ -49,9 +49,9 @@ RUN if [ "$INSTALL_FONTS" = true ]; then \
     apt-get update && apt-get install -y --no-install-recommends ffmpeg; \
     fi; \
     apt-get update -q \
-    && apt-get install -y -q --no-install-recommends less
+    && apt-get install -y -q --no-install-recommends less \
     ## set ssl
-    sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' /usr/local/openjdk-8/jre/lib/security/java.security || true; \
+    && sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' /usr/local/openjdk-8/jre/lib/security/java.security || true; \
     useradd -u 1000 spring \
     && curl -Lo /opt/run.sh $RUNSH \
     && chmod +x /opt/run.sh \
