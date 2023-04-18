@@ -21,6 +21,7 @@ RUN find /src -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' -exec cp {} .
 # FROM bitnami/tomcat:8.5 as p0
 # FROM bitnami/java:1.8-prod as p0
 FROM openjdk:8u332
+ARG IN_CHINA=false
 ## set startup profile
 ARG MVN_PROFILE=test
 ## Set Timezone
@@ -37,16 +38,22 @@ ARG INSTALL_FFMPEG=false
 ARG RUNSH=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/run.sh
 ARG FONTS=http://cdn.flyh6.com/docker/fonts-2022.tgz
 
-RUN if [ "$INSTALL_FONTS" = true ]; then \
+RUN if [ "$IN_CHINA" = true ]; then \
     sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
-    && apt-get update -q && apt-get install -y -q --no-install-recommends fontconfig \
+    && apt-get update -q \
+    && apt-get install -y -q --no-install-recommends less; \
+    fi; \
+    if [ "$INSTALL_FONTS" = true ]; then \
+    apt-get update -q \
+    && apt-get install -y -q --no-install-recommends fontconfig \
     && fc-cache --force \
     && curl -Lo /tmp/fonts.tgz --referer http://www.flyh6.com/ $FONTS \
     && tar -zxf /tmp/fonts.tgz -C /usr/share \
     && rm -f /tmp/fonts.tgz; \
     fi; \
     if [ "$INSTALL_FFMPEG" = true ]; then \
-    apt-get update && apt-get install -y --no-install-recommends ffmpeg; \
+    apt-get update -q \
+    && apt-get install -y --no-install-recommends ffmpeg; \
     fi; \
     ## set ssl
     sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' /usr/local/openjdk-8/jre/lib/security/java.security || true; \
