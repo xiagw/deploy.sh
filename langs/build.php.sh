@@ -24,7 +24,7 @@ if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
     _msg step "[build] php composer install"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     # if ! docker images | grep -q "deploy/composer"; then
-    #     DOCKER_BUILDKIT=1 docker build $quiet_flag --tag "deploy/composer" --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+    #     DOCKER_BUILDKIT=1 docker build $quiet_flag --tag "deploy/composer" --build-arg IN_CHINA="${ENV_IN_CHINA}" \
     #         -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile" >/dev/null
     # fi
     # rm -rf "${gitlab_project_dir}"/vendor

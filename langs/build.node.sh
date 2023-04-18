@@ -22,7 +22,7 @@ _msg step "[build] yarn..."
 
 if ! docker images | grep -q 'deploy/node'; then
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/node \
-        --build-arg CHANGE_SOURCE="${ENV_CHANGE_SOURCE}" \
+        --build-arg IN_CHINA="${ENV_IN_CHINA}" \
         -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
 fi
 

@@ -1,10 +1,10 @@
 FROM phpswoole/swoole:4.6-php7.4
 WORKDIR /app
 ARG COMPOSER_INSTALL=true
-ARG CHANGE_SOURCE=true
+ARG IN_CHINA=true
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -ex \
-    && if [ "${CHANGE_SOURCE}" = true ]; then sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; fi \
+    && if [ "${IN_CHINA}" = true ]; then sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; fi \
     && apt-get update \
     # && apt-get install -yq nodejs \
     && apt-get install -yq --no-install-recommends apt-utils bash curl zip unzip vim git \
@@ -41,12 +41,12 @@ RUN set -ex \
 EXPOSE 9501
 
 #############################################################
-ONBUILD ARG CHANGE_SOURCE=true
+ONBUILD ARG IN_CHINA=true
 ONBUILD ARG COMPOSER_INSTALL=true
 # ONBUILD COPY ./composer.json /app/
 ONBUILD COPY . /app/
 ONBUILD RUN set -xe \
-    && if [ "${CHANGE_SOURCE}" = true ]; then composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/; fi \
+    && if [ "${IN_CHINA}" = true ]; then composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/; fi \
     && if [ "${COMPOSER_INSTALL}" = true ] || [ ! -d vendor ]; then composer install -q; fi \
     # && php /app/vendor/easyswoole/easyswoole/bin/easyswoole install || true \
     && chown -R 1000:1000 /app

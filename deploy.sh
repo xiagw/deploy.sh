@@ -294,7 +294,7 @@ _build_image_docker() {
     [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
     [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
-        --build-arg CHANGE_SOURCE="${ENV_IN_CHINA:-false}" \
+        --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     ## docker push to ttl.sh
     # image_uuid="ttl.sh/$(uuidgen):1h"
