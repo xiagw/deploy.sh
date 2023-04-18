@@ -15,7 +15,7 @@ if [ ! -d "${gitlab_project_dir}/node_modules" ]; then
 fi
 
 # https://github.com/nodesource/distributions#debinstall
-_msg step "[build] yarn..."
+_msg step "[build] yarn"
 
 # rm -f package-lock.json
 [[ "${github_action:-0}" -eq 1 ]] && return 0

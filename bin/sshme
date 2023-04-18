@@ -9,7 +9,7 @@ _get_input() {
         read -rp "[$((count + 1))]. Enter ssh port: [22] " read_ssh_port
         read -rp "[$((count + 1))]. Enable byobu? [Y/n] " read_byobu
     fi
-    select c in "$HOME/.ssh/config"*; do
+    select c in "$HOME"/.ssh/config*; do
         ssh_conf="$(readlink -f "$c")"
         break
     done
@@ -28,12 +28,11 @@ _add_host() {
     fi
     ## ssh config
     cat >>"$ssh_conf" <<EOF
-### ${read_ssh_name} begin
-$([[ "${read_byobu:-y}" == y ]] && echo "# byobu")
+### ${read_ssh_name} begin  ## $([[ "${read_byobu:-y}" == y ]] && echo "# byobu")
 Host ${read_ssh_name}
     HostName ${read_ssh_ip}
     User ${read_ssh_user:-root}
-    Port ${read_ssh_port:-22}
+    $([[ "${read_ssh_port:-22}" == 22 ]] || echo "Port ${read_ssh_port:-22}")
 ### ${read_ssh_name} end
 EOF
     ## ansible config
@@ -75,11 +74,11 @@ main() {
             ;;
         *)
             if grep -B2 "${ssh_host}" "${file_conf[@]}" | grep -q 'byobu'; then
-                use_byobu='byobu'
+                exec_byobu='byobu'
             fi
             ## get username from $1
             [ -n "${1}" ] && ssh_host="${1}@${ssh_host}"
-            ssh -A -t "${ssh_host}" $use_byobu
+            ssh -A -t "${ssh_host}" $exec_byobu
             break
             ;;
         esac
