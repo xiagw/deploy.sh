@@ -25,7 +25,7 @@ if [[ "${COMPOSER_INSTALL:-0}" -eq 1 ]]; then
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     # if ! docker images | grep -q "deploy/composer"; then
     #     DOCKER_BUILDKIT=1 docker build $quiet_flag --tag "deploy/composer" --build-arg IN_CHINA="${ENV_IN_CHINA}" \
-    #         -f "$script_dockerfile/Dockerfile.composer" "$script_dockerfile" >/dev/null
+    #         -f "$me_dockerfile/Dockerfile.composer" "$me_dockerfile" >/dev/null
     # fi
     # rm -rf "${gitlab_project_dir}"/vendor
     # shellcheck disable=2015

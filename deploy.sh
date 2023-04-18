@@ -1435,7 +1435,7 @@ main() {
 
     export PATH
 
-    docker_run="docker run --interactive --rm -u 1000:1000"
+    docker_run="docker run --interactive --rm -u $(id -u):$(id -g)"
     # docker_run_root="docker run --interactive --rm -u 0:0"
     kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
     helm_opt="helm --kubeconfig $HOME/.kube/config"

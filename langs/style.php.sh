@@ -6,7 +6,7 @@
 _msg step 'code style [PHP Code Sniffer], < standard=PSR12 >...'
 [[ "${github_action:-0}" -eq 1 ]] && return 0
 if ! docker images | grep -q 'deploy/phpcs'; then
-    DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/phpcs -f "$script_dockerfile/Dockerfile.phpcs" "$script_dockerfile" >/dev/null
+    DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null
 fi
 phpcs_result=0
 for i in $(git --no-pager diff --name-only HEAD^ | awk '/\.php$/{if (NR>0){print $0}}'); do

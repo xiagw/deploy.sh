@@ -2,19 +2,20 @@ FROM node:14
 WORKDIR /app
 ARG IN_CHINA=false
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN set -xe \
-    ## change SOURCE
-    && if [ ${IN_CHINA} = true ]; then \
+RUN set -xe; \
+    if [ "$IN_CHINA" = true ]; then \
     yarn config set registry https://registry.npm.taobao.org; \
-    npm config set registry https://registry.npm.taobao.org; fi \
-    && mkdir /.cache \
+    npm config set registry https://registry.npm.taobao.org; \
+    fi; \
+    mkdir /.cache \
     && chown -R node:node /.cache \
     && npm install -g rnpm@1.9.0 \
     && npm install -g apidoc
 
 USER node
 RUN set -x \
-    && if [ ${IN_CHINA} = true ]; then \
+    && if [ "$IN_CHINA" = true ]; then \
     yarn config set registry https://registry.npm.taobao.org; \
-    npm config set registry https://registry.npm.taobao.org; fi
+    npm config set registry https://registry.npm.taobao.org; \
+    fi
 

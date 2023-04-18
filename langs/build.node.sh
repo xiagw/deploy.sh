@@ -20,13 +20,14 @@ _msg step "[build] yarn..."
 # rm -f package-lock.json
 [[ "${github_action:-0}" -eq 1 ]] && return 0
 
+##
 if ! docker images | grep -q 'deploy/node'; then
-    DOCKER_BUILDKIT=1 docker build ${quiet_flag} -t deploy/node \
+    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag deploy/node \
         --build-arg IN_CHINA="${ENV_IN_CHINA}" \
-        -f "$script_dockerfile/Dockerfile.nodebuild" "$script_dockerfile"
+        --file "$me_dockerfile/Dockerfile.nodebuild" "$me_dockerfile"
 fi
 
-## exist custome build? / 自定义构建？
+## custome build? / 自定义构建？
 if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
     $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash custom.build.sh
     return
