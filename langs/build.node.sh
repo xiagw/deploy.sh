@@ -24,7 +24,7 @@ _msg step "[build] yarn..."
 if ! docker images | grep -q 'deploy/node'; then
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag deploy/node \
         --build-arg IN_CHINA="${ENV_IN_CHINA}" \
-        --file "$me_dockerfile/Dockerfile.nodebuild" "$me_dockerfile"
+        --file "$me_dockerfile/Dockerfile.node" "$me_dockerfile"
 fi
 
 ## custome build? / 自定义构建？
