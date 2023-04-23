@@ -31,8 +31,7 @@ _add_host() {
 ### ${read_ssh_name} begin  ## $([[ "${read_byobu:-y}" == y ]] && echo "# byobu")
 Host ${read_ssh_name}
     HostName ${read_ssh_ip}
-    User ${read_ssh_user:-root}
-    $([[ "${read_ssh_port:-22}" == 22 ]] || echo "Port ${read_ssh_port:-22}")
+    User ${read_ssh_user:-root} $([[ "${read_ssh_port:-22}" == 22 ]] || echo -e "\nPort ${read_ssh_port:-22}")
 ### ${read_ssh_name} end
 EOF
     ## ansible config
