@@ -7,11 +7,11 @@ WORKDIR /src
 COPY . .
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -xe; \
+    [ -d /root/.m2 ] || mkdir -p /root/.m2; \
     if [ "${IN_CHINA}" = true ]; then \
     curl -Lo /root/.m2/settings.xml $SETTINGS; \
     fi; \
-    [ -d /root/.m2 ] || mkdir -p /root/.m2 \
-    && [ -f docs/settings.xml ] && cp -vf docs/settings.xml /root/.m2/ || true \
+    [ -f docs/settings.xml ] && cp -vf docs/settings.xml /root/.m2/ || true \
     && [ -f settings.xml ] && cp -vf settings.xml /root/.m2/ || true
 RUN mvn -q -T 1C clean -U package -DskipTests -Dmaven.compile.fork=true
 WORKDIR /jar_file
