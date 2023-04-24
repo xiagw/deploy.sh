@@ -1,14 +1,16 @@
 FROM maven:3.6-jdk-8 AS builder
-ARG MVN_PROFILE=test
+ARG MVN_PROFILE=main
 ARG MVN_DEBUG=-q
+ARG IN_CHINA=false
 ARG SETTINGS=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml
 WORKDIR /src
 COPY . .
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN set -xe \
-    # && echo "192.168.145.12 mynexus" >>/etc/hosts \
-    && [ -d /root/.m2 ] || mkdir -p /root/.m2 \
-    # && curl -Lo /root/.m2/settings.xml $SETTINGS \
+RUN set -xe; \
+    if [ "${IN_CHINA}" = true ]; then \
+    curl -Lo /root/.m2/settings.xml $SETTINGS; \
+    fi; \
+    [ -d /root/.m2 ] || mkdir -p /root/.m2 \
     && [ -f docs/settings.xml ] && cp -vf docs/settings.xml /root/.m2/ || true \
     && [ -f settings.xml ] && cp -vf settings.xml /root/.m2/ || true
 RUN mvn -q -T 1C clean -U package -DskipTests -Dmaven.compile.fork=true
@@ -23,7 +25,7 @@ RUN find /src -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' -exec cp {} .
 FROM openjdk:8u332
 ARG IN_CHINA=false
 ## set startup profile
-ARG MVN_PROFILE=test
+ARG MVN_PROFILE=main
 ## Set Timezone
 ARG TZ=Asia/Shanghai
 ENV TZ=$TZ
@@ -38,11 +40,12 @@ ARG INSTALL_FFMPEG=false
 ARG RUNSH=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/run.sh
 ARG FONTS=http://cdn.flyh6.com/docker/fonts-2022.tgz
 
-RUN if [ "$IN_CHINA" = true ]; then \
-    sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
-    && apt-get update -q \
-    && apt-get install -y -q --no-install-recommends less; \
+RUN set -x; \
+    if [ "$IN_CHINA" = true ]; then \
+    sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
     fi; \
+    apt-get update -q \
+    && apt-get install -y -q --no-install-recommends less; \
     if [ "$INSTALL_FONTS" = true ]; then \
     apt-get update -q \
     && apt-get install -y -q --no-install-recommends fontconfig \
