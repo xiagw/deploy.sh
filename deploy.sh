@@ -982,6 +982,14 @@ _generate_apidoc() {
 
 _inject_files() {
     _msg step "[inject] from runner/data/project_conf/"
+    ## backend (PHP/Java/Python) project_conf files
+    ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
+    path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
+    if [ -d "$path_project_conf" ]; then
+        _msg warning "found custom config files, sync it."
+        rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
+    fi
+
     ## frontend (VUE) .env file
     if [[ "$project_lang" == node ]]; then
         config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
@@ -997,13 +1005,6 @@ _inject_files() {
         copy_flyway_file=0
     fi
 
-    ## backend (PHP/Java/Python) project_conf files
-    ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
-    path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}.${env_namespace}"
-    if [ -d "$path_project_conf" ]; then
-        _msg warning "found custom config files, sync it."
-        rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
-    fi
     ## from deploy.env， 使用全局模板文件替换项目文件
     # ENV_ENABLE_INJECT=1, 覆盖 [default action]
     # ENV_ENABLE_INJECT=2, 不覆盖 [使用项目自身的文件]
