@@ -15,7 +15,7 @@ else
     fi
     [ -d "${maven_cache}" ] || mkdir -p "${maven_cache}"
 
-    docker run --rm -i --user "$(id -u):$(id -g)" \
+    docker run $ENV_ADD_HOST --rm -i --user "$(id -u):$(id -g)" \
         -e MAVEN_CONFIG=/var/maven/.m2 \
         -v "$maven_cache":/var/maven/.m2:rw \
         -v "$gitlab_project_dir":/src:rw \

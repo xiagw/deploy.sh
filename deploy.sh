@@ -288,12 +288,12 @@ _build_image_docker() {
 
     ## docker build flyway image / 构建 flyway 模板
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
     [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
     [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
-    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
+    DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     ## docker push to ttl.sh
@@ -462,7 +462,7 @@ _deploy_rsync_ssh() {
         fi
         if [[ $exec_deploy_single_host -eq 1 ]]; then
             _msg step "deploy to singl host with docker-compose"
-            $ssh_opt -n "$ssh_host" "cd ~/docker/laradock && docker compose up -d $gitlab_project_name"
+            $ssh_opt -n "$ssh_host" "cd $HOME/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
     _msg stepend "[deploy] deploy files"
@@ -1436,8 +1436,8 @@ main() {
 
     export PATH
 
-    docker_run="docker run --interactive --rm -u $(id -u):$(id -g)"
-    # docker_run_root="docker run --interactive --rm -u 0:0"
+    docker_run="docker run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
+    # docker_run_root="docker run $ENV_ADD_HOST --interactive --rm -u 0:0"
     kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
     helm_opt="helm --kubeconfig $HOME/.kube/config"
 
