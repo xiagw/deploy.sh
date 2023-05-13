@@ -83,8 +83,8 @@ Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
 # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 0
 # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 1
 
-# $env:HTTP_PROXY="http://192.168.1.154:1080"
-# $env:HTTPS_PROXY="http://192.168.1.154:1080"
+# $env:HTTP_PROXY="http://192.168.1.52:1080"
+# $env:HTTPS_PROXY="http://192.168.1.52:1080"
 
 ## install powershell 7
 # winget install --id Microsoft.Powershell --source winget
