@@ -1044,10 +1044,6 @@ _inject_files() {
     ## docker ignore file / 使用全局模板文件替换项目文件
     [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]] &&
         rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
-    ## cert file for nginx
-    if [[ "${gitlab_project_name}" == *"$ENV_NGINX_GIT_NAME"* && -d "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" ]]; then
-        rsync -av "$me_path_data/.acme.sh/${ENV_CERT_INSTALL:-dest}/" "${gitlab_project_dir}/etc/nginx/conf.d/ssl/"
-    fi
 
     ## flyway files sql & conf
     for sql in ${ENV_FLYWAY_SQL:-docs/sql} flyway_sql doc/sql sql; do
