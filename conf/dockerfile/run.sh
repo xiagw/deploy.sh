@@ -54,11 +54,11 @@ _start_php() {
     for i in /usr/sbin/php-fpm*; do
         [ -x "$i" ] && exec $i ## php-fpm -F, 前台启动
     done
-    if nginx -t &>/dev/null; then
-        exec nginx -g "daemon off;"
+    if command -v nginx && nginx -t; then
+        exec nginx -g "daemon off;" &
         pids="${pids} $!"
-    elif apachectl -t &>/dev/null; then
-        exec apachectl -k start -D FOREGROUND
+    elif command -v apachectl && apachectl -t; then
+        exec apachectl -k start -D FOREGROUND &
         pids="${pids} $!"
     else
         _msg "Not found php."
@@ -84,7 +84,7 @@ _schedule_upgrade() {
     remote_ver=$(awk -F= '/^project_ver=/ {print $2}' "$file_temp")
     file_update=spring.tgz
     if [[ "${project_id:-1}" == "$remote_id" && "${project_ver:-1}" != "$remote_ver" ]]; then
-        curl -fsSLo /tmp/$file_update "${project_upgrade_url%/}/$file_update"
+        curl -fsSLo /tmp/${file_update} "${project_upgrade_url%/}/$file_update"
         curl -fsSLo /tmp/${file_update}.sha "${project_upgrade_url%/}/${file_update}.sha"
         if (cd /tmp && sha256sum -c $file_update.sha) &>/dev/null; then
             tar -C "$app_path" -zxf /tmp/$file_update
