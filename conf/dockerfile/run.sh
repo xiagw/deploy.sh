@@ -119,7 +119,7 @@ main() {
         start_nohup=1
     fi
 
-    _msg "startup ..." | tee -a "$app_log"
+    _msg "startup /opt/run.sh ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT QUIT TERM
 
@@ -137,9 +137,9 @@ main() {
     ## 适用于 docker 中启动
     if [[ "${start_nohup:-0}" -eq 0 ]]; then
         ## method 1: allow debug / use tail -f，方便开发者调试，可以直接 kill java, 不会停止容器
-        # exec tail -f "$me_log" "$app_path"/log/*.log
+        # exec tail -f "$app_path"/log/*.log
         ## method 2: use wait, kill java, stop container
-        exec tail -f "$me_log" "$app_log" "$app_path"/log/*.log &
+        exec tail -f "$app_log" "$app_path"/log/*.log &
         wait
     fi
 }
