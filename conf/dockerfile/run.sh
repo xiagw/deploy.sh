@@ -11,14 +11,16 @@ _log() {
 _start_java() {
     ## 修改内存占用值，
     [ -z "$JAVA_OPTS" ] && JAVA_OPTS='java -Xms256m -Xmx384m'
+
     ## 启动方式三，nohup 后台启动
     [[ "${start_nohup:-0}" -eq 1 ]] && JAVA_OPTS="nohup $JAVA_OPTS"
-    ## 启动方式一， jar 内置配置文件 yml，
+
+    ## 启动方式一， jar 内置配置(profile)文件 yml，
     ## Dockerfile ARG MVN_PROFILE=test （此处对应 git 分支名） 镜像内生成文件 profile.<分支名>
-    for f in "$app_path"/profile.*; do
-        [[ -f "$f" ]] || continue
-        profile_name="--spring.profiles.active=${f##*.}"
-        _msg "try using $profile_name"
+    for file in "$app_path"/profile.*; do
+        [[ -f "$file" ]] || continue
+        profile_name="--spring.profiles.active=${file##*.}"
+        _msg "Found $profile_name, start with profile..."
         break
     done
 
@@ -37,12 +39,16 @@ _start_java() {
                 break
             fi
         done
+
         _msg "${cj}. start $jar $config_yml ..."
         if [ "$profile_name" ]; then
+            ## 启动方式一， jar 内置配置(profile)文件 yml，
             $JAVA_OPTS -jar "$jar" "$profile_name" &>>"$app_log" &
         elif [ "$config_yml" ]; then
+            ## 启动方式二，配置文件 yml 在 jar 包外，非内置
             $JAVA_OPTS "$config_yml" -jar "$jar" &>>"$app_log" &
         else
+            ##
             $JAVA_OPTS -jar "$jar" &>>"$app_log" &
         fi
         pids="$pids $!"
@@ -106,17 +112,20 @@ main() {
     else
         app_log="/tmp/${me_name}.log"
     fi
+    [ -d "$app_path"/log ] || mkdir "$app_path"/log
 
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then
         start_nohup=1
     fi
-    [ -d "$app_path"/log ] || mkdir "$app_path"/log
+
     _msg "startup ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT QUIT TERM
+
     ## 统一兼容启动 start php
     _start_php "$@"
+
     ## 统一兼容启动 start java
     _start_java "$@"
 
