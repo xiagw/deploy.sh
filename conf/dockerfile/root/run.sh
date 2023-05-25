@@ -9,8 +9,14 @@ _log() {
 }
 
 _start_java() {
+    if [ "${USE_JEMALLOC:-false}" = true ]; then
+        export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+    else
+        unset LD_PRELOAD
+    fi
     ## 修改内存占用值，
     [ -z "$JAVA_OPTS" ] && JAVA_OPTS='java -Xms256m -Xmx384m'
+    # -XX:+UseG1GC
 
     ## 启动方式三，nohup 后台启动
     [[ "${start_nohup:-0}" -eq 1 ]] && JAVA_OPTS="nohup $JAVA_OPTS"
@@ -115,6 +121,10 @@ main() {
         app_log="$me_log"
     fi
     [ -d "$app_path"/log ] || mkdir "$app_path"/log
+
+    if [ -f /usr/lib/x86_64-linux-gnu/libjemalloc.so.2 ]; then
+        export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+    fi
 
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then

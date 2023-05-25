@@ -72,7 +72,6 @@ _build_php() {
     usermod -u 1000 www-data
     groupmod -g 1000 www-data
 
-    apt_opt="apt-get install -yqq --no-install-recommends"
     apt-get update -yqq
     $apt_opt apt-utils
     ## preesed tzdata, update package index, upgrade packages and install needed software
@@ -123,6 +122,8 @@ _build_php() {
     # php"${LARADOCK_PHP_VERSION}"-process \
     # php"${LARADOCK_PHP_VERSION}"-pecl-mcrypt  replace by  php"${LARADOCK_PHP_VERSION}"-libsodium
 
+    $apt_opt libjemalloc2
+
     if [ "$INSTALL_APACHE" = true ]; then
         $apt_opt apache2 libapache2-mod-fcgid \
             libapache2-mod-php"${LARADOCK_PHP_VERSION}"
@@ -163,7 +164,6 @@ _build_mysql() {
 _build_redis() {
     echo "build redis ..."
 }
-
 _build_node() {
     echo "build node ..."
 
@@ -192,12 +192,12 @@ _build_mvn() {
 
 _build_runtime_jdk() {
     apt-get update -q
-    apt-get install -y -q --no-install-recommends less
+    $apt_opt less
     if [ "$INSTALL_FFMPEG" = true ]; then
-        apt-get install -y --no-install-recommends ffmpeg
+        $apt_opt ffmpeg
     fi
     if [ "$INSTALL_FONTS" = true ]; then
-        apt-get install -y -q --no-install-recommends fontconfig
+        $apt_opt fontconfig
         fc-cache --force
         curl --referer http://www.flyh6.com/ -Lo - $url_fly_cdn/fonts-2022.tgz |
             tar -C /usr/share -zxf -
@@ -213,6 +213,8 @@ _build_runtime_jdk() {
     useradd -u 1000 spring
     chown -R 1000:1000 /app
     touch "/app/profile.${MVN_PROFILE}"
+
+    $apt_opt libjemalloc2
 
     # apt-get autoremove -y
     apt-get clean all
@@ -244,6 +246,8 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="$me_path/${me_name}.log"
+
+    apt_opt="apt-get install -yqq --no-install-recommends"
 
     _set_mirror
 
