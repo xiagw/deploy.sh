@@ -85,6 +85,16 @@ _kill() {
     done
 }
 
+_check_jemalloc() {
+    for pid in $pids; do
+        if grep -q "/proc/$pid/smaps"; then
+            _msg "PID $pid using jemalloc..."
+        else
+            _msg "PID $pid not use jemalloc"
+        fi
+    done
+}
+
 _schedule_upgrade() {
     file_up="$app_path/.up"
     ## project_id=1 ; project_ver=hash; project_upgrade_url=http://update.xxx.com
@@ -145,6 +155,8 @@ main() {
         _schedule_upgrade
         sleep 60
     done &
+
+    _check_jemalloc
 
     ## 适用于 docker 中启动
     if [[ "${start_nohup:-0}" -eq 0 ]]; then

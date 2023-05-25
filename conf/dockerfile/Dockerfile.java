@@ -25,6 +25,7 @@ ARG INSTALL_FFMPEG=false
 ARG USE_JEMALLOC=false
 
 ENV TZ=$TZ
+ENV USE_JEMALLOC=$USE_JEMALLOC
 
 WORKDIR /app
 COPY --from=builder /jars/ .
