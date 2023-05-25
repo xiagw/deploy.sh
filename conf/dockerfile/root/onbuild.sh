@@ -7,7 +7,7 @@ _onbuild_php() {
         -e '/fpm.sock/s/^/;/' \
         -e '/fpm.sock/a listen = 9000' \
         -e '/rlimit_files/a rlimit_files = 51200' \
-        -e '/pm.max_children/s/5/3000/' \
+        -e '/pm.max_children/s/5/10000/' \
         -e '/pm.start_servers/s/2/10/' \
         -e '/pm.min_spare_servers/s/1/10/' \
         -e '/pm.max_spare_servers/s/3/20/' \
