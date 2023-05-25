@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 _msg() {
-    echo "[$(date)], $*"
+    echo "[$(date)], [RUN] $*"
 }
 
 _log() {
-    echo "[$(date)], $*" | tee -a "$app_log"
+    echo "[$(date)], [RUN] $*" | tee -a "$app_log"
 }
 
 _start_java() {
@@ -80,7 +80,7 @@ _start_php() {
 }
 
 _kill() {
-    _msg "[WARN] Receive SIGTERM, kill $pids"
+    _msg "Receive SIGTERM, kill $pids"
     for pid in $pids; do
         kill "$pid"
         wait "$pid"
