@@ -8,7 +8,7 @@ ARG MVN_DEBUG=-q
 WORKDIR /src
 COPY . .
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/build.sh | bash
+RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
 #############################
 # FROM openjdk:11-jdk
@@ -27,7 +27,7 @@ ENV TZ=$TZ
 WORKDIR /app
 COPY --from=builder /jars/ .
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/build.sh | bash
+RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
 USER 1000
 EXPOSE 8080 8081 8082
