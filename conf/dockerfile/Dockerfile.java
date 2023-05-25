@@ -1,3 +1,4 @@
+# FROM maven:3.6-jdk-11 AS builder
 FROM maven:3.6-jdk-8 AS builder
 
 ARG IN_CHINA=false
@@ -14,16 +15,14 @@ RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/build.sh
 # FROM bitnami/tomcat:8.5 as p0
 # FROM bitnami/java:1.8-prod as p0
 FROM openjdk:8u332
+
 ARG IN_CHINA=false
 ## set startup profile
 ARG MVN_PROFILE=main
-## Set Timezone
 ARG TZ=Asia/Shanghai
-ENV TZ=$TZ
-## install fonts
 ARG INSTALL_FONTS=false
-## install ffmpeg
 ARG INSTALL_FFMPEG=false
+ENV TZ=$TZ
 
 WORKDIR /app
 COPY --from=builder /jars/ .

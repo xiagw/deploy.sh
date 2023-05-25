@@ -28,7 +28,7 @@ RUN set -xe; \
     sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
     fi; \
     apt-get update -yqq; \
-    apt-get install -yqq --no-install-recommends curl vim ca-certificates; \
+    apt-get install -yqq --no-install-recommends curl ca-certificates vim; \
     curl -Lo /opt/build.sh https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/opt/build.sh; \
     bash /opt/build.sh; \
     apt-get clean all && rm -rf /tmp/*

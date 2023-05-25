@@ -1,36 +1,35 @@
 # Use Java 8 slim JRE
 FROM openjdk:8-jre-slim
-MAINTAINER QJP
+
+ARG IN_CHINA=false
 
 # JMeter version
-ARG JMETER_VERSION=5.1.1
-
-# Install few utilities
-RUN apt-get clean && \
-  apt-get update && \
-  apt-get -qy install \
-        wget \
-        telnet \
-        iputils-ping \
-        unzip
-# Install JMeter
-RUN  mkdir /jmeter \
-   && cd /jmeter/ \
-   && wget https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz \
-   && tar -xzf apache-jmeter-$JMETER_VERSION.tgz \
-   && rm apache-jmeter-$JMETER_VERSION.tgz
-   
-WORKDIR /jmeter/apache-jmeter-$JMETER_VERSION/bin
-#从当前文件夹拷贝一份jmeter.properties文件，注意开启：server.rmi.ssl.disable=true
-COPY jmeter.properties .
-# ADD all the plugins
-ADD jmeter-plugins/lib /jmeter/apache-jmeter-$JMETER_VERSION/lib
-
-# ADD the sample test
-ADD sample-test sample-test
-
+ARG JMETER_VERSION=5.5
 # Set JMeter Home
-ENV JMETER_HOME /jmeter/apache-jmeter-$JMETER_VERSION/
-
+ENV JMETER_HOME /opt/apache-jmeter-$JMETER_VERSION
 # Add JMeter to the Path
 ENV PATH $JMETER_HOME/bin:$PATH
+
+# Install few utilities
+RUN set -xe; \
+   if [ "$CHANGE_SOURCE" = true ] || [ "$IN_CHINA" = true ]; then \
+   sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
+   fi; \
+   apt-get update; \
+   apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip; \
+   curl -fLo /opt/jmeter.tgz https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz; \
+   tar -C /opt -xzf jmeter.tgz; \
+   rm /opt/jmeter.tgz; \
+   apt-get clean all; \
+   rm -rf /tmp/*
+
+WORKDIR $JMETER_HOME
+
+#从当前文件夹拷贝一份jmeter.properties文件，注意开启：server.rmi.ssl.disable=true
+# COPY jmeter.properties .
+# ADD all the plugins
+# COPY jmeter-plugins/lib /opt/apache-jmeter-$JMETER_VERSION/lib
+# ADD the sample test
+# COPY sample-test sample-test
+
+COPY ./root/ /

@@ -21,7 +21,7 @@ _set_mirror() {
         elif [ -f docs/settings.xml ]; then
             cp -vf docs/settings.xml $m2_dir/
         else
-            url_settings=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml
+            url_settings=$url_deploy_raw/conf/dockerfile/settings.xml
             curl -Lo $m2_dir/settings.xml $url_settings
         fi
     fi
@@ -188,10 +188,9 @@ _build_runtime_jdk() {
         apt-get install -y --no-install-recommends ffmpeg
     fi
     if [ "$INSTALL_FONTS" = true ]; then
-        url_fonts=http://cdn.flyh6.com/docker/fonts-2022.tgz
         apt-get install -y -q --no-install-recommends fontconfig
         fc-cache --force
-        curl --referer http://www.flyh6.com/ -Lo - $url_fonts |
+        curl --referer http://www.flyh6.com/ -Lo - $url_fly_cdn/fonts-2022.tgz |
             tar -C /usr/share -zxf -
     fi
     ## set ssl
@@ -199,7 +198,7 @@ _build_runtime_jdk() {
         sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' /usr/local/openjdk-8/jre/lib/security/java.security
     fi
     ## startup run.sh
-    curl -Lo /opt/run.sh https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/run.sh
+    curl -Lo /opt/run.sh $url_deploy_raw/conf/dockerfile/root/run.sh
     chmod +x /opt/run.sh
 
     useradd -u 1000 spring
@@ -236,6 +235,14 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="$me_path/${me_name}.log"
+
+    url_fly_cdn="http://cdn.flyh6.com/docker"
+
+    if [[ "${IN_CHINA:-true}" == true ]]; then
+        url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
+    else
+        url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
+    fi
 
     _set_mirror
 

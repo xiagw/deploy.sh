@@ -106,11 +106,13 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
+    [ -w "$me_path" ] || me_log="/tmp/${me_name}.log"
+
     app_path="/app"
     if [ -w "$app_path" ]; then
         app_log="$app_path/${me_name}.log"
     else
-        app_log="/tmp/${me_name}.log"
+        app_log="$me_log"
     fi
     [ -d "$app_path"/log ] || mkdir "$app_path"/log
 
@@ -119,7 +121,7 @@ main() {
         start_nohup=1
     fi
 
-    _msg "startup /opt/run.sh ..." | tee -a "$app_log"
+    _msg "startup $me_path/$me_name ..." | tee -a "$app_log"
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT QUIT TERM
 
