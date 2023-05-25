@@ -237,12 +237,12 @@ main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="$me_path/${me_name}.log"
 
-    _set_timezone
     _set_mirror
 
     if command -v nginx && [ -n "$INSTALL_NGINX" ]; then
         _build_nginx
     elif [ -n "$LARADOCK_PHP_VERSION" ]; then
+        _set_timezone
         _build_php
     elif command -v mvn && [ -n "$MVN_PROFILE" ]; then
         _build_mvn
