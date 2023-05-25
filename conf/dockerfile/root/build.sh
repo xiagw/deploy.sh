@@ -181,7 +181,8 @@ _build_node() {
 
 _build_mvn() {
     # --settings=settings.xml --activate-profiles=main
-    mvn $MVN_DEBUG --threads 2C --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package
+    # mvn -T 1C install -pl $moduleName -am --offline
+    mvn --threads 1C --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package
 
     mkdir /jars
     find . -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' |
