@@ -7,7 +7,7 @@ ARG MVN_DEBUG=-q
 WORKDIR /src
 COPY . .
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/build.sh | bash
+RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
 #############################
 # FROM openjdk:11-jdk
@@ -25,13 +25,12 @@ ARG INSTALL_FONTS=false
 ## install ffmpeg
 ARG INSTALL_FFMPEG=false
 
-WORKDIR /app
-COPY --from=builder /jars/ .
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/build.sh | bash
-
 USER 1000
 EXPOSE 8080 8081 8082
 # volume /data
-
 CMD ["/opt/run.sh"]
+
+WORKDIR /app
+COPY --from=builder /jars/ .
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
