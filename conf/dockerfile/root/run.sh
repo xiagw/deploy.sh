@@ -11,6 +11,8 @@ _log() {
 _start_java() {
     if [ "${USE_JEMALLOC:-false}" = true ]; then
         export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+        echo "USE_JEMALLOC: $USE_JEMALLOC"
+        echo "LD_PRELOAD: $LD_PRELOAD"
     else
         unset LD_PRELOAD
     fi
@@ -86,6 +88,7 @@ _kill() {
 }
 
 _check_jemalloc() {
+    sleep 60
     for pid in $pids; do
         if grep -q "/proc/$pid/smaps"; then
             _msg "PID $pid using jemalloc..."
@@ -141,7 +144,7 @@ main() {
         start_nohup=1
     fi
 
-    _msg "startup $me_path/$me_name ..." | tee -a "$app_log"
+    _msg "Startup $me_path/$me_name ..." >>"$app_log"
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT QUIT TERM
 
@@ -156,7 +159,7 @@ main() {
         sleep 60
     done &
 
-    _check_jemalloc
+    _check_jemalloc &
 
     ## 适用于 docker 中启动
     if [[ "${start_nohup:-0}" -eq 0 ]]; then
