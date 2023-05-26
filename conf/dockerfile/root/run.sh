@@ -5,7 +5,7 @@ _msg() {
 }
 
 _log() {
-    echo "[$(date)], [RUN] $*" | tee -a "$app_log"
+    echo "[$(date)], [RUN] $*" | tee -a "$me_log"
 }
 
 _start_java() {
@@ -51,13 +51,13 @@ _start_java() {
         _msg "${cj}. start $jar $config_yml ..."
         if [ "$profile_name" ]; then
             ## 启动方式一， jar 内置配置(profile)文件 yml，
-            $JAVA_OPTS -jar "$jar" "$profile_name" &>>"$app_log" &
+            $JAVA_OPTS -jar "$jar" "$profile_name" &>>"$me_log" &
         elif [ "$config_yml" ]; then
             ## 启动方式二，配置文件 yml 在 jar 包外，非内置
-            $JAVA_OPTS "$config_yml" -jar "$jar" &>>"$app_log" &
+            $JAVA_OPTS "$config_yml" -jar "$jar" &>>"$me_log" &
         else
             ##
-            $JAVA_OPTS -jar "$jar" &>>"$app_log" &
+            $JAVA_OPTS -jar "$jar" &>>"$me_log" &
         fi
         pids="$pids $!"
     done
@@ -77,6 +77,7 @@ _start_php() {
     else
         _msg "Not found php."
     fi
+    pids="$pids $!"
 }
 
 _kill() {
@@ -125,15 +126,16 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
-    [ -w "$me_path" ] || me_log="/tmp/${me_name}.log"
 
     app_path="/app"
     if [ -w "$app_path" ]; then
-        app_log="$app_path/${me_name}.log"
+        me_log="$app_path/${me_name}.log"
+    elif [ -w "$me_path" ]; then
+        me_log="${me_path}/${me_name}.log"
     else
-        app_log="$me_log"
+        me_log="/tmp/${me_name}.log"
     fi
-    [ -d "$app_path"/log ] || mkdir "$app_path"/log
+    [ -d "$app_path"/log ] || mkdir -p "$app_path"/log
 
     if [ -f /usr/lib/x86_64-linux-gnu/libjemalloc.so.2 ]; then
         export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
@@ -144,7 +146,7 @@ main() {
         start_nohup=1
     fi
 
-    _msg "Startup $me_path/$me_name ..." >>"$app_log"
+    _msg "Startup $me_path/$me_name ..." >>"$me_log"
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT QUIT TERM
 
@@ -166,7 +168,7 @@ main() {
         ## method 1: allow debug / use tail -f，方便开发者调试，可以直接 kill java, 不会停止容器
         # exec tail -f "$app_path"/log/*.log
         ## method 2: use wait, kill java, stop container
-        exec tail -f "$app_log" "$app_path"/log/*.log &
+        exec tail -f "$me_log" &
         wait
     fi
 }

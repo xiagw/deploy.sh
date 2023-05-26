@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -xe
-
 _onbuild_php() {
     sed -i \
         -e '/fpm.sock/s/^/;/' \
@@ -39,6 +37,8 @@ _onbuild_php() {
 }
 
 main() {
+    set -xe
+
     if command -v php && [ -n "$LARADOCK_PHP_VERSION" ]; then
         _onbuild_php
     fi
