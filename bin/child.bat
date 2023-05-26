@@ -3,11 +3,12 @@ REM schtasks /Create /SC MINUTE /TN child /NP /RU SYSTEM /TR C:\Applications\chi
 
 set me_path=C:\applications
 
-if "%1"=="2" goto :cancel
 if "%1"=="c" goto :cancel
 if "%1"=="cancel" goto :cancel
+
 if "%1"=="a" goto :always
 if "%1"=="always" goto :always
+
 if "%1"=="r" goto :revert
 if "%1"=="revert" goto :revert
 
