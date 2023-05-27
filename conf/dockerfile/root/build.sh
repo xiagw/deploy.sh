@@ -1,13 +1,5 @@
 #!/bin/bash
 
-_set_timezone() {
-    if [ "$IN_CHINA" = false ] || [ "${CHANGE_SOURCE}" = false ]; then
-        return
-    fi
-    ln -snf /usr/share/zoneinfo/${TZ:-Asia/Shanghai} /etc/localtime
-    echo ${TZ:-Asia/Shanghai} >/etc/timezone
-}
-
 _set_mirror() {
     url_fly_cdn="http://cdn.flyh6.com/docker"
 
@@ -17,9 +9,15 @@ _set_mirror() {
         url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
     fi
 
+    if [ "$1" = timezone ]; then
+        ln -snf /usr/share/zoneinfo/${TZ:-Asia/Shanghai} /etc/localtime
+        echo ${TZ:-Asia/Shanghai} >/etc/timezone
+    fi
+
     if [ "$IN_CHINA" = false ] || [ "${CHANGE_SOURCE}" = false ]; then
         return
     fi
+
     ## maven
     if command -v mvn; then
         m2_dir=/root/.m2
@@ -50,7 +48,7 @@ _set_mirror() {
 }
 
 _build_nginx() {
-    echo "build nginx ..."
+    echo "build nginx alpine ..."
     apk update
     apk upgrade
     apk add --no-cache openssl bash curl
@@ -69,8 +67,8 @@ _build_nginx() {
 _build_php() {
     echo "build php ..."
 
-    usermod -u 1000 www-data
-    groupmod -g 1000 www-data
+    # usermod -u 1000 www-data
+    # groupmod -g 1000 www-data
 
     apt-get update -yqq
     $apt_opt apt-utils
@@ -143,20 +141,22 @@ _build_mysql() {
 
     my_cnf=/etc/mysql/conf.d/my.cnf
     if mysqld --version | grep '5\.7'; then
-        cp -f $me_path/my.5.7.cnf $my_cnf
+        cp -f "$me_path"/my.5.7.cnf $my_cnf
     elif mysqld --version | grep '8\.0'; then
-        cp -f $me_path/my.8.0.cnf $my_cnf
+        cp -f "$me_path"/my.8.0.cnf $my_cnf
     else
-        cp -f $me_path/my.cnf $my_cnf
+        cp -f "$me_path"/my.cnf $my_cnf
     fi
     chmod 0444 $my_cnf
     if [ "$MYSQL_SLAVE" = 'true' ]; then
         sed -i -e "/server_id/s/1/${MYSQL_SLAVE_ID:-2}/" -e "/auto_increment_offset/s/1/2/" $my_cnf
     fi
-    sed -i '/skip-host-cache/d' /etc/my.cnf
+    if [ -f /etc/my.cnf ]; then
+        sed -i '/skip-host-cache/d' /etc/my.cnf
+    fi
 
-    printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >/root/.my.cnf
-    printf "export LANG=C.UTF-8" >/root/.bashrc
+    printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >$HOME/.my.cnf
+    printf "export LANG=C.UTF-8" >$HOME/.bashrc
 
     chmod +x /opt/*.sh
 }
@@ -164,6 +164,7 @@ _build_mysql() {
 _build_redis() {
     echo "build redis ..."
 }
+
 _build_node() {
     echo "build node ..."
 
@@ -190,9 +191,9 @@ _build_mvn() {
         xargs -t -I {} cp -vf {} /jars/
 }
 
-_build_runtime_jdk() {
+_build_jdk_runtime() {
     apt-get update -q
-    $apt_opt less
+    $apt_opt less apt-utils
     if [ "$INSTALL_FFMPEG" = true ]; then
         $apt_opt ffmpeg
     fi
@@ -212,7 +213,7 @@ _build_runtime_jdk() {
 
     useradd -u 1000 spring
     chown -R 1000:1000 /app
-    touch "/app/profile.${MVN_PROFILE}"
+    touch "/app/profile.${MVN_PROFILE:-main}"
 
     $apt_opt libjemalloc2
 
@@ -254,12 +255,12 @@ main() {
     if command -v nginx && [ -n "$INSTALL_NGINX" ]; then
         _build_nginx
     elif [ -n "$LARADOCK_PHP_VERSION" ]; then
-        _set_timezone
+        _set_mirror timezone
         _build_php
     elif command -v mvn && [ -n "$MVN_PROFILE" ]; then
         _build_mvn
     elif command -v java && [ -n "$MVN_PROFILE" ]; then
-        _build_runtime_jdk
+        _build_jdk_runtime
     fi
 }
 
