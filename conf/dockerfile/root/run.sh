@@ -81,7 +81,7 @@ _start_php() {
 }
 
 _kill() {
-    _msg "Receive SIGTERM, kill $pids"
+    _msg "receive SIGTERM, kill $pids"
     for pid in $pids; do
         kill "$pid"
         wait "$pid"

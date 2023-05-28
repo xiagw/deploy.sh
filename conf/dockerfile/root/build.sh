@@ -3,7 +3,7 @@
 _set_mirror() {
     url_fly_cdn="http://cdn.flyh6.com/docker"
 
-    if [ "${IN_CHINA:-true}" = true ]; then
+    if [ "$IN_CHINA" = true ] || [ "$CHANGE_SOURCE" = true ]; then
         url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
     else
         url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
@@ -70,8 +70,11 @@ _build_php() {
     # usermod -u 1000 www-data
     # groupmod -g 1000 www-data
 
+    apt_opt="apt-get install -yqq --no-install-recommends"
+
     apt-get update -yqq
     $apt_opt apt-utils
+
     ## preesed tzdata, update package index, upgrade packages and install needed software
     truncate -s0 /tmp/preseed.cfg
     echo "tzdata tzdata/Areas select Asia" >>/tmp/preseed.cfg
@@ -82,15 +85,22 @@ _build_php() {
     $apt_opt tzdata
     $apt_opt locales
 
-    grep -q '^en_US.UTF-8' /etc/locale.gen || echo 'en_US.UTF-8 UTF-8' >>/etc/locale.gen
+    if ! grep -q '^en_US.UTF-8' /etc/locale.gen; then
+        echo 'en_US.UTF-8 UTF-8' >>/etc/locale.gen
+    fi
     locale-gen en_US.UTF-8
 
     case "$LARADOCK_PHP_VERSION" in
-    8.*)
-        echo "Use default repo of OS."
+    8.1)
+        echo "install PHP from repo of OS..."
+        ;;
+    8.2)
+        echo "install PHP from ppa:ondrej/php..."
+        $apt_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
+        add-apt-repository ppa:ondrej/php
         ;;
     *)
-        echo "Use ppa:ondrej/php"
+        echo "Use ppa:ondrej/php..."
         $apt_opt software-properties-common
         add-apt-repository ppa:ondrej/php
         $apt_opt php"${LARADOCK_PHP_VERSION}"-mcrypt
@@ -99,6 +109,7 @@ _build_php() {
 
     apt-get upgrade -yqq
     $apt_opt \
+        vim curl ca-certificates \
         php"${LARADOCK_PHP_VERSION}" \
         php"${LARADOCK_PHP_VERSION}"-redis \
         php"${LARADOCK_PHP_VERSION}"-mongodb \
@@ -117,12 +128,13 @@ _build_php() {
         php"${LARADOCK_PHP_VERSION}"-mbstring \
         php"${LARADOCK_PHP_VERSION}"-msgpack \
         php"${LARADOCK_PHP_VERSION}"-sqlite3
+
     # php"${LARADOCK_PHP_VERSION}"-process \
     # php"${LARADOCK_PHP_VERSION}"-pecl-mcrypt  replace by  php"${LARADOCK_PHP_VERSION}"-libsodium
 
     $apt_opt libjemalloc2
 
-    if [ "$INSTALL_APACHE" = true ]; then
+    if [ "$LARADOCK_PHP_VERSION" = 5.6 ]; then
         $apt_opt apache2 libapache2-mod-fcgid \
             libapache2-mod-php"${LARADOCK_PHP_VERSION}"
         sed -i -e '1 i ServerTokens Prod' -e '1 i ServerSignature Off' \
@@ -131,7 +143,6 @@ _build_php() {
     else
         $apt_opt nginx
     fi
-    apt-get clean all && rm -rf /tmp/*
 }
 
 _build_mysql() {
@@ -216,10 +227,6 @@ _build_jdk_runtime() {
     touch "/app/profile.${MVN_PROFILE:-main}"
 
     $apt_opt libjemalloc2
-
-    # apt-get autoremove -y
-    apt-get clean all
-    rm -rf /var/lib/apt/lists/*
 }
 
 _build_tomcat() {
@@ -262,6 +269,10 @@ main() {
     elif command -v java && [ -n "$MVN_PROFILE" ]; then
         _build_jdk_runtime
     fi
+
+    # apt-get autoremove -y
+    apt-get clean all
+    rm -rf /var/lib/apt/lists/* /tmp/*
 }
 
 main "$@"
