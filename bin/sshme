@@ -5,24 +5,41 @@ _get_input() {
     read -rp "[$((count + 1))]. Enter ssh name: (alias name) " read_ssh_name
     if [[ "${delete_flag:-0}" -eq 0 ]]; then
         read -rp "[$((count + 1))]. Enter ssh ip: (ip/dns) " read_ssh_ip
-        read -rp "[$((count + 1))]. Enter ssh user: [root] " read_ssh_user
-        read -rp "[$((count + 1))]. Enter ssh port: [22] " read_ssh_port
-        read -rp "[$((count + 1))]. Enable byobu? [Y/n] " read_byobu
+        ssh_ip=${read_ssh_ip}
+        if echo "$read_ssh_ip" | grep -q ".*@.*:"; then
+            ssh_user=${read_ssh_ip%%@*}
+            var_temp=${read_ssh_ip#*@}
+            ssh_ip=${var_temp%%:*}
+            ssh_port=${read_ssh_ip##*:}
+        else
+            read -rp "[$((count + 1))]. Enter ssh user: [root] " read_ssh_user
+            read -rp "[$((count + 1))]. Enter ssh port: [22] " read_ssh_port
+            ssh_user=${read_ssh_user:-root}
+            ssh_port=${read_ssh_port:-22}
+        fi
+        # read -rp "[$((count + 1))]. Enable byobu? [Y/n] " read_byobu
     fi
-    select c in "$HOME"/.ssh/config*; do
-        ssh_conf="$(readlink -f "$c")"
-        break
-    done
-    select a in "$HOME"/src/*devops*/ansible/hosts; do
-        ansible_conf="$(readlink -f "$a")"
-        break
-    done
+    if [[ "$files_num" == 1 ]]; then
+        ssh_conf=${files_conf[0]}
+    else
+        select c in "${files_conf[@]}"; do
+            ssh_conf="$(readlink -f "$c")"
+            break
+        done
+    fi
+
+    if [[ "$files_nums" == 1 ]]; then
+        ansible_conf=${files_host[0]}
+    else
+        select a in "${files_host[@]}"; do
+            ansible_conf="$(readlink -f "$a")"
+            break
+        done
+    fi
 }
 
 _add_host() {
-    grep -q "^Host.*${read_ssh_name}$" "$ssh_conf" && host_exist=1
-    grep -q "### ${read_ssh_name} begin$" "$ssh_conf" && host_exist=1
-    if [[ $host_exist ]]; then
+    if grep -q -E "^Host.*${read_ssh_name}$|^### ${read_ssh_name} begin$" "$ssh_conf"; then
         echo "host ${read_ssh_name} exist, skip"
         return 1
     fi
@@ -30,9 +47,10 @@ _add_host() {
     cat >>"$ssh_conf" <<EOF
 ### ${read_ssh_name} begin  ## $([[ "${read_byobu:-y}" == y ]] && echo "# byobu")
 Host ${read_ssh_name}
-    HostName ${read_ssh_ip}
-    User ${read_ssh_user:-root} $([[ "${read_ssh_port:-22}" == 22 ]] || echo -e "\nPort ${read_ssh_port:-22}")
+    HostName ${ssh_ip}
+    User ${ssh_user} $([[ "${ssh_port}" == 22 ]] || echo -e "\n    Port ${ssh_port}")
 ### ${read_ssh_name} end
+
 EOF
     ## ansible config
     echo "${read_ssh_name}" >>"$ansible_conf"
@@ -40,7 +58,7 @@ EOF
 
 _delete_host() {
     sed -i "/^### ${read_ssh_name} begin/,/^### ${read_ssh_name} end/d" "$ssh_conf"
-    sed -i "/^${read_ssh_name}/d" "$ansible_conf"
+    sed -i "/^${read_ssh_name}$/d" "$ansible_conf"
 }
 
 main() {
@@ -51,8 +69,13 @@ main() {
     LC_MONETARY="en_US.UTF-8"
     LC_NUMERIC="en_US.UTF-8"
     LC_TIME="en_US.UTF-8"
-    file_conf=("$HOME/.ssh/config"*)
-    select ssh_host in add update delete $(awk 'NR>1 && /^Host/ {print $2}' "${file_conf[@]}") quit; do
+
+    files_conf=("$HOME"/.ssh/config*)
+    files_num=${#files_conf[@]}
+    files_host=("$HOME"/src/*devops*/ansible/hosts)
+    files_nums=${#files_host[@]}
+
+    select ssh_host in add update delete $(awk 'NR>1 && /^Host/ {print $2}' "${files_conf[@]}") quit; do
         case "${ssh_host:-quit}" in
         'quit')
             break
@@ -72,7 +95,7 @@ main() {
             _delete_host
             ;;
         *)
-            if grep -B2 "${ssh_host}" "${file_conf[@]}" | grep -q 'byobu'; then
+            if grep -B2 "${ssh_host}" "${files_conf[@]}" | grep -q 'byobu'; then
                 exec_byobu='byobu'
             fi
             ## get username from $1
