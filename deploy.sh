@@ -632,46 +632,43 @@ _renew_cert() {
     acme_cmd="${acme_home}/acme.sh"
     acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
     file_reload_nginx="${acme_home}/.reload.nginx"
-    ## content: export CF_Key="sdfsdfsdfljlbjkljlkjsdfoiwje" export CF_Email="xxxx@sss.com"
-    conf_dns_cloudflare="${me_path_data}/.cloudflare.conf"
-    ## export Ali_Key="sdfsdfsdfljlbjkljlkjsdfoiwje" export Ali_Secret="jlsdflanljkljlfdsaklkjflsa"
-    conf_dns_aliyun="${me_path_data}/.aliyun.dnsapi.conf"
-    ## content: DP_Id="1234" DP_Key="sADDsdasdgdsf"
-    conf_dns_qcloud="${me_path_data}/.qcloud.dnspod.conf"
 
     ## install acme.sh / 安装 acme.sh
     [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
 
     [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
+    files_account=("${acme_home}/"account.conf.*)
+    files_num=${#files_account[@]}
     ## support multiple account.conf.[x] / 支持多账号,只有一个则 account.conf.1
-    if [[ "$(find "${acme_home}" -name 'account.conf*' | wc -l)" == 1 ]]; then
+    if [[ "$files_num" == 1 ]]; then
         cp -vf "${acme_home}/"account.conf "${acme_home}/"account.conf.1
     fi
 
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
-    for account in "${acme_home}/"account.conf.*; do
-        if [ ! -f "$account" ]; then
+    for file in "${files_account[@]}"; do
+        if [ ! -f "$file" ]; then
             continue
         fi
-        if [ -f "$conf_dns_cloudflare" ]; then
-            if ! command -v flarectl >/dev/null 2>&1; then
-                _msg warning "command not found: flarectl "
-                return 1
-            fi
-            source "$conf_dns_cloudflare" "${account##*.}"
+        source "$file"
+        dns_type=${file##*.}
+        case "${dns_type}" in
+        dns_cf)
+            _msg "dns type: cloudflare."
+            _install_cloudflare_cli
             domains="$(flarectl zone list | awk '/active/ {print $3}')"
-            dnsType='dns_cf'
-        elif [ -f "$conf_dns_aliyun" ]; then
+            ;;
+        dns_ali)
+            _msg "dns type: aliyun."
             _install_aliyun_cli
+            aliyun configure set --profile "deploy${file##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
+            domains="$(aliyun --profile "deploy${file##*.}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
+            ;;
+        *)
+            _msg warn "unknown dns type: $dns_type"
+            ;;
+        esac
 
-            source "$conf_dns_aliyun" "${account##*.}"
-            aliyun configure set --profile "deploy${account##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
-            domains="$(aliyun --profile "deploy${account##*.}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
-            dnsType='dns_ali'
-        elif [ -f "$conf_dns_qcloud" ]; then
-            _msg warning "[TODO] use dnspod api."
-        fi
-        \cp -vf "$account" "${acme_home}/account.conf"
+        \cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
             if [ -d "${acme_home}/$domain" ]; then
@@ -679,7 +676,7 @@ _renew_cert() {
                 "${acme_cmd}" --renew -d "${domain}" --renew-hook "touch $file_reload_nginx" || true
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue --dns $dnsType -d "$domain" -d "*.$domain"
+                "${acme_cmd}" --issue -d "$domain" -d "*.$domain" --dns $dns_type
             fi
             "${acme_cmd}" --install-cert -d "$domain" --key-file "$acme_cert/$domain".key --fullchain-file "$acme_cert/$domain".crt
         done
@@ -757,6 +754,15 @@ _install_python_element() {
     else
         _msg error "failed to install matrix-nio"
     fi
+}
+
+_install_cloudflare_cli() {
+    command -v flarectl >/dev/null && return
+    _msg info "install flarectl..."
+    # curl -Lo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
+    # tar -C /tmp -zxf /tmp/aliyun.tgz
+    # install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    # install -m 0755 /tmp/aliyun "${me_path_data_bin}/aliyun"
 }
 
 _install_aliyun_cli() {
