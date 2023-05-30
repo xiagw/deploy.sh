@@ -638,11 +638,8 @@ _renew_cert() {
 
     [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
     files_account=("${acme_home}/"account.conf.*)
-    files_num=${#files_account[@]}
+    # files_num=${#files_account[@]}
     ## support multiple account.conf.[x] / 支持多账号,只有一个则 account.conf.1
-    if [[ "$files_num" == 1 ]]; then
-        cp -vf "${acme_home}/"account.conf "${acme_home}/"account.conf.1
-    fi
 
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     for file in "${files_account[@]}"; do
