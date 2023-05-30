@@ -607,7 +607,7 @@ _deploy_notify() {
     fi
 }
 
-_reload_nginx_gitlab() {
+_nginx_gitlab_create_pipeline() {
     if [ -f "$file_reload_nginx" ]; then
         _msg info "found .reload.nginx"
     else
@@ -692,7 +692,7 @@ _renew_cert() {
         done
     done
 
-    _reload_nginx_gitlab
+    _nginx_gitlab_create_pipeline
 
     ## Custom deployment method / 自定义部署方式
     if [[ -f "${acme_home}/custom.acme.sh" ]]; then
