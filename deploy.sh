@@ -624,6 +624,7 @@ _nginx_gitlab_create_pipeline() {
 _renew_cert() {
     if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
         echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
+        exec_single=1
     else
         return 0
     fi
