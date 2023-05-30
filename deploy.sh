@@ -648,7 +648,15 @@ _renew_cert() {
         fi
         source "$file"
         dns_type=${file##*.}
+        profile_name=${file%.*}
+        profile_name=${profile_name##*.}
         case "${dns_type}" in
+        dns_gd)
+            _msg "dns type: Goddady."
+            api_goddady="https://api.godaddy.com/v1/domains"
+            api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
+            domains="$(curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain')"
+            ;;
         dns_cf)
             _msg "dns type: cloudflare."
             _install_cloudflare_cli
@@ -657,8 +665,13 @@ _renew_cert() {
         dns_ali)
             _msg "dns type: aliyun."
             _install_aliyun_cli
-            aliyun configure set --profile "deploy${file##*.}" --mode AK --region "${Ali_region:-none}" --access-key-id "${Ali_Key:-none}" --access-key-secret "${Ali_Secret:-none}"
-            domains="$(aliyun --profile "deploy${file##*.}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
+            aliyun configure set \
+                --profile "deploy_${profile_name}" \
+                --mode AK \
+                --region "${SAVED_Ali_region:-none}" \
+                --access-key-id "${SAVED_Ali_Key:-none}" \
+                --access-key-secret "${SAVED_Ali_Secret:-none}"
+            domains="$(aliyun --profile "deploy_${profile_name}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
             ;;
         *)
             _msg warn "unknown dns type: $dns_type"
