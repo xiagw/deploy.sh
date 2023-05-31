@@ -770,10 +770,10 @@ _install_python_element() {
 _install_cloudflare_cli() {
     command -v flarectl >/dev/null && return
     _msg info "install flarectl..."
-    # curl -Lo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
-    # tar -C /tmp -zxf /tmp/aliyun.tgz
-    # install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-    # install -m 0755 /tmp/aliyun "${me_path_data_bin}/aliyun"
+    url_flarectl=https://github.com/cloudflare/cloudflare-go/releases/download/v0.68.0/flarectl_0.68.0_linux_amd64.tar.xz
+    curl -fLo /tmp/flarectl.tar.xz $url_flarectl
+    tar -C /tmp -xf /tmp/flarectl.tar.xz flarectl
+    install -m 0755 /tmp/flarectl "${me_path_data_bin}/flarectl"
 }
 
 _install_aliyun_cli() {
