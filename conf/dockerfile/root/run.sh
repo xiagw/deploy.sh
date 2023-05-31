@@ -100,24 +100,51 @@ _check_jemalloc() {
 }
 
 _schedule_upgrade() {
-    file_up="$app_path/.up"
-    ## project_id=1 ; project_ver=hash; project_upgrade_url=http://update.xxx.com
-    [ -f "$file_up" ] || return 0
-    source "$file_up"
-    file_temp=/tmp/u.html
-    curl -fsSLo "$file_temp" "${project_upgrade_url:-localhost}" 2>/dev/null
-    remote_id=$(awk -F= '/^project_id=/ {print $2}' "$file_temp")
-    remote_ver=$(awk -F= '/^project_ver=/ {print $2}' "$file_temp")
-    file_update=spring.tgz
-    if [[ "${project_id:-1}" == "$remote_id" && "${project_ver:-1}" != "$remote_ver" ]]; then
-        curl -fsSLo /tmp/${file_update} "${project_upgrade_url%/}/$file_update"
-        curl -fsSLo /tmp/${file_update}.sha "${project_upgrade_url%/}/${file_update}.sha"
-        if (cd /tmp && sha256sum -c $file_update.sha) &>/dev/null; then
-            tar -C "$app_path" -zxf /tmp/$file_update
-            _kill
-            _start_java
-            sed -i "/^project_ver=/s/=.*/=$remote_ver/" "$file_up"
-            rm -f /tmp/${file_update}*
+    ## app_id=1
+    ## app_ver=hash
+    ## app_upgrade_url=http://update.xxx.com
+
+    path_html=/var/www/html
+    file_local=upgrade_auto
+
+    if [[ -f "$app_path/$file_local" || -f "$path_html/$file_local" ]]; then
+        _msg "found upgrade_auto"
+    else
+        return 0
+    fi
+
+    file_remote=upgrade_check.txt
+    curl -fsSLo "/tmp/$file_remote" "${project_upgrade_url:-localhost}/$file_remote" 2>/dev/null
+    app_id_remote=$(awk -F= '/^app_id=/ {print $2}' "/tmp/$file_remote")
+    app_ver_remote=$(awk -F= '/^app_ver=/ {print $2}' "/tmp/$file_remote")
+
+    if [ -f "$app_path/$file_local" ]; then
+        source "$app_path/$file_local"
+        if [[ "${app_id:-1}" == "$app_id_remote" && "${app_ver:-1}" != "$app_ver_remote" ]]; then
+            get_remote_file=spring.tar.gz
+            curl -fsSLo /tmp/${get_remote_file} "${project_upgrade_url%/}/$get_remote_file"
+            curl -fsSLo /tmp/${get_remote_file}.sha256 "${project_upgrade_url%/}/${get_remote_file}.sha256"
+            if cd /tmp && sha256sum -c $get_remote_file.sha256; then
+                tar -C "$app_path" -zxf /tmp/$get_remote_file
+                _kill
+                _start_java
+                sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$app_path/$file_local"
+                rm -f /tmp/${get_remote_file}*
+            fi
+        fi
+    fi
+
+    if [ -f "$path_html/$file_local" ]; then
+        source "$path_html/$file_local"
+        if [[ "${app_id:-1}" == "$app_id_remote" && "${app_ver:-1}" != "$app_ver_remote" ]]; then
+            get_remote_file=tp.tar.gz
+            curl -fsSLo /tmp/${get_remote_file} "${project_upgrade_url%/}/$get_remote_file"
+            curl -fsSLo /tmp/${get_remote_file}.sha256 "${project_upgrade_url%/}/${get_remote_file}.sha256"
+            if cd /tmp && sha256sum -c $get_remote_file.sha256; then
+                tar -C "$path_html" -zxf /tmp/$get_remote_file
+                sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$path_html/$file_local"
+                rm -f /tmp/${get_remote_file}*
+            fi
         fi
     fi
 }
