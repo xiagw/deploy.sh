@@ -710,7 +710,6 @@ _renew_cert() {
 
 _get_balance_aliyun() {
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-
     if [[ "${PIPELINE_GET_BALANCE:-0}" -eq 1 || "${arg_get_balance:-0}" -eq 1 ]]; then
         echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-0}"
     else
@@ -725,9 +724,6 @@ _get_balance_aliyun() {
         else
             continue
         fi
-        # if [[ $ENV_SKIP_ALIYUN_PROFILE =~ $p ]]; then
-        #     continue
-        # fi
         local amount
         amount="$(aliyun -p "$p" bssopenapi QueryAccountBalance 2>/dev/null | jq -r .Data.AvailableAmount | sed 's/,//')"
         if [[ -z "$amount" ]]; then
@@ -741,6 +737,9 @@ _get_balance_aliyun() {
     done
     echo
     _msg stepend "check balance of aliyun"
+    if [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 ]]; then
+        return 0
+    fi
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         exit 0
     fi
@@ -1498,11 +1497,11 @@ main() {
     ## setup ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     _set_deploy_conf
 
-    ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
-    _renew_cert
-
     ## get balance of aliyun / 获取 aliyun 账户现金余额
     _get_balance_aliyun
+
+    ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
+    _renew_cert
 
     ## probe program lang / 探测项目的程序语言
     _probe_langs
