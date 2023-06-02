@@ -114,16 +114,18 @@ _schedule_upgrade() {
     fi
 
     file_remote=upgrade_check.txt
-    curl -fsSLo "/tmp/$file_remote" "${project_upgrade_url:-localhost}/$file_remote" 2>/dev/null
+    touch /tmp/$file_remote
+    curl -fsSLo "/tmp/$file_remote" "${app_upgrade_url:-localhost}/$file_remote" 2>/dev/null
     app_id_remote=$(awk -F= '/^app_id=/ {print $2}' "/tmp/$file_remote")
     app_ver_remote=$(awk -F= '/^app_ver=/ {print $2}' "/tmp/$file_remote")
 
     if [ -f "$app_path/$file_local" ]; then
+        # shellcheck source=/dev/null
         source "$app_path/$file_local"
         if [[ "${app_id:-1}" == "$app_id_remote" && "${app_ver:-1}" != "$app_ver_remote" ]]; then
             get_remote_file=spring.tar.gz
-            curl -fsSLo /tmp/${get_remote_file} "${project_upgrade_url%/}/$get_remote_file"
-            curl -fsSLo /tmp/${get_remote_file}.sha256 "${project_upgrade_url%/}/${get_remote_file}.sha256"
+            curl -fsSLo /tmp/${get_remote_file} "${app_upgrade_url%/}/$get_remote_file"
+            curl -fsSLo /tmp/${get_remote_file}.sha256 "${app_upgrade_url%/}/${get_remote_file}.sha256"
             if cd /tmp && sha256sum -c $get_remote_file.sha256; then
                 tar -C "$app_path" -zxf /tmp/$get_remote_file
                 _kill
@@ -135,11 +137,12 @@ _schedule_upgrade() {
     fi
 
     if [ -f "$path_html/$file_local" ]; then
+        # shellcheck source=/dev/null
         source "$path_html/$file_local"
         if [[ "${app_id:-1}" == "$app_id_remote" && "${app_ver:-1}" != "$app_ver_remote" ]]; then
             get_remote_file=tp.tar.gz
-            curl -fsSLo /tmp/${get_remote_file} "${project_upgrade_url%/}/$get_remote_file"
-            curl -fsSLo /tmp/${get_remote_file}.sha256 "${project_upgrade_url%/}/${get_remote_file}.sha256"
+            curl -fsSLo /tmp/${get_remote_file} "${app_upgrade_url%/}/$get_remote_file"
+            curl -fsSLo /tmp/${get_remote_file}.sha256 "${app_upgrade_url%/}/${get_remote_file}.sha256"
             if cd /tmp && sha256sum -c $get_remote_file.sha256; then
                 tar -C "$path_html" -zxf /tmp/$get_remote_file
                 sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$path_html/$file_local"
@@ -147,6 +150,22 @@ _schedule_upgrade() {
             fi
         fi
     fi
+}
+
+_set_jemalloc() {
+    case "$LARADOCK_PHP_VERSION" in
+    8.*)
+        _msg "disable jemalloc."
+        ;;
+    *)
+        _msg "enable jemalloc..."
+        if [ -f /usr/lib/x86_64-linux-gnu/libjemalloc.so.2 ]; then
+            export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+        fi
+        # 1. lsof -Pn -p $(pidof mariadbd) | grep jemalloc，配置正确的话会有jemalloc.so的输出；
+        # 2. cat /proc/$(pidof mariadbd)/smaps | grep jemalloc，和上述命令有类似的输出。
+        ;;
+    esac
 }
 
 main() {
@@ -164,9 +183,45 @@ main() {
     fi
     [ -d "$app_path"/log ] || mkdir -p "$app_path"/log
 
-    if [ -f /usr/lib/x86_64-linux-gnu/libjemalloc.so.2 ]; then
-        export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+    _set_jemalloc
+
+    if [ -f /opt/run.init.sh ]; then
+        bash /opt/run.init.sh
     fi
+
+    ## index for default site
+    html_path=/var/www/html
+    [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
+    [ -d /run/php ] || mkdir -p /run/php
+    [ -d $html_path ] || mkdir $html_path
+    [ -f $html_path/index.html ] || date >>$html_path/index.html
+
+    ## create runtime for ThinkPHP
+    while [ -d $html_path ]; do
+        for dir in $html_path/ $html_path/tp/ "$html_path"/tp/*/; do
+            [ -d "$dir" ] || continue
+            ## ThinkPHP 5.1
+            [[ -f "${dir}"think && -d ${dir}thinkphp && -d ${dir}application ]] && need_runtime=1
+            ## ThinkPHP 6.0
+            [[ -f "${dir}"think && -d ${dir}thinkphp && -d ${dir}app ]] && need_runtime=1
+            if [[ "$need_runtime" -eq 1 ]]; then
+                run_dir="${dir}runtime"
+                [[ -d "$run_dir" ]] || mkdir "$run_dir"
+                dir_owner="$(stat -t -c %U "$run_dir")"
+                [[ "$dir_owner" == www-data ]] || chown -R www-data:www-data "$run_dir"
+            fi
+        done
+        sleep 600
+    done &
+
+    ## remove runtime log files
+    while [ -d $html_path ]; do
+        for dir in $html_path/ $html_path/tp/ "$html_path"/tp/*/; do
+            [ -d "$dir" ] || continue
+            find "${dir}runtime" -type f -iname '*.log' -ctime +5 -print0 | xargs -t --null rm -f
+        done
+        sleep 86400
+    done &
 
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then
