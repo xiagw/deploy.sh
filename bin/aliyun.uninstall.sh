@@ -182,7 +182,7 @@ AEGIS_UPDATE_SITE_ARRAY[2]="update5.aegis.aliyun.com"
 AEGIS_UPDATE_SITE_ARRAY[3]="update.aegis.aliyun.com"
 
 # entry
-if [ $UID -ne "0" ]; then
+if [ "$(/usr/bin/id -u)" -ne "0" ]; then
     echo "ERROR: This script must be run as root." >&2
     exit 8
 fi

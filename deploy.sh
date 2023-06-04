@@ -787,14 +787,14 @@ _install_aliyun_cli() {
 _install_jq_cli() {
     command -v jq >/dev/null && return
     _msg info "install jq cli..."
-    [[ $UID -eq 0 ]] || pre_sudo=sudo
+    [[ $(/usr/bin/id -u) -eq 0 ]] || pre_sudo=sudo
     $pre_sudo apt-get install -y jq
 }
 
 _install_terraform() {
     command -v terraform >/dev/null && return
     _msg info "installing terraform..."
-    [[ $UID -eq 0 ]] || use_sudo=sudo
+    [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
     $use_sudo apt-get update -qq && $use_sudo apt-get install -qq -y gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null 2>&1
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
@@ -883,7 +883,7 @@ _install_flarectl() {
 }
 
 _detect_os() {
-    if [[ "$UID" != 0 ]]; then
+    if [[ "$(/usr/bin/id -u)" != 0 ]]; then
         exec_sudo=sudo
     fi
     if [[ -e /etc/os-release ]]; then
