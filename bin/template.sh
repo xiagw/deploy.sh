@@ -6,6 +6,44 @@ _cleanup() {
     # rm -f $file_temp
 }
 
+_loading_rotate() {
+    sleep 10 &
+    pid=$!
+    frames="/ - \\ |"
+    while kill -0 $pid >/dev/null 2>&1; do
+        for frame in $frames; do
+            printf "\r$frame Loading..."
+            sleep 0.5
+        done
+    done
+    printf "\n"
+}
+
+_loading_left_right() {
+    while true; do
+        # Frame #1
+        printf "\r< Loading..."
+        sleep 0.5
+        # Frame #2
+        printf "\r> Loading..."
+        sleep 0.5
+    done
+}
+
+_msg_color() {
+    bold=$(tput bold)
+    underline=$(tput smul)
+    italic=$(tput sitm)
+    info=$(tput setaf 2)
+    error=$(tput setaf 160)
+    warn=$(tput setaf 214)
+    reset=$(tput sgr0)
+    echo "${info}INFO${reset}: This is an ${bold}info${reset} message"
+    echo "${error}ERROR${reset}: This is an ${underline}error${reset} message"
+    echo "${warn}WARN${reset}: This is a ${italic}warning${reset} message
+"
+}
+
 _color() {
     if [[ -t 2 ]] && [[ -z "${no_color-}" ]] && [[ "${TERM-}" != "dumb" ]]; then
         COLOROFF='\033[0m' RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m'
