@@ -1,5 +1,5 @@
 1. flameshot.%Y%m%d.%H%M%S
-1. grub
+1. grub timeout
 As such your /etc/default/grub should contain:
 
 GRUB_RECORDFAIL_TIMEOUT=10
