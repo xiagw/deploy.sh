@@ -23,7 +23,7 @@ _msg() {
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
     time)
-        color_on="[+] $(date +%Y%m%d-%T-%u), "
+        color_on="[+$([ "$STEP" -gt 9 ] &&  echo '+')] $(date +%Y%m%d-%T-%u), "
         color_off=''
         ;;
     step | timestep)
@@ -470,7 +470,7 @@ _deploy_rsync_ssh() {
 }
 
 _deploy_aliyun_oss() {
-    _msg step "[deploy] deploy files to aliyun oss"
+    _msg step "[deploy] deploy files to Aliyun OSS"
     # Check if deployment is enabled
     if [[ "${DEPLOYMENT_ENABLED:-0}" -ne 1 ]]; then
         echo '<skip>'
@@ -478,16 +478,15 @@ _deploy_aliyun_oss() {
     fi
 
     # Read config file
-    source $me_path_conf/aliyun.oss.conf
+    source ${me_path_data}/aliyun.oss.key.conf
 
     # Check if OSS CLI is installed
     if ! command -v ossutil >/dev/null 2>&1; then
-        echo 'ossutil is not installed. Please install it before deploying to Aliyun OSS.'
-        return
+        sudo -v
+        curl https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
     fi
 
     # Deploy files to Aliyun OSS
-    _msg step "[oss] deploy files to Aliyun OSS"
     _msg time "Start time: $(date +'%F %T')"
     ossutil cp -r "${LOCAL_DIR}" "oss://${BUCKET_NAME}/${REMOTE_DIR}" --config="${OSS_CONFIG_FILE}"
     if [[ $? -eq 0 ]]; then
@@ -1588,7 +1587,7 @@ main() {
     ## deploy notify info / 发布通知信息
     _deploy_notify
 
-    _msg time "END."
+    _msg time "[END]"
     ## deploy result:  0 成功， 1 失败
     return ${deploy_result:-0}
 }
