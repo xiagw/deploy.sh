@@ -15,7 +15,7 @@ if [ ! -d "${gitlab_project_dir}/vendor" ]; then
 fi
 
 if [ -f "$gitlab_project_dir"/custom.build.sh ]; then
-    echo "Found custom.build.sh, run it"
+    echo "Found $gitlab_project_dir/custom.build.sh, run it"
     bash "$gitlab_project_dir"/custom.build.sh
     return
 fi

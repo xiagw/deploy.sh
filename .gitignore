@@ -1,15 +1,19 @@
 ## macos
 .DS_Store
+
 ## vim swap
 .swp
 *.log
+
 ## gitlab runner exclude
 builds/
 cache/
 etc/
+
+## deploy.sh conf/ data/
 conf/deploy.*
-## deploy.sh data/
 data/**
-!data/readme.md
+!data/README.md
+
 ## custome folder
 tmp/

@@ -293,7 +293,6 @@ _build_image_docker() {
     ## docker build
     [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
     [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
-    _msg "USE_JEMALLOC: ${ENV_USE_JEMALLOC:-false}"
     DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg USE_JEMALLOC="${ENV_USE_JEMALLOC:-false}" \
@@ -532,21 +531,6 @@ _deploy_sftp() {
     _msg step "[deploy] deploy files to sftp server"
 }
 
-_deploy_notify_msg() {
-    msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
-
-    msg_body="
-[Gitlab Deploy]
-Project = ${gitlab_project_path}/${gitlab_project_id}
-Branche = ${gitlab_project_branch}
-Pipeline = ${gitlab_pipeline_id}/JobID=$gitlab_job_id
-Describe = [${gitlab_commit_short_sha}]/${msg_describe}
-Who = ${gitlab_user_id}/${gitlab_username}
-Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
-$(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi)
-"
-}
-
 _notify_zoom() {
     # Send message to Zoom channel
     # ENV_ZOOM_CHANNEL="https://api.zoom.us/v2/im/chat/messages"
@@ -570,8 +554,27 @@ _notify_wechat_work() {
 }
 
 _deploy_notify() {
+    ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
+    [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
+    [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
+    [[ "$ENV_DISABLE_MSG" -eq 1 ]] && exec_deploy_notify=0
+    [[ "$ENV_DISABLE_MSG_BRANCH" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
+    [[ "${exec_deploy_notify:-1}" -eq 1 ]] || return
+
     _msg step "[notify] message for result"
-    _deploy_notify_msg
+    msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
+
+    msg_body="
+[Gitlab Deploy]
+Project = ${gitlab_project_path}/${gitlab_project_id}
+Branche = ${gitlab_project_branch}
+Pipeline = ${gitlab_pipeline_id}/JobID=$gitlab_job_id
+Describe = [${gitlab_commit_short_sha}]/${msg_describe}
+Who = ${gitlab_user_id}/${gitlab_username}
+Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
+$(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi)
+"
+
     if [[ "${ENV_NOTIFY_WECHAT:-0}" -eq 1 ]]; then
         ## work chat / 发送至 企业微信
         _msg time "to wechat work"
@@ -1583,14 +1586,9 @@ main() {
     _scan_vulmap
 
     ## deploy notify info / 发布通知信息
-    ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
-    [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
-    [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
-    [[ "$ENV_DISABLE_MSG" -eq 1 ]] && exec_deploy_notify=0
-    [[ "$ENV_DISABLE_MSG_BRANCH" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
-    [[ "${exec_deploy_notify:-1}" -eq 1 ]] && _deploy_notify
+    _deploy_notify
 
-    echo "==== END ===="
+    _msg time "END."
     ## deploy result:  0 成功， 1 失败
     return ${deploy_result:-0}
 }
