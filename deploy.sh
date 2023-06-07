@@ -32,7 +32,7 @@ _msg() {
         color_off=' ... start'
         ;;
     stepend | end)
-        color_on="[+] $(date +%Y%m%d-%T-%u), "
+        color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%T-%u), "
         color_off=' ... end'
         ;;
     *)
