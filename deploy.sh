@@ -554,9 +554,11 @@ _notify_wechat_work() {
 
 _deploy_notify() {
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
+    echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-0}"
     [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
     [[ "$ENV_DISABLE_MSG" -eq 1 ]] && exec_deploy_notify=0
+    [[ "${PIPELINE_NOTIFY:-0}" -eq 1 ]] && exec_deploy_notify=1
     [[ "$ENV_DISABLE_MSG_BRANCH" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
     [[ "${exec_deploy_notify:-1}" -eq 1 ]] || return
 
