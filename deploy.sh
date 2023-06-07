@@ -1010,7 +1010,7 @@ _inject_files() {
 
     ## frontend (VUE) .env file
     if [[ "$project_lang" == node ]]; then
-        config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}.*")"
+        config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}-*")"
         for file in $config_env_path; do
             [[ -f "$file" ]] || continue
             echo "Found $file"
