@@ -10,14 +10,23 @@ _set_mirror() {
     fi
 
     if [ "$1" = timezone ]; then
-        ln -snf /usr/share/zoneinfo/${TZ:-Asia/Shanghai} /etc/localtime
-        echo ${TZ:-Asia/Shanghai} >/etc/timezone
+        ln -snf /usr/share/zoneinfo/"${TZ:-Asia/Shanghai}" /etc/localtime
+        echo "${TZ:-Asia/Shanghai}" >/etc/timezone
     fi
 
     if [ "$IN_CHINA" = false ] || [ "${CHANGE_SOURCE}" = false ]; then
         return
     fi
 
+    ## OS ubuntu:20.04 php
+    if [ -f /etc/apt/sources.list ]; then
+        sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
+            -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+    fi
+    ## OS alpine, nginx:alpine
+    if [ -f /etc/apk/repositories ]; then
+        sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
+    fi
     ## maven
     if command -v mvn; then
         m2_dir=/root/.m2
@@ -31,19 +40,19 @@ _set_mirror() {
             curl -Lo $m2_dir/settings.xml $url_settings
         fi
     fi
-    ## OS ubuntu:20.04 php
-    if [ -f /etc/apt/sources.list ]; then
-        sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
-            -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-    fi
-    ## alpine, nginx:alpine
-    if [ -f /etc/apk/repositories ]; then
-        sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
+    ## PHP composer
+    if command -v composer; then
+        composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
+        mkdir -p /var/www/.composer /.composer
+        chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
     fi
     ## node, npm, yarn
-    if command -v yarn || command -v npm; then
-        yarn config set registry https://registry.npm.taobao.org
-        npm config set registry https://registry.npm.taobao.org
+    if command -v npm; then
+        addgroup -g 1000 -S php
+        adduser -u 1000 -D -S -G php php
+        yarn config set registry https://registry.npm.taobao.org/
+        npm config set registry https://registry.npm.taobao.org/
+        su - node -c "yarn config set registry https://registry.npm.taobao.org/; npm config set registry https://registry.npm.taobao.org/"
     fi
 }
 
@@ -51,9 +60,8 @@ _build_nginx() {
     echo "build nginx alpine ..."
     apk update
     apk upgrade
-    apk add --no-cache openssl bash curl
+    apk add --no-cache openssl bash curl shadow
     touch /var/log/messages
-    apk --no-cache add shadow
 
     groupmod -g 1000 nginx
     usermod -u 1000 nginx
@@ -180,15 +188,8 @@ _build_node() {
     echo "build node ..."
 
     mkdir /.cache
-    chown -R node:node /.cache
+    chown -R node:node /.cache /apps
     npm install -g rnpm@1.9.0
-    npm install -g apidoc
-
-    # su - node -c
-    # if [ "$IN_CHINA" = true ]; then
-    #     yarn config set registry https://registry.npm.taobao.org
-    #     npm config set registry https://registry.npm.taobao.org
-    # fi
 }
 
 _build_mvn() {
@@ -268,6 +269,8 @@ main() {
         _build_mvn
     elif command -v java && [ -n "$MVN_PROFILE" ]; then
         _build_jdk_runtime
+    elif command -v node; then
+        _build_node
     fi
 
     # apt-get autoremove -y
