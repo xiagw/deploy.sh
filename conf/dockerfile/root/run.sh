@@ -64,6 +64,46 @@ _start_java() {
 }
 
 _start_php() {
+    local php_count=0
+    for i in /usr/sbin/php-fpm*; do
+        [ -f "$i" ] && php_count=$((php_count + 1))
+    done
+    [[ "$php_count" -eq 0 ]] && return
+    ## index for default site
+
+    [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
+    [ -d /run/php ] || mkdir -p /run/php
+    [ -d $html_path ] || mkdir $html_path
+    [ -f $html_path/index.html ] || date >>$html_path/index.html
+
+    ## create runtime for ThinkPHP
+    while [ -d $html_path ]; do
+        for dir in $html_path/ $html_path/tp/ "$html_path"/tp/*/; do
+            [ -d "$dir" ] || continue
+            need_runtime=0
+            ## ThinkPHP 5.1
+            [[ -f "${dir}"think && -d ${dir}thinkphp && -d ${dir}application ]] && need_runtime=1
+            ## ThinkPHP 6.0
+            [[ -f "${dir}"think && -d ${dir}thinkphp && -d ${dir}app ]] && need_runtime=1
+            if [[ "$need_runtime" -eq 1 ]]; then
+                run_dir="${dir}runtime"
+                [[ -d "$run_dir" ]] || mkdir "$run_dir"
+                dir_owner="$(stat -t -c %U "$run_dir")"
+                [[ "$dir_owner" == www-data ]] || chown -R www-data:www-data "$run_dir"
+            fi
+        done
+        sleep 600
+    done &
+
+    ## remove runtime log files
+    while [ -d $html_path ]; do
+        for dir in $html_path/ $html_path/tp/ "$html_path"/tp/*/; do
+            [ -d "$dir" ] || continue
+            find "${dir}runtime" -type f -iname '*.log' -ctime +5 -print0 | xargs -t --null rm -f
+        done
+        sleep 86400
+    done &
+
     ## start php-fpm*
     for i in /usr/sbin/php-fpm*; do
         [ -x "$i" ] && exec $i ## php-fpm -F, 前台启动
@@ -100,56 +140,35 @@ _check_jemalloc() {
 }
 
 _schedule_upgrade() {
-    ## app_id=1
-    ## app_ver=hash
-    ## app_upgrade_url=http://update.xxx.com
-
-    path_html=/var/www/html
-    file_local=upgrade_auto
-
-    if [[ -f "$app_path/$file_local" || -f "$path_html/$file_local" ]]; then
-        _msg "found upgrade_auto"
+    local file_local=upgrade_auto
+    if [[ -f "$html_path/$file_local" || -f $app_path/$file_local ]]; then
+        :
     else
         return 0
     fi
 
     file_remote=upgrade_check.txt
     touch /tmp/$file_remote
-    curl -fsSLo "/tmp/$file_remote" "${app_upgrade_url:-localhost}/$file_remote" 2>/dev/null
+    curl -fsSLo "/tmp/$file_remote" "${app_upgrade_url:-http://cdn.flyh6.com/docker}/$file_remote" 2>/dev/null
     app_id_remote=$(awk -F= '/^app_id=/ {print $2}' "/tmp/$file_remote")
     app_ver_remote=$(awk -F= '/^app_ver=/ {print $2}' "/tmp/$file_remote")
 
-    if [ -f "$app_path/$file_local" ]; then
-        # shellcheck source=/dev/null
-        source "$app_path/$file_local"
-        if [[ "${app_id:-1}" == "$app_id_remote" && "${app_ver:-1}" != "$app_ver_remote" ]]; then
-            get_remote_file=spring.tar.gz
-            curl -fsSLo /tmp/${get_remote_file} "${app_upgrade_url%/}/$get_remote_file"
-            curl -fsSLo /tmp/${get_remote_file}.sha256 "${app_upgrade_url%/}/${get_remote_file}.sha256"
-            if cd /tmp && sha256sum -c $get_remote_file.sha256; then
-                tar -C "$app_path" -zxf /tmp/$get_remote_file
-                _kill
-                _start_java
-                sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$app_path/$file_local"
-                rm -f /tmp/${get_remote_file}*
-            fi
-        fi
+    # shellcheck source=/dev/null
+    source "$html_path/$file_local"
+    if [[ "${app_id:-1}" == "$app_id_remote" && "${app_ver:-1}" == "$app_ver_remote" ]]; then
+        return 0
     fi
-
-    if [ -f "$path_html/$file_local" ]; then
-        # shellcheck source=/dev/null
-        source "$path_html/$file_local"
-        if [[ "${app_id:-1}" == "$app_id_remote" && "${app_ver:-1}" != "$app_ver_remote" ]]; then
-            get_remote_file=tp.tar.gz
-            curl -fsSLo /tmp/${get_remote_file} "${app_upgrade_url%/}/$get_remote_file"
-            curl -fsSLo /tmp/${get_remote_file}.sha256 "${app_upgrade_url%/}/${get_remote_file}.sha256"
-            if cd /tmp && sha256sum -c $get_remote_file.sha256; then
-                tar -C "$path_html" -zxf /tmp/$get_remote_file
-                sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$path_html/$file_local"
-                rm -f /tmp/${get_remote_file}*
-            fi
+    while read -r line; do
+        curl -fsSLo /tmp/"${line}" "${app_upgrade_url%/}/$line"
+        curl -fsSLo /tmp/"${line}".sha256 "${app_upgrade_url%/}/${line}.sha256"
+        if cd /tmp && sha256sum -c "${line}".sha256; then
+            _msg "decompress $line."
+            tar -C "$html_path/" -zxf /tmp/"${line}" && rm -f /tmp/"${line}"*
         fi
-    fi
+    done < <(awk -F= '/^app_zip=/ {print $2}' "/tmp/$file_remote")
+    _msg "set app_ver=$app_ver_remote to $html_path/$file_local"
+    sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$html_path/$file_local"
+    rm -f /tmp/${file_remote}*
 }
 
 _set_jemalloc() {
@@ -183,45 +202,13 @@ main() {
     fi
     [ -d "$app_path"/log ] || mkdir -p "$app_path"/log
 
+    html_path=/var/www/html
+
     _set_jemalloc
 
     if [ -f /opt/run.init.sh ]; then
         bash /opt/run.init.sh
     fi
-
-    ## index for default site
-    html_path=/var/www/html
-    [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
-    [ -d /run/php ] || mkdir -p /run/php
-    [ -d $html_path ] || mkdir $html_path
-    [ -f $html_path/index.html ] || date >>$html_path/index.html
-
-    ## create runtime for ThinkPHP
-    while [ -d $html_path ]; do
-        for dir in $html_path/ $html_path/tp/ "$html_path"/tp/*/; do
-            [ -d "$dir" ] || continue
-            ## ThinkPHP 5.1
-            [[ -f "${dir}"think && -d ${dir}thinkphp && -d ${dir}application ]] && need_runtime=1
-            ## ThinkPHP 6.0
-            [[ -f "${dir}"think && -d ${dir}thinkphp && -d ${dir}app ]] && need_runtime=1
-            if [[ "$need_runtime" -eq 1 ]]; then
-                run_dir="${dir}runtime"
-                [[ -d "$run_dir" ]] || mkdir "$run_dir"
-                dir_owner="$(stat -t -c %U "$run_dir")"
-                [[ "$dir_owner" == www-data ]] || chown -R www-data:www-data "$run_dir"
-            fi
-        done
-        sleep 600
-    done &
-
-    ## remove runtime log files
-    while [ -d $html_path ]; do
-        for dir in $html_path/ $html_path/tp/ "$html_path"/tp/*/; do
-            [ -d "$dir" ] || continue
-            find "${dir}runtime" -type f -iname '*.log' -ctime +5 -print0 | xargs -t --null rm -f
-        done
-        sleep 86400
-    done &
 
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.run.nohup ]]; then
