@@ -102,7 +102,7 @@ _start_php() {
             find "${dir}runtime" -type f -iname '*.log' -ctime +5 -print0 | xargs -t --null rm -f
         done
         sleep 86400
-    done &
+    done >/dev/null 2>&1 &
 
     ## start php-fpm*
     for i in /usr/sbin/php-fpm*; do
