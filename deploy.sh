@@ -639,12 +639,15 @@ _renew_cert() {
     file_reload_nginx="${acme_home}/.reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
-    [[ -x "${acme_cmd}" ]] || curl https://get.acme.sh | sh -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
+    if [[ ! -x "${acme_cmd}" ]]; then
+        curl https://get.acme.sh |
+            sh -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
+    fi
 
     [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
-    files_account=("${acme_home}/"account.conf.*)
+    files_account=("${acme_home}/"account.conf.*.dns_*)
     # files_num=${#files_account[@]}
-    ## support multiple account.conf.[x] / 支持多账号,只有一个则 account.conf.1
+    ## support multiple account.conf.* / 支持多账号
 
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     for file in "${files_account[@]}"; do
@@ -653,7 +656,7 @@ _renew_cert() {
         fi
         source "$file"
         dns_type=${file##*.}
-        profile_name=${file%.*}
+        profile_name=${file%.dns_*}
         profile_name=${profile_name##*.}
         case "${dns_type}" in
         dns_gd)
@@ -680,10 +683,11 @@ _renew_cert() {
             ;;
         *)
             _msg warn "unknown dns type: $dns_type"
+            continue
             ;;
         esac
 
-        \cp -vf "$file" "${acme_home}/account.conf"
+        /usr/bin/cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
             if [ -d "${acme_home}/$domain" ]; then
@@ -691,14 +695,15 @@ _renew_cert() {
                 "${acme_cmd}" --renew -d "${domain}" --renew-hook "touch $file_reload_nginx" || true
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue -d "$domain" -d "*.$domain" --dns $dns_type
+                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type
             fi
-            "${acme_cmd}" --install-cert -d "$domain" --key-file "$acme_cert/$domain".key --fullchain-file "$acme_cert/$domain".crt
+            "${acme_cmd}" --install-cert -d "${domain}" \
+                --key-file "$acme_cert/${domain}".key \
+                --fullchain-file "$acme_cert/${domain}".crt
         done
     done
-
+    ## deploy with gitlab CI/CD,
     _nginx_gitlab_create_pipeline
-
     ## Custom deployment method / 自定义部署方式
     if [[ -f "${acme_home}/custom.acme.sh" ]]; then
         echo "Found ${acme_home}/custom.acme.sh"
