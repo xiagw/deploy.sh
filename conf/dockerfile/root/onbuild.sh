@@ -28,11 +28,11 @@ _onbuild_php() {
     ## setup nginx for ThinkPHP
     rm -f /etc/nginx/sites-enabled/default
     curl -Lo /etc/nginx/sites-enabled/default \
-        https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/etc/nginx/sites-available/php.conf
+        https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/opt/nginx.conf
 
     ## startup run.sh
     curl -Lo /opt/run.sh \
-        https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/opt/run.sh
+        https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/run.sh
     chmod +x /opt/run.sh
 }
 
