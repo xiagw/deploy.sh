@@ -146,7 +146,7 @@ _check_style() {
 }
 
 _scan_zap() {
-    _msg step "[security] run ZAP scan"
+    _msg step "[scan] run ZAP scan"
     echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-0}"
     if [[ "${PIPELINE_SCAN_ZAP:-0}" -ne 1 ]]; then
         echo '<skip>'
@@ -167,12 +167,12 @@ _scan_zap() {
     else
         _msg error "ZAP scan failed."
     fi
-    _msg stepend "[security] run ZAP scan"
+    _msg stepend "[scan] run ZAP scan"
 }
 # _security_scan_zap "http://example.com" "my/zap-image" "-t http://example.com -r report.html -x report.xml"
 
 _scan_vulmap() {
-    _msg step "[security] vulmap scan"
+    _msg step "[scan] vulmap scan"
     echo "PIPELINE_SCAN_VULMAP: ${PIPELINE_SCAN_VULMAP:-0}"
     if [[ "${PIPELINE_SCAN_VULMAP:-0}" -ne 1 ]]; then
         echo '<skip>'
@@ -281,7 +281,7 @@ _docker_login() {
 }
 
 _build_image_docker() {
-    _msg step "[container] build image with docker"
+    _msg step "[image] build image with docker"
     _docker_login
     ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
@@ -305,28 +305,25 @@ _build_image_docker() {
     # echo "Then execute the following command on remote server:"
     # echo "#    docker pull $image_uuid"
     # echo "#    docker tag $image_uuid deploy/<your_app>"
-    _msg stepend "[container] build image with docker"
+    _msg stepend "[image] build image with docker"
 }
 
 _build_image_podman() {
-    _msg step "[container] build image with podman"
+    _msg step "[image] build image with podman"
     local image_name="$1"
     local image_tag="$2"
     local dockerfile_path="$3"
     local podman_registry="$4"
 
     # Build image
-    podman build -f "$dockerfile_path" -t "$image_name:$image_tag" .
-
-    # Tag image for remote registry
-    podman tag "$image_name:$image_tag" "$podman_registry/$image_name:$image_tag"
+    podman build -f "$dockerfile_path" -t "$podman_registry/$image_name:$image_tag" "${gitlab_project_dir}"
 
     # Push image to remote registry
     podman push "$podman_registry/$image_name:$image_tag"
 }
 
 _push_image() {
-    _msg step "[container] push image with docker"
+    _msg step "[image] push image with docker"
     _docker_login
     [[ "${github_action:-0}" -eq 1 ]] && return 0
     if [[ "$demo_mode" == 1 ]]; then
@@ -341,7 +338,7 @@ _push_image() {
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker push ${quiet_flag} "$image_tag_flyway" || _msg error "got an error here, probably caused by network..."
     fi
-    _msg stepend "[container] push image with docker"
+    _msg stepend "[image] push image with docker"
 }
 
 _deploy_k8s() {
