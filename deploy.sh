@@ -1005,7 +1005,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    _msg step "[inject] from runner/data/project_conf/"
+    _msg step "[inject] ${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
     ## backend (PHP/Java/Python) project_conf files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
