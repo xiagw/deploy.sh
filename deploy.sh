@@ -1322,13 +1322,13 @@ Parameters:
 "
 }
 
-_process_args() {
+_set_args() {
     ## All tasks are performed by default / 默认执行所有任务
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
     exec_single=0
     while [[ "${#}" -ge 0 ]]; do
         case "$1" in
-        --debug)
+        --debug |-d )
             set -x
             debug_on=1
             quiet_flag=
@@ -1421,7 +1421,7 @@ _process_args() {
 main() {
     [[ "${PIPELINE_DEBUG:-0}" -eq 1 ]] && set -x
     ## Process parameters / 处理传入的参数
-    _process_args "$@"
+    _set_args "$@"
 
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
