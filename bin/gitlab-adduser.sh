@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+_new_element_user() {
+    cd ~/src/matrix-docker-ansible-deploy || exit 1
+    file_secret=inventory/host_vars/matrix.example.com/user_pass.txt
+    echo "username=${user_name}/password=${password_rand}" | tee -a $file_secret
+    sed -i -e 's/^matrix.example1.com/#matrix.example2.com/' inventory/hosts
+    ansible-playbook -i inventory/hosts setup.yml --extra-vars="username=$user_name password=$password_rand admin=no" --tags=register-user
+    # ansible-playbook -i inventory/hosts setup.yml --extra-vars='username=fangzheng password=Eefaiyau6de1' --tags=update-user-password
+}
+
 _new_user() {
     if [[ -z "$1" ]]; then
         read -rp 'Enter username: ' read_user_name
@@ -74,6 +83,7 @@ main() {
     _new_user "$@"
     _add_group_member
     _send_msg
+    # _new_element_user
 }
 
 main "$@"
