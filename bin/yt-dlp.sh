@@ -4,8 +4,8 @@ set -x
 # Download youtube video with desired quality
 # youtube-dl accepts both fully qualified URLs and video id's such as AQcQgfvfF1M
 
-me_name="$(basename "$0")"
-me_path="$(cd "$(dirname "$0")" && pwd)"
+# me_name="$(basename "$0")"
+# me_path="$(cd "$(dirname "$0")" && pwd)"
 
 if command -v yt-dlp; then
     yt_opt='yt-dlp'
@@ -13,10 +13,12 @@ elif command -v youtube-dl; then
     yt_opt='youtube-dl'
 else
     echo "command \"$yt_opt\" not found"
+    echo "brew install yt-dlp"
+    echo "python3 -m pip install yt-dlp"
     exit 1
 fi
 
-url_file=$me_path/${me_name}.url.txt
+url_file=url.txt
 
 while [ $# -ge 0 ]; do
     case $1 in
@@ -42,7 +44,7 @@ while [ $# -ge 0 ]; do
         ;;
     *)
         if [ -z "$1" ]; then
-            urls="$(cat "$url_file")"
+            urls="$(grep -v '^#' "$url_file")"
             if [ -z "$urls" ]; then
                 echo "No URLs found in $url_file, exit."
                 exit 1
