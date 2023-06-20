@@ -1005,12 +1005,12 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    _msg step "[inject] ${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
+    _msg step "[inject] conf/env/Dockerfile..."
     ## backend (PHP/Java/Python) project_conf files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
     if [ -d "$path_project_conf" ]; then
-        _msg warning "found custom config files, sync it."
+        _msg warning "found custom files, sync it."
         rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
     fi
 
@@ -1066,8 +1066,9 @@ _inject_files() {
         ;;
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
-    [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]] &&
+    if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
         rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
+    fi
 
     ## flyway files sql & conf
     for sql in ${ENV_FLYWAY_SQL:-docs/sql} flyway_sql doc/sql sql; do
@@ -1328,7 +1329,7 @@ _set_args() {
     exec_single=0
     while [[ "${#}" -ge 0 ]]; do
         case "$1" in
-        --debug |-d )
+        --debug | -d)
             set -x
             debug_on=1
             quiet_flag=
