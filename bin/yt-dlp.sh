@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-set -x
+# set -x
 # Download youtube video with desired quality
 # youtube-dl accepts both fully qualified URLs and video id's such as AQcQgfvfF1M
 
-# me_name="$(basename "$0")"
-# me_path="$(cd "$(dirname "$0")" && pwd)"
+me_name="$(basename "$0")"
+me_path="$(cd "$(dirname "$0")" && pwd)"
 
 if command -v yt-dlp; then
     yt_opt='yt-dlp'
@@ -18,7 +18,13 @@ else
     exit 1
 fi
 
-url_file=url.txt
+if [ -f url.conf ]; then
+    url_file=url.conf
+elif [ -f "$me_path"/url.conf ]; then
+    url_file=$me_path/url.conf
+else
+    echo "not found $url_file"
+fi
 
 while [ $# -ge 0 ]; do
     case $1 in
@@ -43,14 +49,9 @@ while [ $# -ge 0 ]; do
         shift
         ;;
     *)
-        if [ -z "$1" ]; then
-            urls="$(grep -v '^#' "$url_file")"
-            if [ -z "$urls" ]; then
-                echo "No URLs found in $url_file, exit."
-                exit 1
-            fi
-        else
-            urls="$*"
+        urls=("$@")
+        if [ ${#urls[@]} -eq 0 ] && [ -f "$url_file" ]; then
+            urls=($(grep -v '^#' "$url_file"))
         fi
         break
         ;;
@@ -58,7 +59,7 @@ while [ $# -ge 0 ]; do
     shift
 done
 
-for url in $urls; do
+for url in "${urls[@]}"; do
     tmp_file=$(mktemp)
     echo "Fetching available formats for $url..."
     $yt_opt --list-formats "$url" | tee "$tmp_file"
