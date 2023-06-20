@@ -54,6 +54,10 @@ _set_mirror() {
         npm config set registry https://registry.npm.taobao.org/
         su - node -c "yarn config set registry https://registry.npm.taobao.org/; npm config set registry https://registry.npm.taobao.org/"
     fi
+    ## python pip
+    if command -v pip; then
+        pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+    fi
 }
 
 _build_nginx() {
