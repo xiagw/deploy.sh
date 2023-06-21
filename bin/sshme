@@ -19,19 +19,19 @@ _get_input() {
         fi
         # read -rp "[$((count + 1))]. Enable byobu? [Y/n] " read_byobu
     fi
-    if [[ "$files_num" == 1 ]]; then
-        ssh_conf=${files_conf[0]}
+    if [[ "$conf_nums" == 1 ]]; then
+        ssh_conf=${conf_files[0]}
     else
-        select c in "${files_conf[@]}"; do
+        select c in "${conf_files[@]}"; do
             ssh_conf="$(readlink -f "$c")"
             break
         done
     fi
 
-    if [[ "$files_nums" == 1 ]]; then
-        ansible_conf=${files_host[0]}
+    if [[ "$ansible_host_nums" == 1 ]]; then
+        ansible_conf=${ansible_host_files[0]}
     else
-        select a in "${files_host[@]}"; do
+        select a in "${ansible_host_files[@]}"; do
             ansible_conf="$(readlink -f "$a")"
             break
         done
@@ -62,6 +62,7 @@ _delete_host() {
 }
 
 main() {
+    # set -xe
     LANG="en_US.UTF-8"
     LC_COLLATE="en_US.UTF-8"
     LC_CTYPE="en_US.UTF-8"
@@ -70,13 +71,13 @@ main() {
     LC_NUMERIC="en_US.UTF-8"
     LC_TIME="en_US.UTF-8"
 
-    files_conf=("$HOME"/.ssh/config*)
-    files_num=${#files_conf[@]}
-    files_host=("$HOME"/src/*devops*/ansible/hosts)
-    files_nums=${#files_host[@]}
+    conf_files=("$HOME"/.ssh/config*)
+    conf_nums=${#conf_files[@]}
+    ansible_host_files=("$HOME"/src/*devops*/ansible/hosts)
+    ansible_host_nums=${#ansible_host_files[@]}
 
-    select ssh_host in add update delete $(awk 'NR>1 && /^Host/ {print $2}' "${files_conf[@]}") quit; do
-        case "${ssh_host:-quit}" in
+    select host in add update delete $(awk '/^Host/ {print $2}' "${conf_files[@]}" | grep -v '\*') quit; do
+        case "${host:-quit}" in
         'quit')
             break
             ;;
@@ -95,13 +96,14 @@ main() {
             _delete_host
             ;;
         *)
-            if grep -B2 "${ssh_host}" "${files_conf[@]}" | grep -q 'byobu'; then
+            if grep -B2 "${host}" "${conf_files[@]}" | grep -q 'byobu'; then
                 exec_byobu='byobu'
             fi
             ## get username from $1
-            [ -n "${1}" ] && ssh_host="${1}@${ssh_host}"
-            ssh -A -t "${ssh_host}" $exec_byobu
-            break
+            if [ -n "${1}" ]; then
+                host="${1}@${host}"
+            fi
+            ssh -A -t "${host}" $exec_byobu
             ;;
         esac
         break
