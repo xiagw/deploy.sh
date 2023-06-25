@@ -58,18 +58,18 @@ Clear-Content -Force $PROFILE
 # Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Ctrl+d -Function DeleteCharOrExit'
 Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Key Tab -Function MenuComplete'
 Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
-Add-Content -Path $PROFILE -Value '# $env:HTTP_PROXY="http://192.168.1.52:1080"'
-Add-Content -Path $PROFILE -Value '# $env:HTTPS_PROXY="http://192.168.1.52:1080"'
+Add-Content -Path $PROFILE -Value '# $env:HTTP_PROXY="http://192.168.41.252:1080"'
+Add-Content -Path $PROFILE -Value '# $env:HTTPS_PROXY="http://192.168.41.252:1080"'
 if (oh-my-posh.exe --version) {
     Write-Host "oh-my-posh already installed"
 } else {
-    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
+    # Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
+    winget install JanDeDobbeleer.OhMyPosh --source winget
+    # scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
 }
 if (oh-my-posh.exe --version) {
     Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
 }
-# winget install JanDeDobbeleer.OhMyPosh --source winget
-# scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
 
 # winget settings
 

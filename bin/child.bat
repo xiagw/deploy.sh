@@ -1,7 +1,7 @@
 @echo off
-REM schtasks /Create /SC MINUTE /TN child /NP /RU SYSTEM /TR C:\Applications\child.bat
+REM schtasks /Create /SC MINUTE /TN child /NP /RU SYSTEM /TR C:\Users\xia\child.bat
 
-set me_path=C:\applications
+set me_path=%~dp0
 
 if "%1"=="c" goto :cancel
 if "%1"=="cancel" goto :cancel
