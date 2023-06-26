@@ -3,11 +3,10 @@
 ## in-china # irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
 ## not-china # irm https://github.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
 
+## https://github.com/massgravel/Microsoft-Activation-Scripts
+# irm https://massgrave.dev/get | iex
+
 # Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH*'
-## Install the OpenSSH Client
-# Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
-## Install the OpenSSH Server
-# Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
 Get-WindowsCapability -online | Where-Object {$_.Name -like "OpenSSH*" -and $_.State -eq "NotPresent"} | Add-WindowsCapability -online
 ## Start the sshd service
 Start-Service sshd
@@ -63,8 +62,9 @@ Add-Content -Path $PROFILE -Value '# $env:HTTPS_PROXY="http://192.168.41.252:108
 if (oh-my-posh.exe --version) {
     Write-Host "oh-my-posh already installed"
 } else {
-    # Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
-    winget install JanDeDobbeleer.OhMyPosh --source winget
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
+    # winget install JanDeDobbeleer.OhMyPosh --source winget
     # scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
 }
 if (oh-my-posh.exe --version) {
@@ -102,13 +102,13 @@ if (oh-my-posh.exe --version) {
 # git logなどのマルチバイト文字を表示させるため (絵文字含む)
 # $env:LESSCHARSET = "utf-8"
 
-# 音を消す
+## 音を消す
 # Set-PSReadlineOption -BellStyle None
 
-# 履歴検索
+## 履歴検索
+# scoop install fzf gawk
 # Set-PSReadLineKeyHandler -Chord Ctrl+r -ScriptBlock {
-    # いつからかawkの表示がされないようになったので、以下コマンドを実行
-    # Set-Alias awk C:\Users\saido\scoop\apps\msys2\current\usr\bin\awk.exe
-    # $command = Get-Content (Get-PSReadlineOption).HistorySavePath | awk '!a[$0]++' | fzf --tac
-    # [Microsoft.PowerShell.PSConsoleReadLine]::Insert($command)
+#     Set-Alias awk $HOME\scoop\apps\gawk\current\bin\awk.exe
+#     $command = Get-Content (Get-PSReadlineOption).HistorySavePath | awk '!a[$0]++' | fzf --tac
+#     [Microsoft.PowerShell.PSConsoleReadLine]::Insert($command)
 # }
