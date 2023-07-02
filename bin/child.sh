@@ -22,15 +22,27 @@ main() {
         play_minutes=1
         rest_minutes=2
     else
-        play_minutes=40
+        play_minutes=45
         rest_minutes=120
     fi
-    file_play="$me_path/${me_name}.$play_minutes"
-    file_rest="$me_path/${me_name}.$rest_minutes"
+    file_play="$me_path/${me_name}.play"
+    file_rest="$me_path/${me_name}.rest"
     file_disable="$me_path/${me_name}.disable"
+    file_force="$me_path/${me_name}.force"
 
     ## manual cancel
-    if [[ "$1" == c || -f $file_disable ]]; then
+    case $1 in
+    d | disable)
+        touch "$file_disable"
+        ;;
+    f | force)
+        touch "$file_force"
+        ;;
+    r | revert)
+        rm -f "$file_force" "$file_disable"
+        ;;
+    esac
+    if [[ -f $file_disable ]]; then
         rm -f "$file_rest" "$file_play"
         return
     fi
@@ -38,9 +50,11 @@ main() {
     if pgrep code >/dev/null 2>&1 && ! pgrep -f HMCL &>/dev/null; then
         [[ ${debug_mod:-0} == 1 ]] || return
     fi
-    ## homework mode, week 1-4, after 19:10, always shut
-    if (($(date +%u) < 5)) && (($(date +%H%M) > 1910)); then
-        _poweroff
+    ## homework mode, week 1-4, after 19:30, always shut
+    if (($(date +%u) < 5)) && (($(date +%H%M) > 1930)); then
+        if [[ ! -f $file_force ]]; then
+            _poweroff
+        fi
         [[ ${debug_mod:-0} == 1 ]] || return
     fi
     ## rest

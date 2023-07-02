@@ -44,25 +44,31 @@ function Invoke-Poweroff {
 }
 
 # $AppPath = Get-Location
+$PlayMinutes = 45
+$RestMinutes = 120
 $AppPath = $PSScriptRoot
 $PlayFile = Join-Path $AppPath "child.play"
 $RestFile = Join-Path $AppPath "child.rest"
-$CancelFile = Join-Path $AppPath "child.cancel"
+$DisableFile = Join-Path $AppPath "child.disable"
+$ForceFile = Join-Path $AppPath "child.force"
 $LogFile = Join-Path $AppPath "child.log"
-$PlayMinutes = 40
-$RestMinutes = 120
 
 # Cancel shutdown
-if (Test-Path $CancelFile) {
+if (Test-Path $DisableFile) {
     return
 }
 
 ## study mode, program with vscode, but no minecraft
 
 ## homework mode, week 1-4, after 19:30, always shutdown
-if ( ((Get-Date -Uformat %w) -lt 5) -and ((Get-Date -Uformat %H%M) -gt 1910) ) {
-    Invoke-Poweroff
-    return
+if ( ((Get-Date -Uformat %w) -lt 5) -and ((Get-Date -Uformat %H%M) -gt 1930) ) {
+    if (Test-Path $ForceFile) {
+        Write-Output ""
+    }
+    else {
+        Invoke-Poweroff
+        return
+    }
 }
 
 # Check if it's time to rest

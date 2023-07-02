@@ -10,6 +10,9 @@ COPY . .
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
+# https://blog.frankel.ch/faster-maven-builds/2/
+# RUN --mount=type=cache,target=/root/.m2 curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
+
 #############################
 # FROM openjdk:11-jdk
 # FROM bitnami/tomcat:8.5 as p0
