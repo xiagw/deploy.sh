@@ -35,9 +35,9 @@ remove_aegis() {
         "/usr/local/aegis/aegis_debug/tracing/kprobe_events"
     )
 
-    for value in ${kprobeArr[@]}; do
+    for value in "${kprobeArr[@]}"; do
         if [ -f "$value" ]; then
-            echo >$value
+            echo >"$value"
         fi
     done
 
