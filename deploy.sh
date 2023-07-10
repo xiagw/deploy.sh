@@ -1147,6 +1147,7 @@ _setup_gitlab_vars() {
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}
     gitlab_project_branch=${gitlab_project_branch:-develop}
+    [[ "${gitlab_project_branch}" == 'HEAD' ]] && gitlab_project_branch=main
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
     if [[ -z "$gitlab_commit_short_sha" ]]; then
         if [[ "${github_action:-0}" -eq 1 ]]; then
