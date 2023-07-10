@@ -303,7 +303,7 @@ _build_image_docker() {
     echo "#    docker push $image_uuid"
     echo "## Then execute the following command on remote server:"
     echo "#    docker pull $image_uuid"
-    echo "#    docker tag $image_uuid deploy/<your_app>"
+    echo "#    docker tag $image_uuid laradock_spring"
     _msg stepend "[image] build image with docker"
 }
 
