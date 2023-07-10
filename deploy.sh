@@ -290,21 +290,30 @@ _build_image_docker() {
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
+    jdk_version='8u332'
+    if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" 2>/dev/null; then
+        source <(grep '^jdk_version=' "${gitlab_project_dir}/README.md")
+        case "$jdk_version" in
+        11) get_jdk_ver=11-jdk ;;
+        17) get_jdk_ver=17-jdk ;;
+        *) get_jdk_ver=8u332 ;;
+        esac
+    fi
     ## docker build
-    [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
-    [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
-    DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
+    docker build $ENV_ADD_HOST $quiet_flag \
+        --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
+        --build-arg JDK_VER="${get_jdk_ver:-$jdk_version}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg USE_JEMALLOC="${ENV_USE_JEMALLOC:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     ## docker push to ttl.sh
-    # image_uuid="ttl.sh/$(uuidgen):1h"
-    # echo "If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
-    # echo "#    docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
-    # echo "#    docker push $image_uuid"
-    # echo "Then execute the following command on remote server:"
-    # echo "#    docker pull $image_uuid"
-    # echo "#    docker tag $image_uuid deploy/<your_app>"
+    image_uuid="ttl.sh/$(uuidgen):1h"
+    echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
+    echo "#    docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
+    echo "#    docker push $image_uuid"
+    echo "## Then execute the following command on remote server:"
+    echo "#    docker pull $image_uuid"
+    echo "#    docker tag $image_uuid deploy/<your_app>"
     _msg stepend "[image] build image with docker"
 }
 
@@ -1030,37 +1039,41 @@ _inject_files() {
     fi
 
     ## from deploy.env， 使用全局模板文件替换项目文件
-    # ENV_ENABLE_INJECT=1, 覆盖 [default action]
-    # ENV_ENABLE_INJECT=2, 不覆盖 [使用项目自身的文件]
-    # ENV_ENABLE_INJECT=3, 删除 Dockerfile [不使用 docker build]
-    # ENV_ENABLE_INJECT=4, 创建 docker-compose.yml [使用 docker-compose 发布]
-    echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-1}
-    case ${ENV_ENABLE_INJECT:-1} in
-    1)
-        ## Java, shared template files Dockerfile, run.sh, settings.xml
-        if [[ "$project_lang" == java ]]; then
-            local dockerfile_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/Dockerfile.java"
+    echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-keep}
+    case ${ENV_ENABLE_INJECT:-keep} in
+    keep)
+        echo 'Keep Dockerfile in project.'
+        ;;
+    overwrit)
+        ## 优先查找 data/ 目录
+        if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
+            echo "Found ${me_path_data}/dockerfile/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
+            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+        ## Java, shared template files Dockerfile, settings.xml
+        elif [[ "$project_lang" == java ]]; then
+            echo "Get Dockerfile online"
+            if [[ "$ENV_IN_CHINA" == 'true' ]]; then
+                local dockerfile_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/Dockerfile.$project_lang"
+                local settings_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
+            else
+                local dockerfile_url="https://github.com/xiagw/deploy.sh/raw/main/conf/dockerfile/Dockerfile.$project_lang"
+                local settings_url="https://github.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
+            fi
             curl -fsSLo "${gitlab_project_dir}/Dockerfile" $dockerfile_url
+            ## 优先查找 data/ 目录
             if [[ -f "${me_path_data}/dockerfile/settings.xml" ]]; then
+                echo "Found ${me_path_data}/dockerfile/settings.xml, copy to ${gitlab_project_dir}/"
                 rsync -a "${me_path_data}/dockerfile/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
-                local settings_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
                 curl -fsSLo "${gitlab_project_dir}/settings.xml" $settings_url
             fi
         fi
-        if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
-            echo "Overwriting from data/dockerfile/Dockerfile.${project_lang}"
-            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
-        fi
         ;;
-    2)
-        echo 'Not overwriting Dockerfile'
-        ;;
-    3)
+    remove)
         echo 'Removing Dockerfile (disabling docker build)'
         rm -f "${gitlab_project_dir}/Dockerfile"
         ;;
-    4)
+    create)
         echo "Generating docker-compose.yml (enabling deployment with docker-compose)"
         echo '## deploy with docker-compose' >>"${gitlab_project_dir}/docker-compose.yml"
         ;;

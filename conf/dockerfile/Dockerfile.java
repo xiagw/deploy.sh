@@ -11,10 +11,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
 #############################
-# FROM openjdk:11-jdk
-# FROM bitnami/tomcat:8.5 as p0
-# FROM bitnami/java:1.8-prod as p0
-FROM openjdk:8u332
+# ARG JDK_VER=17-jdk
+ARG JDK_VER=8u332
+FROM openjdk:$JDK_VER
 
 ARG IN_CHINA=false
 ## set startup profile
