@@ -290,19 +290,9 @@ _build_image_docker() {
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    jdk_version='8u332'
-    if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" 2>/dev/null; then
-        source <(grep '^jdk_version=' "${gitlab_project_dir}/README.md")
-        case "$jdk_version" in
-        11) get_jdk_ver=11-jdk ;;
-        17) get_jdk_ver=17-jdk ;;
-        *) get_jdk_ver=8u332 ;;
-        esac
-    fi
     ## docker build
     docker build $ENV_ADD_HOST $quiet_flag \
         --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
-        --build-arg JDK_VER="${get_jdk_ver:-$jdk_version}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg USE_JEMALLOC="${ENV_USE_JEMALLOC:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
@@ -1066,6 +1056,12 @@ _inject_files() {
                 rsync -a "${me_path_data}/dockerfile/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
                 curl -fsSLo "${gitlab_project_dir}/settings.xml" $settings_url
+            fi
+            if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" 2>/dev/null; then
+                case "$(grep '^jdk_version=' "${gitlab_project_dir}/README.md")" in
+                *=11) sed -i -e "s/openjdk:8u332/openjdk:11-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
+                *=17) sed -i -e "s/openjdk:8u332/openjdk:17-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
+                esac
             fi
         fi
         ;;
