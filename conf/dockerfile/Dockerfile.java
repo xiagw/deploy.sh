@@ -13,7 +13,7 @@ RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/bui
 #############################
 # ARG JDK_VER=17-jdk
 ARG JDK_VER=8u332
-FROM openjdk:$JDK_VER
+FROM openjdk:8u332
 
 ARG IN_CHINA=false
 ## set startup profile
