@@ -299,11 +299,11 @@ _build_image_docker() {
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
     echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
-    echo "#    docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
-    echo "#    docker push $image_uuid"
+    echo "docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
+    echo "docker push $image_uuid"
     echo "## Then execute the following command on remote server:"
-    echo "#    docker pull $image_uuid"
-    echo "#    docker tag $image_uuid laradock_spring"
+    echo "docker pull $image_uuid"
+    echo "docker tag $image_uuid laradock_spring"
     _msg stepend "[image] build image with docker"
 }
 
@@ -1034,31 +1034,28 @@ _inject_files() {
     keep)
         echo 'Keep Dockerfile in project.'
         ;;
-    overwrit)
-        ## 优先查找 data/ 目录
+    overwrite)
+        ## Dockerfile 优先查找 data/ 目录
         if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
             echo "Found ${me_path_data}/dockerfile/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
             rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
-        ## Java, shared template files Dockerfile, settings.xml
-        elif [[ "$project_lang" == java ]]; then
-            echo "Get Dockerfile online"
-            if [[ "$ENV_IN_CHINA" == 'true' ]]; then
-                local dockerfile_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/Dockerfile.$project_lang"
-                local settings_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
-            else
-                local dockerfile_url="https://github.com/xiagw/deploy.sh/raw/main/conf/dockerfile/Dockerfile.$project_lang"
-                local settings_url="https://github.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
-            fi
-            curl -fsSLo "${gitlab_project_dir}/Dockerfile" $dockerfile_url
-            ## 优先查找 data/ 目录
+        ## Dockerfile 其次查找 conf/ 目录
+        elif [[ -f "${me_path_conf}/dockerfile/Dockerfile.${project_lang}" ]]; then
+            echo "Found ${me_path_conf}/dockerfile/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
+            rsync -a "${me_path_conf}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+        else
+            echo "Not found custome Dockerfile"
+        fi
+        if [[ "${project_lang}" == java ]]; then
+            ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_path_data}/dockerfile/settings.xml" ]]; then
                 echo "Found ${me_path_data}/dockerfile/settings.xml, copy to ${gitlab_project_dir}/"
                 rsync -a "${me_path_data}/dockerfile/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
-                curl -fsSLo "${gitlab_project_dir}/settings.xml" $settings_url
+                rsync -a "${me_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}/settings.xml"
             fi
-            if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" 2>/dev/null; then
-                case "$(grep '^jdk_version=' "${gitlab_project_dir}/README.md")" in
+            if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" 2>/dev/null; then
+                case "$(grep '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md")" in
                 *=11) sed -i -e "s/openjdk:8u332/openjdk:11-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=17) sed -i -e "s/openjdk:8u332/openjdk:17-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
                 esac
@@ -1076,6 +1073,7 @@ _inject_files() {
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
     if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
+        echo "Using global dockerignore."
         rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     fi
 
