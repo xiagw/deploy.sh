@@ -1073,7 +1073,7 @@ _inject_files() {
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
     if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
-        echo "Using global dockerignore."
+        echo "Not found .dockerignore, using global .dockerignore."
         rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     fi
 
