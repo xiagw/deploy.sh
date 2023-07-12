@@ -25,7 +25,7 @@ _start_java() {
     for file in "$app_path"/profile.*; do
         [[ -f "$file" ]] || continue
         profile_name="--spring.profiles.active=${file##*.}"
-        _msg "Found $profile_name, start with profile..."
+        _msg "Found $profile_name ..."
         break
     done
 

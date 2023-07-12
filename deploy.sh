@@ -291,20 +291,19 @@ _build_image_docker() {
         DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
-    [ -d "${gitlab_project_dir}"/flyway_conf ] && rm -rf "${gitlab_project_dir}"/flyway_conf
-    [ -d "${gitlab_project_dir}"/flyway_sql ] && rm -rf "${gitlab_project_dir}"/flyway_sql
-    DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
+    docker build $ENV_ADD_HOST $quiet_flag \
+        --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg USE_JEMALLOC="${ENV_USE_JEMALLOC:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     ## docker push to ttl.sh
-    # image_uuid="ttl.sh/$(uuidgen):1h"
-    # echo "If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
-    # echo "#    docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
-    # echo "#    docker push $image_uuid"
-    # echo "Then execute the following command on remote server:"
-    # echo "#    docker pull $image_uuid"
-    # echo "#    docker tag $image_uuid deploy/<your_app>"
+    image_uuid="ttl.sh/$(uuidgen):1h"
+    echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
+    echo "docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
+    echo "docker push $image_uuid"
+    echo "## Then execute the following command on remote server:"
+    echo "docker pull $image_uuid"
+    echo "docker tag $image_uuid laradock_spring"
     _msg stepend "[image] build image with docker"
 }
 
@@ -1030,43 +1029,51 @@ _inject_files() {
     fi
 
     ## from deploy.env， 使用全局模板文件替换项目文件
-    # ENV_ENABLE_INJECT=1, 覆盖 [default action]
-    # ENV_ENABLE_INJECT=2, 不覆盖 [使用项目自身的文件]
-    # ENV_ENABLE_INJECT=3, 删除 Dockerfile [不使用 docker build]
-    # ENV_ENABLE_INJECT=4, 创建 docker-compose.yml [使用 docker-compose 发布]
-    echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-1}
-    case ${ENV_ENABLE_INJECT:-1} in
-    1)
-        ## Java, shared template files Dockerfile, run.sh, settings.xml
-        if [[ "$project_lang" == java ]]; then
-            local dockerfile_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/Dockerfile.java"
-            curl -fsSLo "${gitlab_project_dir}/Dockerfile" $dockerfile_url
+    echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-keep}
+    case ${ENV_ENABLE_INJECT:-keep} in
+    keep)
+        echo 'Keep Dockerfile in project.'
+        ;;
+    overwrite)
+        ## Dockerfile 优先查找 data/ 目录
+        if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
+            echo "Found ${me_path_data}/dockerfile/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
+            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+        ## Dockerfile 其次查找 conf/ 目录
+        elif [[ -f "${me_path_conf}/dockerfile/Dockerfile.${project_lang}" ]]; then
+            echo "Found ${me_path_conf}/dockerfile/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
+            rsync -a "${me_path_conf}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+        else
+            echo "Not found custome Dockerfile"
+        fi
+        if [[ "${project_lang}" == java ]]; then
+            ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_path_data}/dockerfile/settings.xml" ]]; then
+                echo "Found ${me_path_data}/dockerfile/settings.xml, copy to ${gitlab_project_dir}/"
                 rsync -a "${me_path_data}/dockerfile/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
-                local settings_url="https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/settings.xml"
-                curl -fsSLo "${gitlab_project_dir}/settings.xml" $settings_url
+                rsync -a "${me_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}/settings.xml"
+            fi
+            if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" 2>/dev/null; then
+                case "$(grep '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md")" in
+                *=11) sed -i -e "s/openjdk:8u332/openjdk:11-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
+                *=17) sed -i -e "s/openjdk:8u332/openjdk:17-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
+                esac
             fi
         fi
-        if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
-            echo "Overwriting from data/dockerfile/Dockerfile.${project_lang}"
-            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
-        fi
         ;;
-    2)
-        echo 'Not overwriting Dockerfile'
-        ;;
-    3)
+    remove)
         echo 'Removing Dockerfile (disabling docker build)'
         rm -f "${gitlab_project_dir}/Dockerfile"
         ;;
-    4)
+    create)
         echo "Generating docker-compose.yml (enabling deployment with docker-compose)"
         echo '## deploy with docker-compose' >>"${gitlab_project_dir}/docker-compose.yml"
         ;;
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
     if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
+        echo "Not found .dockerignore, using global .dockerignore."
         rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     fi
 
@@ -1134,6 +1141,7 @@ _setup_gitlab_vars() {
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}
     gitlab_project_branch=${gitlab_project_branch:-develop}
+    [[ "${gitlab_project_branch}" == 'HEAD' ]] && gitlab_project_branch=main
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
     if [[ -z "$gitlab_commit_short_sha" ]]; then
         if [[ "${github_action:-0}" -eq 1 ]]; then

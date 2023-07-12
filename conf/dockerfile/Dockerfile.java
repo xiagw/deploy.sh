@@ -14,9 +14,6 @@ RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/bui
 # RUN --mount=type=cache,target=/root/.m2 curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
 #############################
-# FROM openjdk:11-jdk
-# FROM bitnami/tomcat:8.5 as p0
-# FROM bitnami/java:1.8-prod as p0
 FROM openjdk:8u332
 
 ARG IN_CHINA=false
