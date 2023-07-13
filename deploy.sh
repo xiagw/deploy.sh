@@ -264,7 +264,9 @@ _docker_login() {
             return 0
         fi
         _msg time "[login] docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
-        aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" | docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*} >/dev/null
+        aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" |
+            docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*} >/dev/null &&
+            touch "$lock_docker_login"
         ;;
     *)
         if [[ "${demo_mode:-0}" == 1 ]]; then
@@ -274,27 +276,26 @@ _docker_login() {
         if [[ -f "$lock_docker_login" ]]; then
             return 0
         fi
-        echo "${ENV_DOCKER_PASSWORD}" | docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"
+        echo "${ENV_DOCKER_PASSWORD}" |
+            docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" &&
+            touch "$lock_docker_login"
         ;;
     esac
-    touch "$lock_docker_login"
 }
 
 _build_image_docker() {
     _msg step "[image] build image with docker"
     _docker_login
-    ## Docker build from template image / 是否从模板构建
     [[ "${github_action:-0}" -eq 1 ]] && return 0
 
     ## docker build flyway image / 构建 flyway 模板
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        DOCKER_BUILDKIT=1 docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
     docker build $ENV_ADD_HOST $quiet_flag \
         --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
-        --build-arg USE_JEMALLOC="${ENV_USE_JEMALLOC:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
@@ -553,9 +554,9 @@ _deploy_notify() {
     echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-0}"
     [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
-    [[ "$ENV_DISABLE_MSG" -eq 1 ]] && exec_deploy_notify=0
+    [[ "${ENV_DISABLE_MSG}" -eq 1 ]] && exec_deploy_notify=0
     [[ "${PIPELINE_NOTIFY:-0}" -eq 1 ]] && exec_deploy_notify=1
-    [[ "$ENV_DISABLE_MSG_BRANCH" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
+    [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
     [[ "${exec_deploy_notify:-1}" -eq 1 ]] || return
 
     _msg step "[notify] message for result"
@@ -1036,23 +1037,23 @@ _inject_files() {
         ;;
     overwrite)
         ## Dockerfile 优先查找 data/ 目录
-        if [[ -f "${me_path_data}/dockerfile/Dockerfile.${project_lang}" ]]; then
-            echo "Found ${me_path_data}/dockerfile/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
-            rsync -a "${me_path_data}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+        if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
+            echo "Found ${me_data_dockerfile}/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
+            rsync -a "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         ## Dockerfile 其次查找 conf/ 目录
-        elif [[ -f "${me_path_conf}/dockerfile/Dockerfile.${project_lang}" ]]; then
-            echo "Found ${me_path_conf}/dockerfile/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
-            rsync -a "${me_path_conf}/dockerfile/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+        elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
+            echo "Found ${me_dockerfile}/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
+            rsync -a "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         else
             echo "Not found custome Dockerfile"
         fi
         if [[ "${project_lang}" == java ]]; then
             ## java settings.xml 优先查找 data/ 目录
-            if [[ -f "${me_path_data}/dockerfile/settings.xml" ]]; then
-                echo "Found ${me_path_data}/dockerfile/settings.xml, copy to ${gitlab_project_dir}/"
-                rsync -a "${me_path_data}/dockerfile/settings.xml" "${gitlab_project_dir}/"
+            if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
+                echo "Found ${me_data_dockerfile}/settings.xml, copy to ${gitlab_project_dir}/"
+                rsync -a "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
-                rsync -a "${me_path_conf}/dockerfile/settings.xml" "${gitlab_project_dir}/settings.xml"
+                rsync -a "${me_dockerfile}/settings.xml" "${gitlab_project_dir}/settings.xml"
             fi
             if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" 2>/dev/null; then
                 case "$(grep '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md")" in
@@ -1428,7 +1429,6 @@ _set_args() {
 }
 
 main() {
-    [[ "${PIPELINE_DEBUG:-0}" -eq 1 ]] && set -x
     ## Process parameters / 处理传入的参数
     _set_args "$@"
 
@@ -1440,9 +1440,10 @@ main() {
     me_log="${me_path_data}/${me_name}.log"
     me_path_data_bin="${me_path}/data/bin"
     me_path_builds="${me_path}/builds"
-    me_conf="${me_path_data}/deploy.conf"      ## deploy to app server 发布到目标服务器的配置信息
-    me_env="${me_path_data}/deploy.env"        ## deploy.sh ENV 发布配置信息(密)
-    me_dockerfile="${me_path_conf}/dockerfile" ## deploy.sh dependent dockerfile
+    me_conf="${me_path_data}/deploy.conf"           ## deploy to app server 发布到目标服务器的配置信息
+    me_env="${me_path_data}/deploy.env"             ## deploy.sh ENV 发布配置信息(密)
+    me_dockerfile="${me_path_conf}/dockerfile"      ## deploy.sh dependent dockerfile
+    me_data_dockerfile="${me_path_data}/dockerfile" ## deploy.sh dependent dockerfile
     ## create deploy.sh/data dir  /  创建 data 目录
     [[ -d $me_path_data ]] || mkdir -p $me_path_data
     ## 准备配置文件
