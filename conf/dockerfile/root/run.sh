@@ -28,19 +28,20 @@ _start_java() {
         _msg "Found $profile_name ..."
         break
     done
-
+    cj=0
     for jar in "$app_path"/*.jar; do
         [[ -f "$jar" ]] || continue
-        cj=$((${cj:-0} + 1))
+        cj=$((cj + 1))
         ## 启动方式二，配置文件 yml 在 jar 包外，非内置
-        ## !!!! 注意 !!!!, 自动探测 yml 配置文件, 按文件名自动排序对应 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
+        ## !!!! 注意 !!!!,
+        ## 自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
         cy=0
         config_yml=
-        for y in "$app_path"/*.yml "$app_path"/*.yaml; do
-            [[ -f "$y" ]] || continue
+        for yml in "$app_path"/*.yml "$app_path"/*.yaml; do
+            [[ -f "$yml" ]] || continue
             cy=$((cy + 1))
             if [[ "$cj" -eq "$cy" ]]; then
-                config_yml="-Dspring.config.location=${y}"
+                config_yml="-Dspring.config.location=${yml}"
                 break
             fi
         done
@@ -48,13 +49,13 @@ _start_java() {
         _msg "${cj}. start $jar $config_yml ..."
         if [ "$profile_name" ]; then
             ## 启动方式一， jar 内置配置(profile)文件 yml，
-            $JAVA_OPTS -jar "$jar" "$profile_name" &>>"$me_log" &
+            $JAVA_OPTS -jar "$jar" "$profile_name" >>"$me_log" 2>&1 &
         elif [ "$config_yml" ]; then
             ## 启动方式二，配置文件 yml 在 jar 包外，非内置
-            $JAVA_OPTS "$config_yml" -jar "$jar" &>>"$me_log" &
+            $JAVA_OPTS "$config_yml" -jar "$jar" >>"$me_log" 2>&1 &
         else
             ##
-            $JAVA_OPTS -jar "$jar" &>>"$me_log" &
+            $JAVA_OPTS -jar "$jar" >>"$me_log" 2>&1 &
         fi
         pids="$pids $!"
     done
@@ -213,8 +214,7 @@ main() {
     _set_jemalloc
 
     _msg "startup $me_path/$me_name ..." >>"$me_log"
-    ## 识别中断信号，停止 java 进程
-    trap _kill HUP INT QUIT TERM
+
     ## 初始化程序
     if [ -f /opt/run.init.sh ]; then
         bash /opt/run.init.sh
@@ -238,6 +238,9 @@ main() {
     done &
 
     _check_jemalloc &
+
+    ## 识别中断信号，停止 java 进程
+    trap _kill HUP INT QUIT TERM
 
     if [[ "${start_nohup:-0}" -eq 1 ]]; then
         _msg "startup method \"nohup\", exit."

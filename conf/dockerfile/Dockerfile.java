@@ -1,3 +1,4 @@
+##### stage 1 ########################
 # FROM maven:3.6-jdk-11 AS builder
 FROM maven:3.6-jdk-8 AS builder
 
@@ -13,7 +14,7 @@ RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/bui
 # https://blog.frankel.ch/faster-maven-builds/2/
 # RUN --mount=type=cache,target=/root/.m2 curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
-#############################
+##### stage 2 ########################
 FROM openjdk:8u332
 
 ARG IN_CHINA=false
