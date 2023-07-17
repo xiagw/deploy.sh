@@ -1057,6 +1057,8 @@ _inject_files() {
             fi
             if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" 2>/dev/null; then
                 case "$(grep '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md")" in
+                *=1.7) sed -i -e "s/openjdk:8u332/openjdk:7u221/" "${gitlab_project_dir}/Dockerfile" ;;
+                *=1.8) sed -i -e "s/openjdk:8u332/openjdk:8u342/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=11) sed -i -e "s/openjdk:8u332/openjdk:11-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=17) sed -i -e "s/openjdk:8u332/openjdk:17-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
                 esac
