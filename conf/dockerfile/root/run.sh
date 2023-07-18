@@ -57,7 +57,7 @@ _start_java() {
             ##
             $JAVA_OPTS -jar "$jar" >>"$me_log" 2>&1 &
         fi
-        pids="$pids $!"
+        pids+=("$!")
     done
 }
 
@@ -104,7 +104,7 @@ _start_php() {
     ## start php-fpm*
     for i in /usr/sbin/php-fpm*; do
         [ -x "$i" ] && exec $i ## php-fpm -F, 前台启动
-        pids="$pids $!"
+        pids+=("$!")
     done
     if command -v nginx && nginx -t; then
         exec nginx -g "daemon off;" &
@@ -113,7 +113,7 @@ _start_php() {
     else
         _msg "Not found php."
     fi
-    pids="$pids $!"
+    pids+=("$!")
 }
 
 _schedule_upgrade() {
@@ -174,7 +174,7 @@ _set_jemalloc() {
 
 _check_jemalloc() {
     sleep 5
-    for pid in $pids; do
+    for pid in "${pids[@]}"; do
         [ -f "/proc/$pid/smaps" ] || continue
         if grep -q jemalloc "/proc/$pid/smaps"; then
             _msg "PID $pid using jemalloc..."
@@ -185,8 +185,8 @@ _check_jemalloc() {
 }
 
 _kill() {
-    _msg "receive SIGTERM, kill $pids"
-    for pid in $pids; do
+    _msg "receive SIGTERM, kill ${pids[*]}"
+    for pid in "${pids[@]}"; do
         kill "$pid"
         wait "$pid"
     done
@@ -196,6 +196,8 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
+
+    pids=()
 
     app_path="/app"
     if [ -w "$app_path" ]; then
