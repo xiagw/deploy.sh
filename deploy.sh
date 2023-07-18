@@ -55,13 +55,6 @@ _log() {
 ## install phpunit
 _test_unit() {
     _msg step "[test] unit test"
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用[default]，0 禁用
-    echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
-    if [[ "${PIPELINE_UNIT_TEST:-0}" -eq 0 ]]; then
-        echo "<skip>"
-        return 0
-    fi
-
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
         echo "Found $gitlab_project_dir/tests/unit_test.sh"
         bash "$gitlab_project_dir"/tests/unit_test.sh
@@ -77,12 +70,6 @@ _test_unit() {
 ## install jdk/ant/jmeter
 _test_function() {
     _msg step "[test] function test"
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用[default]，0 禁用
-    echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-1}"
-    if [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 0 ]]; then
-        echo "<skip>"
-        return 0
-    fi
     if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
         echo "Found $gitlab_project_dir/tests/func_test.sh"
         bash "$gitlab_project_dir"/tests/func_test.sh
@@ -97,12 +84,6 @@ _test_function() {
 
 _check_quality_sonar() {
     _msg step "[quality] check code with sonarqube"
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
-    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    if [[ "${PIPELINE_SONAR:-0}" -eq 0 ]]; then
-        echo "<skip>"
-        return 0
-    fi
     local sonar_url="${ENV_SONAR_URL:?empty}"
     local sonar_conf="$gitlab_project_dir/sonar-project.properties"
     if ! curl --silent --head --fail "$sonar_url" >/dev/null 2>&1; then
@@ -135,24 +116,8 @@ EOF
     exit 0
 }
 
-_check_style() {
-    _msg step "[style] check code style"
-    echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
-        source "$code_style_sh"
-    else
-        echo '<skip>'
-    fi
-}
-
 _scan_zap() {
     _msg step "[scan] run ZAP scan"
-    echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-0}"
-    if [[ "${PIPELINE_SCAN_ZAP:-0}" -ne 1 ]]; then
-        echo '<skip>'
-        return
-    fi
-
     local target_url="${ENV_TARGET_URL}"
     local zap_docker_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
     local zap_options="${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
@@ -173,11 +138,6 @@ _scan_zap() {
 
 _scan_vulmap() {
     _msg step "[scan] vulmap scan"
-    echo "PIPELINE_SCAN_VULMAP: ${PIPELINE_SCAN_VULMAP:-0}"
-    if [[ "${PIPELINE_SCAN_VULMAP:-0}" -ne 1 ]]; then
-        echo '<skip>'
-        return
-    fi
     # https://github.com/zhzyker/vulmap
     # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
     # Load environment variables from config file
@@ -205,11 +165,6 @@ _check_gitleaks() {
 
 _deploy_flyway_docker() {
     _msg step "[database] deploy SQL files with flyway"
-    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
-    if [[ "${PIPELINE_FLYWAY:-0}" -ne 1 || "${exec_deploy_flyway:-0}" -ne 1 ]]; then
-        echo '<skip>'
-        return
-    fi
     flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
@@ -233,7 +188,6 @@ _deploy_flyway_docker() {
 }
 
 _deploy_flyway_helm_job() {
-    [[ "${ENV_FLYWAY_HELM_JOB:-0}" -ne 1 ]] && return
     _msg step "[database] deploy SQL with flyway helm job"
     echo "$image_tag_flyway"
     [[ "${github_action:-0}" -eq 1 ]] && return 0
@@ -550,15 +504,6 @@ _notify_wechat_work() {
 }
 
 _deploy_notify() {
-    ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
-    echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-0}"
-    [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
-    [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
-    [[ "${ENV_DISABLE_MSG}" -eq 1 ]] && exec_deploy_notify=0
-    [[ "${PIPELINE_NOTIFY:-0}" -eq 1 ]] && exec_deploy_notify=1
-    [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
-    [[ "${exec_deploy_notify:-1}" -eq 1 ]] || return
-
     _msg step "[notify] message for result"
     msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
 
@@ -623,12 +568,6 @@ _nginx_gitlab_create_pipeline() {
 }
 
 _renew_cert() {
-    if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
-        echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-        exec_single=1
-    else
-        return 0
-    fi
     _msg step "[cert] renew cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
@@ -637,8 +576,7 @@ _renew_cert() {
 
     ## install acme.sh / 安装 acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
-        curl https://get.acme.sh |
-            sh -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
+        curl https://get.acme.sh | bash -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
     fi
 
     [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
@@ -716,12 +654,6 @@ _renew_cert() {
 
 _get_balance_aliyun() {
     [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if [[ "${PIPELINE_GET_BALANCE:-0}" -eq 1 || "${arg_get_balance:-0}" -eq 1 ]]; then
-        echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-0}"
-    else
-        return 0
-    fi
-
     _msg step "check balance of aliyun"
     local alarm_balance=${ENV_ALARM_BALANCE_ALIYUN:-3000}
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
@@ -1420,7 +1352,7 @@ _set_args() {
         *)
             if [[ "${#}" -gt 0 ]]; then
                 _usage
-                exit
+                exit 1
             fi
             [[ "${debug_on:-0}" -eq 0 ]] && quiet_flag='--quiet'
             break
@@ -1516,10 +1448,17 @@ main() {
     _set_deploy_conf
 
     ## get balance of aliyun / 获取 aliyun 账户现金余额
-    _get_balance_aliyun
+    echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-0}"
+    if [[ "${PIPELINE_GET_BALANCE:-0}" -eq 1 || "${arg_get_balance:-0}" -eq 1 ]]; then
+        _get_balance_aliyun
+    fi
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
-    _renew_cert
+    echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
+    if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+        exec_single=1
+        _renew_cert
+    fi
 
     ## probe program lang / 探测项目的程序语言
     _probe_langs
@@ -1558,17 +1497,42 @@ main() {
     ################################################################################
 
     ## default exec all tasks / 默认执行所有任务
-    _check_quality_sonar
 
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用[default]，0 禁用
-    _check_style
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
+    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
+    if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
+        _check_quality_sonar
+    else
+        echo "<skip>"
+    fi
+
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用，0 禁用[default]
+    _msg step "[style] check code style"
+    echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
+    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
+        source "$code_style_sh"
+    else
+        echo '<skip>'
+    fi
 
     ## unit test / 单元测试
-    _test_unit
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用，0 禁用[default]
+    echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
+    if [[ "${PIPELINE_UNIT_TEST:-0}" -eq 1 ]]; then
+        _test_unit
+    else
+        echo "<skip>"
+    fi
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
+    # [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]] && _deploy_flyway_helm_job
     # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-    _deploy_flyway_docker
+    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
+    if [[ "${PIPELINE_FLYWAY:-0}" -eq 1 || "${exec_deploy_flyway:-0}" -eq 1 ]]; then
+        _deploy_flyway_docker
+    else
+        echo '<skip>'
+    fi
 
     ## generate api docs / 利用 apidoc 产生 api 文档
     # _generate_apidoc
@@ -1594,14 +1558,40 @@ main() {
     [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
 
     ## function test / 功能测试
-    _test_function
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用，0 禁用[default]
+    echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-0}"
+    if [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 1 ]]; then
+        _test_function
+    else
+        echo "<skip>"
+    fi
 
     ## 安全扫描
-    _scan_zap
-    _scan_vulmap
+    echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-0}"
+    if [[ "${PIPELINE_SCAN_ZAP:-0}" -eq 1 ]]; then
+        _scan_zap
+    else
+        echo '<skip>'
+    fi
+
+    echo "PIPELINE_SCAN_VULMAP: ${PIPELINE_SCAN_VULMAP:-0}"
+    if [[ "${PIPELINE_SCAN_VULMAP:-0}" -eq 1 ]]; then
+        _scan_vulmap
+    else
+        echo '<skip>'
+    fi
 
     ## deploy notify info / 发布通知信息
-    _deploy_notify
+    ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
+    echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-0}"
+    [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
+    [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
+    [[ "${ENV_DISABLE_MSG}" -eq 1 ]] && exec_deploy_notify=0
+    [[ "${PIPELINE_NOTIFY:-0}" -eq 1 ]] && exec_deploy_notify=1
+    [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
+    if [[ "${exec_deploy_notify:-1}" -eq 1 ]]; then
+        _deploy_notify
+    fi
 
     _msg time "[END]"
     ## deploy result:  0 成功， 1 失败
