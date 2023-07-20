@@ -108,12 +108,12 @@ _build_php() {
         ;;
     8.2)
         echo "install PHP from ppa:ondrej/php..."
-        $apt_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
+        apt-get install -yqq lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
         add-apt-repository ppa:ondrej/php
         ;;
     *)
         echo "Use ppa:ondrej/php..."
-        $apt_opt software-properties-common
+        apt-get install -yqq software-properties-common
         add-apt-repository ppa:ondrej/php
         $apt_opt php"${LARADOCK_PHP_VERSION}"-mcrypt
         ;;
@@ -155,6 +155,47 @@ _build_php() {
     else
         $apt_opt nginx
     fi
+}
+
+_onbuild_php() {
+    if command -v php && [ -n "$LARADOCK_PHP_VERSION" ]; then
+        echo "command php exists, php ver is $LARADOCK_PHP_VERSION"
+    else
+        return
+    fi
+    sed -i \
+        -e '/fpm.sock/s/^/;/' \
+        -e '/fpm.sock/a listen = 9000' \
+        -e '/rlimit_files/a rlimit_files = 65535' \
+        -e '/pm.max_children/s/5/10000/' \
+        -e '/pm.start_servers/s/2/10/' \
+        -e '/pm.min_spare_servers/s/1/10/' \
+        -e '/pm.max_spare_servers/s/3/20/' \
+        /etc/php/"${LARADOCK_PHP_VERSION}"/fpm/pool.d/www.conf
+    sed -i \
+        -e "/memory_limit/s/128M/1024M/" \
+        -e "/post_max_size/s/8M/1024M/" \
+        -e "/upload_max_filesize/s/2M/1024M/" \
+        -e "/max_file_uploads/s/20/1024/" \
+        -e '/disable_functions/s/$/phpinfo,/' \
+        -e '/max_execution_time/s/30/60/' \
+        /etc/php/"${LARADOCK_PHP_VERSION}"/fpm/php.ini
+
+    if [ "$PHP_SESSION_REDIS" = true ]; then
+        sed -i -e "/session.save_handler/s/files/redis/" \
+            -e "/session.save_handler/a session.save_path = \"tcp://${PHP_SESSION_REDIS_SERVER}:${PHP_SESSION_REDIS_PORT}?auth=${PHP_SESSION_REDIS_PASS}&database=${PHP_SESSION_REDIS_DB}\"" \
+            /etc/php/"${LARADOCK_PHP_VERSION}"/fpm/php.ini
+    fi
+
+    ## setup nginx for ThinkPHP
+    rm -f /etc/nginx/sites-enabled/default
+    curl -fLo /etc/nginx/sites-enabled/default \
+        https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/opt/nginx.conf
+
+    ## startup run.sh
+    curl -fLo /opt/run.sh \
+        https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/run.sh
+    chmod +x /opt/run.sh
 }
 
 _build_mysql() {
@@ -263,6 +304,13 @@ main() {
     apt_opt="apt-get install -yqq --no-install-recommends"
 
     _set_mirror
+
+    case "$1" in
+    --onbuild)
+        _onbuild_php
+        return 0
+        ;;
+    esac
 
     if command -v nginx && [ -n "$INSTALL_NGINX" ]; then
         _build_nginx

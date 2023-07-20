@@ -12,7 +12,7 @@ ENV LARADOCK_PHP_VERSION=${LARADOCK_PHP_VERSION}
 
 EXPOSE 80 443 9000
 WORKDIR /var/www/html
-CMD ["/opt/run.sh"]
+CMD ["bash", "/opt/run.sh"]
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # COPY ./root/opt/build.sh /opt/build.sh
@@ -23,7 +23,7 @@ RUN set -xe; \
     apt-get update -yqq; \
     apt-get install -yqq --no-install-recommends curl ca-certificates vim; \
     apt-get clean all && rm -rf /tmp/*; \
-    curl -fL https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/opt/build.sh | bash
+    curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh | bash
 
-# ONBUILD COPY ./root/ /
-ONBUILD RUN curl -fL https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/opt/onbuild.sh | bash
+ONBUILD COPY ./root/ /
+ONBUILD RUN curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh | bash -s --onbuild
