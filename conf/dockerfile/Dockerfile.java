@@ -35,4 +35,4 @@ USER 1000
 EXPOSE 8080 8081 8082
 # volume /data
 
-CMD ["/opt/run.sh"]
+CMD ["bash", "/opt/run.sh"]
