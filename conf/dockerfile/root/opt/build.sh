@@ -193,8 +193,7 @@ _onbuild_php() {
         https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/opt/nginx.conf
 
     ## startup run.sh
-    curl -fLo /opt/run.sh \
-        https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/run.sh
+    curl -fLo /opt/run.sh $url_deploy_raw/conf/dockerfile/root/opt/run.sh
     chmod +x /opt/run.sh
 }
 
@@ -265,7 +264,7 @@ _build_jdk_runtime() {
         sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' /usr/local/openjdk-8/jre/lib/security/java.security
     fi
     ## startup run.sh
-    curl -Lo /opt/run.sh $url_deploy_raw/conf/dockerfile/root/run.sh
+    curl -Lo /opt/run.sh $url_deploy_raw/conf/dockerfile/root/opt/run.sh
     chmod +x /opt/run.sh
 
     useradd -u 1000 spring
