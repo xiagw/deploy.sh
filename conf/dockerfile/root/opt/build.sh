@@ -246,9 +246,14 @@ _build_maven() {
         grep -vE 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' |
         xargs -t -I {} cp -vf {} /jars/
     if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
+        c=0
         find . -type f -iname "*${MVN_PROFILE:-main}.yml" -o -iname "*${MVN_PROFILE:-main}.yaml" |
             grep "/resources/" |
-            xargs -t -I {} cp -vf {} /jars/
+            while read -r line; do
+                filename=${line##*/}
+                c=$((c + 1))
+                cp -vf "${line}" /jars/"${c}.${filename}"
+            done
     fi
 }
 
