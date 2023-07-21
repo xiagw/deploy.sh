@@ -236,15 +236,20 @@ _build_node() {
     npm install -g rnpm@1.9.0
 }
 
-_build_mvn() {
+_build_maven() {
     # --settings=settings.xml --activate-profiles=main
     # mvn -T 1C install -pl $moduleName -am --offline
     mvn --threads 1C --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package
 
     mkdir /jars
     find . -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' |
-        grep -Ev 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' |
+        grep -vE 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' |
         xargs -t -I {} cp -vf {} /jars/
+    if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
+        find . -type f -iname "*${MVN_PROFILE:-main}.yml" -o -iname "*${MVN_PROFILE:-main}.yaml" |
+            grep "/resources/" |
+            xargs -t -I {} cp -vf {} /jars/
+    fi
 }
 
 _build_jdk_runtime() {
@@ -260,8 +265,9 @@ _build_jdk_runtime() {
             tar -C /usr/share -zxf -
     fi
     ## set ssl
-    if [[ -f /usr/local/openjdk-8/jre/lib/security/java.security ]]; then
-        sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' /usr/local/openjdk-8/jre/lib/security/java.security
+    sec_file=/usr/local/openjdk-8/jre/lib/security/java.security
+    if [[ -f $sec_file ]]; then
+        sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $sec_file
     fi
     ## startup run.sh
     curl -Lo /opt/run.sh $url_deploy_raw/conf/dockerfile/root/opt/run.sh
@@ -269,7 +275,13 @@ _build_jdk_runtime() {
 
     useradd -u 1000 spring
     chown -R 1000:1000 /app
-    touch "/app/profile.${MVN_PROFILE:-main}"
+    for file in /app/*.{yml,yaml}; do
+        if [ -f "$file" ]; then
+            break
+        else
+            touch "/app/profile.${MVN_PROFILE:-main}"
+        fi
+    done
 
     $apt_opt libjemalloc2
 }
@@ -317,7 +329,7 @@ main() {
         _set_mirror timezone
         _build_php
     elif command -v mvn && [ -n "$MVN_PROFILE" ]; then
-        _build_mvn
+        _build_maven
     elif command -v java && [ -n "$MVN_PROFILE" ]; then
         _build_jdk_runtime
     elif command -v node; then

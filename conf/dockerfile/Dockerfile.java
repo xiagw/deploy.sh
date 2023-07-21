@@ -5,6 +5,7 @@ FROM maven:3.6-jdk-8 AS builder
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG MVN_DEBUG=-q
+ARG MVN_COPY_YAML=false
 
 WORKDIR /src
 COPY . .
