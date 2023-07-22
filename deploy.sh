@@ -246,6 +246,16 @@ _build_image_docker() {
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
+    ## docker build Dockerfile.base
+    dockerfile_base="${gitlab_project_dir}/Dockerfile.base"
+    if [[ -f "${dockerfile_base}" ]]; then
+        image_base=deploy/$gitlab_project_name
+        if docker images | grep -q $image_base; then
+            _msg time "found $image_base"
+        else
+            docker build -t $image_base -f "${dockerfile_base}" "${gitlab_project_dir}"
+        fi
+    fi
     ## docker build
     echo "ENV_COPY_YAML: ${ENV_COPY_YAML:-false}"
     echo "PIPELINE_COPY_YAML: ${PIPELINE_COPY_YAML:-false}"
