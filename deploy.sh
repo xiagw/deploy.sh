@@ -247,10 +247,14 @@ _build_image_docker() {
         docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## docker build
+    echo "ENV_COPY_YAML: ${ENV_COPY_YAML:-false}"
+    echo "PIPELINE_COPY_YAML: ${PIPELINE_COPY_YAML:-false}"
     docker build $ENV_ADD_HOST $quiet_flag \
         --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
-        --build-arg MVN_PROFILE="${gitlab_project_branch}" "${gitlab_project_dir}"
+        --build-arg MVN_PROFILE="${gitlab_project_branch}" \
+        --build-arg MVN_COPY_YAML="${ENV_COPY_YAML:-${PIPELINE_COPY_YAML:-false}}" \
+        "${gitlab_project_dir}"
     ## docker push to ttl.sh
     image_uuid="ttl.sh/$(uuidgen):1h"
     echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
@@ -489,13 +493,13 @@ _notify_zoom() {
 }
 
 _notify_feishu() {
-    # Send message to Feishu
+    # Send message to Feishu 飞书
     # ENV_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-url"
     curl -X POST -H "Content-Type: application/json" -d '{"text": "'"$msg_body"'"}' "$ENV_WEBHOOK_URL"
 }
 
 _notify_wechat_work() {
-    # Send message to weixin_work
+    # Send message to weixin_work 企业微信
     local wechat_key=$1
     wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wechat_key"
     curl -s -H 'Content-Type: application/json' \
@@ -571,7 +575,7 @@ _renew_cert() {
     _msg step "[cert] renew cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
-    acme_cert="${acme_home}/${ENV_CERT_INSTALL:-dest}"
+    acme_install_dest="${acme_home}/${ENV_CERT_INSTALL:-dest}"
     file_reload_nginx="${acme_home}/.reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
@@ -579,7 +583,7 @@ _renew_cert() {
         curl https://get.acme.sh | bash -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
     fi
 
-    [ -d "$acme_cert" ] || mkdir -p "$acme_cert"
+    [ -d "$acme_install_dest" ] || mkdir -p "$acme_install_dest"
     files_account=("${acme_home}/"account.conf.*.dns_*)
     # files_num=${#files_account[@]}
     ## support multiple account.conf.* / 支持多账号
@@ -632,9 +636,8 @@ _renew_cert() {
                 ## create cert / 创建证书
                 "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type
             fi
-            "${acme_cmd}" --install-cert -d "${domain}" \
-                --key-file "$acme_cert/${domain}".key \
-                --fullchain-file "$acme_cert/${domain}".crt
+            ## install certs to dest folder
+            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
         done
     done
     ## deploy with gitlab CI/CD,
@@ -646,9 +649,7 @@ _renew_cert() {
     fi
 
     _msg stepend "[cert] renew cert with acme.sh using dns+api"
-
     [[ "${exec_single:-0}" -gt 0 ]] && exit 0
-
     return 0
 }
 
@@ -825,18 +826,18 @@ _detect_os() {
         exec_sudo=sudo
     fi
     if [[ -e /etc/os-release ]]; then
-        OS="$(source /etc/os-release && echo ${ID})"
+        os_type="$(source /etc/os-release && echo ${ID})"
     elif [[ -e /etc/centos-release ]]; then
-        OS=centos
+        os_type=centos
     elif [[ -e /etc/arch-release ]]; then
-        OS=arch
+        os_type=arch
     else
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
         _msg error "Unsupported. exit."
         return 1
     fi
 
-    case "$OS" in
+    case "$os_type" in
     debian | ubuntu | linuxmint)
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
         [[ -f "$HOME"/.bash_logout ]] && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
@@ -857,7 +858,7 @@ _detect_os() {
         ;;
     centos | amzn | rhel | fedora)
         rpm -q epel-release >/dev/null || {
-            if [ "$OS" = amzn ]; then
+            if [ "$os_type" = amzn ]; then
                 $exec_sudo amazon-linux-extras install -y epel >/dev/null
             else
                 $exec_sudo yum install -y epel-release >/dev/null
@@ -940,7 +941,7 @@ _inject_files() {
     _msg step "[inject] conf/env/Dockerfile..."
     ## backend (PHP/Java/Python) project_conf files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
-    path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
+    local path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
     if [ -d "$path_project_conf" ]; then
         _msg warning "found custom files, sync it."
         rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
@@ -1037,12 +1038,12 @@ _inject_files() {
 }
 
 _set_deploy_conf() {
-    path_conf_ssh="${me_path_data}/.ssh"
-    path_conf_acme="${me_path_data}/.acme.sh"
-    path_conf_aws="${me_path_data}/.aws"
-    path_conf_kube="${me_path_data}/.kube"
-    path_conf_aliyun="${me_path_data}/.aliyun"
-    conf_python_gitlab="${me_path_data}/.python-gitlab.cfg"
+    local path_conf_ssh="${me_path_data}/.ssh"
+    local path_conf_acme="${me_path_data}/.acme.sh"
+    local path_conf_aws="${me_path_data}/.aws"
+    local path_conf_kube="${me_path_data}/.kube"
+    local path_conf_aliyun="${me_path_data}/.aliyun"
+    local file_python_gitlab="${me_path_data}/.python-gitlab.cfg"
     ## ssh config and key files
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
@@ -1062,7 +1063,7 @@ _set_deploy_conf() {
     [[ ! -d "${HOME}/.aws" && -d "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
     [[ ! -d "${HOME}/.kube" && -d "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
     [[ ! -d "${HOME}/.aliyun" && -d "${path_conf_aliyun}" ]] && ln -sf "${path_conf_aliyun}" "$HOME/"
-    [[ ! -f "${HOME}/.python-gitlab.cfg" && -f "${conf_python_gitlab}" ]] && ln -sf "${conf_python_gitlab}" "$HOME/"
+    [[ ! -f "${HOME}/.python-gitlab.cfg" && -f "${file_python_gitlab}" ]] && ln -sf "${file_python_gitlab}" "$HOME/"
     return 0
 }
 
@@ -1147,7 +1148,7 @@ _probe_langs() {
 }
 
 _probe_deploy_method() {
-    _msg step "[probe] probe deploy method"
+    _msg step "[probe] deploy method"
     for f in Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in

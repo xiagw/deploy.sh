@@ -259,14 +259,14 @@ _build_maven() {
 
 _build_jdk_runtime() {
     apt-get update -q
-    $apt_opt less apt-utils
+    $apt_opt less apt-utils libjemalloc2
     if [ "$INSTALL_FFMPEG" = true ]; then
         $apt_opt ffmpeg
     fi
     if [ "$INSTALL_FONTS" = true ]; then
         $apt_opt fontconfig
         fc-cache --force
-        curl --referer http://www.flyh6.com/ -Lo - $url_fly_cdn/fonts-2022.tgz |
+        curl --referer http://cdn.flyh6.com/ -Lo - $url_fly_cdn/fonts-2022.tgz |
             tar -C /usr/share -zxf -
     fi
     ## set ssl
@@ -287,8 +287,6 @@ _build_jdk_runtime() {
             touch "/app/profile.${MVN_PROFILE:-main}"
         fi
     done
-
-    $apt_opt libjemalloc2
 }
 
 _build_tomcat() {
