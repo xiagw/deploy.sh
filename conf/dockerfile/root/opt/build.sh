@@ -22,9 +22,8 @@ _set_mirror() {
     if [ -f /etc/apt/sources.list ]; then
         sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
             -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-    fi
     ## OS alpine, nginx:alpine
-    if [ -f /etc/apk/repositories ]; then
+    elif [ -f /etc/apk/repositories ]; then
         sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
     fi
     ## maven
@@ -72,8 +71,10 @@ _build_nginx() {
     # Set upstream conf and remove the default conf
     # echo "upstream php-upstream { server ${PHP_UPSTREAM_CONTAINER}:${PHP_UPSTREAM_PORT}; }" >/etc/nginx/php-upstream.conf
     # rm /etc/nginx/conf.d/default.conf
-    sed -i 's/\r//g' /docker-entrypoint.d/run.sh
-    chmod +x /docker-entrypoint.d/run.sh
+    if [ -f /docker-entrypoint.d/run.sh ]; then
+        sed -i 's/\r//g' /docker-entrypoint.d/run.sh
+        chmod +x /docker-entrypoint.d/run.sh
+    fi
 }
 
 _build_php() {
@@ -323,8 +324,9 @@ main() {
         ;;
     esac
 
-    if command -v nginx && [ -n "$INSTALL_NGINX" ]; then
+    if command -v nginx; then
         _build_nginx
+        return
     elif [ -n "$LARADOCK_PHP_VERSION" ]; then
         _set_mirror timezone
         _build_php
