@@ -1009,6 +1009,14 @@ _inject_files() {
                 esac
             fi
         fi
+        case ${gitlab_project_name} in
+        *-php*)
+            rsync -a "${me_dockerfile}/Dockerfile.php" "${gitlab_project_dir}/Dockerfile.base"
+            ;;
+        *-nginx*)
+            rsync -a "${me_dockerfile}/Dockerfile.nginx" "${gitlab_project_dir}/Dockerfile.base"
+            ;;
+        esac
         ;;
     remove)
         echo 'Removing Dockerfile (disabling docker build)'

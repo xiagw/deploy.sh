@@ -24,7 +24,8 @@ _set_mirror() {
             -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
     ## OS alpine, nginx:alpine
     elif [ -f /etc/apk/repositories ]; then
-        sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
+        # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
+        sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
     fi
     ## maven
     if command -v mvn; then
@@ -101,7 +102,7 @@ _build_php() {
     fi
     locale-gen en_US.UTF-8
 
-    case "$LARADOCK_PHP_VERSION" in
+    case "$PHP_VERSION" in
     8.1)
         echo "install PHP from repo of OS..."
         ;;
@@ -109,12 +110,12 @@ _build_php() {
         echo "install PHP from ppa:ondrej/php..."
         apt-get install -yqq lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
         add-apt-repository ppa:ondrej/php
-        case "$LARADOCK_PHP_VERSION" in
+        case "$PHP_VERSION" in
         8.*)
             :
             ;;
         *)
-            $apt_opt php"${LARADOCK_PHP_VERSION}"-mcrypt
+            $apt_opt php"${PHP_VERSION}"-mcrypt
             ;;
         esac
         ;;
@@ -123,30 +124,30 @@ _build_php() {
     apt-get upgrade -yqq
     $apt_opt \
         vim curl ca-certificates \
-        php"${LARADOCK_PHP_VERSION}" \
-        php"${LARADOCK_PHP_VERSION}"-redis \
-        php"${LARADOCK_PHP_VERSION}"-mongodb \
-        php"${LARADOCK_PHP_VERSION}"-imagick \
-        php"${LARADOCK_PHP_VERSION}"-fpm \
-        php"${LARADOCK_PHP_VERSION}"-gd \
-        php"${LARADOCK_PHP_VERSION}"-mysql \
-        php"${LARADOCK_PHP_VERSION}"-xml \
-        php"${LARADOCK_PHP_VERSION}"-xmlrpc \
-        php"${LARADOCK_PHP_VERSION}"-bcmath \
-        php"${LARADOCK_PHP_VERSION}"-gmp \
-        php"${LARADOCK_PHP_VERSION}"-zip \
-        php"${LARADOCK_PHP_VERSION}"-soap \
-        php"${LARADOCK_PHP_VERSION}"-curl \
-        php"${LARADOCK_PHP_VERSION}"-bz2 \
-        php"${LARADOCK_PHP_VERSION}"-mbstring \
-        php"${LARADOCK_PHP_VERSION}"-msgpack \
-        php"${LARADOCK_PHP_VERSION}"-sqlite3
+        php"${PHP_VERSION}" \
+        php"${PHP_VERSION}"-redis \
+        php"${PHP_VERSION}"-mongodb \
+        php"${PHP_VERSION}"-imagick \
+        php"${PHP_VERSION}"-fpm \
+        php"${PHP_VERSION}"-gd \
+        php"${PHP_VERSION}"-mysql \
+        php"${PHP_VERSION}"-xml \
+        php"${PHP_VERSION}"-xmlrpc \
+        php"${PHP_VERSION}"-bcmath \
+        php"${PHP_VERSION}"-gmp \
+        php"${PHP_VERSION}"-zip \
+        php"${PHP_VERSION}"-soap \
+        php"${PHP_VERSION}"-curl \
+        php"${PHP_VERSION}"-bz2 \
+        php"${PHP_VERSION}"-mbstring \
+        php"${PHP_VERSION}"-msgpack \
+        php"${PHP_VERSION}"-sqlite3
 
-    # php"${LARADOCK_PHP_VERSION}"-process \
-    # php"${LARADOCK_PHP_VERSION}"-pecl-mcrypt  replace by  php"${LARADOCK_PHP_VERSION}"-libsodium
+    # php"${PHP_VERSION}"-process \
+    # php"${PHP_VERSION}"-pecl-mcrypt  replace by  php"${PHP_VERSION}"-libsodium
 
-    if [ "$LARADOCK_PHP_VERSION" = 5.6 ]; then
-        $apt_opt apache2 libapache2-mod-fcgid libapache2-mod-php"${LARADOCK_PHP_VERSION}"
+    if [ "$PHP_VERSION" = 5.6 ]; then
+        $apt_opt apache2 libapache2-mod-fcgid libapache2-mod-php"${PHP_VERSION}"
         sed -i -e '1 i ServerTokens Prod' -e '1 i ServerSignature Off' -e '1 i ServerName www.example.com' /etc/apache2/sites-available/000-default.conf
     else
         $apt_opt nginx
@@ -161,7 +162,7 @@ _build_php() {
         -e '/pm.start_servers/s/2/10/' \
         -e '/pm.min_spare_servers/s/1/10/' \
         -e '/pm.max_spare_servers/s/3/20/' \
-        /etc/php/"${LARADOCK_PHP_VERSION}"/fpm/pool.d/www.conf
+        /etc/php/"${PHP_VERSION}"/fpm/pool.d/www.conf
     sed -i \
         -e "/memory_limit/s/128M/1024M/" \
         -e "/post_max_size/s/8M/1024M/" \
@@ -169,12 +170,12 @@ _build_php() {
         -e "/max_file_uploads/s/20/1024/" \
         -e '/disable_functions/s/$/phpinfo,/' \
         -e '/max_execution_time/s/30/60/' \
-        /etc/php/"${LARADOCK_PHP_VERSION}"/fpm/php.ini
+        /etc/php/"${PHP_VERSION}"/fpm/php.ini
 }
 
 _onbuild_php() {
-    if command -v php && [ -n "$LARADOCK_PHP_VERSION" ]; then
-        echo "command php exists, php ver is $LARADOCK_PHP_VERSION"
+    if command -v php && [ -n "$PHP_VERSION" ]; then
+        echo "command php exists, php ver is $PHP_VERSION"
     else
         return
     fi
@@ -182,7 +183,7 @@ _onbuild_php() {
     if [ "$PHP_SESSION_REDIS" = true ]; then
         sed -i -e "/session.save_handler/s/files/redis/" \
             -e "/session.save_handler/a session.save_path = \"tcp://${PHP_SESSION_REDIS_SERVER}:${PHP_SESSION_REDIS_PORT}?auth=${PHP_SESSION_REDIS_PASS}&database=${PHP_SESSION_REDIS_DB}\"" \
-            /etc/php/"${LARADOCK_PHP_VERSION}"/fpm/php.ini
+            /etc/php/"${PHP_VERSION}"/fpm/php.ini
     fi
 
     ## setup nginx for ThinkPHP
@@ -327,7 +328,7 @@ main() {
     if command -v nginx; then
         _build_nginx
         return
-    elif [ -n "$LARADOCK_PHP_VERSION" ]; then
+    elif command -v php && [ -n "$PHP_VERSION" ]; then
         _set_mirror timezone
         _build_php
     elif command -v mvn && [ -n "$MVN_PROFILE" ]; then

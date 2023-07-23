@@ -14,4 +14,4 @@ RUN set -xe; \
     sh /opt/build.sh
 
 ONBUILD COPY ./root/ /
-ONBUILD RUN sh /opt/onbuild.sh
+ONBUILD RUN [ -f /opt/onbuild.sh ] && sh /opt/onbuild.sh

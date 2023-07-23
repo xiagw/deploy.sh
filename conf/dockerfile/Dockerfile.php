@@ -2,13 +2,13 @@ FROM ubuntu:22.04
 
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
-ARG LARADOCK_PHP_VERSION=8.1
+ARG PHP_VERSION=8.1
 
 ## for apt to be noninteractive
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
 ENV TIME_ZOME Asia/Shanghai
-ENV LARADOCK_PHP_VERSION=${LARADOCK_PHP_VERSION}
+ENV PHP_VERSION=${PHP_VERSION}
 
 EXPOSE 80 443 9000
 WORKDIR /var/www/html
@@ -28,4 +28,4 @@ RUN set -xe; \
     bash /opt/build.sh
 
 ONBUILD COPY ./root/ /
-ONBUILD RUN bash /opt/onbuild.sh
+ONBUILD RUN [ -f /opt/onbuild.sh ] && bash /opt/onbuild.sh
