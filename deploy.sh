@@ -249,11 +249,13 @@ _build_image_docker() {
     ## docker build Dockerfile.base
     dockerfile_base="${gitlab_project_dir}/Dockerfile.base"
     if [[ -f "${dockerfile_base}" ]]; then
-        image_base=deploy/$gitlab_project_name
+        image_base=deploy/base:$gitlab_project_name
         if docker images | grep -q $image_base; then
             _msg time "found $image_base"
         else
-            docker build -t $image_base -f "${dockerfile_base}" "${gitlab_project_dir}"
+            docker build --tag $image_base \
+                --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
+                -f "${dockerfile_base}" "${gitlab_project_dir}"
         fi
     fi
     ## docker build
