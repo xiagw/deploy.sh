@@ -14,7 +14,7 @@ _set_mirror() {
         echo "${TZ:-Asia/Shanghai}" >/etc/timezone
     fi
 
-    if [ "$IN_CHINA" = false ] || [ "${CHANGE_SOURCE}" = false ]; then
+    if [ "$IN_CHINA" = false ] && [ "${CHANGE_SOURCE}" = false ]; then
         return
     fi
 
