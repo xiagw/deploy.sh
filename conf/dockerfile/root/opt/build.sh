@@ -328,7 +328,7 @@ main() {
     if command -v nginx; then
         _build_nginx
         return
-    elif command -v php && [ -n "$PHP_VERSION" ]; then
+    elif [ -n "$PHP_VERSION" ]; then
         _set_mirror timezone
         _build_php
     elif command -v mvn && [ -n "$MVN_PROFILE" ]; then
