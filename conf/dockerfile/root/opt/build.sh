@@ -18,7 +18,7 @@ _set_mirror() {
         return
     fi
 
-    ## OS ubuntu:20.04 php
+    ## OS ubuntu:22.04 php
     if [ -f /etc/apt/sources.list ]; then
         sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
             -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
@@ -78,14 +78,12 @@ _build_nginx() {
 
 _build_php() {
     echo "build php ..."
-
     # usermod -u 1000 www-data
     # groupmod -g 1000 www-data
-
     apt_opt="apt-get install -yqq --no-install-recommends"
 
     apt-get update -yqq
-    $apt_opt apt-utils
+    $apt_opt apt-utils libjemalloc2
 
     ## preesed tzdata, update package index, upgrade packages and install needed software
     truncate -s0 /tmp/preseed.cfg
@@ -106,16 +104,18 @@ _build_php() {
     8.1)
         echo "install PHP from repo of OS..."
         ;;
-    8.2)
+    *)
         echo "install PHP from ppa:ondrej/php..."
         apt-get install -yqq lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
         add-apt-repository ppa:ondrej/php
-        ;;
-    *)
-        echo "Use ppa:ondrej/php..."
-        apt-get install -yqq software-properties-common
-        add-apt-repository ppa:ondrej/php
-        $apt_opt php"${LARADOCK_PHP_VERSION}"-mcrypt
+        case "$LARADOCK_PHP_VERSION" in
+        8.*)
+            :
+            ;;
+        *)
+            $apt_opt php"${LARADOCK_PHP_VERSION}"-mcrypt
+            ;;
+        esac
         ;;
     esac
 
@@ -144,25 +144,14 @@ _build_php() {
     # php"${LARADOCK_PHP_VERSION}"-process \
     # php"${LARADOCK_PHP_VERSION}"-pecl-mcrypt  replace by  php"${LARADOCK_PHP_VERSION}"-libsodium
 
-    $apt_opt libjemalloc2
-
     if [ "$LARADOCK_PHP_VERSION" = 5.6 ]; then
-        $apt_opt apache2 libapache2-mod-fcgid \
-            libapache2-mod-php"${LARADOCK_PHP_VERSION}"
-        sed -i -e '1 i ServerTokens Prod' -e '1 i ServerSignature Off' \
-            -e '1 i ServerName www.example.com' \
-            /etc/apache2/sites-available/000-default.conf
+        $apt_opt apache2 libapache2-mod-fcgid libapache2-mod-php"${LARADOCK_PHP_VERSION}"
+        sed -i -e '1 i ServerTokens Prod' -e '1 i ServerSignature Off' -e '1 i ServerName www.example.com' /etc/apache2/sites-available/000-default.conf
     else
         $apt_opt nginx
     fi
-}
+    # $apt_opt lsyncd openssh-client
 
-_onbuild_php() {
-    if command -v php && [ -n "$LARADOCK_PHP_VERSION" ]; then
-        echo "command php exists, php ver is $LARADOCK_PHP_VERSION"
-    else
-        return
-    fi
     sed -i \
         -e '/fpm.sock/s/^/;/' \
         -e '/fpm.sock/a listen = 9000' \
@@ -180,6 +169,14 @@ _onbuild_php() {
         -e '/disable_functions/s/$/phpinfo,/' \
         -e '/max_execution_time/s/30/60/' \
         /etc/php/"${LARADOCK_PHP_VERSION}"/fpm/php.ini
+}
+
+_onbuild_php() {
+    if command -v php && [ -n "$LARADOCK_PHP_VERSION" ]; then
+        echo "command php exists, php ver is $LARADOCK_PHP_VERSION"
+    else
+        return
+    fi
 
     if [ "$PHP_SESSION_REDIS" = true ]; then
         sed -i -e "/session.save_handler/s/files/redis/" \

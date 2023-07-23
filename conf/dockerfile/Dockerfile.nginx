@@ -1,12 +1,17 @@
 FROM nginx:alpine
 
 # If you're in China, set IN_CHINA to true.
+ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
 ARG INSTALL_NGINX=true
 
-COPY ./root/ /
-RUN sh /opt/build.sh
-
-# WORKDIR /app
-
 EXPOSE 80 81 443
+WORKDIR /app
+
+# COPY ./root/opt/build.sh /opt/build.sh
+RUN set -xe; \
+    curl -fLo /opt/build.sh https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh; \
+    sh /opt/build.sh
+
+ONBUILD COPY ./root/ /
+ONBUILD RUN sh /opt/onbuild.sh

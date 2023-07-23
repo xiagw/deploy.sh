@@ -9,11 +9,10 @@ ARG MVN_COPY_YAML=false
 
 WORKDIR /src
 COPY . .
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -xe; \
     curl -fLo /opt/build.sh https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh; \
     bash /opt/build.sh
-
 # https://blog.frankel.ch/faster-maven-builds/2/
 # RUN --mount=type=cache,target=/root/.m2 curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
@@ -31,7 +30,6 @@ ENV TZ=$TZ
 
 WORKDIR /app
 COPY --from=builder /jars/ .
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -xe; \
     curl -fLo /opt/build.sh https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh; \
     bash /opt/build.sh
