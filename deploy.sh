@@ -250,7 +250,7 @@ _build_image_docker() {
     dockerfile_base="${gitlab_project_dir}/Dockerfile.base"
     if [[ -f "${dockerfile_base}" ]]; then
         image_base=deploy/base:$gitlab_project_name
-        if docker images | grep "deploy/base:.*$gitlab_project_name"; then
+        if docker images | grep "deploy/base.*$gitlab_project_name"; then
             _msg time "found $image_base"
         else
             _msg time "not found $image_base"
