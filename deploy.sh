@@ -956,7 +956,7 @@ _inject_files() {
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     local path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
     if [ -d "$path_project_conf" ]; then
-        _msg warning "found custom files, sync it."
+        _msg warning "found $path_project_conf, sync it."
         rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
     fi
 
@@ -974,7 +974,12 @@ _inject_files() {
         done
         copy_flyway_file=0
     fi
-
+    ## inject docker build files
+    if [ -d "${gitlab_project_dir}/root/opt" ]; then
+        _msg "found ${gitlab_project_dir}/root/opt"
+    else
+        rsync -av "${me_dockerfile}/root/" "$gitlab_project_dir/root/"
+    fi
     ## from deploy.env， 使用全局模板文件替换项目文件
     echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-keep}
     case ${ENV_ENABLE_INJECT:-keep} in
@@ -1001,8 +1006,8 @@ _inject_files() {
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
                 rsync -a "${me_dockerfile}/settings.xml" "${gitlab_project_dir}/settings.xml"
             fi
-            if grep -q '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md" 2>/dev/null; then
-                case "$(grep '^jdk_version=' "${gitlab_project_dir}/README.md" "${gitlab_project_dir}/readme.md")" in
+            if grep -q '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.md 2>/dev/null; then
+                case "$(grep '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.md)" in
                 *=1.7) sed -i -e "s/openjdk:8u332/openjdk:7u221/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=1.8) sed -i -e "s/openjdk:8u332/openjdk:8u342/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=11) sed -i -e "s/openjdk:8u332/openjdk:11-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
@@ -1138,7 +1143,7 @@ _setup_gitlab_vars() {
 
 _probe_langs() {
     _msg step "[langs] probe language"
-    for f in pom.xml composer.json package.json requirements.txt README.md readme.md README.txt readme.txt; do
+    for f in pom.xml composer.json package.json requirements.txt {README,readme}.{md,txt}; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
         composer.json)

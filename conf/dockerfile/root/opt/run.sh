@@ -68,6 +68,7 @@ _start_php() {
     done
     [[ "$php_count" -eq 0 ]] && return
 
+    php -v
     [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
     [ -d /run/php ] || mkdir -p /run/php
     [ -d $html_path ] || mkdir $html_path
@@ -102,14 +103,15 @@ _start_php() {
     done &
 
     ## start php-fpm*
-    for i in /usr/sbin/php-fpm*; do
-        [ -x "$i" ] && exec $i ## php-fpm -F, 前台启动
+    for fpm in /usr/sbin/php-fpm*; do
+        [ -x "$fpm" ] && $fpm -F &
+        ## php-fpm -F, 前台启动
         pids+=("$!")
     done
     if command -v nginx && nginx -t; then
-        exec nginx -g "daemon off;" &
+        nginx -g "daemon off;" &
     elif command -v apachectl && apachectl -t; then
-        exec apachectl -k start -D FOREGROUND &
+        apachectl -k start -D FOREGROUND &
     else
         _msg "Not found php."
     fi
@@ -155,8 +157,8 @@ _schedule_upgrade() {
 }
 
 _set_jemalloc() {
-    case "$LARADOCK_PHP_VERSION" in
-    8.*)
+    case "$PHP_VERSION" in
+    5.* | 7.* | 8.*)
         _msg "disable jemalloc."
         ;;
     *)
@@ -233,7 +235,7 @@ main() {
     _start_php "$@"
     ## 统一兼容启动 start java
     _start_java "$@"
-    ## 自动定时60s更新
+    ## 自动定时更新程序文件， php file / jar
     while true; do
         _schedule_upgrade
         sleep 60
@@ -242,17 +244,19 @@ main() {
     _check_jemalloc &
 
     ## 识别中断信号，停止 java 进程
-    trap _kill HUP INT QUIT TERM
+    trap _kill HUP INT PIPE QUIT TERM
 
     if [[ "${start_nohup:-0}" -eq 1 ]]; then
+        ## 手工方式 shell 启动，非容器
         _msg "startup method \"nohup\", exit."
     else
+        ## 容器内启动
         if [[ "$start_debug" -eq 1 ]]; then
-            ## method 1: allow debug / use tail -f，方便开发者调试，可以直接 kill java, 不会停止容器
+            ## method 1: allow debug / 方便开发者调试，可以直接 kill java, 不会停止容器
             exec tail -f "$app_path"/log/*.log
         else
-            ## method 2: use wait, kill java 会停止容器
-            exec tail -f "$me_log" &
+            ## method 2: use wait / kill java 会停止容器
+            tail -f "$me_log" &
             wait
         fi
     fi

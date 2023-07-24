@@ -1,27 +1,23 @@
-# Use Java 8 slim JRE
 FROM openjdk:8-jre-slim
 
 ARG IN_CHINA=false
+ARG JMETER_VERSION=5.6
 
-# JMeter version
-ARG JMETER_VERSION=5.5
-# Set JMeter Home
 ENV JMETER_HOME /opt/apache-jmeter-$JMETER_VERSION
-# Add JMeter to the Path
 ENV PATH $JMETER_HOME/bin:$PATH
 
-# Install few utilities
+COPY ./root/ /
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -xe; \
    if [ "$CHANGE_SOURCE" = true ] || [ "$IN_CHINA" = true ]; then \
    sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
    fi; \
    apt-get update; \
    apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip; \
-   curl -fLo /opt/jmeter.tgz https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz; \
-   tar -C /opt -xzf jmeter.tgz; \
-   rm /opt/jmeter.tgz; \
+   curl -fLo /tmp/jmeter.tgz https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz; \
+   tar -C /opt/ -xzf /tmp/jmeter.tgz; \
    apt-get clean all; \
-   rm -rf /tmp/*
+   rm -rf /tmp/* /var/lib/apt/lists/*
 
 WORKDIR $JMETER_HOME
 
@@ -31,5 +27,3 @@ WORKDIR $JMETER_HOME
 # COPY jmeter-plugins/lib /opt/apache-jmeter-$JMETER_VERSION/lib
 # ADD the sample test
 # COPY sample-test sample-test
-
-COPY ./root/ /

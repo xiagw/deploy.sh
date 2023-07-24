@@ -8,10 +8,14 @@ ARG INSTALL_NGINX=true
 EXPOSE 80 81 443
 WORKDIR /app
 
-# COPY ./root/opt/build.sh /opt/build.sh
+COPY ./root/ /
 RUN set -xe; \
+    if [ -f /opt/build.sh ]; then \
+    echo "found /opt/build.sh"; \
+    else \
     curl -fLo /opt/build.sh https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh; \
-    sh /opt/build.sh
+    fi; \
+    bash /opt/build.sh
 
 ONBUILD COPY ./root/ /
-ONBUILD RUN [ -f /opt/onbuild.sh ] && sh /opt/onbuild.sh
+ONBUILD RUN if [ -f /opt/onbuild.sh ]; then sh /opt/onbuild.sh; else :; fi

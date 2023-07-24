@@ -16,4 +16,4 @@ EXPOSE 3306
 
 COPY ./root/ /
 
-RUN bash /opt/build.sh
+RUN if [ -f /opt/build.sh ]; then bash /opt/build.sh; else :; fi

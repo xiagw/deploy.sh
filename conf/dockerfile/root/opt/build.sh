@@ -31,12 +31,13 @@ _set_mirror() {
     if command -v mvn; then
         m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
+        ## 项目内自带 settings.xml docs/settings.xml
         if [ -f settings.xml ]; then
             cp -vf settings.xml $m2_dir/
         elif [ -f docs/settings.xml ]; then
             cp -vf docs/settings.xml $m2_dir/
         else
-            url_settings=$url_deploy_raw/conf/dockerfile/settings.xml
+            url_settings=$url_deploy_raw/conf/dockerfile/root/opt/settings.xml
             curl -Lo $m2_dir/settings.xml $url_settings
         fi
     fi
@@ -313,6 +314,7 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="$me_path/${me_name}.log"
+    echo "build log file: $me_log"
 
     apt_opt="apt-get install -yqq --no-install-recommends"
 
