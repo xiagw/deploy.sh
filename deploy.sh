@@ -256,6 +256,7 @@ _build_image_docker() {
             _msg time "not found $image_base"
             docker build $ENV_ADD_HOST $quiet_flag \
                 --tag $image_base \
+                --build-arg PHP_VERSION="8.1" \
                 --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
                 --build-arg BASE_TAG="${gitlab_project_name}" \
                 -f "${dockerfile_base}" "${gitlab_project_dir}"
