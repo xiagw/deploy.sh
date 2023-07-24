@@ -10,6 +10,7 @@ for tag in "${tags[@]}"; do
         --build-arg IN_CHINA="true" \
         .
 
+    echo "FROM deploy/base:fly-php${tag/./}" >Dockerfile
     DOCKER_BUILDKIT=0 docker build \
         --build-arg=BASE_TAG="fly-php${tag/./}" \
         -t deploy/php:"$tag" \
