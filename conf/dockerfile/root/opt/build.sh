@@ -343,7 +343,10 @@ main() {
 
     # apt-get autoremove -y
     apt-get clean all
-    rm -rf /var/lib/apt/lists/* /tmp/*
+    rm -rf \
+        /var/lib/apt/lists/* \
+        /tmp/* \
+        /opt/settings.xml
 }
 
 main "$@"

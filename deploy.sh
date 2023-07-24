@@ -1004,7 +1004,7 @@ _inject_files() {
                 echo "Found ${me_data_dockerfile}/settings.xml, copy to ${gitlab_project_dir}/"
                 rsync -a "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
-                rsync -a "${me_dockerfile}/settings.xml" "${gitlab_project_dir}/settings.xml"
+                rsync -a "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/settings.xml"
             fi
             if grep -q '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.md 2>/dev/null; then
                 case "$(grep '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.md)" in
