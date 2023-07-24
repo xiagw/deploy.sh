@@ -250,13 +250,14 @@ _build_image_docker() {
     dockerfile_base="${gitlab_project_dir}/Dockerfile.base"
     if [[ -f "${dockerfile_base}" ]]; then
         image_base=deploy/base:$gitlab_project_name
+        php_ver="${gitlab_project_name##*php}"
         if docker images | grep "deploy/base.*$gitlab_project_name"; then
             _msg time "found $image_base"
         else
             _msg time "not found $image_base"
             docker build $ENV_ADD_HOST $quiet_flag \
                 --tag $image_base \
-                --build-arg PHP_VERSION="8.1" \
+                --build-arg PHP_VERSION="${php_ver:0:1}.${php_ver:1}" \
                 --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
                 --build-arg BASE_TAG="${gitlab_project_name}" \
                 -f "${dockerfile_base}" "${gitlab_project_dir}"
