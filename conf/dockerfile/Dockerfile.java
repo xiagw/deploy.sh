@@ -18,8 +18,8 @@ RUN set -xe; \
     echo "found /opt/build.sh"; \
     else \
     curl -fLo /opt/build.sh https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh; \
-    fi; \
-    bash /opt/build.sh
+    fi
+RUN bash /opt/build.sh
 # https://blog.frankel.ch/faster-maven-builds/2/
 # RUN --mount=type=cache,target=/root/.m2 curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
 
