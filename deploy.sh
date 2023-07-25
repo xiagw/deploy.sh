@@ -996,7 +996,7 @@ _inject_files() {
             echo "Found ${me_dockerfile}/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
             rsync -a "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         else
-            echo "Not found custome Dockerfile"
+            echo "Not found custom Dockerfile from conf/ or data/"
         fi
         if [[ "${project_lang}" == java ]]; then
             ## java settings.xml 优先查找 data/ 目录
