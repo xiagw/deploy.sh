@@ -266,14 +266,16 @@ _build_image_docker() {
         --build-arg MVN_PROFILE="${gitlab_project_branch}" \
         --build-arg MVN_COPY_YAML="${ENV_COPY_YAML:-${PIPELINE_COPY_YAML:-false}}" \
         "${gitlab_project_dir}"
-    ## docker push to ttl.sh
-    image_uuid="ttl.sh/$(uuidgen):1h"
-    echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
-    echo "docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
-    echo "docker push $image_uuid"
-    echo "## Then execute the following command on remote server:"
-    echo "docker pull $image_uuid"
-    echo "docker tag $image_uuid laradock_spring"
+    if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
+        ## docker push to ttl.sh
+        image_uuid="ttl.sh/$(uuidgen):1h"
+        echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
+        echo "docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
+        echo "docker push $image_uuid"
+        echo "## Then execute the following command on remote server:"
+        echo "docker pull $image_uuid"
+        echo "docker tag $image_uuid laradock_spring"
+    fi
     _msg stepend "[image] build image with docker"
 }
 
@@ -976,7 +978,7 @@ _inject_files() {
     if [ -d "${gitlab_project_dir}/root/opt" ]; then
         _msg "found ${gitlab_project_dir}/root/opt"
     else
-        rsync -av "${me_dockerfile}/root/" "$gitlab_project_dir/root/"
+        rsync -a "${me_dockerfile}/root/" "$gitlab_project_dir/root/"
     fi
     ## from deploy.env， 使用全局模板文件替换项目文件
     echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-keep}
@@ -1002,9 +1004,10 @@ _inject_files() {
                 echo "Found ${me_data_dockerfile}/settings.xml, copy to ${gitlab_project_dir}/"
                 rsync -a "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
+                echo "IN_CHINA=true, copy ${me_dockerfile}/root/opt/settings.xml"
                 rsync -a "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/settings.xml"
             fi
-            if grep -q '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.md 2>/dev/null; then
+            if grep -q '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.{md,txt} 2>/dev/null; then
                 case "$(grep '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.md)" in
                 *=1.7) sed -i -e "s/openjdk:8u332/openjdk:7u221/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=1.8) sed -i -e "s/openjdk:8u332/openjdk:8u342/" "${gitlab_project_dir}/Dockerfile" ;;
@@ -1034,7 +1037,7 @@ _inject_files() {
     ## docker ignore file / 使用全局模板文件替换项目文件
     if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
         echo "Not found .dockerignore, using global .dockerignore."
-        rsync -av "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
+        rsync -a "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     fi
 
     ## flyway files sql & conf
@@ -1388,6 +1391,7 @@ _set_args() {
 }
 
 main() {
+    _msg time "[BEGIN]"
     ## Process parameters / 处理传入的参数
     _set_args "$@"
 
