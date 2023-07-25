@@ -54,7 +54,6 @@ _log() {
 
 ## install phpunit
 _test_unit() {
-    _msg step "[test] unit test"
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
         echo "Found $gitlab_project_dir/tests/unit_test.sh"
         bash "$gitlab_project_dir"/tests/unit_test.sh
@@ -69,7 +68,6 @@ _test_unit() {
 
 ## install jdk/ant/jmeter
 _test_function() {
-    _msg step "[test] function test"
     if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
         echo "Found $gitlab_project_dir/tests/func_test.sh"
         bash "$gitlab_project_dir"/tests/func_test.sh
@@ -83,7 +81,6 @@ _test_function() {
 }
 
 _check_quality_sonar() {
-    _msg step "[quality] check code with sonarqube"
     local sonar_url="${ENV_SONAR_URL:?empty}"
     local sonar_conf="$gitlab_project_dir/sonar-project.properties"
     if ! curl --silent --head --fail "$sonar_url" >/dev/null 2>&1; then
@@ -117,7 +114,6 @@ EOF
 }
 
 _scan_zap() {
-    _msg step "[scan] run ZAP scan"
     local target_url="${ENV_TARGET_URL}"
     local zap_docker_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
     local zap_options="${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
@@ -137,7 +133,6 @@ _scan_zap() {
 # _security_scan_zap "http://example.com" "my/zap-image" "-t http://example.com -r report.html -x report.xml"
 
 _scan_vulmap() {
-    _msg step "[scan] vulmap scan"
     # https://github.com/zhzyker/vulmap
     # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
     # Load environment variables from config file
@@ -164,7 +159,6 @@ _check_gitleaks() {
 }
 
 _deploy_flyway_docker() {
-    _msg step "[database] deploy SQL files with flyway"
     flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
@@ -1530,6 +1524,7 @@ main() {
     ## default exec all tasks / 默认执行所有任务
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
+    _msg step "[quality] check code with sonarqube"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
     if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
         _check_quality_sonar
@@ -1548,6 +1543,7 @@ main() {
 
     ## unit test / 单元测试
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用，0 禁用[default]
+    _msg step "[test] unit test"
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
     if [[ "${PIPELINE_UNIT_TEST:-0}" -eq 1 ]]; then
         _test_unit
@@ -1556,6 +1552,7 @@ main() {
     fi
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
+    _msg step "[database] deploy SQL files with flyway"
     # [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]] && _deploy_flyway_helm_job
     # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
     echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
@@ -1590,6 +1587,7 @@ main() {
 
     ## function test / 功能测试
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用，0 禁用[default]
+    _msg step "[test] function test"
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-0}"
     if [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 1 ]]; then
         _test_function
@@ -1598,6 +1596,7 @@ main() {
     fi
 
     ## 安全扫描
+    _msg step "[scan] run ZAP scan"
     echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-0}"
     if [[ "${PIPELINE_SCAN_ZAP:-0}" -eq 1 ]]; then
         _scan_zap
@@ -1605,6 +1604,7 @@ main() {
         echo '<skip>'
     fi
 
+    _msg step "[scan] vulmap scan"
     echo "PIPELINE_SCAN_VULMAP: ${PIPELINE_SCAN_VULMAP:-0}"
     if [[ "${PIPELINE_SCAN_VULMAP:-0}" -eq 1 ]]; then
         _scan_vulmap
