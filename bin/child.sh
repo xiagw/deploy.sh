@@ -8,6 +8,7 @@ _poweroff() {
     if [[ ${debug_mod:-0} == 1 ]]; then
         echo "[+] poweroff"
     else
+        sleep 15
         sudo poweroff
     fi
 }
@@ -32,6 +33,9 @@ main() {
 
     ## manual cancel
     case $1 in
+    c | cancel)
+        rm -f "$file_play"
+        ;;
     d | disable)
         touch "$file_disable"
         ;;
