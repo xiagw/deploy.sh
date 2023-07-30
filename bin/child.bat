@@ -2,12 +2,12 @@
 REM schtasks /Create /SC MINUTE /TN child /NP /RU SYSTEM /TR C:\Users\xia\child.bat
 
 set me_path=%~dp0
-set ps_file=%me_path%\child.ps1
-set log_file=%me_path%\child.log
-set play_file=%me_path%\child.play
-set rest_file=%me_path%\child.rest
-set disable_file=%me_path%\child.disable
-set force_file=%me_path%\child.force
+set ps_file=%me_path%child.ps1
+set log_file=%me_path%child.log
+set play_file=%me_path%child.play
+set rest_file=%me_path%child.rest
+set disable_file=%me_path%child.disable
+set force_file=%me_path%child.force
 
 if "%1"=="d" goto :disable
 if "%1"=="disable" goto :disable
