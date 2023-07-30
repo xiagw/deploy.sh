@@ -1144,24 +1144,28 @@ _setup_gitlab_vars() {
 
 _probe_langs() {
     _msg step "[langs] probe language"
-    for f in pom.xml composer.json package.json requirements.txt {README,readme}.{md,txt}; do
+    for f in pom.xml {composer,package}.json requirements.txt {README,readme}.{md,txt}; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         case $f in
         composer.json)
             echo "Found composer.json"
             project_lang=php
+            break
             ;;
         package.json)
             echo "Found package.json"
             project_lang=node
+            break
             ;;
         pom.xml)
             echo "Found pom.xml"
             project_lang=java
+            break
             ;;
         requirements.txt)
             echo "Found requirements.txt"
             project_lang=python
+            break
             ;;
         *)
             project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
@@ -1391,7 +1395,7 @@ _set_args() {
 }
 
 main() {
-    _msg time "[BEGIN]"
+    _msg time "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _set_args "$@"
 
@@ -1628,7 +1632,7 @@ main() {
         _deploy_notify
     fi
 
-    _msg time "[END]"
+    _msg time "[deploy] END"
     ## deploy result:  0 成功， 1 失败
     return ${deploy_result:-0}
 }

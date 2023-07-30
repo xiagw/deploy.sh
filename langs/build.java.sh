@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=2154
 
-path_for_rsync="jar_file"
 MVN_PROFILE="${gitlab_project_branch}"
+jars_path="jars"
 maven_cache="${me_path_data}"/cache.maven
 
 if [[ -f "$gitlab_project_dir/build.gradle" ]]; then
@@ -29,16 +29,17 @@ else
         --activate-profiles "$MVN_PROFILE" $MVN_SET
 fi
 
-[ -d "$gitlab_project_dir/$path_for_rsync" ] || mkdir "$gitlab_project_dir/${path_for_rsync}"
+[ -d "$gitlab_project_dir/$jars_path" ] || mkdir "$gitlab_project_dir/${jars_path}"
 
-find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
+find "${gitlab_project_dir}" -path "${jars_path}" -prune -o -type f \
     -regextype egrep -iregex '.*SNAPSHOT.*\.(jar|war)' \
-    -exec rsync -a --exclude='framework*' --exclude='gdp-module*' --exclude='sdk*.jar' --exclude='core*.jar' {} "$path_for_rsync/" \;
+    -exec rsync -a --exclude='framework*' --exclude='gdp-module*' --exclude='sdk*.jar' --exclude='core*.jar' {} "$jars_path/" \;
 
+## copy *.yml
 if [[ "${exec_deploy_k8s:-0}" -ne 1 ]]; then
-    find "${gitlab_project_dir}" -path "${path_for_rsync}" -prune -o -type f \
+    find "${gitlab_project_dir}" -path "${jars_path}" -prune -o -type f \
         -regextype egrep -iregex ".*resources.*${gitlab_project_branch}.*\.(yml)" \
-        -exec rsync -a {} "$path_for_rsync/" \;
+        -exec rsync -a {} "$jars_path/" \;
 fi
 
 _msg stepend "[build] java build"
