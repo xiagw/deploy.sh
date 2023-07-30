@@ -4,13 +4,13 @@ _get_input() {
     count=0
     read -rp "[$((count + 1))]. Enter ssh name: (alias name) " read_ssh_name
     if [[ "${delete_flag:-0}" -eq 0 ]]; then
-        read -rp "[$((count + 1))]. Enter ssh ip: (ip/dns) " read_ssh_ip
-        ssh_ip=${read_ssh_ip}
-        if echo "$read_ssh_ip" | grep -q ".*@.*:"; then
-            ssh_user=${read_ssh_ip%%@*}
-            var_temp=${read_ssh_ip#*@}
-            ssh_ip=${var_temp%%:*}
-            ssh_port=${read_ssh_ip##*:}
+        read -rp "[$((count + 1))]. Enter ssh ip: (ip/dns) " read_ssh_host
+        ssh_host=${read_ssh_host}
+        if echo "$read_ssh_host" | grep -q ".*@.*:"; then
+            ssh_user=${read_ssh_host%%@*}
+            var_temp=${read_ssh_host#*@}
+            ssh_host=${var_temp%%:*}
+            ssh_port=${read_ssh_host##*:}
         else
             read -rp "[$((count + 1))]. Enter ssh user: [root] " read_ssh_user
             read -rp "[$((count + 1))]. Enter ssh port: [22] " read_ssh_port
@@ -19,7 +19,7 @@ _get_input() {
         fi
         # read -rp "[$((count + 1))]. Enable byobu? [Y/n] " read_byobu
     fi
-    if [[ "$conf_nums" == 1 ]]; then
+    if [[ "$conf_nums" -eq 1 ]]; then
         ssh_conf=${conf_files[0]}
     else
         select c in "${conf_files[@]}"; do
@@ -28,7 +28,7 @@ _get_input() {
         done
     fi
 
-    if [[ "$ansible_host_nums" == 1 ]]; then
+    if [[ "$ansible_host_nums" -eq 1 ]]; then
         ansible_conf=${ansible_host_files[0]}
     else
         select a in "${ansible_host_files[@]}"; do
@@ -39,7 +39,7 @@ _get_input() {
 }
 
 _add_host() {
-    if grep -q -E "^Host.*${read_ssh_name}$|^### ${read_ssh_name} begin$" "$ssh_conf"; then
+    if grep -q -E "^Host.*${read_ssh_name}$|^### ${read_ssh_name} begin" "$ssh_conf"; then
         echo "host ${read_ssh_name} exist, skip"
         return 1
     fi
@@ -47,7 +47,7 @@ _add_host() {
     cat >>"$ssh_conf" <<EOF
 ### ${read_ssh_name} begin  ## $([[ "${read_byobu:-y}" == y ]] && echo "# byobu")
 Host ${read_ssh_name}
-    HostName ${ssh_ip}
+    HostName ${ssh_host}
     User ${ssh_user} $([[ "${ssh_port}" == 22 ]] || echo -e "\n    Port ${ssh_port}")
 ### ${read_ssh_name} end
 
@@ -103,6 +103,7 @@ main() {
             if [ -n "${1}" ]; then
                 host="${1}@${host}"
             fi
+            # shellcheck disable=2086
             ssh -A -t "${host}" $exec_byobu
             ;;
         esac
