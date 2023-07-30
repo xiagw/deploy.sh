@@ -7,14 +7,23 @@ _cleanup() {
 }
 
 _loading_rotate() {
-    sleep 10 &
+    sleep "${1:-10}" &
     pid=$!
-    frames="/ - \\ |"
+    frames='/ - \ |'
     while kill -0 $pid >/dev/null 2>&1; do
         for frame in $frames; do
-            printf "\r$frame Loading..."
+            printf "\r%s Loading..." "$frame"
             sleep 0.5
         done
+    done
+    printf "\n"
+}
+
+_loading_second() {
+    s="${1:-10}"
+    for i in $(seq 1 "$s"); do
+        printf "\rLoading... %s/$s" "$i"
+        sleep 1
     done
     printf "\n"
 }
@@ -40,16 +49,15 @@ _msg_color() {
     reset=$(tput sgr0)
     echo "${info}INFO${reset}: This is an ${bold}info${reset} message"
     echo "${error}ERROR${reset}: This is an ${underline}error${reset} message"
-    echo "${warn}WARN${reset}: This is a ${italic}warning${reset} message
-"
+    echo "${warn}WARN${reset}: This is a ${italic}warning${reset} message"
 }
 
 _color() {
     if [[ -t 2 ]] && [[ -z "${no_color-}" ]] && [[ "${TERM-}" != "dumb" ]]; then
-        COLOROFF='\033[0m' RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m'
-        BLUE='\033[0;34m' PURPLE='\033[0;35m' CYAN='\033[0;36m' YELLOW='\033[1;33m'
+        COLOROFF='\033[0m'
+        RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m' BLUE='\033[0;34m' PURPLE='\033[0;35m' CYAN='\033[0;36m' YELLOW='\033[1;33m'
     else
-        COLOROFF='' RED='' GREEN='' ORANGE='' BLUE='' PURPLE='' CYAN='' YELLOW=''
+        unset COLOROFF RED GREEN ORANGE BLUE PURPLE CYAN YELLOW
     fi
 }
 
@@ -108,7 +116,7 @@ _parse_params() {
 
 _usage() {
     cat <<EOF
-Usage: $(basename "${BASH_SOURCE[0]}") [options] [Parameter]
+Usage: $me_name [options] [Parameter]
 
 Script description here.
 
@@ -139,6 +147,12 @@ _func_demo() {
     _msg "  - ${YELLOW}flag${COLOROFF}: ${flag}"
     _msg "  - ${BLUE}param:${COLOROFF} ${param}"
     _msg "  - ${GREEN}arguments:${COLOROFF} ${args[*]-}"
+    _msg "  - ${ORANGE}ORANGE text contents${COLOROFF}"
+    _msg "  - ${PURPLE}PURPLE text contents${COLOROFF}"
+    _msg "  - ${CYAN}CYAN text contents${COLOROFF}"
+    # _loading_rotate 10
+    # _loading_left_right
+    _loading_second 12
 }
 
 main() {
