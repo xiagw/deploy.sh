@@ -23,12 +23,15 @@ _msg() {
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
     time)
-        color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%T-%u), "
+        if [ -z "$STEP" ]; then
+            color_on="[+] $(date +%Y%m%d-%T-%u), "
+        else
+            color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%T-%u), "
+        fi
         color_off=''
         ;;
     step | timestep)
-        STEP=$((${STEP:-0} + 1))
-        color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%T-%u), \033[0m"
+        color_on="\033[0;36m[$((${STEP:-0} + 1))] $(date +%Y%m%d-%T-%u), \033[0m"
         color_off=' ... start'
         ;;
     stepend | end)
