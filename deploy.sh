@@ -31,8 +31,8 @@ _msg() {
         color_off=''
         ;;
     step | timestep)
-        color_on="\033[0;36m[$((${STEP:-0} + 1))] $(date +%Y%m%d-%T-%u), \033[0m"
-        color_off=' ... start'
+        STEP=$((${STEP:-0} + 1))
+        color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%T-%u), \033[0m"
         ;;
     stepend | end)
         color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%T-%u), "
