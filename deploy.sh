@@ -1551,7 +1551,9 @@ main() {
         [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
         [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
-        return 0
+        if [[ "${github_action:-0}" -ne 1 ]]; then
+            return 0
+        fi
     fi
     ################################################################################
 
