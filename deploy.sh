@@ -22,6 +22,7 @@ _msg() {
     blue) color_on='\033[0;34m' ;;                     # Blue
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
+    orange) color_on='\033[1;33m' ;;
     time)
         if [ -z "$STEP" ]; then
             color_on="[+] $(date +%Y%m%d-%T-%u), "
