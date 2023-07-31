@@ -727,7 +727,7 @@ _install_cloudflare_cli() {
     command -v flarectl >/dev/null && return
     _msg info "install flarectl..."
     url_flarectl=https://github.com/cloudflare/cloudflare-go/releases/download/v0.68.0/flarectl_0.68.0_linux_amd64.tar.xz
-    curl -fLo /tmp/flarectl.tar.xz $url_flarectl
+    curl -fsSLo /tmp/flarectl.tar.xz $url_flarectl
     tar -C /tmp -xf /tmp/flarectl.tar.xz flarectl
     install -m 0755 /tmp/flarectl "${me_path_data_bin}/flarectl"
 }
@@ -735,7 +735,7 @@ _install_cloudflare_cli() {
 _install_aliyun_cli() {
     command -v aliyun >/dev/null && return
     _msg info "install aliyun cli..."
-    curl -Lo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
+    curl -fsSLo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
     tar -C /tmp -zxf /tmp/aliyun.tgz
     # install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
     install -m 0755 /tmp/aliyun "${me_path_data_bin}/aliyun"
@@ -745,18 +745,22 @@ _install_jq_cli() {
     command -v jq >/dev/null && return
     _msg info "install jq cli..."
     [[ $(/usr/bin/id -u) -eq 0 ]] || pre_sudo=sudo
-    $pre_sudo apt-get install -y jq
+    $use_sudo apt-get update -qq
+    $pre_sudo apt-get install -yqq jq
 }
 
 _install_terraform() {
     command -v terraform >/dev/null && return
     _msg info "installing terraform..."
     [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
-    $use_sudo apt-get update -qq && $use_sudo apt-get install -qq -y gnupg software-properties-common curl
-    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null 2>&1
+    $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
+    curl -fsSL https://apt.releases.hashicorp.com/gpg |
+        gpg --dearmor |
+        $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null 2>&1
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
         $use_sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null 2>&1
-    $use_sudo apt-get update -qq && $use_sudo apt-get install -qq -y terraform
+    $use_sudo apt-get update -qq
+    $use_sudo apt-get install -yqq terraform
     # terraform version
     _msg info "terraform installed successfully!"
 }
@@ -764,12 +768,12 @@ _install_terraform() {
 _install_aws() {
     command -v aws >/dev/null && return
     _msg info "installing aws cli..."
-    curl -Lo "/tmp/awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    curl -fsSLo "/tmp/awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq /tmp/awscliv2.zip -d /tmp
     /tmp/aws/install --bin-dir "${me_path_data_bin}" --install-dir "${me_path_data}" --update
     rm -rf /tmp/aws
     ## install eksctl / 安装 eksctl
-    curl -L "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+    curl -fsSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
     mv /tmp/eksctl "${me_path_data_bin}/"
     chmod +x "${me_path_data_bin}/eksctl"
 }
@@ -777,9 +781,9 @@ _install_aws() {
 _install_kubectl() {
     command -v kubectl >/dev/null && return
     _msg info "installing kubectl..."
-    kube_ver="$(curl -L --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
+    kube_ver="$(curl -fsSL --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    if ! curl -Lo "${me_path_data_bin}/kubectl" "$kube_url"; then
+    if ! curl -fsSLo "${me_path_data_bin}/kubectl" "$kube_url"; then
         _msg error "failed to download kubectl"
         return 1
     fi
@@ -837,6 +841,23 @@ _install_flarectl() {
         return 1
     fi
     _msg success "flarectl installed successfully"
+}
+
+_install_docker() {
+    command -v docker &>/dev/null && return
+    _msg info "installing docker"
+    [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
+    [[ "${ENV_IN_CHINA:-false}" == 'true' ]] && install_arg='-s --mirror Aliyun'
+    curl -fsSL https://get.docker.com | $use_sudo bash $install_arg
+
+}
+
+_install_podman() {
+    command -v podman &>/dev/null && return
+    _msg info "installing podman"
+    [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
+    $exec_sudo apt-get update -qq
+    $exec_sudo apt-get install -yqq podman
 }
 
 _detect_os() {
@@ -908,10 +929,6 @@ _detect_os() {
         return 1
         ;;
     esac
-    if ! command -v docker &>/dev/null; then
-        [[ "${ENV_IN_CHINA:-false}" == 'true' ]] && install_arg='-s --mirror Aliyun'
-        curl -fsSL https://get.docker.com | bash $install_arg
-    fi
 }
 
 _clean_disk() {
@@ -1477,6 +1494,8 @@ main() {
     [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && _install_python_gitlab
     [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && _install_jmeter
     [[ "${ENV_INSTALL_FLARECTL}" == 'true' ]] && _install_flarectl
+    [[ "${ENV_INSTALL_DOCKER}" == 'true' ]] && _install_docker
+    [[ "${ENV_INSTALL_PODMAN}" == 'true' ]] && _install_podman
 
     ## clean up disk space / 清理磁盘空间
     _clean_disk
