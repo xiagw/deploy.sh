@@ -665,7 +665,9 @@ _renew_cert() {
     fi
 
     _msg stepend "[cert] renew cert with acme.sh using dns+api"
-    [[ "${exec_single:-0}" -gt 0 ]] && exit 0
+    if [[ "${exec_single:-0}" -gt 0 && "${github_action:-0}" -ne 1 ]]; then
+        exit 0
+    fi
     return 0
 }
 
@@ -842,6 +844,7 @@ _detect_os() {
         exec_sudo=sudo
     fi
     if [[ -e /etc/os-release ]]; then
+        # shellcheck disable=1091
         os_type="$(source /etc/os-release && echo ${ID})"
     elif [[ -e /etc/centos-release ]]; then
         os_type=centos
@@ -852,24 +855,22 @@ _detect_os() {
         _msg error "Unsupported. exit."
         return 1
     fi
-
+    pkgs=()
     case "$os_type" in
     debian | ubuntu | linuxmint)
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
         [[ -f "$HOME"/.bash_logout ]] && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
-        command -v git >/dev/null || install_pkg="git"
-        git lfs version >/dev/null 2>&1 || install_pkg="$install_pkg git-lfs"
-        command -v curl >/dev/null || install_pkg="$install_pkg curl"
-        command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
-        command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
-        command -v pip3 >/dev/null || install_pkg="$install_pkg python3-pip"
+        command -v git >/dev/null || pkgs+=(git)
+        git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
+        command -v curl >/dev/null || pkgs+=(curl)
+        command -v unzip >/dev/null || pkgs+=(unzip)
+        command -v rsync >/dev/null || pkgs+=(rsync)
+        command -v pip3 >/dev/null || pkgs+=(python3-pip)
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
 
-        if [[ -n "$install_pkg" ]]; then
+        if [[ "${#pkgs[*]}" -ne 0 ]]; then
             $exec_sudo apt-get update -qq
-            $exec_sudo apt-get install -qq -y apt-utils
-            # shellcheck disable=SC2086
-            $exec_sudo apt-get install -qq -y $install_pkg >/dev/null
+            $exec_sudo apt-get install -yqq apt-utils "${pkgs[@]}" >/dev/null
         fi
         ;;
     centos | amzn | rhel | fedora)
@@ -880,23 +881,26 @@ _detect_os() {
                 $exec_sudo yum install -y epel-release >/dev/null
             fi
         }
-        command -v git >/dev/null || install_pkg=git2u
-        git lfs version >/dev/null 2>&1 || install_pkg="$install_pkg git-lfs"
-        command -v curl >/dev/null || install_pkg="$install_pkg curl"
-        command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
-        command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
-        [[ -n "$install_pkg" ]] && $exec_sudo yum install -y $install_pkg >/dev/null
+        command -v git >/dev/null || pkgs+=(git2u)
+        git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
+        command -v curl >/dev/null || pkgs+=(curl)
+        command -v unzip >/dev/null || pkgs+=(unzip)
+        command -v rsync >/dev/null || pkgs+=(rsync)
+        if [[ "${#pkgs[*]}" -ne 0 ]]; then
+            $exec_sudo yum install -y "${pkgs[@]}" >/dev/null
+        fi
         # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
         ;;
     alpine)
-        command -v openssl >/dev/null || install_pkg=openssl
-        command -v git >/dev/null || install_pkg=git
-        git lfs version >/dev/null 2>&1 || install_pkg="$install_pkg git-lfs"
-        command -v curl >/dev/null || install_pkg="$install_pkg curl"
-        command -v unzip >/dev/null || install_pkg="$install_pkg unzip"
-        command -v rsync >/dev/null || install_pkg="$install_pkg rsync"
-        [[ -n "$install_pkg" ]] && $exec_sudo apk add $install_pkg >/dev/null
-
+        command -v openssl >/dev/null || pkgs+=(openssl)
+        command -v git >/dev/null || pkgs+=(git)
+        git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
+        command -v curl >/dev/null || pkgs+=(curl)
+        command -v unzip >/dev/null || pkgs+=(unzip)
+        command -v rsync >/dev/null || pkgs+=(rsync)
+        if [[ "${#pkgs[*]}" -ne 0 ]]; then
+            $exec_sudo apk add --no-cache "${pkgs[@]}" >/dev/null
+        fi
         ;;
     *)
         echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
