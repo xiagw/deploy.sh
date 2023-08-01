@@ -1542,7 +1542,7 @@ main() {
 
     ################################################################################
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
-    if [[ "${exec_single:-0}" -gt 0 && "${github_action:-0}" -eq 0 ]]; then
+    if [[ "${exec_single:-0}" -gt 0 ]]; then
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _check_quality_sonar
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
@@ -1558,6 +1558,9 @@ main() {
         [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
         [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
+        if [[ "${github_action:-0}" -ne 1 ]]; then
+            return 0
+        fi
     fi
     ################################################################################
 
