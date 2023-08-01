@@ -1134,7 +1134,7 @@ _setup_gitlab_vars() {
     # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
     gitlab_project_path=${CI_PROJECT_PATH:-$gitlab_project_namespace/$gitlab_project_name}
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
-    gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}
+    gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD || true)}
     gitlab_project_branch=${gitlab_project_branch:-develop}
     [[ "${gitlab_project_branch}" == 'HEAD' ]] && gitlab_project_branch=main
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
