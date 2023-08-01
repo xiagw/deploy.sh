@@ -624,7 +624,7 @@ _renew_cert() {
             ;;
         dns_cf)
             _msg "dns type: cloudflare."
-            _install_cloudflare_cli
+            _install_flarectl
             domains="$(flarectl zone list | awk '/active/ {print $3}')"
             ;;
         dns_ali)
@@ -725,13 +725,21 @@ _install_python_element() {
     fi
 }
 
-_install_cloudflare_cli() {
+_install_flarectl() {
     command -v flarectl >/dev/null && return
-    _msg info "install flarectl..."
-    url_flarectl=https://github.com/cloudflare/cloudflare-go/releases/download/v0.68.0/flarectl_0.68.0_linux_amd64.tar.xz
-    curl -fsSLo /tmp/flarectl.tar.xz $url_flarectl
-    tar -C /tmp -xf /tmp/flarectl.tar.xz flarectl
-    install -m 0755 /tmp/flarectl "${me_path_data_bin}/flarectl"
+    _msg info "installing flarectl"
+    local ver='0.68.0'
+    local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz"
+
+    if curl -fsSLo /tmp/flarectl.tar.xz $url; then
+        #  | tar xJf - -C "/tmp/" flarectl
+        tar -C /tmp -xJf /tmp/flarectl.tar.xz flarectl
+        $use_sudo install -m 0755 /tmp/flarectl /usr/local/bin/
+        _msg success "flarectl installed successfully"
+    else
+        _msg error "failed to download and install flarectl"
+        return 1
+    fi
 }
 
 _install_aliyun_cli() {
@@ -739,22 +747,19 @@ _install_aliyun_cli() {
     _msg info "install aliyun cli..."
     curl -fsSLo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
     tar -C /tmp -zxf /tmp/aliyun.tgz
-    # install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-    install -m 0755 /tmp/aliyun "${me_path_data_bin}/aliyun"
+    $use_sudo install -m 0755 /tmp/aliyun /usr/local/bin/aliyun
 }
 
 _install_jq_cli() {
     command -v jq >/dev/null && return
     _msg info "install jq cli..."
-    [[ $(/usr/bin/id -u) -eq 0 ]] || pre_sudo=sudo
     $use_sudo apt-get update -qq
-    $pre_sudo apt-get install -yqq jq
+    $use_sudo apt-get install -yqq jq >/dev/null
 }
 
 _install_terraform() {
     command -v terraform >/dev/null && return
     _msg info "installing terraform..."
-    [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
     $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg |
         gpg --dearmor |
@@ -762,7 +767,7 @@ _install_terraform() {
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
         $use_sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null 2>&1
     $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq terraform
+    $use_sudo apt-get install -yqq terraform >/dev/null
     # terraform version
     _msg info "terraform installed successfully!"
 }
@@ -776,26 +781,26 @@ _install_aws() {
     rm -rf /tmp/aws
     ## install eksctl / 安装 eksctl
     curl -fsSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    mv /tmp/eksctl "${me_path_data_bin}/"
-    chmod +x "${me_path_data_bin}/eksctl"
+    $use_sudo install -m 0755 /tmp/eksctl /usr/local/bin/
 }
 
 _install_kubectl() {
     command -v kubectl >/dev/null && return
     _msg info "installing kubectl..."
-    kube_ver="$(curl -fsSL --silent https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
+    kube_ver="$(curl -fsSL https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
     kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    if ! curl -fsSLo "${me_path_data_bin}/kubectl" "$kube_url"; then
+    if curl -fsSLo /tmp/kubectl "$kube_url"; then
+        $use_sudo install -m 0755 /tmp/kubectl /usr/local/bin/
+    else
         _msg error "failed to download kubectl"
         return 1
     fi
-    chmod +x "${me_path_data_bin}/kubectl"
 }
 
 _install_helm() {
     command -v helm >/dev/null && return
     _msg info "installing helm..."
-    curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | $use_sudo bash
 }
 
 _install_jmeter() {
@@ -815,12 +820,12 @@ _install_jmeter() {
         echo "tzdata tzdata/Zones/Asia select Shanghai" >>/tmp/preseed.cfg
         debconf-set-selections /tmp/preseed.cfg
         rm -f /etc/timezone /etc/localtime
-        $exec_sudo apt-get update -y
-        $exec_sudo apt-get install -y tzdata
+        $use_sudo apt-get update -yqq
+        $use_sudo apt-get install -yqq tzdata
         rm -rf /tmp/preseed.cfg
         unset DEBIAN_FRONTEND DEBCONF_NONINTERACTIVE_SEEN TIME_ZOME
         ## install jdk
-        $exec_sudo apt-get install -y openjdk-16-jdk
+        $use_sudo apt-get install -yqq openjdk-17-jdk
     fi
     url_jmeter="https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
     curl --retry -C - -Lo "$path_temp"/jmeter.zip $url_jmeter
@@ -830,19 +835,6 @@ _install_jmeter() {
         ln -sf apache-jmeter-${ver_jmeter} jmeter
     )
     rm -rf "$path_temp"
-}
-
-_install_flarectl() {
-    command -v flarectl >/dev/null && return
-    _msg info "installing flarectl"
-    local ver='0.52.0'
-    local download_url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz"
-
-    if ! curl -sSL "${download_url}" | tar xJf - -C "${me_path_data_bin}/" flarectl; then
-        _msg error "failed to download and install flarectl"
-        return 1
-    fi
-    _msg success "flarectl installed successfully"
 }
 
 _install_docker() {
@@ -858,13 +850,13 @@ _install_podman() {
     command -v podman &>/dev/null && return
     _msg info "installing podman"
     [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
-    $exec_sudo apt-get update -qq
-    $exec_sudo apt-get install -yqq podman
+    $use_sudo apt-get update -qq
+    $use_sudo apt-get install -yqq podman
 }
 
 _detect_os() {
     if [[ "$(/usr/bin/id -u)" != 0 ]]; then
-        exec_sudo=sudo
+        use_sudo=sudo
     fi
     if [[ -e /etc/os-release ]]; then
         # shellcheck disable=1091
@@ -889,7 +881,7 @@ _detect_os() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         command -v pip3 >/dev/null || pkgs+=(python3-pip)
-        # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
+        # command -v shc >/dev/null || $use_sudo apt-get install -qq -y shc
 
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
             ## OS ubuntu:22.04 php
@@ -897,16 +889,17 @@ _detect_os() {
                 sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
                     -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
             fi
-            $exec_sudo apt-get update -qq
-            $exec_sudo apt-get install -yqq apt-utils "${pkgs[@]}" >/dev/null
+            $use_sudo apt-get update -qq
+            $use_sudo apt-get install -yqq apt-utils >/dev/null
+            $use_sudo apt-get install -yqq "${pkgs[@]}" >/dev/null
         fi
         ;;
     centos | amzn | rhel | fedora)
         rpm -q epel-release >/dev/null || {
             if [ "$os_type" = amzn ]; then
-                $exec_sudo amazon-linux-extras install -y epel >/dev/null
+                $use_sudo amazon-linux-extras install -y epel >/dev/null
             else
-                $exec_sudo yum install -y epel-release >/dev/null
+                $use_sudo yum install -y epel-release >/dev/null
             fi
         }
         command -v git >/dev/null || pkgs+=(git2u)
@@ -915,9 +908,9 @@ _detect_os() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            $exec_sudo yum install -y "${pkgs[@]}" >/dev/null
+            $use_sudo yum install -y "${pkgs[@]}" >/dev/null
         fi
-        # id | grep -q docker || $exec_sudo usermod -aG docker "$USER"
+        # id | grep -q docker || $use_sudo usermod -aG docker "$USER"
         ;;
     alpine)
         command -v openssl >/dev/null || pkgs+=(openssl)
@@ -927,7 +920,7 @@ _detect_os() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            $exec_sudo apk add --no-cache "${pkgs[@]}" >/dev/null
+            $use_sudo apk add --no-cache "${pkgs[@]}" >/dev/null
         fi
         ;;
     *)
