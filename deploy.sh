@@ -789,12 +789,15 @@ _install_aws() {
 _install_kubectl() {
     command -v kubectl >/dev/null && return
     _msg info "installing kubectl..."
-    kube_ver="$(curl -fsSL https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
-    kube_url="https://storage.googleapis.com/kubernetes-release/release/${kube_ver}/bin/linux/amd64/kubectl"
-    if curl -fsSLo /tmp/kubectl "$kube_url"; then
-        $use_sudo install -m 0755 /tmp/kubectl /usr/local/bin/
+    local kver
+    kver="$(curl -sL https://dl.k8s.io/release/stable.txt)"
+    curl -fsSLO "https://dl.k8s.io/release/${kver}/bin/linux/amd64/kubectl"
+    curl -fsSLO "https://dl.k8s.io/${kver}/bin/linux/amd64/kubectl.sha256"
+    if echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check; then
+        $use_sudo install -m 0755 kubectl /usr/local/bin/kubectl
+        rm -f kubectl kubectl.sha256
     else
-        _msg error "failed to download kubectl"
+        _msg error "failed to install kubectl"
         return 1
     fi
 }
