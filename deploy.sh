@@ -1005,12 +1005,7 @@ _inject_files() {
         done
         copy_flyway_file=0
     fi
-    ## inject docker build files
-    if [ -d "${gitlab_project_dir}/root/opt" ]; then
-        _msg "found ${gitlab_project_dir}/root/opt"
-    else
-        rsync -a "${me_dockerfile}/root/" "$gitlab_project_dir/root/"
-    fi
+
     ## from deploy.env， 使用全局模板文件替换项目文件
     echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-keep}
     case ${ENV_ENABLE_INJECT:-keep} in
@@ -1018,6 +1013,12 @@ _inject_files() {
         echo 'Keep Dockerfile in project.'
         ;;
     overwrite)
+        ## inject docker build files
+        if [ -d "${gitlab_project_dir}/root/opt" ]; then
+            _msg "found ${gitlab_project_dir}/root/opt"
+        else
+            rsync -a "${me_dockerfile}/root/" "$gitlab_project_dir/root/"
+        fi
         ## Dockerfile 优先查找 data/ 目录
         if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
             echo "Found ${me_data_dockerfile}/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
@@ -1635,6 +1636,8 @@ main() {
     ## deploy with rsync / 使用 rsync 发布
     [[ "${ENV_DISABLE_RSYNC:-0}" -eq 1 ]] && exec_deploy_rsync_ssh=0
     [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
+
+    ## clean
 
     ## function test / 功能测试
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用，0 禁用[default]
