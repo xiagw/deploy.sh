@@ -1133,14 +1133,8 @@ _setup_gitlab_vars() {
     [[ "${gitlab_project_branch}" == 'HEAD' ]] && gitlab_project_branch=main
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
     if [[ -z "$gitlab_commit_short_sha" ]]; then
-        if [[ "${github_action:-0}" -eq 1 ]]; then
-            gitlab_commit_short_sha=${gitlab_commit_short_sha:-1234567}
-        elif [[ "${debug_on:-0}" -eq 1 ]]; then
-            read -rp "Enter commit short hash: " -e -i '1234567' gitlab_commit_short_sha
-        else
-            _msg red "Error: gitlab_commit_short_sha is not set"
-            return 1
-        fi
+        _msg warn "WARN: \"\$gitlab_commit_short_sha\" set to \"1234567\""
+        gitlab_commit_short_sha=1234567
     fi
     # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
     gitlab_project_id=${CI_PROJECT_ID:-1234}
