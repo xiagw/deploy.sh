@@ -707,6 +707,8 @@ _get_balance_aliyun() {
 _install_python_gitlab() {
     python3 -m pip list 2>/dev/null | grep -q python-gitlab && return
     _msg info "installing python3 gitlab api..."
+    [ -d $HOME/.local/bin ] || mkdir -p $HOME/.local/bin
+    export PATH="${PATH:+"$PATH:"}$HOME/.local/bin"
     python3 -m pip install --user --upgrade python-gitlab
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg info "python-gitlab is installed successfully"
@@ -849,9 +851,8 @@ _install_docker() {
 _install_podman() {
     command -v podman &>/dev/null && return
     _msg info "installing podman"
-    [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
     $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq podman
+    $use_sudo apt-get install -yqq podman >/dev/null
 }
 
 _detect_os() {
