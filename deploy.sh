@@ -284,17 +284,18 @@ _build_image_docker() {
 }
 
 _build_image_podman() {
+    [[ "${github_action:-0}" -eq 1 ]] && return 0
+
     _msg step "[image] build image with podman"
-    local image_name="$1"
-    local image_tag="$2"
-    local dockerfile_path="$3"
-    local podman_registry="$4"
-
-    # Build image
-    podman build -f "$dockerfile_path" -t "$podman_registry/$image_name:$image_tag" "${gitlab_project_dir}"
-
-    # Push image to remote registry
-    podman push "$podman_registry/$image_name:$image_tag"
+    ## podman build
+    echo "ENV_COPY_YAML: ${ENV_COPY_YAML:-false}"
+    echo "PIPELINE_COPY_YAML: ${PIPELINE_COPY_YAML:-false}"
+    podman build $ENV_ADD_HOST $quiet_flag \
+        --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
+        --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
+        --build-arg MVN_PROFILE="${gitlab_project_branch}" \
+        --build-arg MVN_COPY_YAML="${ENV_COPY_YAML:-${PIPELINE_COPY_YAML:-false}}" \
+        "${gitlab_project_dir}"
 }
 
 _push_image() {
@@ -1305,8 +1306,9 @@ Parameters:
     --code-style             Check code style.
     --code-quality           Check code quality.
     --build-langs            Build all the languages.
-    --build-image            Build docker image.
-    --push-image             Push docker image.
+    --build-docker           Build image with docker.
+    --build-podman           Build image with podman.
+    --push-image             Push image with docker.
     --deploy-k8s             Deploy to kubernetes.
     --deploy-flyway          Deploy database with flyway.
     --deploy-rsync-ssh       Deploy to rsync with ssh.
@@ -1375,8 +1377,11 @@ _set_args() {
         --build-langs)
             arg_build_langs=1 && exec_single=$((exec_single + 1))
             ;;
-        --build-image)
-            arg_build_image=1 && exec_single=$((exec_single + 1))
+        --build-docker)
+            arg_build_docker=1 && exec_single=$((exec_single + 1))
+            ;;
+        --build-podman)
+            arg_build_podman=1 && exec_single=$((exec_single + 1))
             ;;
         --push-image)
             arg_push_image=1 && exec_single=$((exec_single + 1))
@@ -1537,14 +1542,15 @@ main() {
 
     ################################################################################
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
-    if [[ "${exec_single:-0}" -gt 0 ]]; then
+    if [[ "${exec_single:-0}" -gt 0 && "${github_action:-0}" -eq 0 ]]; then
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _check_quality_sonar
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
         [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
-        [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image_docker
+        [[ "${arg_build_docker:-0}" -eq 1 ]] && _build_image_docker
+        [[ "${arg_build_podman:-0}" -eq 1 ]] && _build_image_podman
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
         [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
         [[ "${arg_deploy_rsync_ssh:-0}" -eq 1 ]] && _deploy_rsync_ssh
@@ -1552,9 +1558,6 @@ main() {
         [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
         [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
-        if [[ "${github_action:-0}" -ne 1 ]]; then
-            return 0
-        fi
     fi
     ################################################################################
 
@@ -1604,8 +1607,11 @@ main() {
 
     ## build
     [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
-    [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
-    # [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
+    if [[ "${PIPELINE_BUILD_PODMAN:-0}" -eq 1 ]]; then
+        [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
+    else
+        [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
+    fi
 
     ## docker push image
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
