@@ -892,6 +892,11 @@ _detect_os() {
         # command -v shc >/dev/null || $exec_sudo apt-get install -qq -y shc
 
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
+            ## OS ubuntu:22.04 php
+            if [[ ${ENV_IN_CHINA:-false} == true && -f /etc/apt/sources.list ]]; then
+                sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
+                    -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+            fi
             $exec_sudo apt-get update -qq
             $exec_sudo apt-get install -yqq apt-utils "${pkgs[@]}" >/dev/null
         fi
