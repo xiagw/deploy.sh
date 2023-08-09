@@ -307,13 +307,14 @@ _push_image() {
         return 0
     fi
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        _msg "safe remove the above image with 'docker rmi'"
+        docker rmi "${ENV_DOCKER_REGISTRY}:${image_tag}"
     else
-        _msg error "got an error here, probably caused by network..."
+        push_error=1
     fi
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        docker push ${quiet_flag} "$image_tag_flyway" || _msg error "got an error here, probably caused by network..."
+        docker push ${quiet_flag} "$image_tag_flyway" || push_error=1
     fi
+    [[ $push_error -eq 1 ]] && _msg error "got an error here, probably caused by network..."
     _msg stepend "[image] push image with docker"
 }
 
