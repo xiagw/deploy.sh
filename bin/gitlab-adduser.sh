@@ -68,8 +68,9 @@ main() {
         user_name=${1}
         domain_name=${2}
     fi
-    if grep -q "=$user_name/" "$file_save_pass"; then
-        echo "user $user_name exist on $file_save_pass, skip."
+    # if grep -q "=$user_name/" "$file_save_pass"; then
+    if gitlab user list --search "$user_name" | grep "name: ${user_name}$"; then
+        echo "user $user_name exists, exit 1."
         return 1
     fi
     ## user_password
