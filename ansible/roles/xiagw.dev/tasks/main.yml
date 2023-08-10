@@ -1,0 +1,73 @@
+---
+# tasks file for wireguard
+
+- name: Install sys packages (Debian)
+  ansible.builtin.apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+  vars:
+    packages:
+      - byobu
+      - curl
+      - wget
+      - fzf
+      - tree
+      - git
+      - ncdu
+      - qrencode
+      - jq
+      - unrar
+      - p7zip-full
+      - fcitx5-pinyin
+      - openssh-server
+      - flameshot
+      - python3-pip
+      - x11vnc
+      - shellcheck
+      - shfmt
+      - wireguard
+      - autofs
+      - fio
+      - pwgen
+      - sshpass
+      - nload
+      - nfs-common
+      - nfs4-acl-tools
+      - smbclient
+      - cifs-utils
+      - terminator
+      - ranger
+      - htop
+      - nmap
+      - amule
+      - aria2
+      - tree
+      - gvfs
+      - gvfs-fuse
+      - sshfs
+      - gh
+      # - tig
+      - uidmap
+      # - mysql-client
+      # - vbackup
+      - autossh
+      - zip
+      - pbzip2
+      - pigz
+      - pixz
+      - thunar-archive-plugin
+      # - thunar-vcs-plugin
+      - thunar-shares-plugin
+      - thunar-media-tags-plugin
+      - build-essential
+      - android-tools-adb
+      - android-tools-fastboot
+
+- name: Install dbeaver-ce (snap)
+  community.general.snap:
+    name:
+      - dbeaver-ce
+      - firefox
+  when: ansible_os_family == "Debian"

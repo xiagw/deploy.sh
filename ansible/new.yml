@@ -1,0 +1,23 @@
+---
+- name: Install new host (CentOS7/Debian/Ubuntu)
+  hosts: all
+  become: true
+  become_user: root
+  vars:
+    # user_name: ubuntu
+    # user_name: centos
+    user_name: ops
+    create_user: false
+    install_fzf: true
+    upgrade_os: false
+    edit_grub: false
+
+  roles:
+    - xiagw.sshkey
+    - xiagw.flyh6
+    # - xiagw.autofs
+    # - xiagw.eda
+    # - xiagw.dev
+    # - ryandaniels.create_users
+    # - geerlingguy.docker
+    # - gantsign.oh-my-zsh

@@ -1,0 +1,132 @@
+---
+- name: ensure required packages [Debian]
+  apt:
+    name: unzip
+  when: ansible_os_family == 'Debian'
+- name: ensure required packages [RedHat]
+  yum:
+    name: unzip
+  when: ansible_os_family == 'RedHat'
+- name: get latest xray version
+  uri:
+    url: https://api.github.com/repos/XTLS/Xray-core/releases/latest
+  register: latest_xray_release
+- name: get installed xray version
+  shell: xray version | awk 'NR==1{print $2}'
+  register: installed_xray_version
+  changed_when: false
+  failed_when: false
+- name: ensure latest xray
+  when: latest_xray_release.json.tag_name|trim('v') != installed_xray_version.stdout
+  block:
+    - name: tmp dir
+      command: mktemp -d
+      register: tmp_dir
+    - name: download
+      unarchive:
+        src: "https://github.com/XTLS/Xray-core/releases/download/{{ latest_xray_release.json.tag_name }}/Xray-linux-64.zip"
+        dest: "{{ tmp_dir }}"
+        remote_src: yes
+    - name: install xray
+      copy:
+        src: "{{ tmp_dir }}/xray"
+        dest: /usr/local/bin/
+        owner: root
+        mode: 0755
+        remote_src: yes
+      notify: restart xray
+    - name: install geosite, geoip
+      when: xray_client
+      block:
+        - name: ensure geosite path
+          file:
+            path: /usr/local/share/xray
+            state: directory
+        - name: install geosite, geoip
+          copy:
+            src: "{{ tmp_dir }}/{{ item }}"
+            dest: /usr/local/share/xray
+            remote_src: yes
+          loop: [geosite.dat, geoip.dat]
+    - name: clean up
+      file:
+        path: "{{ tmp_dir }}"
+        state: absent
+# - name: ensure TLS certificate
+#   when: xray_client == false
+#   vars:
+#     certbot_auto_renew: false # use systemd instead of cron
+#     certbot_create_if_missing: true
+#     certbot_certs: [{domains: ["{{ xray_server_addr }}"]}]
+#   include_role:
+#     name: geerlingguy.certbot
+
+- name: ensure xray config dir
+  file:
+    path: /usr/local/etc/xray
+    state: directory
+- name: get/generate xray_uuid
+  when: xray_uuid == ""
+  block:
+    - name: get exisitng xray_uuid
+      shell: cat /etc/xray/config.toml | awk -F'"' '/id/{print $2}'
+      changed_when: false
+      register: _xray_uuid
+    - name: set xray_uuid from existing
+      set_fact:
+        xray_uuid: "{{ _xray_uuid.stdout }}"
+      when: _xray_uuid.stdout != ""
+    - name: generate xray_uuid
+      command: xray uuid
+      register: _xray_uuid
+      when: _xray_uuid.stdout == ""
+    - name: set xray_uuid from new
+      set_fact:
+        xray_uuid: "{{ _xray_uuid.stdout }}"
+      when: _xray_uuid.changed
+    - name: print xray_uuid
+      debug:
+        msg: "{{ xray_uuid }}"
+- name: upload cert key
+  copy:
+    src: "{{ xray_domain_name }}.key"
+    dest: "/usr/local/etc/xray/{{ xray_domain_name }}.key"
+    owner: root
+    mode: 0644
+- name: upload cert
+  copy:
+    src: "{{ xray_domain_name }}.crt"
+    dest: "/usr/local/etc/xray/{{ xray_domain_name }}.crt"
+    owner: root
+    mode: 0644
+- name: ensure xray config
+  template:
+    # src: "{{ 'client.toml' if xray_client else 'server.toml' }}"
+    src: "{{ 'client.json' if xray_client else 'server.json' }}"
+    dest: /usr/local/etc/xray/config.json
+    owner: root
+    mode: 0644
+  notify: restart xray
+  when: xray_update_config
+- name: ensure xray.service
+  copy:
+    src: "{{ 'client.service' if xray_client else 'server.service' }}"
+    dest: /etc/systemd/system/xray.service
+    owner: root
+    mode: 0664
+  notify: systemd daemon-reload
+# - name: generate client config
+#   when: xray_generate_client_config
+#   delegate_to: localhost
+#   template:
+#     src: "client.toml"
+#     dest: config.toml
+
+- name: Install nginx [RedHat]
+  yum: name=nginx state=latest
+  when: ansible_os_family == 'RedHat'
+
+- name: Install nginx [Debian]
+  apt: name=nginx state=latest
+  # update_cache=yes
+  when: ansible_os_family == 'Debian'

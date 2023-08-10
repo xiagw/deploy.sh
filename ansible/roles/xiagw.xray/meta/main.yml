@@ -1,0 +1,19 @@
+galaxy_info:
+  role_name: xray
+  author: xiagw
+  standalone: true
+  description: Xray client/server on Debian/Ubuntu.
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+    - name: Debian
+      versions:
+        - all
+
+  license: MIT
+
+  min_ansible_version: "2.1"
+  galaxy_tags: []
+
+dependencies: []

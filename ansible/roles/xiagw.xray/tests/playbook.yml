@@ -1,0 +1,8 @@
+---
+- hosts: all
+  become: true
+  roles:
+    - role: xray
+      xray_server_addr: ""
+      xray_uuid: ""
+      certbot_admin_email: ""

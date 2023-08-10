@@ -1,0 +1,22 @@
+---
+# handlers file for roles/xiagw.autofs
+- name: Systemctl restart autofs
+  ansible.builtin.systemd:
+    name: autofs
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "Debian"
+
+- name: Systemctl restart nis
+  ansible.builtin.systemd:
+    name: nis
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "Debian"
+
+- name: Systemctl restart rpcbind
+  ansible.builtin.systemd:
+    name: rpcbind
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "Debian"

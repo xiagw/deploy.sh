@@ -1,0 +1,4 @@
+- name: systemd daemon-reload
+  systemd: daemon_reload=yes
+- name: restart xray
+  systemd: name=xray state=restarted enabled=yes

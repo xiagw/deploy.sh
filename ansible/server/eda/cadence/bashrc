@@ -1,0 +1,569 @@
+# shellcheck disable=2148,2154,1091,2034
+#--------------------------------------------------------------------------------------------------
+#  User's Guide
+#
+#  Copy this .bashrc environment setting file to the working (design project) directory, e.g.
+#  /home/johndoe/project1, /home/johndoe/project2, ...., etc.
+#
+#  On terminal, cd to the working directory and then source the .bashrc file by typing the
+#  following at the shell prompt $:
+#  . .bashrc
+#  Note:  a space is required between "." and ".bashrc" in the above command.
+#
+#  Now all the environment variables in .bashrc file have been loaded into the current shell
+#  terminal and commands can be issued at the shell prompt $ to launch various Cadence
+#  tools, for instance, "virtuoso &" (without the quotes).  Some frequently used commands are
+#  listed in this file together with corresponding environment settings.
+#
+#  You may finish the Cadence session at any time by closing the running Cadence tool.  To
+#  start up another Cadence session, just issue another Cadence command at the shell
+#  prompt $, e.g. "innovus &" (without the quotes), etc. To exit the entire Cadence
+#  environment, close the terminal.  By closing the terminal, all loaded Cadence and Calibre
+#  environment variables are terminated since all of these variables are loaded and
+#  contained in the terminated shell terminal.  The benefit of sourcing .bashrc to a local shell
+#  terminal instead of setting them in the $HOME/.bashrc is that all of the loaded Cadence &
+#  Calibre environment variables don't globally affect system environment settings and
+#  therefore you can run other programs on the system normally and won't disturb the
+#  Cadence session or vice versa.
+#
+#  If you're setting up a multiuser server, create a client copy of this .bashrc file and make
+#  necessary changes accordingly, e.g. point CDS_LIC_FILE to the server's license directory
+#  as port@hostname.  Instruct users to download it to the working directory on the client
+#  machine and source the client copy before starting up any Cadence tool.
+#--------------------------------------------------------------------------------------------------
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# For proper distributed processing execution using Cadence PVS software, it requires
+# that the following is set as the first line in .bashrc
+# Note: the space between the ! and $prompt is required!
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+if (! $prompt); then
+    exit
+fi
+
+##############################################################
+# Cadence Design Systems
+#
+# Master IC CAD flow including schematic capture, simulation, layout, and verification.
+##############################################################
+if [[ -d /home/eda ]]; then
+    export EDA_HOME=/home/eda
+else
+    export EDA_HOME=/eda
+fi
+export CDS_HOME=$EDA_HOME/cadence
+# export CADHOME=$CDS_HOME
+
+# Requied for Cadence on Linux
+export LANG=C
+
+# Set netlisting mode
+export CDS_Netlisting_Mode=Analog
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Specify a search order for .cdsenv
+#
+# Load .cdsenv in the working directory ($CWD)
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export CDS_LOAD_ENV=CSF
+#CDS_LOG_VERSION to either "sequential" or "pid".
+export CDS_LOG_VERSION=sequential
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# browser setup for Cadence Help
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export MOZILLA_HOME=/usr/bin/firefox
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Cadence - IC
+#
+# IC Schematic Entry, Simulation, Layout, Verification (Diva)
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# export CDS=$CDS_HOME/IC617
+export CDS=$CDS_HOME/IC618
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Some of these variables are used by various other tools, e.g. foundry's PDK.
+# Set them to be safe
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export CDSDIR=$CDS
+export CDSHOME=$CDS
+export CADENCE_DIR=$CDS
+export CDS_INST_DIR=$CDS
+export CDS_ROOT=$CDS
+export CDSROOT=$CDS
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Set up either CDS_LIC_FILE or LM_LICENSE_FILE, but NOT both or it'll
+# take long time to search license!!!
+#
+# Set variable CDS_LIC_ONLY to ignore LM_LICENSE_FILE if it exists.
+#
+# Use absolute PATH to license.dat file instead of port@hostname
+#
+# The license server is no longer needed once all features are set to uncounted or 0
+# (unlimited use) for the FEATURE lines in license.dat.  The SERVER, VENDOR and
+# USE_SERVER lines can be safely removed from license.dat file, i.e. license.dat here
+# contains FEATURE lines only.  DO NOT START UP LICENSE SERVER DAEMON!!!
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export CDS_LIC_FILE=$CDS_HOME/license/license.dat
+export CDS_LIC_ONLY=1
+
+# Support for 64-bit executables (this should be set for 64-bit hosts - IMPORTANT!!!)
+export CDS_AUTO_64BIT=ALL
+# “Warning HOST DOES NOT APPEAR TO BE A CADENCE SUPPORTED LINUX CONFIGURATION”
+export W3264_NO_HOST_CHECK=1
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Set up OA (OpenAccess)
+#
+# It is STRONGLY recommended that you DO NOT change the OA installation that
+# each tool uses because tools are tested with the version of OA shipped with the
+# particular tool such as EDI142. However, if it is necessary to use a different
+# version of OA, you can do so with one of the following approaches:
+# 1) Use the Configure utility on InstallScape to specify a different OA installation.
+# 2) Use the OA_HOME environment variable to override the default OA installation.
+#
+# DO NOT set up OA_HOME as recommended above!  Instead use the default OA
+# installed within each Cadence tool, or use Configure utility on InstallScape to
+# re-set OA back to the original default OA installation in each product such as.EDI,
+# EXT, etc. if they were ever changed.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# Set up Cadence unsupported systems such as Ubuntu Linux
+# IC617 supports Ubuntu14.04 so this variable is no longer required
+#export OA_UNSUPPORTED_PLAT=linux_rhel50_gcc44x
+
+# To run Virtuoso Schematic and Verilog Driven Mixed-Signal Flow,  the following
+# environment variable must be set before starting Virtuoso.
+export CDS_ENABLE_VMS=1
+
+## SPECTRE
+export SPECTREHOME=$CDS_HOME/SPECTRE181
+# export SPECTREHOME=$CDS_HOME/SPECTRE211
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Cadence Analog Simulators (MMSIM) - Spectre, SpectreRF, &
+# RelXpert (Reliability Simulator)
+#
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# export MMSIMHOME=$CDS_HOME/MMSIM151
+# if [[ -d $MMSIMHOME && $PATH != *$MMSIMHOME/bin* ]]; then
+#   PATH=${PATH:+${PATH}}:$MMSIMHOME/bin
+#   PATH=${PATH:+${PATH}}:$MMSIMHOME/tools/relxpert/bin
+# fi
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Cadence QRC Extraction, Advanced Analysis & Modeling (EXT)
+#
+# Note: QRC must appear in the PATH before Assura executables
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export QRC_HOME=$CDS_HOME/EXT151
+
+# Enhance precision of QRC for DFM MOS extraction
+export QRC_MOS_LW_PRECISION=Y
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Cadence Assura (ASSURA) - DRC. LVS, parasitic extraction
+#
+# These executables should be on the PATH after DFII executables
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# export ASSURAHOME=$CDS_HOME/ASSURA41
+
+# Setting this variable enables Assura to work with PVS licenses only without
+# attempts to check-out Assura licenses first and thus speeds up execution.
+# export ASSURA_USE_PVS_LICENSE=1
+
+# Set up foundry DFM PATH for Assura - CRNxxG/CRNxxLP process for current project
+export TSMC_ASU_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxG/Assura/lvs_rcx/DFM
+#export TSMC_ASU_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxLP/Assura/lvs_rcx/DFM
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Cadence Physical Verification System, MaskCompose, & QuickView (PVS)
+#
+# K2_VIEWER_HOME must be set before Quickview is invoked. LM_LICENSE_FILE
+# is required to run any K2 product.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export K2_HOME=$CDS_HOME/PVS151/tools/K2
+export K2_VIEWER_HOME=$K2_HOME/Viewer
+export K2_MASKCOMPOSE_HOME=$K2_HOME/MaskCompose
+export K2_MC_DATA=$HOME/Projects
+export LM_LICENSE_FILE=$CDS_LIC_FILE
+export XKEYSYMDB=$CDSDIR/tools/plot/etc/XKeysymDB
+
+# Commands on terminal to launch Quickview or MaskCompose
+#k2_viewer &
+#k2_mcs &
+
+##############################################################
+# Cadence Digital Flow - HDL Simulations, Synthesis, P&R
+#
+##############################################################
+# Genus Synthesis Solution (GENUS) - Logic & Physical Synthesis
+# GENUS_HOME=$CDS_HOME/GENUS152
+export GENUS_HOME=$CDS_HOME/GENUS191
+
+# Command on terminal to launch Genus
+# genus
+
+# RTL Power Analysis (Joules)
+export JLS_HOME=$CDS_HOME/JLS151
+
+# Command on terminal to start Joules
+# joules &
+
+# Innovus Implementation System (INNOVUS) - P&R
+# INNOVUS_HOME=$CDS_HOME/INNOVUS152
+export INNOVUS_HOME=$CDS_HOME/INNOVUS201
+
+# Command on terminal to launch Innovus
+# innovus &
+
+# EMX
+export EMX_HOME=$CDS_HOME/EMX64-5.7
+# EMX_HOME=$CDS_HOME/EMX5
+# EMX_HOME=$CDS_HOME/INTEGRAND60
+export MODELGEN_HOME=$CDS_HOME/modelgen64-2.22
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Cadence C-to-Silicon Compiler (CTOS)
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export CTOS_HOME=$CDS_HOME/CTOS142
+# Command on terminal to launch CTOS
+# ctosgui &
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Encounter Conformal (CONFRML) - Constraint Designer, Low Power Designer,
+# & ECO Designer
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export ECO_HOME=$CDS_HOME/CONFRML152
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Command on terminal to launch Confirmal with license options:
+# -xl/-gxl/-rcv/-eco/-ecogxl/-lp/-lpxl/-ccd/-ccdxl/-lpgxl/-verify;
+#  default is set to -l if no option is given.
+# example:  "lec -lp -verify -gui &" for Low Power license and Verify license
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# lec -lpgxl -verify -gui &
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Silicon Signoff & Verification (SSV) - including Tempus Timing Signoff
+# & Voltus IC Power Integrity
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export SSV_HOME=$CDS_HOME/SSV152
+
+# Command on terminal to launch tempus or voltus
+# tempus &
+# voltus &
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Incisive Verification Platform - Digital HDL simulators
+#
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# export INC_HOME=$CDS_HOME/INCISIVE151
+# "$INC_HOME/bin"
+# "$INC_HOME/tools/bin"
+# "$INC_HOME/tools/vtools/vfault/bin"
+XCELIUM_HOME=$CDS_HOME/XCELIUM1803
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# For 3-step (ncvlog, ncelab, and ncsim) flow to run Virtuoso AMS Designer simulator,
+# the following library path environment variable has to be set.
+#
+# For single-step (irun) running AMS simulator, LD_LIBRARY_PATH is not required.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# LD_LIBRARY_PATH=${LD_LIBRARY_PATH:+${LD_LIBRARY_PATH}}:$INC_HOME/tools/lib/64bit
+# LD_LIBRARY_PATH=${LD_LIBRARY_PATH:+${LD_LIBRARY_PATH}}:$INC_HOME/tools/lib
+
+# Enable noise analysis in AMS designer
+AMS_ENABLE_NOISE=YES
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Set up Universal Verification Methodology (UVM) Environment Variables
+#
+# uvm_home defines the path to the UVM class library
+# ml_uvm defines the path to the ml_uvm code
+# ml_seq_dir defines the path to the SystemVerilog ml_uvm_seq package for using
+# sequencer stubs
+# The SystemVerilog package ml_uvm_seq is included in the Specman installation.
+# To use it, you must add the following command-line options to your compilation flow,
+# as additional command-line arguments to irun or ncvlog :
+# irun ... ${ML_SEQ_DIR}/ml_uvm_seq.sv -incdir ${ML_SEQ_DIR}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export uvm_home=$CDS_HOME/INCISIVE151/tools/uvm
+export ml_uvm=$CDS_HOME/INCISIVE151/tools/uvm/uvm_lib/uvm_ml/sc/ml_uvm
+export ml_seq_dir=$CDS_HOME/INCISIVE151/specman/src
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Set up the HOME Environment Variable for Incisive Verification Kits
+# Source the appropriate environment setup file (Note: a space is required
+# between . and $SOCV_KIT_HOME/env.sh)
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export SOCV_KIT_HOME=$CDS_HOME/INCISIVE151/kits/VerificationKit
+[ -f $SOCV_KIT_HOME/env.sh ] && source $SOCV_KIT_HOME/env.sh
+
+# Command on terminal to start up Incisive Verification Kits
+# start_kit &
+
+#***********************************************************************
+# Command on terminal to launch NClaunch
+#***********************************************************************
+# nclaunch &
+
+# Command on terminal to start up Specman & SimVision
+# specman -gui &
+
+# Command on terminal to invoke Desktop Manager
+# emanager -desktop &
+# vmanager &
+
+# Encounter Diagnostics & Test (ET)
+export ET_HOME=$CDS_HOME/ET151
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Command on terminal to launch ET,  or with license options: -architect/-truetime/-diag
+# commands eta, ett and ediag are equivalent to et -architect, et -truetime and et -diag
+# which invokes Encounter Test Architect,  Encounter True_time Delay Test and
+# Encounter Diagnostics, respectively.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# eta &
+# ett &
+# ediag &
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Verification IP Product Catalog (VIPCAT)
+#
+# VIP products are configured using a GUI called PureView.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export CDN_VIP_ROOT=$CDS_HOME/VIPCAT113
+export CADENCE_VIP_LIC_ORDER=newrev:soc:portfolio:alacarte
+export ABVIP_ISNT_DIR=$CDN_VIP_ROOT/tools/abvip
+export DENALI=$CDN_VIP_ROOT/tools/denali_64bit
+# In e , set SPECMAN_PATH to the location of the specific UVC directory
+export SPECMAN_PATH=$CDN_VIP_ROOT/utils:$CDN_VIP_ROOT/packages:$CDN_VIP_ROOT/vips/enet/vr_enet
+
+# In SV, add the UVC by including the specific VIP SV directory in the irun command:
+#irun -incdir $CDN_VIP_ROOT/vips/enet/vr_enet/sv
+
+# Command on terminal to launch PureView to configure VIP products.
+# pureview
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Manufacturability and Variability Sign-Off (MVS) - Litho Analyzers,
+# CMP Predictor
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# Commands on terminal to launch Litho Analyzers, CMP Predictor
+#lpa &
+#lea &
+# need to figure out correct license keys in license.dat for CMP Predictor
+# (current ones don't work)
+#cmms -ccp &
+#cmms -ccpo &
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Library Characterizer (Liberate)
+#
+# Include the integrated Spectre in PATH
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# export ALTOSHOME=$CDS_HOME/LIBERATE151
+export ALTOSHOME=$CDS_HOME/LIBERATE201
+export ALTOS_64=1
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Set up NCSU CDK
+#
+# This is optional for educational purpose; use foundry provided PDKs
+# instead for production projects by including foundry PDKs in cds.lib
+# in the working directory.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export CDK_DIR=$EDA_HOME/PDKs/ncsu-cdk-1.6.0.beta
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Mentor Graphics Calibre
+#
+# MGC_HOME environment variable has been deprecated in favor
+# of CALIBRE_HOME.
+#
+# Use absolute PATH to license.dat instead of port@hostname
+#
+# .cdsinit in the working directory should be modified for Calibre to
+# be integrated into Virtuoso menu bar.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export MGC_HOME=$EDA_HOME/mentor
+# export CALIBRE_HOME=$MGC_HOME/Calibre2015/aoi_cal_2015.2_36.27
+export CALIBRE_HOME=$MGC_HOME/Calibre2021/aoi_cal_2021.2_28.15
+if [ -f "$MGC_HOME/license/$(hostname -s).license.dat" ]; then
+    MGC_LICENSE_FILE=$MGC_HOME/license/$(hostname -s).license.dat
+else
+    MGC_LICENSE_FILE=$MGC_HOME/license/license.dat
+fi
+export MGC_LICENSE_FILE
+export MGLS_LICENSE_FILE=$MGC_LICENSE_FILE
+export MGC_LIB_PATH=$CALIBRE_HOME/lib
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Mentor Environment Checking
+#
+# CALIBRE_OS_MSG_LEVEL variable is deprecated with the Calibre 2013.1 release.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#***********************************************************************
+# Enable Calibre RealTime with Cadence Virtuoso
+#***********************************************************************
+#export MGC_CALIBRE_REALTIME_VIRTUOSO_ENABLED=1
+#export OA_PLUGIN_PATH=$CALIBRE_HOME/shared/pkgs/icv/tools/queryskl
+#LD_LIBRARY_PATH+=:$CALIBRE_HOME/shared/pkgs/icv/tools/calibre_client/lib/64
+#export MGC_CALIBRE_REALTIME_VIRTUOSO_SAVE_MESSENGER_CELL=1
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# This variable enables Calibre Interactive to save all GUI settings including default
+# values to a runset file for future re-run
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export MGC_CALIBRE_SAVE_ALL_RUNSET_VALUES=1
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Set up socket connection with Virtuoso schematic or layout viewer (using default ports
+# 9199 for schematic and 9189 for layout) in the form of host:port
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!#
+MGC_CALIBRE_SCHEMATIC_SERVER=$(hostname -s):9199
+MGC_CALIBRE_LAYOUT_SERVER=$(hostname -s):9189
+export MGC_CALIBRE_SCHEMATIC_SERVER
+export MGC_CALIBRE_LAYOUT_SERVER
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!#
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Set up foundry DFM PATH for Calibre - CRNxxG/CRNxxLP process for current project
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+export TSMC_CAL_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxG/Calibre/lvs/DFM
+#export TSMC_CAL_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxLP/Calibre/lvs/DFM
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# The license server is no longer needed once all features are set to uncounted or 0
+# (unlimited use) for the FEATURE lines in license.dat. file.  The SERVER, VENDOR and
+# USE_SERVER lines can be safely removed from license.dat file, i.e. license.dat here
+# contains FEATURE lines only.  DO NOT START UP LICENSE SERVER DAEMON!!!
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#***********************************************************************
+# Set the name of the executable for displaying PDF documentation from Calibre Help
+# menu. The default is acroread if it exists.  Make sure evince has been installed before
+# setting up the following (on Ubuntu type command "sudo apt-get install evince").
+#***********************************************************************
+export MGC_PDF_READER=evince
+
+## Matalab
+MATLAB_HOME=$EDA_HOME/matlab/Polyspace/R2020a
+
+export SYSTEM_CDS_LIB_DIR=$CDS/share/cdssetup
+
+# export FLEXLM_DIAGNOSTICS=1
+
+## ADS
+export HPEESOF_DIR=$EDA_HOME/keysight/ADS2022_update1
+ADS_LICENSE_FILE=$HPEESOF_DIR/$(hostname -s).license.lic
+if [ -f "$ADS_LICENSE_FILE" ]; then
+    export ADS_LICENSE_FILE
+else
+    export ADS_LICENSE_FILE=$HPEESOF_DIR/license.lic
+fi
+
+## Ansys HFFS
+export ANSYSLIC_DIR=$EDA_HOME/AnsysEM/shared_files/licensing
+export ANSYSLMD_LCENSE_FILE=$ANSYSLIC_DIR/license_files/ansyslmd.lic
+ECAD_TRANSLATORS_INSTALL_DIR=$EDA_HOME/AnsysEM/LayoutIntegrations21.1/Linux64
+# $ECAD_TRANSLATORS_INSTALL_DIR/ConfigureLayoutIntegrations
+# ----------------------------
+# Cadence Virtuoso Integration
+# ----------------------------
+# You will need to add this variable to your shell startup files
+# in order to run the integration to ANSYS:
+# bash:
+export SI_INTEGRATE4_DIR=$ECAD_TRANSLATORS_INSTALL_DIR/LayoutIntegrations
+# csh:
+#   setenv SI_INTEGRATE4_DIR $ECAD_TRANSLATORS_INSTALL_DIR/LayoutIntegrations
+# If you are integrating with Cadence Virtuoso, you will also need
+# to add the following variables to your shell startup files in order
+# to run the integration to ANSYS:
+# bash:
+export ANSYSEM_INSTALL_DIR=$EDA_HOME/AnsysEM/AnsysEM21.1/Linux64
+export ANSLINKS_PERSONAL_LIB=$HOME/Ansoft
+export ANSOFT_PROJECT_DIR=${ANSLINKS_PERSONAL_LIB}/virtuoso
+# csh:
+#   setenv ANSYSEM_INSTALL_DIR $EDA_HOME/AnsysEM/AnsysEM21.1/Linux64
+#   setenv ANSLINKS_PERSONAL_LIB $HOME/Ansoft
+#   setenv ANSOFT_PROJECT_DIR ${ANSLINKS_PERSONAL_LIB}/virtuoso
+# In addition, add ANSYSEM_INSTALL_DIR to your PATH environment variable.
+# Finally, you will need to add this variable to your shell startup
+# files in order to launch SIwave directly from your third party tool:
+# bash:
+export SIWAVE_INSTALL_DIR=$EDA_HOME/AnsysEM/AnsysEM21.1/Linux64
+# csh:
+#   setenv SIWAVE_INSTALL_DIR $EDA_HOME/AnsysEM/AnsysEM21.1/Linux64
+
+
+## set PATH
+declare -a paths_to_append=(
+    "$EDA_HOME/cadence/installscape/iscape/bin"
+    "$CDS/share/bin"
+    "$CDS/tools/bin"
+    "$CDS/tools/dfII/bin"
+    "$CDS/tools/plot/bin"
+    "$SPECTREHOME/bin"
+    "$SPECTREHOME/tools/bin"
+    "$SPECTREHOME/tools/dfII/bin"
+    "$SPECTREHOME/tools/spectre/bin"
+    "$SPECTREHOME/tools/relxpert/bin"
+    "$QRC_HOME/bin"
+    "$QRC_HOME/tools/bin"
+    "$QRC_HOME/tools/tools/extraction/bin"
+    "$QRC_HOME/tools/tools/dfII/bin"
+    "$ASSURAHOME/tools/bin"
+    "$ASSURAHOME/tools/dfII/bin"
+    "$ASSURAHOME/tools/assura/bin"
+    "$CDS_HOME/PVS151/bin"
+    "$CDS_HOME/PVS151/tools/bin"
+    "$K2_MASKCOMPOSE_HOME/bin"
+    "$GENUS_HOME/tools/bin"
+    "$JLS_HOME/bin"
+    "$INNOVUS_HOME/bin"
+    "$EMX_HOME"
+    "$MODELGEN_HOME"
+    "$CTOS_HOME/bin"
+    "$ECO_HOME/bin"
+    "$SSV_HOME/tools/bin"
+    "$XCELIUM_HOME/bin"
+    "$XCELIUM_HOME/tools.lnx86/bin"
+    "$XCELIUM_HOME/tools.lnx86/dfll/bin"
+    "$ET_HOME/bin"
+    "$CDN_VIP_ROOT/utils"
+    "$CDN_VIP_ROOT/packages"
+    "$CDN_VIP_ROOT/vips/enet/vr_enet"
+    "$DENALI/bin"
+    "$CDS_HOME/MVS152/tools/bin"
+    "$ALTOSHOME/bin"
+    "$ALTOSHOME/tools.lnx86/spectre/bin"
+    "$CALIBRE_HOME/bin"
+    "$HPEESOF_DIR/bin"
+    "$MATLAB_HOME/bin"
+)
+
+for p in "${paths_to_append[@]}"; do
+    if [[ -d "$p" && "$PATH" != *":$p:"* ]]; then
+        PATH="${PATH:+"$PATH:"}$p"
+    fi
+done
+
+export PATH
+
+export LD_LIBRARY_PATH
+
+## alias
+alias icfb=virtuoso
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Command on terminal to launch Cadence Virtuoso tools
+#
+# Adding & runs the process in the background allowing to continue using
+# the current terminal.
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# virtuoso &

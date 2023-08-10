@@ -1,0 +1,94 @@
+# shellcheck disable=2148
+########################### Synopsys ###############################
+if [[ -d /home/eda ]]; then
+    EDA_HOME=/home/eda
+else
+    EDA_HOME=/eda
+fi
+export SYNOPSYS_HOME=$EDA_HOME/synopsys
+## SCL
+# export SCL_HOME=$SYNOPSYS_HOME/scl/2018.06
+export SCL_HOME=$SYNOPSYS_HOME/scl/2021.03
+
+## SNPSLMD_LICENSE_FILE
+SNPSLMD_LICENSE_FILE="30000@$(hostname -s)"
+export SNPSLMD_LICENSE_FILE
+LICENCE_FILE_1=$SYNOPSYS_HOME/license/$(hostname -s).license.dat
+LICENCE_FILE_2=$SYNOPSYS_HOME/license/license.dat
+if [ -f "$LICENCE_FILE_1" ]; then
+    export LICENCE_FILE=$LICENCE_FILE_1
+else
+    export LICENCE_FILE=$LICENCE_FILE_2
+fi
+LICENCE_LOG=$SYNOPSYS_HOME/license/$(hostname -s).debug.log
+export LICENCE_LOG
+
+## VCS
+export VCS_HOME=$SYNOPSYS_HOME/vcs/Q-2020.03-SP2-7
+## Verdi
+# export Verdi_HOME=$SYNOPSYS_HOME/verdi/Verdi_O-2018.09-SP2
+# export Verdi_HOME=$SYNOPSYS_HOME/verdi/P-2019.06-SP1-1
+export Verdi_HOME=$SYNOPSYS_HOME/verdi/R-2020.12-SP1
+
+## 的波形文件的时候,需要 NOVAS_HOME 变量指向 Verdi 的安装路径
+export NOVAS_HOME=$Verdi_HOME
+
+## Syn
+export Syn_HOME=$SYNOPSYS_HOME/syn/R-2020.09-SP4
+## PrimeTime
+export PrimeTime_HOME=$SYNOPSYS_HOME/prime/R-2020.09-SP4
+## Formality
+export Formality_HOME=$SYNOPSYS_HOME/fm/Q-2019.12-SP2
+## Starrc
+export Starrc_HOME=$SYNOPSYS_HOME/starrc/vF-2011.12-SP1_amd64
+export Starrc_HOME2=$SYNOPSYS_HOME/starrc/vF-2011.12-SP1_common
+## LC
+export LC_HOME=$SYNOPSYS_HOME/lc/R-2020.09-SP3
+## ICC
+export ICC_HOME=$SYNOPSYS_HOME/icc2/R-2020.09-SP1
+## WV
+# WV_HOME=$SYNOPSYS_HOME/wv/O-2018.09-SP2
+export WV_HOME=$SYNOPSYS_HOME/wv/S-2021.09
+## Hspice
+export Hspice_HOME=$SYNOPSYS_HOME/hspice/S-2021.09/hspice
+
+## set PATH
+declare -a paths_to_append=(
+    "$SCL_HOME/linux64/bin"
+    "$VCS_HOME/bin"
+    "$Verdi_HOME/bin"
+    "$Syn_HOME/bin"
+    "$PrimeTime_HOME/bin"
+    "$Formality_HOME/bin"
+    "$Starrc_HOME2/bin"
+    "$Starrc_HOME/bin"
+    "$LC_HOME/bin"
+    "$ICC_HOME/bin"
+    "$WV_HOME/bin"
+    "$Hspice_HOME/bin"
+)
+for p in "${paths_to_append[@]}"; do
+    if [[ -d "$p" && "$PATH" != *":$p:"* ]]; then
+        PATH="${PATH:+"$PATH:"}$p"
+    fi
+done
+export PATH
+
+## Alias
+alias dv=design_vision
+alias pt=primetime
+alias fm=formality
+alias starrc=StarXtract
+
+## start license
+synlic() {
+    echo "$LICENCE_FILE"
+    echo "$LICENCE_LOG"
+    if lmstat; then
+        echo "Synopsys license already started."
+    else
+        echo "Synopsys license not ready."
+        echo "start:     lmgrd -c \$LICENCE_FILE -l \$LICENCE_LOG"
+        echo "stop:      lmutil lmdown -c \$LICENCE_FILE -q"
+    fi
+}

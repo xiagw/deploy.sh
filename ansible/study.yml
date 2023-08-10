@@ -1,0 +1,51 @@
+- name: Study ansible
+  hosts: all
+
+  tasks:
+
+
+    ## server
+    - name: Install nis server
+      ansible.builtin.yum:
+        name:
+          - vim
+      when: "ansible_hostname == node01"
+    - name: Install fzf (Ubuntu >18)
+      ansible.builtin.apt:
+        update_cache: true
+        pkg:
+          - fzf
+      when: ansible_os_family == "Debian" and ansible_lsb.major_release | int >= 20
+
+    - name: Git checkout
+      ansible.builtin.git:
+        repo: 'https://gitee.com/mirrors/ohmyzsh.git'
+        dest: $HOME/.oh-my-zsh
+        clone: true
+        update: true
+        version: master
+      tags: omz
+    - name: Permit service ssh mountd rpc-bind nfs nfs3
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      with_items:
+        - ssh
+        - mountd
+        - rpc-bind
+        - nfs
+        - nfs3
+    - name: Permit port 944-946/tcp
+      ansible.posix.firewalld:
+        port: 944-946/tcp
+        permanent: true
+        immediate: true
+        state: enabled
+    - name: Permit port 944-946/udp
+      ansible.posix.firewalld:
+        port: 944-946/udp
+        permanent: true
+        immediate: true
+        state: enabled
