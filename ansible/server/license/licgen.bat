@@ -1,0 +1,1 @@
+lmcrypt -i cadence.txt -o license.dat -r

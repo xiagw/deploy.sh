@@ -1,0 +1,26 @@
+- name: Study ansible
+  hosts: all
+
+  tasks:
+
+    - name: Install fzf (Ubuntu <=18)
+      become: true
+      # become_user: "{{ user_name }}"
+      ansible.builtin.git:
+        # repo: "https://github.com/junegunn/fzf.git"
+        repo: "https://gitee.com/mirrors/fzf.git"
+        dest: "/home/{{ user_name }}/.fzf"
+        clone: true
+        update: true
+        # depth: 1
+        version: master
+      when: ansible_os_family == "Debian" and ansible_lsb.major_release | int <= 18
+
+    - name: Install fzf (Ubuntu >=20)
+      become: true
+      ansible.builtin.apt:
+        update_cache: true
+        pkg:
+          - fzf
+      when: ansible_os_family == "Debian" and ansible_lsb.major_release | int >= 20
+

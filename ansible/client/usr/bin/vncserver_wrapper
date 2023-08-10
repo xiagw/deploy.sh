@@ -1,0 +1,48 @@
+#!/bin/sh
+
+USER="$1"
+INSTANCE="$2"
+
+file_vncusers=/etc/sysconfig/vncusers
+if [ -f $file_vncusers ]; then
+	get_user=$(awk -F= '/^'"${INSTANCE}"'=/ {print $2}' ${file_vncusers} 2>/dev/null | tail -n 1)
+	[ -n "$get_user" ] && USER="$get_user"
+fi
+
+die() {
+	echo "FATAL: ${@:-}" >&2
+	exit 2
+}
+
+cleanup() {
+	[ -n "$VNCPID" ] || return
+	if kill -0 $VNCPID 2>/dev/null; then
+		kill $VNCPID
+	fi
+}
+
+trap cleanup TERM INT HUP
+
+[ -n "$USER" -a -n "$INSTANCE" ] || die "Invalid usage!"
+
+/usr/sbin/runuser -l "$USER" -c "/usr/bin/vncserver ${INSTANCE}"
+[ $? -eq 0 ] || die "'runuser -l $USER' failed!"
+
+# Wait up to 5 seconds for vncserver to be up
+for tries in $(seq 1 50); do
+	[ -e "~$USER/.vnc/$(hostname)${INSTANCE}.pid" ] && break
+	sleep 0.1
+done
+
+eval HOME=~$USER
+
+VNCPID=$(cat "$HOME/.vnc/$(hostname)${INSTANCE}.pid" 2>/dev/null || true)
+[ -n "$VNCPID" ] || die "'vncserver ${INSTANCE}' failed to start after 5 seconds!"
+
+echo "'vncserver ${INSTANCE}' has PID $VNCPID, waiting until it exits ..."
+
+while kill -0 $VNCPID 2>/dev/null; do
+	sleep 5
+done
+
+echo "PID $VNCPID exited, exiting ..."

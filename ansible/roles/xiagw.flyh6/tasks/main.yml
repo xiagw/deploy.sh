@@ -1,0 +1,335 @@
+---
+# when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+# when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+# when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+# when: ansible_distribution == 'CentOS' and ansible_distribution_version == '6.4'
+# when: ansible_distribution == 'Ubuntu' and ansible_distribution_release == 'precise'
+# when: ansible_distribution == 'Debian' and ansible_distribution_version == '7'
+# when: ansible_os_family == "RedHat" and ansible_lsb.major_release|int >= 5
+
+# tasks file for xiagw.flyh6
+- name: Install git byobu zsh rsync vim (Debian)
+  ansible.builtin.apt:
+    update_cache: true
+    # state: latest
+    pkg:
+      - zsh
+      - byobu
+      - rsync
+      - git
+      - zip
+      - unzip
+      - vim
+      - language-pack-zh-hans
+  when: ansible_os_family == "Debian"
+
+- name: Install fzf (Ubuntu >18)
+  ansible.builtin.apt:
+    update_cache: true
+    pkg:
+      - fzf
+  when: ansible_os_family == "Debian" and ansible_lsb.major_release|int >= 20
+  # when: ansible_os_family == "Debian" and install_fzf
+# when: ansible_distribution == 'Ubuntu' and ansible_distribution_release == 'precise'
+# when: ansible_distribution == 'Debian' and ansible_distribution_version == '7'
+# when: ansible_os_family == "RedHat" and ansible_lsb.major_release|int >= 5
+
+- name: Install epel-release (RedHat)
+  ansible.builtin.yum:
+    update_cache: true
+    name:
+      - epel-release
+  when: ansible_os_family == "RedHat" and ansible_distribution != "Alibaba"
+
+- name: Install git byobu zsh rsync vim (RedHat)
+  ansible.builtin.yum:
+    update_cache: true
+    # state: latest
+    name:
+      - zsh
+      - byobu
+      - rsync
+      - git
+      - zip
+      - unzip
+      - vim
+  # disablerepo: "*"
+  # enablerepo:
+  #   - base
+  #   - updates
+  when: ansible_os_family == "RedHat" and ansible_distribution != "Alibaba"
+
+- name: Install git byobu zsh rsync vim (only Alibaba)
+  ansible.builtin.dnf:
+    update_cache: true
+    name:
+      - zsh
+      - byobu
+      - rsync
+      - git
+      - zip
+      - unzip
+      - vim
+  when: ansible_os_family == "RedHat" and ansible_distribution == "Alibaba"
+
+# - name: Check user ubuntu status
+#   register: user_status
+# - name: get '{{ user_name }}' user info
+#   getent:
+#     database: passwd
+#     key: "{{ user_name }}"
+#   register: user_status
+# - name: Gather available local users
+#   getent:
+#     database: passwd
+
+# - name: Show gathered local user names only
+#   debug:
+#     msg: "{{ item }}"
+#   loop: "{{ getent_passwd.keys() | list }}"
+#   when: ansible_check_mode
+
+# - name: Check if local user account '{{ user_name }}' exists
+#   assert:
+#     that:
+#       - ubuntu in getent_passwd.keys()
+#     fail_msg: "Given user not exists!"
+#     success_msg: "Given user exists."
+
+- name: Add user with a specific uid 1000 {{ user_name }}
+  ansible.builtin.user:
+    name: "{{ user_name }}"
+    shell: /bin/zsh
+    comment: Admins
+    uid: 1000
+  register: user_create_reult
+  when: create_user
+
+- name: Ansible create file /etc/sudoers.d/{{ user_name }}
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ user_name }}"
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  when: create_user
+
+- name: Config /etc/sudoers.d/{{ user_name }}
+  ansible.builtin.lineinfile: dest=/etc/sudoers.d/{{ user_name }} state=present  line='{{ item }}' validate='visudo -cf %s'
+  with_items:
+    - "{{ user_name }} ALL=(ALL : ALL) NOPASSWD: ALL"
+    # - "Defaults: {{ user_name }}  !requiretty"
+  when: create_user
+
+- name: Add authorized_keys for user {{ user_name }}
+  ansible.posix.authorized_key:
+    user: "{{ user_name }}"
+    state: present
+    key: "{{ lookup('file', '{{ item }}') }}"
+    # exclusive: true
+  with_items:
+    - ~/.ssh/fly.id_ed25519.pub
+    - ~/.ssh/xia.id_ed25519.pub
+    # - ~/.ssh/newkey.pub
+  when: create_user
+
+- name: Remove authorized_keys for user {{ user_name }}
+  ansible.posix.authorized_key:
+    user: "{{ user_name }}"
+    state: absent
+    key: "{{ lookup('file', '{{ item }}') }}"
+  with_items:
+    - ~/.ssh/fly.old.id_ed25519.pub
+  when: create_user
+
+############################# oh my zsh
+- name: Git checkout ohmyzsh for user {{ user_name }}
+  become: true
+  become_user: "{{ user_name }}"
+  ansible.builtin.git:
+    # repo: "https://github.com/ohmyzsh/ohmyzsh"
+    repo: "https://gitee.com/mirrors/ohmyzsh.git"
+    dest: "/home/{{ user_name }}/.oh-my-zsh"
+    clone: true
+    update: true
+    # depth: 1
+    version: master
+  tags: omz
+  when: create_user
+
+- name: Get stats "$HOME/.zshrc" for user {{ user_name }}
+  become: true
+  become_user: "{{ user_name }}"
+  stat:
+    path: "$HOME/.zshrc"
+  register: myvar
+  when: create_user
+
+- name: Copy zshrc for user {{ user_name }}
+  become: true
+  become_user: "{{ user_name }}"
+  ansible.builtin.copy:
+    src: "$HOME/.oh-my-zsh/templates/zshrc.zsh-template"
+    dest: "$HOME/.zshrc"
+    remote_src: yes
+  when: create_user and myvar.stat.exists == False
+
+- name: Edit $HOME/.zshrc for user {{ user_name }}
+  become: true
+  become_user: "{{ user_name }}"
+  lineinfile: >
+    dest=$HOME/.zshrc
+    regexp="{{ item.regexp }}"
+    line="{{ item.line }}"
+  with_items:
+    - { regexp: "^ZSH_THEME", line: 'ZSH_THEME="ys"' }
+    - {
+        regexp: "^plugins=",
+        line: "plugins=(git z extract fzf docker docker-compose)",
+      }
+  when: create_user
+
+##################### root oh my zsh
+- name: Git checkout ohmyzsh for user root
+  become: true
+  become_user: "root"
+  ansible.builtin.git:
+    # repo: "https://github.com/ohmyzsh/ohmyzsh"
+    repo: "https://gitee.com/mirrors/ohmyzsh.git"
+    dest: "$HOME/.oh-my-zsh"
+    clone: true
+    update: true
+    # depth: 1
+    version: master
+  tags: omz
+
+- name: Get stats "/root/.zshrc"
+  become: true
+  become_user: "root"
+  stat:
+    path: "$HOME/.zshrc"
+  register: myvar
+
+- name: Copy zshrc to /root/
+  become: true
+  become_user: "root"
+  ansible.builtin.copy:
+    src: "$HOME/.oh-my-zsh/templates/zshrc.zsh-template"
+    dest: "$HOME/.zshrc"
+    remote_src: yes
+  when: myvar.stat.exists == False
+
+- name: Edit /root/.zshrc
+  become: true
+  become_user: "root"
+  lineinfile: >
+    dest=$HOME/.zshrc
+    regexp="{{ item.regexp }}"
+    line="{{ item.line }}"
+  with_items:
+    - { regexp: "^ZSH_THEME", line: 'ZSH_THEME="ys"' }
+    - {
+        regexp: "^plugins=",
+        line: "plugins=(git z extract fzf docker docker-compose)",
+      }
+
+- name: Upgrade all packages to latest version (RedHat)
+  ansible.builtin.yum:
+    name: "*"
+    update_cache: true
+    disablerepo: "*"
+    enablerepo:
+      - base
+      - updates
+  when: ansible_os_family == "RedHat" and upgrade_os
+  tags: tag_upgrade_os
+
+# - name: (RedHat) Remove dependencies that are no longer required
+#   yum:
+#     autoremove: yes
+#     disablerepo: "epel"
+#   when: ansible_os_family == "RedHat"
+
+- name: Upgrade all packages to latest version (Debian)
+  ansible.builtin.apt:
+    name: "*"
+    only_upgrade: true
+    update_cache: true
+  when: ansible_os_family == "Debian" and upgrade_os
+  tags: tag_upgrade_os
+
+- name: Remove dependencies that are no longer required (Debian)
+  ansible.builtin.apt:
+    autoremove: true
+  when: ansible_os_family == "Debian" and upgrade_os
+  tags: tag_upgrade_os
+
+# - name: Reboot the Debian or Ubuntu server
+#   reboot:
+#     msg: "Reboot initiated by Ansible due to kernel updates"
+#     connect_timeout: 5
+#     reboot_timeout: 300
+#     pre_reboot_delay: 0
+#     post_reboot_delay: 30
+#     test_command: uptime
+#   when: reboot_required_file.stat.exists
+
+- name: Install fzf on RedHat for user {{ user_name }}
+  become: true
+  become_user: "{{ user_name }}"
+  ansible.builtin.git:
+    # repo: "https://github.com/junegunn/fzf.git"
+    repo: "https://gitee.com/mirrors/fzf.git"
+    dest: "/home/{{ user_name }}/.fzf"
+    clone: true
+    update: true
+    # depth: 1
+    version: master
+  when: create_user and ansible_os_family == "RedHat"
+
+- name: Remove CHANGELOG.md for {{ user_name }}
+  ansible.builtin.file:
+    path: "/home/{{ user_name }}/.fzf/CHANGELOG.md"
+    state: absent
+  when: create_user and ansible_os_family == "RedHat"
+
+- name: Install fzf on RedHat for user root
+  become: true
+  become_user: root
+  ansible.builtin.git:
+    # repo: "https://github.com/junegunn/fzf.git"
+    # git clone --depth 1 https://gitee.com/mirrors/fzf.git ~/.fzf
+    repo: "https://gitee.com/mirrors/fzf.git"
+    dest: "$HOME/.fzf"
+    clone: true
+    update: true
+    # depth: 1
+    version: master
+  when: ansible_os_family == "RedHat"
+
+- name: Remove CHANGELOG.md for {{ user_name }}
+  become: true
+  become_user: root
+  ansible.builtin.file:
+    path: "$HOME/.fzf/CHANGELOG.md"
+    state: absent
+  when: ansible_os_family == "RedHat"
+
+- name: Edit /etc/default/grub
+  ansible.builtin.lineinfile: >
+    dest=/etc/default/grub
+    regexp="{{ item.regexp }}"
+    line="{{ item.line }}"
+  with_items:
+    - { regexp: ".*GRUB_TIMEOUT_STYLE=.*", line: "GRUB_TIMEOUT_STYLE=menu" }
+    - { regexp: ".*GRUB_TIMEOUT=.*", line: "GRUB_TIMEOUT=2" }
+    - { regexp: ".*GRUB_TERMINAL=.*", line: "GRUB_TERMINAL=console" }
+    - {
+        regexp: ".*GRUB_HIDDEN_TIMEOUT_QUIET=.*",
+        line: "GRUB_HIDDEN_TIMEOUT_QUIET=false",
+      }
+    - {
+        regexp: ".*GRUB_RECORDFAIL_TIMEOUT=.*",
+        line: "GRUB_RECORDFAIL_TIMEOUT=2",
+      }
+  when: edit_grub

@@ -1,0 +1,46 @@
+---
+# tasks file for xiagw.sshkey
+- name: Edit sshd_config
+  ansible.builtin.lineinfile: >
+    dest=/etc/ssh/sshd_config
+    regexp="{{ item.regexp }}"
+    line="{{ item.line }}"
+  with_items:
+    - {
+        regexp: ".*AuthorizedKeysFile.*authorized_keys.*",
+        line: "AuthorizedKeysFile    .ssh/authorized_keys /etc/ssh/authorized_keys2",
+      }
+    - { regexp: ".*UseDNS.*", line: "UseDNS no" }
+    - { regexp: ".*GSSAPIAuthentication.*", line: "GSSAPIAuthentication no" }
+    - { regexp: ".*PermitEmptyPasswords.*", line: "PermitEmptyPasswords no" }
+  notify: Systemctl restart sshd
+  tags: Edit_sshd_config
+
+## system key
+- name: System key /etc/ssh/authorized_keys2
+  ansible.builtin.copy:
+    src: ~/.ssh/sys.id_ed25519.pub
+    dest: /etc/ssh/authorized_keys2
+    owner: root
+    group: root
+    mode: "0600"
+    # root/3AS6zxQdKuaktfI
+
+- name: Add authorized_keys to root
+  ansible.builtin.authorized_key:
+    user: "root"
+    state: present
+    key: "{{ lookup('file', '{{ item }}') }}"
+    # exclusive: true
+  with_items:
+    - ~/.ssh/fly.id_ed25519.pub
+    - ~/.ssh/xia.id_ed25519.pub
+    # - ~/.ssh/newkey.pub
+
+- name: Remove authorized_keys from root
+  ansible.builtin.authorized_key:
+    user: "root"
+    state: absent
+    key: "{{ lookup('file', '{{ item }}') }}"
+  with_items:
+    - ~/.ssh/fly.old.id_ed25519.pub

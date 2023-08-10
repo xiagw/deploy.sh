@@ -1,0 +1,119 @@
+- name: Install packages for EDA
+  hosts: all
+  become: true
+  vars:
+    username: centos
+    host_name: node11
+    host_name_server: node11
+    firewall_start: false
+    firewall_rule: disable_out
+    nis_server: true
+    eda_home: /eda
+    itcad_home: /mnt/data/ITCAD
+
+  # roles:
+  #   - xiagw.eda
+    # - { role: xiagw.eda, nis_server: true }
+    # - { role: shenxianpeng.polaris, myorg: "https://myorg.polaris.synopsys.com"}
+    # - { role: foo_app_instance, dir:'/opt/a',port:5000}
+    # - { role: roles/dev-workstation, when: ansible_os_family == "Debian" }
+
+  tasks:
+
+    - name: Copy README.md
+      ansible.builtin.copy:
+        src: "../README.md"
+        dest: "{{ itcad_home }}/"
+        mode: "0644"
+        owner: "1000"
+        group: "1000"
+      when: "ansible_hostname == host_name_server"
+
+    - name: Copy admin.sh
+      ansible.builtin.copy:
+        src: "../admin.sh"
+        dest: "{{ itcad_home }}/"
+        mode: "0755"
+        owner: "1000"
+        group: "1000"
+      when: "ansible_hostname == host_name_server"
+
+    - name: Copy dir server/eda/
+      ansible.builtin.copy:
+        src: "server/eda/"
+        dest: "{{ eda_home }}/"
+        mode: "0644"
+        owner: "1000"
+        group: "1000"
+      when: "ansible_hostname == host_name_server"
+
+    - name: Copy dir server/etc/
+      ansible.builtin.copy:
+        src: "server/etc/"
+        dest: "/etc/"
+        mode: "0644"
+        owner: "0"
+        group: "0"
+      when: "ansible_hostname == host_name_server"
+
+    - name: File permission /eda/synopsys/license/startlic.sh
+      ansible.builtin.file:
+        name: "{{ eda_home }}/synopsys/license/startlic.sh"
+        mode: "0755"
+        owner: "1000"
+        group: "1000"
+      when: "ansible_hostname == host_name_server"
+
+    - name: Copy dir client/etc/
+      ansible.builtin.copy:
+        src: "client/etc/"
+        dest: "/etc/"
+        mode: "0644"
+        owner: "0"
+        group: "0"
+
+    - name: Copy dir client/usr/bin/
+      ansible.builtin.copy:
+        src: "client/usr/bin/"
+        dest: "/usr/bin/"
+        mode: "0755"
+        owner: "0"
+        group: "0"
+
+    - name: Disable systemd
+      ansible.builtin.systemd:
+        state: stopped
+        enabled: false
+        name: "{{ item }}"
+      with_items:
+        - abrtd
+        - abrt-oops.service
+        - abrt-vmcore.service
+        - abrt-xorg.service
+        - firstboot-graphical.service
+      tags: jy
+
+    - name: Enable vncserver 1 2 3
+      ansible.builtin.systemd:
+        # state: stopped
+        enabled: true
+        name: "{{ item }}"
+      with_items:
+        # - vncserver@:1
+        # - vncserver@:2
+        # - vncserver@:3
+        - wg-quick@wg0
+      tags: qy
+
+    - name: Remove autofs on {{ host_name_server }}
+      ansible.builtin.yum:
+        name: autofs
+        state: absent
+      when: "ansible_hostname == host_name_server"
+
+    - name: Firewall disable output
+      ansible.builtin.command: /usr/bin/fw.sh {{ firewall_rule }}
+      when: firewall_start
+      register: result
+      changed_when: result.rc == 0
+      tags: fw

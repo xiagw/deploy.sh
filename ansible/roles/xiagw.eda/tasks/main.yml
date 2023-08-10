@@ -1,0 +1,147 @@
+# tasks file for xiagw.eda
+
+## wireguard
+- name: Install epel-release elrepo-release
+  ansible.builtin.yum:
+    name:
+      - epel-release
+      - elrepo-release
+- name: Install yum-plugin-elrepo
+  ansible.builtin.yum:
+    name:
+      - yum-plugin-elrepo
+- name: Install wireguard
+  ansible.builtin.yum:
+    name:
+      - kmod-wireguard
+      - wireguard-tools
+
+- name: Install x2goserver-xsession curl byobu zip git nfs-utils samba rpcbind
+  ansible.builtin.yum:
+    name:
+      - x2goserver-xsession
+      - vim-enhanced
+      - curl
+      - byobu
+      - git
+      - ncdu
+      - nload
+      - pigz
+      # - pixz
+      - pbzip2
+      - p7zip
+      - p7zip-plugins
+      - autossh
+      - nfs-utils
+      - samba
+      - samba-client
+      - rpcbind
+      - mlocate
+## server
+- name: Install nis server
+  ansible.builtin.yum:
+    name:
+      - ypserv
+  when: "ansible_hostname == 'node11'"
+## client
+- name: Install nis client
+  ansible.builtin.yum:
+    name:
+      - ypbind
+      - autofs
+  when: "ansible_hostname != 'node11'"
+
+## sys packages
+- name: Install sys packages (redhat)
+  ansible.builtin.yum:
+    name: "{{ packages }}"
+    state: present
+  when: ansible_os_family == "RedHat"
+  vars:
+    packages:
+      - kernel
+      - kernel-headers
+      - kernel-devel
+      - redhat-lsb
+      - ksh
+      - csh
+      - zsh
+      - xterm
+      - compat-db47
+      - compat-libstdc++-33.i686
+      - autoconf
+      - automake
+      - make
+      - gcc
+      - gcc-c++
+      - glibc
+      - glibc.i686
+      - glibc-devel.i686
+      - glibc-devel.x86_64
+      - glibc-headers
+      - ld-linux.so.2
+      - libXext
+      - libXext.i686
+      - libXext.so.6
+      - libXScrnSaver
+      - libXtst
+      - libXtst.i686
+      - libXtst.so.6
+      - libXt
+      - libXt.i686
+      - libXt.so.6
+      - libGLU
+      - libGLU.so.1
+      - libelf.so.1
+      - libXp
+      - libXp.i686
+      - libXp.so.6
+      - libXrender
+      - libXrender.i686
+      - libXrender.so.1
+      - libXrandr
+      - libXrandr.i686
+      - libXrandr.so.2
+      - libstdc++
+      - libstdc++.so.5
+      - libjvm.so
+      - libarchive-devel.x86_64
+      - mesa-libGLU
+      - mesa-libGLU.i686
+      - xorg*
+      - xorg-x11-fonts*
+      - bpg-courier-fonts
+      - bpg-fonts-common
+      - xorg-x11-fonts-75dpi.noarch
+      - openmotif
+      - java-1.8.0-openjdk
+      - motif.i686
+      - compat-db47.i686
+      - xorg-x11-server-Xvfb
+      - tcl-devel
+      - ncurses-devel
+      - xz-devel
+      - asciidoc
+      - tigervnc-server
+      - redhat-lsb.i686
+
+- name: Install Group packages Xfce (redhat)
+  ansible.builtin.yum:
+    name:
+      - "@Server with GUI"
+      - "@Xfce"
+    state: present
+  when: ansible_os_family == "RedHat"
+
+## systemd
+# - name: Disable systemd
+#   ansible.builtin.systemd:
+#     state: stopped
+#     enabled: false
+#     name: "{{ item }}"
+#   with_items:
+#     - abrtd
+#     - abrt-oops.service
+#     - abrt-vmcore.service
+#     - abrt-xorg.service
+#     - firstboot-graphical.service

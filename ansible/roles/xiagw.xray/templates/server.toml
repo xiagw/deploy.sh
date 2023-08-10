@@ -1,0 +1,43 @@
+[log]
+  loglevel = "warning"
+  access = "none"
+  error = "/var/log/xray.error.log"
+
+[[inbounds]]
+  port = {{ xray_port }}
+  protocol = "vless"
+
+  [inbounds.settings]
+    decryption = "none"
+
+    [[inbounds.settings.clients]]
+      id = "{{ xray_uuid }}"
+      flow = "xtls-rprx-direct"
+      level = 0
+
+    [[inbounds.settings.fallbacks]]
+      dest = {{ xray_fallback }}
+{% if xray_to_proxyproto %}
+      xver = 1
+{% endif %}
+
+  [inbounds.streamSettings]
+    network = "tcp"
+    security = "xtls"
+
+{% if xray_from_proxyproto %}
+    [inbounds.streamSettings.tcpSettings]
+      acceptProxyProtocol = true
+{% endif %}
+
+    [inbounds.streamSettings.xtlsSettings]
+      alpn = [ "http/1.1" ]
+      minVersion = "1.3"
+
+      [[inbounds.streamSettings.xtlsSettings.certificates]]
+        ocspStapling = 3600
+        certificateFile = "/etc/letsencrypt/live/{{ xray_server_addr }}/fullchain.pem"
+        keyFile = "/etc/letsencrypt/live/{{ xray_server_addr }}/privkey.pem"
+
+[[outbounds]]
+  protocol = "freedom"

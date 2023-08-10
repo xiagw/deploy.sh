@@ -1,0 +1,73 @@
+1) This 1st step can be run either on Linux platform or on Windows platform as
+follows:
+
+1-1) On Linux platform, on a terminal cd to directory where holds these files:
+cadence.txt, licgen.bat, licgen.sh, lmcrypt.exe, and README. Make sure 
+licgen.sh and lmcrypt.exe are executable. Then run the following command:
+./licgen.sh
+which will produce the output file license.dat in the same directory.
+
+On a 64-bit Linux host, you probably need to install a 32-bit library 
+libp11-kit-gnome-keyring before you can run this step, e.g. on Ubuntu 
+run the following command to install this library:
+sudo apt-get install libp11-kit-gnome-keyring:i386
+
+1-2) Alternatively on Windows platform (e.g. Windows virtual machine installed on linux), 
+navigate to the folder where holds these files:
+cadence.txt, licgen.bat, licgen.sh, lmcrypt.exe, and README.
+then click licgen.bat to run.
+which will produce the output file license.dat in the same folder.
+
+2) Open the license.dat file produced in the above step 1 and remove the top 
+4 lines (SERVER, DAEMON,... lines) before the 1st FEATURE line and then save the file. 
+Note: the saved file license.dat now contains FEATURE lines ONLY!. Move or copy this 
+license.dat to <Cadence_install_dir>/license directory, e.g. /opt/cadence/license
+Make sure all Cadence tools have the access right to this license file (use chown 
+and/or chmod to change the file access if necessary)!
+
+3) You can add any new (or missing) license FEATUREs to cadence.txt (make sure the
+license strings (keys) are in correct syntax and spelling) or make a brand new cadence.txt
+and then re-run the above 2 steps to produce license.dat file.
+
+The FEATURE line format in the cadence.txt is as follows:
+FEATURE license_key cdslmd 2100.000 permanent uncounted HOSTID=ANY [optioanl_attributes] SIGN2=0
+where cdslmd is the Cadence license server daemon; 2100.000 is the license version;
+permanent (or 0 for year in date-month-year, e.g. 30-nov-0 or 30-nov-0000) is the
+license expiration date (never expires here!); uncounted (or 0) is the number of
+license uses allowed (unlimited use here!); HOSTID=ANY means this license is a floating 
+license and does not attach to any node in the network. The "permanent" and 
+"uncounted" are the reserved keywords in FlexNet/Flexlm license scheme.
+
+optional_attributes includes VENDOR_STRING, vendor_info, ISSUER, ISSUED and SN, etc. 
+e.g. VENDOR_STRING=UHD:PERM. vendor_info=01-oct-2015 and ISSUED=01-oct-2015. 
+SN uses the following format: yyyy-mm-ddThh:mm:ss:xxx where xxx < 1000, 
+e.g. SN=2015-10-01T08:04:11:846. These optioanl_attributes can be automatically
+produced by lmcrypt if the lmcrypt was created correctly in the first place.
+
+Other EDA vendors have their own license server daemons, e.g. mgcld is Mentor
+Graphics license server daemon.  The above steps can also be applied to these 
+other EDA vendors for their FlexNet/Flexlm license files provided you have 
+the lmcrypt.exe for particular EDA vendor. This lmcrypt.exe can be made
+from Flexlm SDK if you can figure out some keywords for each EDA vendor -
+search Internet for this hack.
+
+NOTES:
+In FlexNet (Flexlm) scheme, once all FEATUREs are set to uncounted (or 0) for the
+number of concurrent license uses in the FEATURE lines, the license server is
+no longer needed, that is, you DO NOT need to start up the SERVER DAEMON to
+run any of these features. Therefore, the SERVER, VENDOR, and USE_SERVER lines
+can be safely removed in the license,dat file, that is, the license.dat here is a
+pure FEATURE file without any other lines. In this case, make sure to use absolute
+PATH to the license.dat file for the environment variable CDS_LIC_FILE:
+CDS_LIC_FILE=<Cadence_install_dir>/license/license.dat 
+instead of CDS_LIC_FILE=port@hostname.
+
+User Guides for all Cadence tools can be found in <tool_install_dir>/doc directory, 
+e.g., user guides related to Virtuoso can be found in <IC616_install_dir>/doc and 
+specifically the Virtuoso Licensing & Configuration User Guide is in 
+<IC616_install_dir>/doc/dfIIconfig directory. You can find license strings/keys for 
+each Cadence tool in the respective doc directory, 
+e.g. <Conformal_install_dir>/doc/Conformal_Product
+
+Each Cadence tool also comes with a Flexim User Guide in <tool_install_dir>/share/license
+directory e.g. <INCISIVE_install_dir>/share/license

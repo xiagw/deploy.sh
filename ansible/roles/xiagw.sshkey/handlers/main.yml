@@ -1,0 +1,16 @@
+---
+# handlers file for xiagw.sshkey
+## restart sshd
+- name: Systemctl restart sshd
+  ansible.builtin.systemd:
+    name: sshd
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "Debian"
+
+- name: Systemctl restart sshd
+  ansible.builtin.systemd:
+    name: sshd
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "RedHat"

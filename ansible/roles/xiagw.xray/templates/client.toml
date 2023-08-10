@@ -1,0 +1,51 @@
+[log]
+  loglevel = "none"
+
+[routing]
+  domainStrategy = "AsIs"
+
+  [[routing.rules]]
+    type = "field"
+    domain = {{ xray_direct_outbound_domains }}
+    outboundTag = "direct"
+
+  [[routing.rules]]
+    type = "field"
+    ip = {{ xray_direct_outbound_ips }}
+    outboundTag = "direct"
+
+[[inbounds]]
+  port = {{ xray_socks_port }}
+  listen = "127.0.0.1"
+  protocol = "socks"
+
+  [inbounds.settings]
+    udp = true
+
+[[inbounds]]
+  port = {{ xray_http_port }}
+  listen = "127.0.0.1"
+  protocol = "http"
+
+[[outbounds]]
+  protocol = "vless"
+
+    [[outbounds.settings.vnext]]
+      address = "{{ xray_server_addr }}"
+      port = 443
+
+      [[outbounds.settings.vnext.users]]
+        id = "{{ xray_uuid }}"
+        flow = "xtls-rprx-direct"
+        encryption = "none"
+
+  [outbounds.streamSettings]
+    network = "tcp"
+    security = "xtls"
+
+      [outbounds.streamSettings.xtlsSettings]
+        serverName = "{{ xray_server_addr }}"
+
+[[outbounds]]
+  protocol = "freedom"
+  tag = "direct"

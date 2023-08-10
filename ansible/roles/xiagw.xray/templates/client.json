@@ -1,0 +1,312 @@
+{
+    "log": {
+        "loglevel": "warning"
+    },
+    "dns": {
+        "hosts": {
+            "v2.flyh6.com": "{{ xray_server }}",
+            "geosite:category-ads": "127.0.0.1"
+        },
+        "servers": [
+            {
+                "address": "114.114.114.114",
+                "port": 53,
+                "domains": [
+                    "geosite:cn",
+                    "ntp.org",
+                    "bing.com",
+                    "visualstudio.com"
+                ],
+                "expectIPs": [
+                    "geoip:cn"
+                ]
+            },
+            {
+                "address": "223.5.5.5",
+                "port": 53,
+                "domains": [
+                    "geosite:cn",
+                    "ntp.org",
+                    "bing.com"
+                ],
+                "expectIPs": [
+                    "geoip:cn"
+                ]
+            },
+            {
+                "address": "1.1.1.1",
+                "port": 53,
+                "domains": [
+                    "geosite:geolocation-!cn"
+                ]
+            },
+            {
+                "address": "8.8.8.8",
+                "port": 53,
+                "domains": [
+                    "geosite:geolocation-!cn"
+                ]
+            },
+            {
+                "address": "https://1.1.1.1/dns-query",
+                "domains": [
+                    "geosite:geolocation-!cn"
+                ]
+            },
+            "localhost"
+        ]
+    },
+    "routing": {
+        "domainStrategy": "IPOnDemand",
+        "rules": [
+            {
+                "type": "field",
+                "inboundTag": [
+                    "transparent"
+                ],
+                "port": 53,
+                "network": "udp",
+                "outboundTag": "dns-out"
+            },
+            {
+                "type": "field",
+                "inboundTag": [
+                    "transparent"
+                ],
+                "port": 123,
+                "network": "udp",
+                "outboundTag": "direct"
+            },
+            {
+                "type": "field",
+                "ip": [
+                    "223.5.5.5",
+                    "114.114.114.114"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "type": "field",
+                "outboundTag": "direct",
+                "protocol": [
+                    "bittorrent"
+                ]
+            },
+            {
+                "type": "field",
+                "outboundTag": "block",
+                "domain": [
+                    "geosite:category-ads-all"
+                ]
+            },
+            {
+                "type": "field",
+                "outboundTag": "direct",
+                "domain": [
+                    "geosite:cn",
+                    "bing.com",
+                    "microsoft.com",
+                    "msn.cn",
+                    "msn.com",
+                    "bing.net",
+                    "skype.com",
+                    "live.com",
+                    "visualstudio.com",
+                    "ustc.edu.cn"
+                ]
+            },
+            {
+                "type": "field",
+                "outboundTag": "direct",
+                "ip": [
+                    "geoip:private",
+                    "geoip:cn"
+                ]
+            },
+            {
+                "type": "field",
+                "outboundTag": "proxy",
+                "domain": [
+                    "geosite:geolocation-!cn"
+                ]
+            },
+            {
+                "type": "field",
+                "ip": [
+                    "1.1.1.1",
+                    "8.8.8.8",
+                    "8.8.4.4"
+                ],
+                "outboundTag": "proxy"
+            },
+            {
+                "type": "field",
+                "outboundTag": "proxy",
+                "inboundTag": [
+                    "http-in",
+                    "socks-in"
+                ],
+                "network": "udp,tcp"
+            },
+            {
+                "type": "field",
+                "outboundTag": "proxy-ss",
+                "inboundTag": [
+                    "http-in-ss",
+                    "socks-in-ss"
+                ],
+                "network": "udp,tcp"
+            }
+        ]
+    },
+    "inbounds": [
+        {
+            "tag": "transparent",
+            "port": 12345,
+            "listen": "0.0.0.0",
+            "protocol": "dokodemo-door",
+            "settings": {
+                "network": "tcp,udp",
+                "followRedirect": true
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls"
+                ]
+            },
+            "streamSettings": {
+                "sockopt": {
+                    "tproxy": "tproxy",
+                    "mark": 255
+                }
+            }
+        },
+        {
+            "tag": "http-in",
+            "port": 1080,
+            "listen": "0.0.0.0",
+            "protocol": "http"
+        },
+        {
+            "tag": "socks-in",
+            "port": 1081,
+            "listen": "0.0.0.0",
+            "protocol": "socks",
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls"
+                ]
+            },
+            "settings": {
+                "auth": "noauth"
+            }
+        },
+        {
+            "tag": "dns-in",
+            "port": 5354,
+            "listen": "0.0.0.0",
+            "protocol": "dokodemo-door",
+            "settings": {
+                "network": "tcp,udp"
+            }
+        },
+        {
+            "tag": "http-in-ss",
+            "port": 1082,
+            "listen": "0.0.0.0",
+            "protocol": "http"
+        },
+        {
+            "tag": "socks-in-ss",
+            "port": 1083,
+            "listen": "0.0.0.0",
+            "protocol": "socks",
+            "settings": {
+                "auth": "noauth",
+                "udp": true
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "tag": "direct",
+            "protocol": "freedom",
+            "settings": {
+                "domainStrategy": "UseIP"
+            },
+            "streamSettings": {
+                "sockopt": {
+                    "mark": 255
+                }
+            }
+        },
+        {
+            "tag": "proxy",
+            "protocol": "vless",
+            "settings": {
+                "vnext": [
+                    {
+                        "address": "{{ xray_server_name }}",
+                        "port": 443,
+                        "users": [
+                            {
+                                "id": "{{ xray_uuid }}",
+                                "encryption": "none",
+                                "level": 0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                    "serverName": "{{ xray_server_name }}"
+                },
+                "wsSettings": {
+                    "path": "/webs"
+                },
+                "sockopt": {
+                    "mark": 255
+                }
+            }
+        },
+        {
+            "tag": "proxy-ss",
+            "protocol": "shadowsocks",
+            "settings": {
+                "servers": [
+                    {
+                        "address": "hongkong.1.t.xxxx.pw",
+                        "port": 11541,
+                        "password": "xxxxxxx",
+                        "method": "chacha20-poly1305"
+                    }
+                ]
+            }
+        },
+        {
+            "tag": "block",
+            "protocol": "blackhole",
+            "settings": {
+                "response": {
+                    "type": "http"
+                }
+            }
+        },
+        {
+            "tag": "dns-out",
+            "protocol": "dns",
+            "streamSettings": {
+                "sockopt": {
+                    "mark": 255
+                }
+            }
+        }
+    ]
+}

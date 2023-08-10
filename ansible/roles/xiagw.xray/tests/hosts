@@ -1,0 +1,2 @@
+[all]
+srv0 ansible_host=example.com ansible_user=example-user

@@ -1,0 +1,18 @@
+---
+# common
+xray_client: false
+xray_uuid: "xxxxxxxxxxxxxxxxxx"
+xray_update_config: false
+xray_server_addr: "v2.xxxx.com"
+xray_server_ip: xx.xx.xx.xx
+# server
+xray_port: 443
+xray_from_proxyproto: false
+xray_fallback: 80
+xray_to_proxyproto: false
+xray_generate_client_config: false
+# client
+xray_socks_port: 1080
+xray_http_port: 1081
+xray_direct_outbound_domains: ["geosite:cn", "geosite:private"]
+xray_direct_outbound_ips: [ "geoip:cn", "geoip:private" ]
