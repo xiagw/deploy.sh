@@ -218,7 +218,7 @@ main() {
         mkdir -p "$app_path"/log
     fi
 
-    _msg "$me_path/$me_name begin ..." >>"$me_log"
+    _log "$me_path/$me_name begin ..." >>"$me_log"
 
     pids=()
 
