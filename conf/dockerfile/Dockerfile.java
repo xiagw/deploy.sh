@@ -6,6 +6,7 @@
 # ARG IMAGE_MVN=maven:3.6-jdk-11
 ARG IMAGE_MVN=maven:3.6-jdk-8
 ARG IMAGE_JDK=openjdk:8
+
 ## arch: arm64
 # ARG IMAGE_MVN=arm64v8/maven:3.6-jdk-8
 # ARG IMAGE_JDK=arm64v8/openjdk:8

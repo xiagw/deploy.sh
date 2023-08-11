@@ -204,10 +204,9 @@ main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
 
-    _msg "$me_path/$me_name begin ..." >>"$me_log"
-
-    pids=()
+    html_path=/var/www/html
     app_path="/app"
+
     if [ -w "$app_path" ]; then
         me_log="$app_path/${me_name}.log"
     elif [ -w "$me_path" ]; then
@@ -219,14 +218,15 @@ main() {
         mkdir -p "$app_path"/log
     fi
 
-    html_path=/var/www/html
+    _msg "$me_path/$me_name begin ..." >>"$me_log"
+
+    pids=()
 
     _set_jemalloc
 
     ## 初始化程序
-    if [ -f /opt/run.init.sh ]; then
-        bash /opt/run.init.sh
-    fi
+    [ -f /opt/init.sh ] && bash /opt/init.sh
+    [ -f /app/init.sh ] && bash /app/init.sh
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.nohup ]]; then
         start_nohup=1

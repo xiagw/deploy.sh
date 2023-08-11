@@ -2,24 +2,25 @@ ARG NODE_VER=16
 FROM node:${NODE_VER}
 
 ARG IN_CHINA=false
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG NPM_MIRROR=https://registry.npmmirror.com/
 
-WORKDIR /apps
+WORKDIR /app
 
-# SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+COPY ./root/ /
 RUN set -xe; \
-    if [ "$IN_CHINA" = true ]; then \
-    yarn config set registry https://registry.npm.taobao.org; \
-    npm config set registry https://registry.npm.taobao.org; \
+    if [ -f /opt/build.sh ]; then \
+    echo "found /opt/build.sh"; \
+    else \
+    curl -fLo /opt/build.sh $BUILD_URL; \
     fi; \
-    mkdir /.cache; \
-    chown -R node:node /.cache; \
-    npm install -g rnpm@1.9.0
+    bash /opt/build.sh
 
 USER node
 RUN set -xe; \
     if [ "$IN_CHINA" = true ]; then \
-    yarn config set registry https://registry.npm.taobao.org; \
-    npm config set registry https://registry.npm.taobao.org; \
+    yarn config set registry $NPM_MIRROR; \
+    npm config set registry $NPM_MIRROR; \
     else \
     :; \
     fi

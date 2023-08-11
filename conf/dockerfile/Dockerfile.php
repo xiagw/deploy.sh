@@ -1,8 +1,15 @@
-FROM ubuntu:22.04
+## arch: x86_64
+ARG IMAGE_NAME=ubuntu
+
+## arch: arm64
+# ARG IMAGE_NAME=arm64v8/ubuntu
+
+FROM ${IMAGE_NAME}:22.04
 
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
 ARG PHP_VERSION=8.1
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 
 ## for apt to be noninteractive
 ENV DEBIAN_FRONTEND noninteractive
@@ -27,7 +34,7 @@ RUN set -xe; \
     apt-get update -yqq; \
     apt-get install -yqq --no-install-recommends curl ca-certificates vim; \
     apt-get clean all && rm -rf /tmp/*; \
-    curl -fLo /opt/build.sh https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh; \
+    curl -fLo /opt/build.sh $BUILD_URL; \
     fi; \
     bash /opt/build.sh
 
