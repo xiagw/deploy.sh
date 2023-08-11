@@ -1,12 +1,12 @@
-ARG MYSQL_VERSION=8
-
 ## arch: x86_64
-ARG IMAGE_NAME=mysql
+# ARG IMAGE_NAME=mysql:8
+ARG IMAGE_NAME=mysql:5.7
 
 ## arch: arm64
-# ARG IMAGE_NAME=arm64v8/mysql
+# ARG IMAGE_NAME=arm64v8/mysql:8
+# ARG IMAGE_NAME=biarms/mysql:5.7
 
-FROM ${IMAGE_NAME}:${MYSQL_VERSION}
+FROM ${IMAGE_NAME}
 
 #####################################
 # Set Timezone
