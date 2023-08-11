@@ -194,14 +194,14 @@ _onbuild_php() {
     ## setup nginx for ThinkPHP
     rm -f /etc/nginx/sites-enabled/default
     curl -fLo /etc/nginx/sites-enabled/default \
-        $url_laradock_raw/php-fpm/root/opt/nginx.conf
+        "$url_laradock_raw"/php-fpm/root/opt/nginx.conf
 
     ## startup run.sh
     if [ -f "$run_sh" ]; then
         echo "Found $run_sh"
     else
         echo "Download $run_sh ..."
-        curl -fLo $run_sh $url_deploy_raw/conf/dockerfile/root$run_sh
+        curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
     fi
     chmod +x /opt/run.sh
 }
@@ -227,8 +227,8 @@ _build_mysql() {
         sed -i '/skip-host-cache/d' /etc/my.cnf
     fi
 
-    printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >$HOME/.my.cnf
-    printf "export LANG=C.UTF-8" >$HOME/.bashrc
+    printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >"$HOME"/.my.cnf
+    printf "export LANG=C.UTF-8\alias l='ls -al'" >"$HOME"/.bashrc
 
     chmod +x /opt/*.sh
 }
@@ -248,35 +248,43 @@ _build_node() {
 _build_maven() {
     # --settings=settings.xml --activate-profiles=main
     # mvn -T 1C install -pl $moduleName -am --offline
-    mvn --threads 1C --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package
+    mvn --threads 1C --update-snapshots -DskipTests $MVN_DEBUG -Dmaven.compile.fork=true clean package
 
-    ## TODO: mvn list *.jar
     mkdir /jars
-    find . -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' |
-        grep -vE 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' |
-        xargs -t -I {} cp -vf {} /jars/
+    jar_files=(
+        ./target/*.jar
+        ./*/target/*.jar
+        ./*/*/target/*.jar
+    )
+    for jar in "${jar_files[@]}"; do
+        [ -f "$jar" ] || continue
+        echo "$jar" | grep -E 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' ||
+            cp -vf "$jar" /jars/
+    done
     if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
+        yml_files=(
+            ./*/*/*/resources/*"${MVN_PROFILE:-main}".yml
+        )
         c=0
-        find . -type f -iname "*${MVN_PROFILE:-main}.yml" -o -iname "*${MVN_PROFILE:-main}.yaml" |
-            grep "/resources/" |
-            while read -r line; do
-                filename=${line##*/}
-                c=$((c + 1))
-                cp -vf "${line}" /jars/"${c}.${filename}"
-            done
+        for yml in "${yml_files[@]}"; do
+            [ -f "$yml" ] || continue
+            c=$((c + 1))
+            cp -vf "$yml" /jars/"${c}.${yml##*/}"
+        done
     fi
 }
 
 _build_jdk_runtime() {
-    apt-get update -q
-    $apt_opt less apt-utils libjemalloc2
+    apt-get update -yqq
+    $apt_opt less apt-utils
+    apt-get install -yqq libjemalloc2
     if [ "$INSTALL_FFMPEG" = true ]; then
         $apt_opt ffmpeg
     fi
     if [ "$INSTALL_FONTS" = true ]; then
         $apt_opt fontconfig
         fc-cache --force
-        curl --referer http://cdn.flyh6.com/ -Lo - $url_fly_cdn/fonts-2022.tgz |
+        curl --referer http://cdn.flyh6.com/ -Lo - "$url_fly_cdn"/fonts-2022.tgz |
             tar -C /usr/share -zxf -
     fi
     ## set ssl
@@ -289,7 +297,7 @@ _build_jdk_runtime() {
         echo "Found $run_sh"
     else
         echo "Download $run_sh ..."
-        curl -fLo $run_sh $url_deploy_raw/conf/dockerfile/root$run_sh
+        curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
     fi
     chmod +x /opt/run.sh
 

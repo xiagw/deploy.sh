@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 _msg() {
-    echo "[$(date)], [RUN] $*"
+    echo "[$(date +%Y%m%d-%T-%u)], [RUN] $*"
 }
 
 _log() {
-    echo "[$(date)], [RUN] $*" | tee -a "$me_log"
+    echo "[$(date +%Y%m%d-%T-%u)], [RUN] $*" | tee -a "$me_log"
 }
 
 _start_java() {
@@ -46,7 +46,7 @@ _start_java() {
             fi
         done
 
-        _msg "${cj}. start $jar $config_yml ..."
+        _msg "${cj}. found $jar $config_yml ..."
         if [ "$profile_name" ]; then
             ## 启动方式一， jar 内置配置(profile)文件 yml，
             $JAVA_OPTS -jar "$jar" "$profile_name" >>"$me_log" 2>&1 &
@@ -110,12 +110,13 @@ _start_php() {
     done
     if command -v nginx && nginx -t; then
         nginx -g "daemon off;" &
+        pids+=("$!")
     elif command -v apachectl && apachectl -t; then
         apachectl -k start -D FOREGROUND &
+        pids+=("$!")
     else
         _msg "Not found php."
     fi
-    pids+=("$!")
 }
 
 _schedule_upgrade() {
@@ -157,31 +158,35 @@ _schedule_upgrade() {
 }
 
 _set_jemalloc() {
+    ## ubuntu 22.04, disable, (php crash if enable jemalloc)
     case "$PHP_VERSION" in
     5.* | 7.* | 8.*)
         _msg "disable jemalloc."
         ;;
     *)
-        _msg "enable jemalloc..."
         lib_jemalloc=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
-        ## get $USE_JEMALLOC from deploy.env
-        if [ -f $lib_jemalloc ] && [ "${USE_JEMALLOC:-true}" = true ]; then
+        lib_jemalloc2=/usr/lib/aarch64-linux-gnu/libjemalloc.so.2
+        if [ -f $lib_jemalloc ]; then
             export LD_PRELOAD=$lib_jemalloc
+            _msg "set LD_PRELOAD=$LD_PRELOAD ..."
+        elif [ -f $lib_jemalloc2 ]; then
+            export LD_PRELOAD=$lib_jemalloc2
+            _msg "set LD_PRELOAD=$LD_PRELOAD ..."
         fi
-        # 1. lsof -Pn -p $(pidof mariadbd) | grep jemalloc，配置正确的话会有jemalloc.so的输出；
-        # 2. cat /proc/$(pidof mariadbd)/smaps | grep jemalloc，和上述命令有类似的输出。
         ;;
     esac
 }
 
 _check_jemalloc() {
+    # 1. lsof -Pn -p $(pidof mariadbd) | grep jemalloc，配置正确的话会有jemalloc.so的输出；
+    # 2. cat /proc/$(pidof mariadbd)/smaps | grep jemalloc，和上述命令有类似的输出。
     sleep 5
     for pid in "${pids[@]}"; do
         [ -f "/proc/$pid/smaps" ] || continue
         if grep -q jemalloc "/proc/$pid/smaps"; then
             _msg "PID $pid using jemalloc..."
         else
-            _msg "PID $pid not use jemalloc"
+            _msg "PID $pid not use jemalloc."
         fi
     done
 }
@@ -199,8 +204,9 @@ main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
 
-    pids=()
+    _msg "$me_path/$me_name begin ..." >>"$me_log"
 
+    pids=()
     app_path="/app"
     if [ -w "$app_path" ]; then
         me_log="$app_path/${me_name}.log"
@@ -216,8 +222,6 @@ main() {
     html_path=/var/www/html
 
     _set_jemalloc
-
-    _msg "startup $me_path/$me_name ..." >>"$me_log"
 
     ## 初始化程序
     if [ -f /opt/run.init.sh ]; then
@@ -240,25 +244,26 @@ main() {
         _schedule_upgrade
         sleep 60
     done &
+    pids+=("$!")
 
     _check_jemalloc &
 
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT PIPE QUIT TERM
 
+    ## 手工方式 shell 启动，非容器
     if [[ "${start_nohup:-0}" -eq 1 ]]; then
-        ## 手工方式 shell 启动，非容器
         _msg "startup method \"nohup\", exit."
+        return
+    fi
+    ## 容器内启动
+    if [[ "$start_debug" -eq 1 ]]; then
+        ## method 1: allow debug / 方便开发者调试，可以直接 kill java, 不会停止容器
+        exec tail -f "$app_path"/log/*.log
     else
-        ## 容器内启动
-        if [[ "$start_debug" -eq 1 ]]; then
-            ## method 1: allow debug / 方便开发者调试，可以直接 kill java, 不会停止容器
-            exec tail -f "$app_path"/log/*.log
-        else
-            ## method 2: use wait / kill java 会停止容器
-            tail -f "$me_log" &
-            wait
-        fi
+        ## method 2: use wait / 如果 kill java 就会停止容器
+        tail -f "$me_log" &
+        wait
     fi
 }
 
