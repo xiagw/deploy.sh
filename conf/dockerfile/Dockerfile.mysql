@@ -1,4 +1,4 @@
-ARG MYSQL_VERSION
+ARG MYSQL_VERSION=8
 
 ## arch: x86_64
 ARG IMAGE_NAME=mysql
@@ -11,11 +11,13 @@ FROM ${IMAGE_NAME}:${MYSQL_VERSION}
 #####################################
 # Set Timezone
 #####################################
+ARG IN_CHINA=false
 ARG TZ=UTC
 ARG MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 ARG MYSQL_SLAVE=false
 
 ENV TZ ${TZ}
+# ENV MYSQL_RANDOM_ROOT_PASSWORD=true
 
 # CMD ["mysqld"]
 

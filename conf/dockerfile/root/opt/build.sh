@@ -212,10 +212,8 @@ _build_mysql() {
     chmod o-rw /var/run/mysqld
 
     my_cnf=/etc/mysql/conf.d/my.cnf
-    if mysqld --version | grep '5\.7'; then
-        cp -f "$me_path"/my.5.7.cnf $my_cnf
-    elif mysqld --version | grep '8\.0'; then
-        cp -f "$me_path"/my.8.0.cnf $my_cnf
+    if mysqld --version | grep '8\..\.'; then
+        cp -f "$me_path"/my.8.cnf $my_cnf
     else
         cp -f "$me_path"/my.cnf $my_cnf
     fi
@@ -363,6 +361,8 @@ main() {
         _build_jdk_runtime
     elif command -v node; then
         _build_node
+    elif command -v mysql; then
+        _build_mysql
     fi
 
     # apt-get autoremove -y
@@ -373,7 +373,7 @@ main() {
             /opt/settings.xml \
             /opt/*.log
     fi
-    rm -rf /tmp/*
+    rm -rf /tmp/* /opt/*.cnf
 }
 
 main "$@"
