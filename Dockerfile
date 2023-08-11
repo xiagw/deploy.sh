@@ -1,4 +1,10 @@
-FROM ubuntu:22.04
+## arch: x86_64
+ARG IMAGE_NAME=ubuntu
+
+## arch: arm64
+# ARG IMAGE_NAME=arm64v8/ubuntu
+
+FROM ${IMAGE_NAME}:22.04
 
 WORKDIR /runner
 

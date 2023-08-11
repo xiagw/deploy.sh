@@ -4,9 +4,9 @@
 权限：运维部门/管理者
 
 ### .acme.sh/
-说明：使用 acme.sh 自动生产/更新 ssl 证书的程序和配置文件，例如 dns api
+说明：使用 acme.sh 自动生产/更新 ssl 证书的程序和配置文件，例如 dns api， 软链接到 ~/.acme.sh
 
-https://github.com/acmesh-official/acme.sh
+官网：https://github.com/acmesh-official/acme.sh
 
 ### .aws/
 说明：aws Access Key 管理配置文件机密。
@@ -48,7 +48,7 @@ https://github.com/acmesh-official/acme.sh
 权限：运维部门/管理者
 
 ### deploy.conf
-说明：deploy.sh 的项目配置文件，发布哪个项目到哪个服务器
+说明：deploy.sh 的项目配置文件，发布`哪个项目`到`哪个服务器`
 
 权限：运维部门/管理者/研发部门 可配置
 

@@ -6,5 +6,4 @@
 .gitlab-ci.yml
 data/
 docs/
-Dockerfile
-README*
+Dockerfile*

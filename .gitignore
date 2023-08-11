@@ -10,8 +10,10 @@ builds/
 cache/
 etc/
 
-## deploy.sh conf/ data/
+## deploy.sh conf/
 conf/deploy.*
+
+## data/
 data/**
 !data/README.md
 
