@@ -1,17 +1,19 @@
 #!/bin/bash
 
 _set_mirror() {
+    if [ "$1" = shanghai ]; then
+        ln -snf /usr/share/zoneinfo/"${TZ:-Asia/Shanghai}" /etc/localtime
+        echo "${TZ:-Asia/Shanghai}" >/etc/timezone
+        return
+    fi
     url_fly_cdn="http://cdn.flyh6.com/docker"
 
     if [ "$IN_CHINA" = true ] || [ "$CHANGE_SOURCE" = true ]; then
         url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
+        url_laradock_raw=https://gitee.com/xiagw/laradock/raw/in-china
     else
         url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
-    fi
-
-    if [ "$1" = timezone ]; then
-        ln -snf /usr/share/zoneinfo/"${TZ:-Asia/Shanghai}" /etc/localtime
-        echo "${TZ:-Asia/Shanghai}" >/etc/timezone
+        url_laradock_raw=https://github.com/xiagw/laradock/raw/main
     fi
 
     if [ "$IN_CHINA" = false ] && [ "${CHANGE_SOURCE}" = false ]; then
@@ -37,8 +39,7 @@ _set_mirror() {
         elif [ -f docs/settings.xml ]; then
             cp -vf docs/settings.xml $m2_dir/
         else
-            url_settings=$url_deploy_raw/conf/dockerfile/root/opt/settings.xml
-            curl -Lo $m2_dir/settings.xml $url_settings
+            curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
         fi
     fi
     ## PHP composer
@@ -48,12 +49,14 @@ _set_mirror() {
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
     fi
     ## node, npm, yarn
+    # npm_mirror=https://registry.npm.taobao.org/
+    npm_mirror=https://registry.npmmirror.com/
     if command -v npm; then
         addgroup -g 1000 -S php
         adduser -u 1000 -D -S -G php php
-        yarn config set registry https://registry.npm.taobao.org/
-        npm config set registry https://registry.npm.taobao.org/
-        su - node -c "yarn config set registry https://registry.npm.taobao.org/; npm config set registry https://registry.npm.taobao.org/"
+        yarn config set registry $npm_mirror
+        npm config set registry $npm_mirror
+        su - node -c "yarn config set registry $npm_mirror; npm config set registry $npm_mirror"
     fi
     ## python pip
     if command -v pip; then
@@ -83,7 +86,6 @@ _build_php() {
     echo "build php ..."
     # usermod -u 1000 www-data
     # groupmod -g 1000 www-data
-    apt_opt="apt-get install -yqq --no-install-recommends"
 
     apt-get update -yqq
     $apt_opt apt-utils libjemalloc2
@@ -163,6 +165,8 @@ _build_php() {
         -e '/pm.start_servers/s/2/10/' \
         -e '/pm.min_spare_servers/s/1/10/' \
         -e '/pm.max_spare_servers/s/3/20/' \
+        -e '/^;slowlog.*log\//s//slowlog = \/var\/log\/php/' \
+        -e '/^;request_slowlog_timeout.*/s//request_slowlog_timeout = 2/' \
         /etc/php/"${PHP_VERSION}"/fpm/pool.d/www.conf
     sed -i \
         -e "/memory_limit/s/128M/1024M/" \
@@ -190,10 +194,15 @@ _onbuild_php() {
     ## setup nginx for ThinkPHP
     rm -f /etc/nginx/sites-enabled/default
     curl -fLo /etc/nginx/sites-enabled/default \
-        https://gitee.com/xiagw/laradock/raw/in-china/php-fpm/root/opt/nginx.conf
+        $url_laradock_raw/php-fpm/root/opt/nginx.conf
 
     ## startup run.sh
-    curl -fLo /opt/run.sh $url_deploy_raw/conf/dockerfile/root/opt/run.sh
+    if [ -f "$run_sh" ]; then
+        echo "Found $run_sh"
+    else
+        echo "Download $run_sh ..."
+        curl -fLo $run_sh $url_deploy_raw/conf/dockerfile/root$run_sh
+    fi
     chmod +x /opt/run.sh
 }
 
@@ -241,6 +250,7 @@ _build_maven() {
     # mvn -T 1C install -pl $moduleName -am --offline
     mvn --threads 1C --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package
 
+    ## TODO: mvn list *.jar
     mkdir /jars
     find . -type f -regextype egrep -iregex '.*SNAPSHOT.*\.jar' |
         grep -vE 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' |
@@ -275,7 +285,12 @@ _build_jdk_runtime() {
         sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $sec_file
     fi
     ## startup run.sh
-    curl -Lo /opt/run.sh $url_deploy_raw/conf/dockerfile/root/opt/run.sh
+    if [ -f "$run_sh" ]; then
+        echo "Found $run_sh"
+    else
+        echo "Download $run_sh ..."
+        curl -fLo $run_sh $url_deploy_raw/conf/dockerfile/root$run_sh
+    fi
     chmod +x /opt/run.sh
 
     useradd -u 1000 spring
@@ -314,6 +329,8 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="$me_path/${me_name}.log"
+
+    run_sh=/opt/run.sh
     echo "build log file: $me_log"
 
     apt_opt="apt-get install -yqq --no-install-recommends"
@@ -329,9 +346,8 @@ main() {
 
     if command -v nginx; then
         _build_nginx
-        return
     elif [ -n "$PHP_VERSION" ]; then
-        _set_mirror timezone
+        _set_mirror shanghai
         _build_php
     elif command -v mvn && [ -n "$MVN_PROFILE" ]; then
         _build_maven
@@ -342,11 +358,14 @@ main() {
     fi
 
     # apt-get autoremove -y
-    apt-get clean all
-    rm -rf \
-        /var/lib/apt/lists/* \
-        /tmp/* \
-        /opt/settings.xml
+    if command -v apt-get; then
+        apt-get clean all
+        rm -rf \
+            /var/lib/apt/lists/* \
+            /opt/settings.xml \
+            /opt/*.log
+    fi
+    rm -rf /tmp/*
 }
 
 main "$@"
