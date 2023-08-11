@@ -1,5 +1,12 @@
 ARG MYSQL_VERSION
-FROM mysql:${MYSQL_VERSION}
+
+## arch: x86_64
+ARG IMAGE_NAME=mysql
+
+## arch: arm64
+# ARG IMAGE_NAME=arm64v8/mysql
+
+FROM ${IMAGE_NAME}:${MYSQL_VERSION}
 
 #####################################
 # Set Timezone
@@ -10,7 +17,7 @@ ARG MYSQL_SLAVE=false
 
 ENV TZ ${TZ}
 
-CMD ["mysqld"]
+# CMD ["mysqld"]
 
 EXPOSE 3306
 
