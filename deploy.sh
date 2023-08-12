@@ -9,9 +9,6 @@
 #
 ################################################################################
 
-set -e ## 出现错误自动退出
-# set -u ## 变量未定义报错
-
 _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
@@ -621,7 +618,7 @@ _renew_cert() {
             _msg "dns type: Goddady."
             api_goddady="https://api.godaddy.com/v1/domains"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
-            domains="$(curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain')"
+            domains="$(curl -x "$ENV_HTTP_PROXY" -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain')"
             ;;
         dns_cf)
             _msg "dns type: cloudflare."
@@ -1423,6 +1420,8 @@ _set_args() {
 }
 
 main() {
+    set -e ## 出现错误自动退出
+    # set -u ## 变量未定义报错
     _msg time "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _set_args "$@"
