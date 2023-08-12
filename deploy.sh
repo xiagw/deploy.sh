@@ -618,7 +618,8 @@ _renew_cert() {
             _msg "dns type: Goddady."
             api_goddady="https://api.godaddy.com/v1/domains"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
-            domains="$(curl -x "$ENV_HTTP_PROXY" -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain')"
+            [ -z "$ENV_HTTP_PROXY" ] || curl_opt="curl -x $ENV_HTTP_PROXY"
+            domains="$(${curl_opt:-curl} -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain')"
             ;;
         dns_cf)
             _msg "dns type: cloudflare."
