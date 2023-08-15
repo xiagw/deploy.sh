@@ -1,6 +1,8 @@
 ##############################
 #    docker build stage 1    #
 ##############################
+# https://blog.frankel.ch/faster-maven-builds/2/
+# RUN --mount=type=cache,target=/root/.m2 bash -xe /opt/build.sh
 
 ## arch: x86_64
 # ARG IMAGE_MVN=maven:3.6-jdk-11
@@ -22,16 +24,15 @@ ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/op
 WORKDIR /src
 COPY . .
 COPY ./root/ /
-# SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 RUN set -xe; \
     if [ -f /opt/build.sh ]; then \
     echo "found /opt/build.sh"; \
     else \
     curl -fLo /opt/build.sh $BUILD_URL; \
     fi
-RUN bash /opt/build.sh
-# https://blog.frankel.ch/faster-maven-builds/2/
-# RUN --mount=type=cache,target=/root/.m2 curl -fL https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/build.sh | bash
+## 若此处出现错误，请检查你的maven打包是否正常
+RUN bash -xe /opt/build.sh
 
 
 
