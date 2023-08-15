@@ -262,6 +262,7 @@ _build_maven() {
     if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
         yml_files=(
             ./*/*/*/resources/*"${MVN_PROFILE:-main}".yml
+            ./*/*/*/resources/*"${MVN_PROFILE:-main}".yaml
         )
         c=0
         for yml in "${yml_files[@]}"; do
@@ -275,6 +276,7 @@ _build_maven() {
 _build_jdk_runtime() {
     apt-get update -yqq
     $apt_opt less apt-utils
+    ## disable --no-install-recommends
     apt-get install -yqq libjemalloc2
     if [ "$INSTALL_FFMPEG" = true ]; then
         $apt_opt ffmpeg
@@ -297,7 +299,7 @@ _build_jdk_runtime() {
         echo "Download $run_sh ..."
         curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
     fi
-    chmod +x /opt/run.sh
+    chmod +x $run_sh
 
     useradd -u 1000 spring
     chown -R 1000:1000 /app
@@ -365,15 +367,13 @@ main() {
         _build_mysql
     fi
 
-    # apt-get autoremove -y
+    ## clean
     if command -v apt-get; then
+        apt-get autoremove -y
         apt-get clean all
-        rm -rf \
-            /var/lib/apt/lists/* \
-            /opt/settings.xml \
-            /opt/*.log
+        rm -rf /var/lib/apt/lists/*
     fi
-    rm -rf /tmp/* /opt/*.cnf
+    rm -rf /tmp/* /opt/*.{cnf,xml,log}
 }
 
 main "$@"
