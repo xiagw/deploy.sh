@@ -606,7 +606,9 @@ _renew_cert() {
 
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     for file in "${files_account[@]}"; do
-        if [ ! -f "$file" ]; then
+        if [ -f "$file" ]; then
+            _msg time "Found $file"
+        else
             continue
         fi
         source "$file"
@@ -615,19 +617,19 @@ _renew_cert() {
         profile_name=${profile_name##*.}
         case "${dns_type}" in
         dns_gd)
-            _msg "dns type: Goddady."
+            _msg warn "dns type: Goddady"
             api_goddady="https://api.godaddy.com/v1/domains"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
             [ -z "$ENV_HTTP_PROXY" ] || curl_opt="curl -x $ENV_HTTP_PROXY"
             domains="$(${curl_opt:-curl} -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain')"
             ;;
         dns_cf)
-            _msg "dns type: cloudflare."
+            _msg warn "dns type: cloudflare"
             _install_flarectl
             domains="$(flarectl zone list | awk '/active/ {print $3}')"
             ;;
         dns_ali)
-            _msg "dns type: aliyun."
+            _msg warn "dns type: aliyun"
             _install_aliyun_cli
             aliyun configure set \
                 --profile "deploy_${profile_name}" \
