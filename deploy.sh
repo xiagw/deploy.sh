@@ -675,7 +675,7 @@ _get_balance_aliyun() {
     local alarm_balance=${ENV_ALARM_BALANCE_ALIYUN:-3000}
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
         if [[ $ENV_TAKE_ALIYUN_PROFILE == "$p" ]]; then
-            echo "Aliyun profile is: $p"
+            _msg time "Aliyun profile is: $p"
         else
             continue
         fi
