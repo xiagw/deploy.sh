@@ -573,26 +573,12 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
     fi
 }
 
-_nginx_gitlab_create_pipeline() {
-    if [ -f "$file_reload_nginx" ]; then
-        _msg info "found .reload.nginx"
-    else
-        _msg warn "not found .reload.nginx"
-        return 0
-    fi
-    for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
-        _msg "gitlab create pipeline, project id is $id"
-        gitlab project-pipeline create --ref main --project-id $id
-    done
-    rm -f "$file_reload_nginx"
-}
-
 _renew_cert() {
     _msg step "[cert] renew cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_install_dest="${acme_home}/${ENV_CERT_INSTALL:-dest}"
-    file_reload_nginx="${acme_home}/.reload.nginx"
+    file_reload_nginx="${acme_home}/.need.reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
@@ -653,14 +639,23 @@ _renew_cert() {
                 "${acme_cmd}" --renew -d "${domain}" --renew-hook "touch $file_reload_nginx" || true
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type
+                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "touch $file_reload_nginx" || true
             fi
             ## install certs to dest folder
             "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
         done
     done
     ## deploy with gitlab CI/CD,
-    _nginx_gitlab_create_pipeline
+    if [ -f "$file_reload_nginx" ]; then
+        _msg info "found $file_reload_nginx"
+        rm -f "$file_reload_nginx"
+        for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
+            _msg "gitlab create pipeline, project id is $id"
+            gitlab project-pipeline create --ref main --project-id $id
+        done
+    else
+        _msg warn "not found $file_reload_nginx"
+    fi
     ## Custom deployment method / 自定义部署方式
     if [[ -f "${acme_home}/custom.acme.sh" ]]; then
         echo "Found ${acme_home}/custom.acme.sh"
