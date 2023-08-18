@@ -28,8 +28,8 @@ for ver in "${vers[@]}"; do
 
     docker tag deploy/php:"$ver" laradock-php-fpm
     docker save laradock-php-fpm | gzip -c >/tmp/laradock-php-fpm.$ver.tar.gz
-    ossutil cp /tmp/laradock-php-fpm.$ver.tar.gz oss://bucket_name/docker/ -f
-
+    select b in $(ossutil ls | grep '^oss:'); do
+        ossutil cp /tmp/laradock-php-fpm.$ver.tar.gz $b/docker/ -f
+    done
     rm -f Dockerfile.php2
 done
-

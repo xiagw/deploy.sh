@@ -88,7 +88,8 @@ _build_php() {
     # groupmod -g 1000 www-data
 
     apt-get update -yqq
-    $apt_opt apt-utils libjemalloc2
+    apt-get install -yqq libjemalloc2
+    $apt_opt apt-utils
 
     ## preesed tzdata, update package index, upgrade packages and install needed software
     truncate -s0 /tmp/preseed.cfg
@@ -112,7 +113,7 @@ _build_php() {
     *)
         echo "install PHP from ppa:ondrej/php..."
         apt-get install -yqq lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
-        add-apt-repository ppa:ondrej/php
+        LC_ALL=C.UTF-8 add-apt-repository ppa:ondrej/php
         case "$PHP_VERSION" in
         8.*)
             :
