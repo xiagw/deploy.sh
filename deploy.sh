@@ -1163,26 +1163,23 @@ _setup_gitlab_vars() {
 
 _probe_langs() {
     _msg step "[langs] probe language"
-    for f in pom.xml {composer,package}.json requirements.txt {README,readme}.{md,txt}; do
+    for f in pom.xml {composer,package}.json requirements*.txt {README,readme}.{md,txt}; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
+        echo "Found $f"
         case $f in
         composer.json)
-            echo "Found composer.json"
             project_lang=php
             break
             ;;
         package.json)
-            echo "Found package.json"
             project_lang=node
             break
             ;;
         pom.xml)
-            echo "Found pom.xml"
             project_lang=java
             break
             ;;
-        requirements.txt)
-            echo "Found requirements.txt"
+        requirements*.txt)
             project_lang=python
             break
             ;;
@@ -1201,18 +1198,17 @@ _probe_deploy_method() {
     _msg step "[probe] deploy method"
     for f in Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
+        echo "Found $f"
         case $f in
         docker-compose.yml)
-            echo "Found docker-compose.yml"
             exec_build_image=0
             exec_push_image=0
             exec_deploy_k8s=0
             exec_deploy_single_host=1
             ;;
         Dockerfile)
-            echo "Found Dockerfile"
-            echo "Enable build with docker"
-            echo "Enable deploy with helm"
+            echo "build with docker"
+            echo "deploy with helm"
             exec_build_langs=0
             exec_build_image=1
             exec_push_image=1
