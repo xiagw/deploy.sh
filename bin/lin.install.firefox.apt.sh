@@ -151,15 +151,15 @@ ask_user_swapping_firefox_install_is_ok() {
     # shellcheck disable=SC2086,SC2162
     read -p "May we proceed? (y/n)? " yn
     case $yn in
-      [Yy]*)
-        echo "Removing Firefox, please wait 5 minutes, we will tell you when it is done."
-        break
-        ;;
-      [Nn]*)
-        echo "Installation terminated by user."
-        exit 3
-        ;;
-      *) echo "Please answer yes or no." >/dev/tty ;;
+    [Yy]*)
+      echo "Removing Firefox, please wait 5 minutes, we will tell you when it is done."
+      break
+      ;;
+    [Nn]*)
+      echo "Installation terminated by user."
+      exit 3
+      ;;
+    *) echo "Please answer yes or no." >/dev/tty ;;
     esac
   done
 }

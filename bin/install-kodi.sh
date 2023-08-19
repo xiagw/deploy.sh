@@ -4,13 +4,13 @@ export http_proxy='http://192.168.6.1:1080'
 export https_proxy='http://192.168.6.1:1080'
 export all_proxy='http://192.168.6.1:1080'
 apt_opt='sudo -E apt'
+## 不升级 kernel
+sudo -E apt-mark hold linux-image-generic linux-headers-generic
+
 ## 本机安装  openssh-server
 $apt_opt update
 $apt_opt autoremove
 $apt_opt install -y openssh-server
-
-## 不升级 kernel
-sudo -E apt-mark hold linux-image-generic linux-headers-generic
 
 ## 添加 kodi 仓库
 $apt_opt install -y software-properties-common

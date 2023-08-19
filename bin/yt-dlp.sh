@@ -13,8 +13,9 @@ elif command -v youtube-dl; then
     yt_opt='youtube-dl'
 else
     echo "command \"$yt_opt\" not found"
-    echo "brew install yt-dlp"
-    echo "python3 -m pip install yt-dlp"
+    echo "    brew install yt-dlp"
+    echo "    OR"
+    echo "    python3 -m pip install yt-dlp"
     exit 1
 fi
 
@@ -50,8 +51,9 @@ while [ $# -ge 0 ]; do
         ;;
     *)
         urls=("$@")
-        if [ ${#urls[@]} -eq 0 ] && [ -f "$url_file" ]; then
-            urls=($(grep -v '^#' "$url_file"))
+        if [ -f "$url_file" ] && [ "${#urls[@]}" -eq 0 ]; then
+            IFS=" " read -r -a urls <<<"$(grep -v '^#' "$url_file")"
+            # urls=($(grep -v '^#' "$url_file"))
         fi
         break
         ;;
