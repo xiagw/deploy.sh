@@ -52,8 +52,8 @@ while [ $# -ge 0 ]; do
     *)
         urls=("$@")
         if [ -f "$url_file" ] && [ "${#urls[@]}" -eq 0 ]; then
-            IFS=" " read -r -a urls <<<"$(grep -v '^#' "$url_file")"
-            # urls=($(grep -v '^#' "$url_file"))
+            # IFS=" " read -r -a urls <<<"$(grep -v '^#' "$url_file")"
+            urls=($(grep -v '^#' "$url_file"))
         fi
         break
         ;;
