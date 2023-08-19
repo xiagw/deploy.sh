@@ -2,6 +2,7 @@
 
 _set_mirror() {
     if [ "$1" = shanghai ]; then
+        export TZ=Asia/Shanghai
         ln -snf /usr/share/zoneinfo/"${TZ:-Asia/Shanghai}" /etc/localtime
         echo "${TZ:-Asia/Shanghai}" >/etc/timezone
         return
@@ -84,24 +85,28 @@ _build_nginx() {
 
 _build_php() {
     echo "build php ..."
-    # usermod -u 1000 www-data
-    # groupmod -g 1000 www-data
-
     apt-get update -yqq
-    apt-get install -yqq libjemalloc2
+    # apt-get install -yqq libjemalloc2
     $apt_opt apt-utils
+    # $apt_opt libterm-readkey-perl
+    $apt_opt vim curl ca-certificates
+    # apt-get install -y language-pack-en-base
 
     ## preesed tzdata, update package index, upgrade packages and install needed software
-    truncate -s0 /tmp/preseed.cfg
-    echo "tzdata tzdata/Areas select Asia" >>/tmp/preseed.cfg
-    echo "tzdata tzdata/Zones/Asia select Shanghai" >>/tmp/preseed.cfg
+    (
+        echo "tzdata tzdata/Areas select Asia"
+        echo "tzdata tzdata/Zones/Asia select Shanghai"
+    ) >/tmp/preseed.cfg
     debconf-set-selections /tmp/preseed.cfg
     rm -f /etc/timezone /etc/localtime
+
+    export DEBIAN_FRONTEND=noninteractive
+    # export TZ=Asia/Shanghai
 
     $apt_opt tzdata
     $apt_opt locales
 
-    if ! grep -q '^en_US.UTF-8' /etc/locale.gen; then
+    if ! grep '^en_US.UTF-8' /etc/locale.gen; then
         echo 'en_US.UTF-8 UTF-8' >>/etc/locale.gen
     fi
     locale-gen en_US.UTF-8
@@ -113,7 +118,7 @@ _build_php() {
     *)
         echo "install PHP from ppa:ondrej/php..."
         apt-get install -yqq lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
-        LC_ALL=C.UTF-8 add-apt-repository ppa:ondrej/php
+        LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
         case "$PHP_VERSION" in
         8.*)
             :
@@ -127,7 +132,6 @@ _build_php() {
 
     apt-get upgrade -yqq
     $apt_opt \
-        vim curl ca-certificates \
         php"${PHP_VERSION}" \
         php"${PHP_VERSION}"-redis \
         php"${PHP_VERSION}"-mongodb \

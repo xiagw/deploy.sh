@@ -9,9 +9,16 @@ else
     vers=("$1")
 fi
 
+if command -v podman; then
+    cmd='podman'
+    cmd_opt='build --force-rm --format=docker'
+else
+    cmd='docker'
+    cmd_opt='build'
+fi
 for ver in "${vers[@]}"; do
     tag="fly-php${ver/./}"
-    DOCKER_BUILDKIT=0 docker build \
+    DOCKER_BUILDKIT=0 $cmd $cmd_opt\
         --build-arg PHP_VERSION="$ver" \
         --build-arg IN_CHINA="true" \
         -f Dockerfile.php \
@@ -20,16 +27,16 @@ for ver in "${vers[@]}"; do
 
     echo "FROM deploy/base:$tag" >Dockerfile.php2
 
-    DOCKER_BUILDKIT=0 docker build \
+    DOCKER_BUILDKIT=0 $cmd $cmd_opt \
         --build-arg BASE_TAG="$tag" \
         -f Dockerfile.php2 \
         -t deploy/php:"$ver" \
         "$me_path"
+    rm -f Dockerfile.php2
 
-    docker tag deploy/php:"$ver" laradock-php-fpm
-    docker save laradock-php-fpm | gzip -c >/tmp/laradock-php-fpm.$ver.tar.gz
-    select b in $(ossutil ls | grep '^oss:'); do
+    $cmd tag deploy/php:"$ver" laradock-php-fpm
+    $cmd save laradock-php-fpm | gzip -c >/tmp/laradock-php-fpm.$ver.tar.gz
+    select b in $(ossutil ls -s | grep '^oss:'); do
         ossutil cp /tmp/laradock-php-fpm.$ver.tar.gz $b/docker/ -f
     done
-    rm -f Dockerfile.php2
 done
