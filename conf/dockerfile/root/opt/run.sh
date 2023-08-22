@@ -166,13 +166,12 @@ _set_jemalloc() {
     *)
         lib_jemalloc=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
         lib_jemalloc2=/usr/lib/aarch64-linux-gnu/libjemalloc.so.2
-        if [ -f $lib_jemalloc ]; then
-            export LD_PRELOAD=$lib_jemalloc
+        for f in $lib_jemalloc $lib_jemalloc2; do
+            [ -f "$f" ] || continue
+            export LD_PRELOAD=$f
             _msg "set LD_PRELOAD=$LD_PRELOAD ..."
-        elif [ -f $lib_jemalloc2 ]; then
-            export LD_PRELOAD=$lib_jemalloc2
-            _msg "set LD_PRELOAD=$LD_PRELOAD ..."
-        fi
+            break
+        done
         ;;
     esac
 }
