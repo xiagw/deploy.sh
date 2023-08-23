@@ -1338,12 +1338,6 @@ _set_args() {
             quiet_flag=
             github_action=1
             ;;
-        --get-balance)
-            arg_get_balance=1 && exec_single=$((exec_single + 1))
-            ;;
-        --renew-cert | -r)
-            arg_renew_cert=1 && exec_single=$((exec_single + 1))
-            ;;
         --svn-checkout)
             arg_svn_checkout=1
             arg_svn_checkout_url="${2:?empty svn url}"
@@ -1357,6 +1351,12 @@ _set_args() {
         --git-clone-branch)
             arg_git_clone_branch="${2:?empty git clone branch}"
             shift
+            ;;
+        --get-balance)
+            arg_get_balance=1 && exec_single=$((exec_single + 1))
+            ;;
+        --renew-cert | -r)
+            arg_renew_cert=1 && exec_single=$((exec_single + 1))
             ;;
         --code-style)
             arg_code_style=1 && exec_single=$((exec_single + 1))
@@ -1380,8 +1380,7 @@ _set_args() {
             arg_deploy_k8s=1 && exec_single=$((exec_single + 1))
             ;;
         --deploy-flyway)
-            # arg_deploy_flyway=1
-            exec_single=$((exec_single + 1))
+            arg_deploy_flyway=1 && exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync-ssh)
             arg_deploy_rsync_ssh=1 && exec_single=$((exec_single + 1))
@@ -1445,6 +1444,8 @@ main() {
         "$me_path_bin"
         "$me_path_data_bin"
         "$HOME/.local/bin"
+        "$HOME/.acme.sh"
+        "$me_path_data/.acme.sh"
         "$HOME/.config/composer/vendor/bin"
     )
     for p in "${paths_to_append[@]}"; do
@@ -1538,6 +1539,7 @@ main() {
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _check_quality_sonar
         [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
+        [[ "${arg_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
         [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
