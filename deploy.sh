@@ -505,22 +505,30 @@ _notify_zoom() {
     # Send message to Zoom channel
     # ENV_ZOOM_CHANNEL="https://api.zoom.us/v2/im/chat/messages"
     #
-    curl -X POST -H "Content-Type: application/json" -d '{"text": "'"${msg_body}"'"}' "${ENV_ZOOM_CHANNEL}"
+    curl -s -X POST -H "Content-Type: application/json" -d '{"text": "'"${msg_body}"'"}' "${ENV_ZOOM_CHANNEL}"
 }
 
 _notify_feishu() {
     # Send message to Feishu 飞书
     # ENV_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-url"
-    curl -X POST -H "Content-Type: application/json" -d '{"text": "'"$msg_body"'"}' "$ENV_WEBHOOK_URL"
+    curl -s -X POST -H "Content-Type: application/json" -d '{"text": "'"$msg_body"'"}' "$ENV_WEBHOOK_URL"
 }
 
 _notify_wechat_work() {
     # Send message to weixin_work 企业微信
     local wechat_key=$1
+    file_msg_body=$(mktemp)
+    cat >$file_msg_body <<EOF
+{
+    "msgtype": "text",
+    "text": {
+        "content": "$msg_body"
+    }
+}
+EOF
     wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wechat_key"
-    curl -s -H 'Content-Type: application/json' \
-        -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" \
-        "$wechat_api"
+    curl -s -X POST -H 'Content-Type: application/json' -d @$file_msg_body "$wechat_api"
+    rm -f $file_msg_body
 }
 
 _deploy_notify() {
@@ -538,26 +546,30 @@ Result = $([ "${deploy_result:-0}" = 0 ] && echo OK || echo FAIL)
 $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi)
 "
 
-    if [[ "${ENV_NOTIFY_WECHAT:-0}" -eq 1 ]]; then
+    case ${ENV_NOTIFY_TYPE:-skip} in
+    wechat)
         ## work chat / 发送至 企业微信
-        _msg time "to wechat work"
+        _msg time "notify to wechat work"
         _notify_wechat_work ${ENV_WEIXIN_KEY}
-    elif [[ "${ENV_NOTIFY_TELEGRAM:-0}" -eq 1 ]]; then
+        ;;
+    telegram)
         ## Telegram / 发送至 Telegram
-        _msg time "to Telegram"
-        telegram_api_msg="https://api.telegram.org/bot${ENV_API_KEY_TG:? ERR: empty api key}/sendMessage"
-        # telegram_api_doc="https://api.telegram.org/bot${ENV_API_KEY_TG:? ERR: empty api key}/sendDocument"
+        _msg time "notify to Telegram"
+        telegram_api_msg="https://api.telegram.org/bot${ENV_TG_API_KEY}/sendMessage"
+        # telegram_api_doc="https://api.telegram.org/bot${ENV_TG_API_KEY}/sendDocument"
         msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
-        curl -L -sS -o /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID:? ERR: empty api key}&text=$msg_body" "$telegram_api_msg"
-    elif [[ "${ENV_NOTIFY_ELEMENT:-0}" -eq 1 && "${PIPELINE_TEMP_PASS:-0}" -ne 1 ]]; then
+        curl -sSLo /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID}&text=$msg_body" "$telegram_api_msg"
+        ;;
+    element)
         ## element / 发送至 element
-        _msg time "to Element"
+        _msg time "notify to Element"
         python3 "$me_path_data_bin/element.py" "$msg_body"
-    elif [[ "${ENV_NOTIFY_EMAIL:-0}" -eq 1 ]]; then
+        ;;
+    email)
         ## email / 发送至 email
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
-        _msg time "to Email"
+        _msg time "notify to Email"
         "$me_path_bin/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
@@ -568,9 +580,11 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
             -o message-charset=utf-8 \
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
             -m "$msg_body"
-    else
+        ;;
+    *)
         _msg "<skip>"
-    fi
+        ;;
+    esac
 }
 
 _renew_cert() {
