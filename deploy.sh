@@ -634,14 +634,15 @@ _renew_cert() {
         /usr/bin/cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
-            if [ -d "${acme_home}/$domain" ]; then
+            if "${acme_cmd}" list | grep -q "$domain"; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" --renew-hook "touch $file_reload_nginx" || true
+                "${acme_cmd}" --renew -d "${domain}" && touch $file_reload_nginx || true
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "touch $file_reload_nginx" || true
+                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type && touch $file_reload_nginx || true
             fi
             ## install certs to dest folder
+            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.crt"
             "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
         done
     done
