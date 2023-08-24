@@ -259,13 +259,10 @@ _build_image_docker() {
         fi
     fi
     ## docker build
-    echo "ENV_COPY_YAML: ${ENV_COPY_YAML:-false}"
-    echo "PIPELINE_COPY_YAML: ${PIPELINE_COPY_YAML:-false}"
     docker build $ENV_ADD_HOST $quiet_flag \
         --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" \
-        --build-arg MVN_COPY_YAML="${ENV_COPY_YAML:-${PIPELINE_COPY_YAML:-false}}" \
         "${gitlab_project_dir}"
     if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
         ## docker push to ttl.sh
@@ -285,13 +282,10 @@ _build_image_podman() {
 
     _msg step "[image] build image with podman"
     ## podman build
-    echo "ENV_COPY_YAML: ${ENV_COPY_YAML:-false}"
-    echo "PIPELINE_COPY_YAML: ${PIPELINE_COPY_YAML:-false}"
     podman build $ENV_ADD_HOST $quiet_flag \
         --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" \
-        --build-arg MVN_COPY_YAML="${ENV_COPY_YAML:-${PIPELINE_COPY_YAML:-false}}" \
         "${gitlab_project_dir}"
 }
 
