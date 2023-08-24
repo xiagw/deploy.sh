@@ -1,5 +1,5 @@
 variables:
-  GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e vendor/ -e yarn.lock -e composer.lock
+  GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e vendor/ -e yarn.lock -e composer.lock -e .dockerignore
 
 stages:
   - code_style

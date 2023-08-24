@@ -34,7 +34,7 @@ It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
 
 # Installation
 ```
-git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
+git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
 # How to automatically detect the programming language
@@ -46,6 +46,7 @@ git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 project_lang=shell
 
 # Quickstart
+
 ### option [1]. deploy.sh manually
 ```
 ## If your project repository already exists
@@ -57,6 +58,7 @@ $HOME/runner/deploy.sh
 ## If your project repository dose not exist. (deploy.sh will clone it)
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
+
 ### option [2]. deploy.sh automated
 ```
 ## crontab
@@ -80,10 +82,11 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. setup job, run custom shell, `bash $HOME/runner/deploy.sh`
 
 
-# Examples
-### (with GitLab Server and GitLab-Runner)
+# Examples (with GitLab Server and GitLab-Runner)
+
 ### Step 1: Prepair Gitlab server
 There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
+
 ### Step 2: Prepair Gitlab Runner server
 There is already a server that has installed gitlab-runner and register to Gitlab server, (executer is shell)
 
@@ -99,6 +102,7 @@ SSH login to the gitlab-runner server
 ```
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
+
 ### Step 5: Update $HOME/runner/data/deploy.conf, $HOME/runner/data/deploy.env
 Refer to the conf/example-deploy.conf, conf/example-deploy.env, change to yours configure
 ```
@@ -106,12 +110,14 @@ cd $HOME/runner
 cp conf/example-deploy.conf data/deploy.conf      ## change to yours
 cp conf/example-deploy.env data/deploy.env        ## change to yours
 ```
+
 ### Step 6: Create Gitlab project on gitlab server
 Example: created `project-A` under the root account on gitlab-server (root/project-A)
+
 ### Step 7: Create root/project-A/.gitlab-ci.yml on gitlab server
 Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
-### Step 8: Enjoy CI/CD
 
+### Step 8: Enjoy CI/CD
 
 # FAQ
 ### How to create Helm files for applications project
@@ -120,6 +126,7 @@ If you use helm to deploy to k8s, change helm-new.sh for yours (default open por
 bash $HOME/runner/bin/helm-new.sh
 ## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
+
 ### How to resolve gitlab-runner fail
 If you use Ubuntu, just `rm -f $HOME/.bash_logout`
 
@@ -192,8 +199,8 @@ Welcome create Issue or create PR
 It would be much appreciated if you want to make a small donation to support my work!
 Alipay, WeChat Pay, BitCoin are avaliable for donation. You can chose any of them.
 
-| Alipay                                                 | WeChat Pay                                                |
-|--------------------------------------------------------|-----------------------------------------------------------|
+| Alipay | WeChat Pay |
+| ---- | ---- |
 | <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/pay-alipay.jpg width="250" height="250"> | <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/pay-wechatpay.jpg width="250" height="250"> |
 
 ### Digital Currency:
