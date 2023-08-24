@@ -293,9 +293,9 @@ _build_image_docker() {
 }
 
 _build_image_podman() {
-    _is_github_action && return 0
-
     _msg step "[image] build image with podman"
+    _is_github_action && return 0
+    _is_demo_mode "push-image" && return 0
     ## podman build
     podman build $ENV_ADD_HOST $quiet_flag \
         --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
@@ -306,9 +306,9 @@ _build_image_podman() {
 
 _push_image() {
     _msg step "[image] push image with docker"
-    _docker_login
     _is_github_action && return 0
     _is_demo_mode "push-image" && return 0
+    _docker_login
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
         docker rmi "${ENV_DOCKER_REGISTRY}:${image_tag}"
     else
@@ -350,7 +350,8 @@ _deploy_k8s() {
         path_helm="${me_path_data}/helm/${helm_release}"
         bash "$me_path_bin/helm-new.sh" ${helm_release}
     fi
-    echo -e "Found helm files: $path_helm \n"
+    echo "Found helm files: $path_helm"
+    echo '## -------- cut line --------'
     cat <<EOF
 $helm_opt upgrade ${helm_release} $path_helm/ \
 --install --history-max 1 \
@@ -360,7 +361,7 @@ $helm_opt upgrade ${helm_release} $path_helm/ \
 --set image.pullPolicy=Always \
 --timeout 120s
 EOF
-    echo
+    echo '## -------- cut line --------'
     _is_github_action && return 0
     $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
         --namespace "${env_namespace}" --create-namespace \
