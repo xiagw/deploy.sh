@@ -53,6 +53,23 @@ _log() {
     echo "$(date +%Y%m%d-%T-%u), $*" | tee -a $me_log
 }
 
+_is_github_action() {
+    if [[ "${github_action:-0}" -eq 1 ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+_is_demo_mode() {
+    if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
+        _msg purple "Found default username/password, skip $1 ..."
+        return 0
+    else
+        return 1
+    fi
+}
+
 ## install phpunit
 _test_unit() {
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
@@ -106,7 +123,7 @@ sonar.projectVersion=1.0
 sonar.import_unknown_files=true
 EOF
     fi
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
+    _is_github_action && return 0
     $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
     # --add-host="sonar.entry.one:192.168.145.12"
@@ -185,7 +202,7 @@ _deploy_flyway_docker() {
 _deploy_flyway_helm_job() {
     _msg step "[database] deploy SQL with flyway helm job"
     echo "$image_tag_flyway"
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
+    _is_github_action && return 0
     DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     docker run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
@@ -204,24 +221,22 @@ _deploy_flyway_helm_job() {
 _docker_login() {
     local lock_docker_login="$me_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     local time_last
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
+    _is_github_action && return 0
     case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
     aws)
         time_last="$(stat -t -c %Y "$lock_docker_login" 2>/dev/null || echo 0)"
-        ## Compare the last login time, log in again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
+        ## Compare the last login time, login again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
         if [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]]; then
             return 0
         fi
-        _msg time "[login] docker login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
+        _msg time "[login] aws ecr login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" |
             docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*} >/dev/null &&
             touch "$lock_docker_login"
         ;;
     *)
-        if [[ "${demo_mode:-0}" == 1 ]]; then
-            _msg purple "demo mode, skip docker login."
-            return 0
-        fi
+        _is_demo_mode "docker-login" && return 0
+
         if [[ -f "$lock_docker_login" ]]; then
             return 0
         fi
@@ -235,7 +250,7 @@ _docker_login() {
 _build_image_docker() {
     _msg step "[image] build image with docker"
     _docker_login
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
+    _is_github_action && return 0
 
     ## docker build flyway image / 构建 flyway 模板
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
@@ -278,7 +293,7 @@ _build_image_docker() {
 }
 
 _build_image_podman() {
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
+    _is_github_action && return 0
 
     _msg step "[image] build image with podman"
     ## podman build
@@ -292,11 +307,8 @@ _build_image_podman() {
 _push_image() {
     _msg step "[image] push image with docker"
     _docker_login
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
-    if [[ "$demo_mode" == 1 ]]; then
-        _msg purple "Demo mode, skip push image."
-        return 0
-    fi
+    _is_github_action && return 0
+    _is_demo_mode "push-image" && return 0
     if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
         docker rmi "${ENV_DOCKER_REGISTRY}:${image_tag}"
     else
@@ -311,6 +323,7 @@ _push_image() {
 
 _deploy_k8s() {
     _msg step "[deploy] deploy with helm"
+    _is_demo_mode "deploy-helm" && return 0
     if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
         echo "remove project name prefix"
         helm_release=${gitlab_project_name#*-}
@@ -337,7 +350,7 @@ _deploy_k8s() {
         path_helm="${me_path_data}/helm/${helm_release}"
         bash "$me_path_bin/helm-new.sh" ${helm_release}
     fi
-    echo "Found helm files: $path_helm"
+    echo -e "Found helm files: $path_helm \n"
     cat <<EOF
 $helm_opt upgrade ${helm_release} $path_helm/ \
 --install --history-max 1 \
@@ -347,7 +360,8 @@ $helm_opt upgrade ${helm_release} $path_helm/ \
 --set image.pullPolicy=Always \
 --timeout 120s
 EOF
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
+    echo
+    _is_github_action && return 0
     $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
         --namespace "${env_namespace}" --create-namespace \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
@@ -672,14 +686,14 @@ _renew_cert() {
     fi
 
     _msg stepend "[cert] renew cert with acme.sh using dns+api"
-    if [[ "${exec_single:-0}" -gt 0 && "${github_action:-0}" -ne 1 ]]; then
-        exit 0
+    if [[ "${exec_single:-0}" -gt 0 ]]; then
+        _is_github_action || exit 0
     fi
     return 0
 }
 
 _get_balance_aliyun() {
-    [[ "${github_action:-0}" -eq 1 ]] && return 0
+    _is_github_action && return 0
     _msg step "check balance of aliyun"
     local alarm_balance=${ENV_ALARM_BALANCE_ALIYUN:-3000}
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
@@ -1483,11 +1497,7 @@ main() {
 
     ## source ENV, get global variables / 获取 ENV_ 开头的所有全局变量
     source "$me_env"
-    ## demo mode: default docker login password / docker 登录密码
-    if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
-        _msg purple "Found default username/password, skip docker login / push image / deploy k8s..."
-        demo_mode=1
-    fi
+
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
@@ -1521,7 +1531,7 @@ main() {
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-    if [[ "${github_action:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 || "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+    if _is_github_action || [[ "${arg_renew_cert:-0}" -eq 1 ]] || [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
         exec_single=1
         _renew_cert
     fi
@@ -1560,9 +1570,7 @@ main() {
         [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
         [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
-        if [[ "${github_action:-0}" -ne 1 ]]; then
-            return 0
-        fi
+        _is_github_action && return 0
     fi
     ################################################################################
 
@@ -1665,7 +1673,7 @@ main() {
     ## deploy notify info / 发布通知信息
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
     echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-0}"
-    [[ "${github_action:-0}" -eq 1 ]] && deploy_result=0
+    _is_github_action && deploy_result=0
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
     [[ "${ENV_DISABLE_MSG}" -eq 1 ]] && exec_deploy_notify=0
     [[ "${PIPELINE_NOTIFY:-0}" -eq 1 ]] && exec_deploy_notify=1
