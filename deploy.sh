@@ -609,9 +609,9 @@ _renew_cert() {
     fi
 
     [ -d "$acme_install_dest" ] || mkdir -p "$acme_install_dest"
-    files_account=("${acme_home}/"account.conf.*.dns_*)
-    # files_num=${#files_account[@]}
     ## support multiple account.conf.* / 支持多账号
+    ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
+    files_account=("${acme_home}/"account.conf.*.dns_*)
 
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     for file in "${files_account[@]}"; do
@@ -657,7 +657,7 @@ _renew_cert() {
         /usr/bin/cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
-            if "${acme_cmd}" list | grep -q "$domain"; then
+            if [ -d "${acme_home}/$domain" ] && "${acme_cmd}" list | grep -q "$domain"; then
                 ## renew cert / 续签证书
                 "${acme_cmd}" --renew -d "${domain}" && touch $file_reload_nginx || true
             else
