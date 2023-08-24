@@ -8,7 +8,6 @@
 ## gitlab runner exclude
 builds/
 cache/
-etc/
 
 ## deploy.sh conf/
 conf/deploy.*

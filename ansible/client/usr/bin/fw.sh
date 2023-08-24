@@ -50,8 +50,8 @@ _rule_default() {
     firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p udp --sport 30000:30005 -j ACCEPT
     firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p udp --dport 30000:30005 -j ACCEPT
     ## Allow VNC:
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp --sport 5900:6000 -j ACCEPT
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp --dport 5900:6000 -j ACCEPT
+    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp --sport 5900:5999 -j ACCEPT
+    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp --dport 5900:5999 -j ACCEPT
     ## Allow NAS web 5000, 5001, ssh 22
     # firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -d 192.168.7.10/32 -j ACCEPT
 }

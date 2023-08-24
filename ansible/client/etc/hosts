@@ -1,0 +1,15 @@
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+## same to all servers
+192.168.7.10  nas
+192.168.7.11  node11.quantum.edu node11
+192.168.7.12  node12.quantum.edu node12
+192.168.7.13  node13.quantum.edu node13
+192.168.7.14  node14.quantum.edu node14
+192.168.7.15  node15.quantum.edu node15
+192.168.7.16  node16.quantum.edu node16
+192.168.7.17  node17.quantum.edu node17
+192.168.7.18  node18.quantum.edu node18
+192.168.7.19  node19.quantum.edu node19
+192.168.7.20  node20.quantum.edu node20

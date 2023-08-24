@@ -1,0 +1,1 @@
+/eda    -fstype=nfs,rw,nosuid,soft,sync     node11:/eda

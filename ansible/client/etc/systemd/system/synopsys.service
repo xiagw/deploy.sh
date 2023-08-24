@@ -1,0 +1,14 @@
+
+[Unit]
+Description=Start lmgrd Snopsys
+ConditionPathExists=/eda/synopsys/license/startlic.sh
+After=network.target
+
+[Service]
+User=centos
+Type=forking
+ExecStart=/eda/synopsys/license/startlic.sh start
+ExecStop=/eda/synopsys/license/startlic.sh stop
+
+[Install]
+WantedBy=multi-user.target

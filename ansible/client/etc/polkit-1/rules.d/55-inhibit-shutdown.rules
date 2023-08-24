@@ -1,0 +1,7 @@
+polkit.addRule(function (action, subject) {
+  if ((action.id == "org.freedesktop.consolekit.system.stop" || action.id == "org.freedesktop.consolekit.system.restart") && subject.isInGroup("admin")) {
+    return polkit.Result.YES;
+  } else {
+    return polkit.Result.NO;
+  }
+});
