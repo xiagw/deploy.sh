@@ -1,16 +1,15 @@
-[sme]
-jz-gw:18941
-sme-28
-sme-29 ansible_ssh_port='23'
-sme-30
-# sme21
-# sme28
+[jz]
+jz-gw
+jz-git
+jz-runner
 
 [quantum]
 node11 ansible_ssh_user='root'
 node12 ansible_ssh_user='root'
 node13 ansible_ssh_user='root'
 
+[ld]
+lidan01
 
 [fly]
 node82
@@ -18,35 +17,14 @@ node83
 node150
 node151
 
-[ld]
-lidan01
-
 [other]
 zd-gw
 qiu-h1
 qiu-build18
 
-192.168.1.142 ansible_ssh_user='ops' ansible_sudo_pass="123456"
-genshengmenchuang
 ceccgw
 ceccnode11
 
-zhongqinglv
-
-weishiyun
-flyai
 lingniao1
 lingniao2
 lingniao3
-Dxiaoxiaole
-3k-aws1
-3k-aws2
-flyaws2
-flyasw1
-paifei
-lianhuachaoshi
-
-ertongmianyi
-sanxiao1
-samxiao2
-xiaopengf30

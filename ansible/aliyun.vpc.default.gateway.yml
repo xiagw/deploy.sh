@@ -1,0 +1,56 @@
+- name: Install default Gateway for Aliyun VPC
+  hosts: alydgw
+  become: true
+  # remote_user: root
+  # vars:
+    # user: centos
+
+  tasks:
+    - name: Add EPEL release package
+      ansible.builtin.yum:
+        name: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm"
+        state: present
+      when: ansible_os_family == 'RedHat'
+    - name: Add IUS release package
+      ansible.builtin.yum:
+        name: "https://repo.ius.io/ius-release-el7.rpm"
+        state: present
+      when: ansible_os_family == 'RedHat'
+    - name: Setup firewalld
+      ansible.posix.firewalld:
+        masquerade: true
+        state: enabled
+        permanent: true
+        # zone: public
+
+    - name: Restart service firewalld
+      ansible.builtin.systemd:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Set sysctl ignore icmp
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        sysctl_file: /etc/sysctl.conf
+        reload: true
+
+
+# # 网卡默认是在public的zone内，也是默认zone。永久添加源地址转换功能
+# $ firewall-cmd --add-masquerade --permanent
+# $ firewall-cmd --reload
+
+# 添加网卡的ip转发功能，添加如下配置到文件最后
+# $ vim /etc/sysctl.conf
+# net.ipv4.ip_forward=1
+
+# 重载网络配置生效
+# $ sysctl -p
+
+# ubuntu ufw
+# https://cloud.tencent.com/developer/article/1626255
+
+## centos8, aliyun, default gateway on VPC
+# 进入专有网络VPC中，进入路由表，进入路由表管理界面，选择添加路由条目
+# 新添加的路由条目，0.0.0.0/0 , 选择有公网IP和带宽的ECS实例作为下一跳。
