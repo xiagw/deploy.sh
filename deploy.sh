@@ -351,7 +351,6 @@ _deploy_k8s() {
         bash "$me_path_bin/helm-new.sh" ${helm_release}
     fi
     echo "Found helm files: $path_helm"
-    echo '## -------- cut line --------'
     cat <<EOF
 $helm_opt upgrade ${helm_release} $path_helm/ \
 --install --history-max 1 \
@@ -361,7 +360,6 @@ $helm_opt upgrade ${helm_release} $path_helm/ \
 --set image.pullPolicy=Always \
 --timeout 120s
 EOF
-    echo '## -------- cut line --------'
     _is_github_action && return 0
     $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
         --namespace "${env_namespace}" --create-namespace \
