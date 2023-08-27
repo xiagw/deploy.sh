@@ -21,11 +21,14 @@ fi
 ## Install and run as service
 if _get_yes_no "[+] Do you want create CI user for gitlab-runner?"; then
     sudo useradd --comment 'GitLab Runner' --create-home gitlab-runner --shell /bin/bash
-    sudo $bin_runner install --user gitlab-runner --working-directory /home/gitlab-runner
+    user_name=gitlab-runner
+    user_home=/home/gitlab-runner
 else
-    echo "[+] Use current user $USER"
-    ## Or use current user
-    sudo $bin_runner install --user "$USER" --working-directory "$HOME"/runner
+    user_name=$USER
+    user_home=$HOME
+fi
+if _get_yes_no "[+] Do you want install as service?"; then
+    sudo $bin_runner install --user "$user_name" --working-directory "$user_home"/runner
     sudo $bin_runner start
 fi
 
