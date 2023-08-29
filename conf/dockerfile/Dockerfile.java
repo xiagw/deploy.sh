@@ -5,7 +5,7 @@
 # RUN --mount=type=cache,target=/root/.m2 bash -xe /opt/build.sh
 
 ## arch: x86_64
-# ARG IMAGE_MVN=maven:3.6-jdk-11
+# ARG IMAGE_MVN=maven:3.8-jdk-17
 ARG IMAGE_MVN=maven:3.6-jdk-8
 ARG IMAGE_JDK=openjdk:8
 
@@ -26,8 +26,8 @@ COPY . .
 COPY ./root/ /
 
 RUN set -xe; \
+    ## 若此处出现错误，请检查 maven build 是否正常
     if [ -f /opt/build.sh ]; then echo "found /opt/build.sh"; else curl -fLo /opt/build.sh $BUILD_URL; fi
-## 若此处出现错误，请检查 maven build 是否正常
 RUN bash -xe /opt/build.sh
 
 

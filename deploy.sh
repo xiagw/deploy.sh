@@ -278,6 +278,7 @@ _build_image_docker() {
         --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
         --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
         --build-arg MVN_PROFILE="${gitlab_project_branch}" \
+        $docker_build_arg \
         "${gitlab_project_dir}"
     if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
         ## docker push to ttl.sh
@@ -1058,10 +1059,10 @@ _inject_files() {
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
                 [ -f "$f" ] || continue
                 case "$(grep '^jdk_version=' "${f}")" in
-                *=1.7) sed -i -e "s/openjdk:8/openjdk:7/" "${gitlab_project_dir}/Dockerfile" ;;
-                *=1.8 | *=8) sed -i -e "s/openjdk:8/openjdk:8/" "${gitlab_project_dir}/Dockerfile" ;;
-                *=11) sed -i -e "s/openjdk:8/openjdk:11/" "${gitlab_project_dir}/Dockerfile" ;;
-                *=17) sed -i -e "s/openjdk:8/openjdk:17/" "${gitlab_project_dir}/Dockerfile" ;;
+                *=1.7) docker_build_arg='--build-arg IMAGE_MVN=maven:3.6-jdk-7 IMAGE_JDK=openjdk:7' ;;
+                *=1.8 | *=8) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-jdk-8 IMAGE_JDK=openjdk:8' ;;
+                *=11) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-openjdk-11 IMAGE_JDK=openjdk:11' ;;
+                *=17) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-openjdk-17 IMAGE_JDK=openjdk:17' ;;
                 *) echo "jdk_version unknown." ;;
                 esac
                 break
