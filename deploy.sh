@@ -1054,12 +1054,14 @@ _inject_files() {
                 echo "IN_CHINA=true, copy ${me_dockerfile}/root/opt/settings.xml"
                 rsync -a "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/settings.xml"
             fi
+            ## find jdk version
             if grep -q '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.{md,txt} 2>/dev/null; then
                 case "$(grep '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.md)" in
-                *=1.7) sed -i -e "s/openjdk:8u332/openjdk:7u221/" "${gitlab_project_dir}/Dockerfile" ;;
-                *=1.8) sed -i -e "s/openjdk:8u332/openjdk:8u342/" "${gitlab_project_dir}/Dockerfile" ;;
-                *=11) sed -i -e "s/openjdk:8u332/openjdk:11-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
-                *=17) sed -i -e "s/openjdk:8u332/openjdk:17-jdk/" "${gitlab_project_dir}/Dockerfile" ;;
+                *=1.7) sed -i -e "s/openjdk:8/openjdk:7/" "${gitlab_project_dir}/Dockerfile" ;;
+                *=1.8 | *=8) sed -i -e "s/openjdk:8/openjdk:8/" "${gitlab_project_dir}/Dockerfile" ;;
+                *=11) sed -i -e "s/openjdk:8/openjdk:11/" "${gitlab_project_dir}/Dockerfile" ;;
+                *=17) sed -i -e "s/openjdk:8/openjdk:17/" "${gitlab_project_dir}/Dockerfile" ;;
+                *) echo "jdk_version unknown." ;;
                 esac
             fi
         fi

@@ -26,12 +26,8 @@ COPY . .
 COPY ./root/ /
 
 RUN set -xe; \
-    if [ -f /opt/build.sh ]; then \
-    echo "found /opt/build.sh"; \
-    else \
-    curl -fLo /opt/build.sh $BUILD_URL; \
-    fi
-## 若此处出现错误，请检查你的maven打包是否正常
+    if [ -f /opt/build.sh ]; then echo "found /opt/build.sh"; else curl -fLo /opt/build.sh $BUILD_URL; fi
+## 若此处出现错误，请检查 maven build 是否正常
 RUN bash -xe /opt/build.sh
 
 
@@ -55,11 +51,7 @@ WORKDIR /app
 COPY --from=builder /jars/ .
 COPY ./root/ /
 RUN set -xe; \
-    if [ -f /opt/build.sh ]; then \
-    echo "found /opt/build.sh"; \
-    else \
-    curl -fLo /opt/build.sh $BUILD_URL; \
-    fi; \
+    if [ -f /opt/build.sh ]; then echo "found /opt/build.sh"; else curl -fLo /opt/build.sh $BUILD_URL; fi; \
     bash /opt/build.sh
 
 USER 1000
