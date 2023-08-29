@@ -1055,15 +1055,17 @@ _inject_files() {
                 rsync -a "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/settings.xml"
             fi
             ## find jdk version
-            if grep -q '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.{md,txt} 2>/dev/null; then
-                case "$(grep '^jdk_version=' "${gitlab_project_dir}"/{README,readme}.md)" in
+            for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
+                [ -f "$f" ] || continue
+                case "$(grep '^jdk_version=' "${f}")" in
                 *=1.7) sed -i -e "s/openjdk:8/openjdk:7/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=1.8 | *=8) sed -i -e "s/openjdk:8/openjdk:8/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=11) sed -i -e "s/openjdk:8/openjdk:11/" "${gitlab_project_dir}/Dockerfile" ;;
                 *=17) sed -i -e "s/openjdk:8/openjdk:17/" "${gitlab_project_dir}/Dockerfile" ;;
                 *) echo "jdk_version unknown." ;;
                 esac
-            fi
+                break
+            done
         fi
         case ${gitlab_project_name} in
         *-php*)
