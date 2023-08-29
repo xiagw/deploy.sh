@@ -1059,10 +1059,10 @@ _inject_files() {
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
                 [ -f "$f" ] || continue
                 case "$(grep '^jdk_version=' "${f}")" in
-                *=1.7) docker_build_arg='--build-arg IMAGE_MVN=maven:3.6-jdk-7 IMAGE_JDK=openjdk:7' ;;
-                *=1.8 | *=8) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-jdk-8 IMAGE_JDK=openjdk:8' ;;
-                *=11) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-openjdk-11 IMAGE_JDK=openjdk:11' ;;
-                *=17) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-openjdk-17 IMAGE_JDK=openjdk:17' ;;
+                *=1.7) docker_build_arg='--build-arg IMAGE_MVN=maven:3.6-jdk-7 --build-arg IMAGE_JDK=openjdk:7' ;;
+                *=1.8 | *=8) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-jdk-8 --build-arg IMAGE_JDK=openjdk:8' ;;
+                *=11) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=openjdk:11' ;;
+                *=17) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=openjdk:17' ;;
                 *) echo "jdk_version unknown." ;;
                 esac
                 break
