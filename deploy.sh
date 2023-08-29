@@ -267,28 +267,23 @@ _build_image_docker() {
             _msg time "not found $image_base"
             docker build $ENV_ADD_HOST $quiet_flag \
                 --tag $image_base \
-                --build-arg PHP_VERSION="${php_ver:0:1}.${php_ver:1}" \
                 --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
+                --build-arg PHP_VERSION="${php_ver:0:1}.${php_ver:1}" \
                 --build-arg BASE_TAG="${gitlab_project_name}" \
                 -f "${dockerfile_base}" "${gitlab_project_dir}"
         fi
     fi
     ## docker build
-    docker build $ENV_ADD_HOST $quiet_flag \
-        --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
-        --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
-        --build-arg MVN_PROFILE="${gitlab_project_branch}" \
-        $docker_build_arg \
-        "${gitlab_project_dir}"
+    docker build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
         ## docker push to ttl.sh
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
-        echo "docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
-        echo "docker push $image_uuid"
+        echo "  docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
+        echo "  docker push $image_uuid"
         echo "## Then execute the following command on remote server:"
-        echo "docker pull $image_uuid"
-        echo "docker tag $image_uuid laradock_spring"
+        echo "  docker pull $image_uuid"
+        echo "  docker tag $image_uuid laradock_spring"
     fi
     _msg stepend "[image] build image with docker"
 }
@@ -298,11 +293,7 @@ _build_image_podman() {
     _is_github_action && return 0
     _is_demo_mode "push-image" && return 0
     ## podman build
-    podman build $ENV_ADD_HOST $quiet_flag \
-        --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" \
-        --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
-        --build-arg MVN_PROFILE="${gitlab_project_branch}" \
-        "${gitlab_project_dir}"
+    podman build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
 }
 
 _push_image() {
@@ -998,12 +989,12 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    _msg step "[inject] conf/env/Dockerfile..."
+    _msg step "[inject] inject files: conf/env/Dockerfile..."
     ## backend (PHP/Java/Python) project_conf files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     local path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
     if [ -d "$path_project_conf" ]; then
-        _msg warning "found $path_project_conf, sync it."
+        _msg warning "found $path_project_conf, sync to ${gitlab_project_dir}/"
         rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
     fi
 
@@ -1022,8 +1013,9 @@ _inject_files() {
         copy_flyway_file=0
     fi
 
-    ## from deploy.env， 使用全局模板文件替换项目文件
+    ## from data/deploy.env， 使用 data/ 全局模板文件替换项目文件
     echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-keep}
+    build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
     case ${ENV_ENABLE_INJECT:-keep} in
     keep)
         echo 'Keep Dockerfile in project.'
@@ -1037,19 +1029,22 @@ _inject_files() {
         fi
         ## Dockerfile 优先查找 data/ 目录
         if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-            echo "Found ${me_data_dockerfile}/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
+            echo "Found ${me_data_dockerfile}/Dockerfile.${project_lang}"
+            echo "overwriting ${gitlab_project_dir}/Dockerfile"
             rsync -a "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         ## Dockerfile 其次查找 conf/ 目录
         elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-            echo "Found ${me_dockerfile}/Dockerfile.${project_lang}, overwriting ${gitlab_project_dir}/Dockerfile"
+            echo "Found ${me_dockerfile}/Dockerfile.${project_lang}"
+            echo "overwriting ${gitlab_project_dir}/Dockerfile"
             rsync -a "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         else
-            echo "Not found custom Dockerfile from conf/ or data/"
+            echo "Not found custom Dockerfile from data/ or conf/"
         fi
         if [[ "${project_lang}" == java ]]; then
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
-                echo "Found ${me_data_dockerfile}/settings.xml, copy to ${gitlab_project_dir}/"
+                echo "Found ${me_data_dockerfile}/settings.xml"
+                echo "overwriting ${gitlab_project_dir}/"
                 rsync -a "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
                 echo "IN_CHINA=true, copy ${me_dockerfile}/root/opt/settings.xml"
@@ -1059,10 +1054,10 @@ _inject_files() {
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
                 [ -f "$f" ] || continue
                 case "$(grep '^jdk_version=' "${f}")" in
-                *=1.7) docker_build_arg='--build-arg IMAGE_MVN=maven:3.6-jdk-7 --build-arg IMAGE_JDK=openjdk:7' ;;
-                *=1.8 | *=8) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-jdk-8 --build-arg IMAGE_JDK=openjdk:8' ;;
-                *=11) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=openjdk:11' ;;
-                *=17) docker_build_arg='--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=openjdk:17' ;;
+                *=1.7) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.6-jdk-7 --build-arg IMAGE_JDK=openjdk:7" ;;
+                *=1.8 | *=8) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-jdk-8 --build-arg IMAGE_JDK=openjdk:8" ;;
+                *=11) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=openjdk:11" ;;
+                *=17) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=openjdk:17" ;;
                 *) echo "jdk_version unknown." ;;
                 esac
                 break
@@ -1204,6 +1199,7 @@ _probe_langs() {
             ;;
         pom.xml)
             project_lang=java
+            build_arg="${build_arg:+"$build_arg "}--build-arg MVN_PROFILE=${gitlab_project_branch}"
             break
             ;;
         requirements*.txt)
@@ -1234,7 +1230,7 @@ _probe_deploy_method() {
             exec_deploy_single_host=1
             ;;
         Dockerfile)
-            echo "build with docker"
+            echo "build container image"
             echo "deploy with helm"
             exec_build_langs=0
             exec_build_image=1
@@ -1350,7 +1346,7 @@ _set_args() {
         --debug | -d)
             set -x
             debug_on=1
-            quiet_flag=
+            unset quiet_flag
             ;;
         --cron | --loop)
             run_crontab=1
@@ -1361,7 +1357,7 @@ _set_args() {
         --github-action)
             set -x
             debug_on=1
-            quiet_flag=
+            unset quiet_flag
             github_action=1
             ;;
         --svn-checkout)
