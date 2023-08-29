@@ -702,7 +702,7 @@ _get_balance_aliyun() {
 }
 
 _install_python_gitlab() {
-    command -v gitlab >/dev/null || return
+    command -v gitlab >/dev/null && return
     _msg info "installing python3 gitlab api..."
     python3 -m pip install --user --upgrade python-gitlab
     if python3 -m pip install --user --upgrade python-gitlab; then
