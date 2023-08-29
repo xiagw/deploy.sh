@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
 _msg() {
-    echo "[$(date +%Y%m%d-%u-%T.%3N)], [RUN] $*"
-}
-
-_log() {
-    echo "[$(date +%Y%m%d-%u-%T.%3N)], [RUN] $*" >>"$me_log"
+    if [ "$1" == log ]; then
+        shift
+        echo "[$(date +%Y%m%d-%u-%T.%3N)], [RUN] $*" >>"$me_log"
+    else
+        echo "[$(date +%Y%m%d-%u-%T.%3N)], [RUN] $*"
+    fi
 }
 
 _start_java() {
@@ -220,7 +221,7 @@ main() {
         mkdir -p "$app_path"/log
     fi
 
-    _log "$me_path/$me_name begin ..." >>"$me_log"
+    _msg log "$me_path/$me_name begin ..."
 
     pids=()
 

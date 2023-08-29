@@ -36,6 +36,11 @@ _msg() {
         color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N), "
         color_off=' ... end'
         ;;
+    log)
+        shift
+        echo "$(date +%Y%m%d-%u-%T.%3N), $*" >>$me_log
+        return
+        ;;
     *)
         color_on=
         color_off=
@@ -48,10 +53,6 @@ _msg() {
 }
 
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
-
-_log() {
-    echo "$(date +%Y%m%d-%u-%T.%3N), $*" | tee -a $me_log
-}
 
 _is_github_action() {
     if [[ "${github_action:-0}" -eq 1 ]]; then
@@ -938,7 +939,7 @@ _clean_disk() {
     fi
 
     # Log disk usage and clean up images
-    _log "$(df /)"
+    _msg "$(df /)"
     _msg warning "Disk space is less than ${clean_disk_threshold}%, removing images..."
     $build_cmd images "${ENV_DOCKER_REGISTRY}" -q | sort -u | xargs -r $build_cmd rmi -f >/dev/null || true
     $build_cmd system prune -f >/dev/null || true
