@@ -124,22 +124,20 @@ sonar.import_unknown_files=true
 EOF
     fi
     _is_github_action && return 0
-    $docker_run -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
-    # $docker_run -v $(pwd):/root/src --link sonarqube newtmitch/sonar-scanner
-    # --add-host="sonar.entry.one:192.168.145.12"
+    $run_cmd -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     _msg stepend "[quality] check code with sonarqube"
     exit 0
 }
 
 _scan_zap() {
     local target_url="${ENV_TARGET_URL}"
-    local zap_docker_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
+    local zap_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
     local zap_options="${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
     local zap_report_file
     zap_report_file="zap_report_$(date +%Y%m%d_%H%M%S).html"
 
-    # docker pull "$zap_docker_image"
-    docker run -t --rm -v "$(pwd):/zap/wrk" "$zap_docker_image" zap-full-scan.sh $zap_options
+    # $build_cmd pull "$zap_image"
+    $build_cmd run -t --rm -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh $zap_options
     if [[ $? -eq 0 ]]; then
         mv "$zap_report_file" "zap_report_latest.html"
         _msg green "ZAP scan completed. Report saved to zap_report_latest.html"
@@ -152,13 +150,12 @@ _scan_zap() {
 
 _scan_vulmap() {
     # https://github.com/zhzyker/vulmap
-    # docker run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
+    # $build_cmd run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
     # Load environment variables from config file
+    # shellcheck disable=1091
     source $me_path_data/config.cfg
     # Run vulmap scan
-    docker run --rm -v "${PWD}:/work" vulmap \
-        -u "${ENV_TARGET_URL}" \
-        -o "/work/vulmap_report.html"
+    $build_cmd run --rm -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/vulmap_report.html"
 
     # Display scan results
     if [[ -f "vulmap_report.html" ]]; then
@@ -173,15 +170,16 @@ _check_gitleaks() {
     local path="$1"
     local config_file="$2"
 
-    docker run --rm -v "$path:/repo" -v "$config_file:/config.toml" zricethezav/gitleaks:v7.5.0 gitleaks --path=/repo --config=/config.toml
+    $build_cmd run --rm -v "$path:/repo" -v "$config_file:/config.toml" zricethezav/gitleaks:v7.5.0 gitleaks --path=/repo --config=/config.toml
 }
 
 _deploy_flyway_docker() {
     flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
-    flyway_docker_run="docker run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
+    flyway_docker_run="$build_cmd run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
     ## ssh port-forward mysql 3306 to localhost / 判断是否需要通过 ssh 端口转发建立数据库远程连接
+    # shellcheck disable=1091
     [ -f "$me_path_bin/ssh-port-forward.sh" ] && source "$me_path_bin/ssh-port-forward.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
@@ -203,8 +201,8 @@ _deploy_flyway_helm_job() {
     _msg step "[database] deploy SQL with flyway helm job"
     echo "$image_tag_flyway"
     _is_github_action && return 0
-    DOCKER_BUILDKIT=1 docker build ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
-    docker run --rm "$image_tag_flyway" || deploy_result=1
+    DOCKER_BUILDKIT=1 $build_cmd build $quiet_flag --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+    $build_cmd run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
         _msg green "Result = OK"
     else
@@ -247,70 +245,59 @@ _docker_login() {
     esac
 }
 
-_build_image_docker() {
-    _msg step "[image] build image with docker"
+_build_image() {
+    _msg step "[image] build image"
     _docker_login
     _is_github_action && return 0
 
-    ## docker build flyway image / 构建 flyway 模板
+    ## build flyway image / 构建 flyway 模板
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        docker build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        $build_cmd build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
-    ## docker build Dockerfile.base
+    ## build from Dockerfile.base
     dockerfile_base="${gitlab_project_dir}/Dockerfile.base"
     if [[ -f "${dockerfile_base}" ]]; then
         image_base=deploy/base:$gitlab_project_name
         php_ver="${gitlab_project_name##*php}"
-        if docker images | grep "deploy/base.*$gitlab_project_name"; then
-            _msg time "found $image_base"
+        build_arg="${build_arg:+"$build_arg "}--build-arg PHP_VERSION=${php_ver:0:1}.${php_ver:1}"
+        build_arg="${build_arg:+"$build_arg "}--build-arg BASE_TAG=${gitlab_project_name}"
+        if $build_cmd images | grep "deploy/base.*$gitlab_project_name"; then
+            _msg time "found $image_base, skip build."
         else
-            _msg time "not found $image_base"
-            docker build $ENV_ADD_HOST $quiet_flag \
-                --tag $image_base \
-                --build-arg IN_CHINA="${ENV_IN_CHINA:-false}" \
-                --build-arg PHP_VERSION="${php_ver:0:1}.${php_ver:1}" \
-                --build-arg BASE_TAG="${gitlab_project_name}" \
-                -f "${dockerfile_base}" "${gitlab_project_dir}"
+            _msg time "not found $image_base, build it..."
+            $build_cmd build $ENV_ADD_HOST $quiet_flag --tag $image_base -f "${dockerfile_base}" $build_arg "${gitlab_project_dir}"
         fi
     fi
-    ## docker build
-    docker build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
+    ## build image
+    $build_cmd build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
+    ## push image to ttl.sh
     if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
-        ## docker push to ttl.sh
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
-        echo "  docker tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
-        echo "  docker push $image_uuid"
+        echo "  $build_cmd tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
+        echo "  $build_cmd push $image_uuid"
         echo "## Then execute the following command on remote server:"
-        echo "  docker pull $image_uuid"
-        echo "  docker tag $image_uuid laradock_spring"
+        echo "  $build_cmd pull $image_uuid"
+        echo "  $build_cmd tag $image_uuid laradock_spring"
     fi
-    _msg stepend "[image] build image with docker"
-}
-
-_build_image_podman() {
-    _msg step "[image] build image with podman"
-    _is_github_action && return 0
-    _is_demo_mode "push-image" && return 0
-    ## podman build
-    podman build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
+    _msg stepend "[image] build image"
 }
 
 _push_image() {
-    _msg step "[image] push image with docker"
+    _msg step "[image] push image"
     _is_github_action && return 0
     _is_demo_mode "push-image" && return 0
     _docker_login
-    if docker push ${quiet_flag} "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        docker rmi "${ENV_DOCKER_REGISTRY}:${image_tag}"
+    if $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
+        $build_cmd rmi "${ENV_DOCKER_REGISTRY}:${image_tag}"
     else
         push_error=1
     fi
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        docker push ${quiet_flag} "$image_tag_flyway" || push_error=1
+        $build_cmd push $quiet_flag "$image_tag_flyway" || push_error=1
     fi
     [[ $push_error -eq 1 ]] && _msg error "got an error here, probably caused by network..."
-    _msg stepend "[image] push image with docker"
+    _msg stepend "[image] push image"
 }
 
 _deploy_k8s() {
@@ -858,7 +845,6 @@ _install_docker() {
     [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
     [[ "${ENV_IN_CHINA:-false}" == 'true' ]] && install_arg='-s --mirror Aliyun'
     curl -fsSL https://get.docker.com | $use_sudo bash $install_arg
-
 }
 
 _install_podman() {
@@ -924,7 +910,6 @@ _detect_os() {
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
             $use_sudo yum install -y "${pkgs[@]}" >/dev/null
         fi
-        # id | grep -q docker || $use_sudo usermod -aG docker "$USER"
         ;;
     alpine)
         command -v openssl >/dev/null || pkgs+=(openssl)
@@ -954,11 +939,11 @@ _clean_disk() {
         return 0
     fi
 
-    # Log disk usage and clean up docker images
+    # Log disk usage and clean up images
     _log "$(df /)"
-    _msg warning "Disk space is less than ${clean_disk_threshold}%, removing docker images..."
-    docker images "${ENV_DOCKER_REGISTRY}" -q | sort -u | xargs -r docker rmi -f >/dev/null || true
-    docker system prune -f >/dev/null || true
+    _msg warning "Disk space is less than ${clean_disk_threshold}%, removing images..."
+    $build_cmd images "${ENV_DOCKER_REGISTRY}" -q | sort -u | xargs -r $build_cmd rmi -f >/dev/null || true
+    $build_cmd system prune -f >/dev/null || true
 }
 
 # https://github.com/sherpya/geolite2legacy
@@ -984,7 +969,7 @@ _get_maxmind_ip() {
 _generate_apidoc() {
     if [[ -f "${gitlab_project_dir}/apidoc.json" ]]; then
         _msg step "[apidoc] generate API Docs with apidoc"
-        $docker_run -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
+        $run_cmd -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
     fi
 }
 
@@ -1021,7 +1006,7 @@ _inject_files() {
         echo 'Keep Dockerfile in project.'
         ;;
     overwrite)
-        ## inject docker build files
+        ## inject build container image files
         if [ -d "${gitlab_project_dir}/root/opt" ]; then
             _msg "found ${gitlab_project_dir}/root/opt"
         else
@@ -1073,7 +1058,7 @@ _inject_files() {
         esac
         ;;
     remove)
-        echo 'Removing Dockerfile (disabling docker build)'
+        echo 'Removing Dockerfile (disabling build)'
         rm -f "${gitlab_project_dir}/Dockerfile"
         ;;
     create)
@@ -1341,6 +1326,7 @@ _set_args() {
     ## All tasks are performed by default / 默认执行所有任务
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
     exec_single=0
+    build_cmd=docker
     while [[ "${#}" -ge 0 ]]; do
         case "$1" in
         --debug | -d)
@@ -1375,52 +1361,69 @@ _set_args() {
             shift
             ;;
         --get-balance)
-            arg_get_balance=1 && exec_single=$((exec_single + 1))
+            arg_get_balance=1
+            exec_single=$((exec_single + 1))
             ;;
         --renew-cert | -r)
-            arg_renew_cert=1 && exec_single=$((exec_single + 1))
+            arg_renew_cert=1
+            exec_single=$((exec_single + 1))
             ;;
         --code-style)
-            arg_code_style=1 && exec_single=$((exec_single + 1))
+            arg_code_style=1
+            exec_single=$((exec_single + 1))
             ;;
         --code-quality)
-            arg_code_quality=1 && exec_single=$((exec_single + 1))
+            arg_code_quality=1
+            exec_single=$((exec_single + 1))
             ;;
         --build-langs)
-            arg_build_langs=1 && exec_single=$((exec_single + 1))
+            arg_build_langs=1
+            exec_single=$((exec_single + 1))
             ;;
         --build-docker)
-            arg_build_docker=1 && exec_single=$((exec_single + 1))
+            arg_build_image=1
+            exec_single=$((exec_single + 1))
             ;;
         --build-podman)
-            arg_build_podman=1 && exec_single=$((exec_single + 1))
+            arg_build_image=1
+            exec_single=$((exec_single + 1))
+            build_cmd=podman
             ;;
         --push-image)
-            arg_push_image=1 && exec_single=$((exec_single + 1))
+            arg_push_image=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-k8s)
-            arg_deploy_k8s=1 && exec_single=$((exec_single + 1))
+            arg_deploy_k8s=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-flyway)
-            arg_deploy_flyway=1 && exec_single=$((exec_single + 1))
+            arg_deploy_flyway=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync-ssh)
-            arg_deploy_rsync_ssh=1 && exec_single=$((exec_single + 1))
+            arg_deploy_rsync_ssh=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync)
-            arg_deploy_rsync=1 && exec_single=$((exec_single + 1))
+            arg_deploy_rsync=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-ftp)
-            arg_deploy_ftp=1 && exec_single=$((exec_single + 1))
+            arg_deploy_ftp=1
+            exec_single=$((exec_single + 1))
             ;;
         --deploy-sftp)
-            arg_deploy_sftp=1 && exec_single=$((exec_single + 1))
+            arg_deploy_sftp=1
+            exec_single=$((exec_single + 1))
             ;;
         --test-unit)
-            arg_test_unit=1 && exec_single=$((exec_single + 1))
+            arg_test_unit=1
+            exec_single=$((exec_single + 1))
             ;;
         --test-function)
-            arg_test_function=1 && exec_single=$((exec_single + 1))
+            arg_test_function=1
+            exec_single=$((exec_single + 1))
             ;;
         *)
             if [[ "${#}" -gt 0 ]]; then
@@ -1478,8 +1481,7 @@ main() {
 
     export PATH
 
-    docker_run="docker run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
-    # docker_run_root="docker run $ENV_ADD_HOST --interactive --rm -u 0:0"
+    run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
     kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
     helm_opt="helm --kubeconfig $HOME/.kube/config"
 
@@ -1561,8 +1563,7 @@ main() {
         # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
         [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
-        [[ "${arg_build_docker:-0}" -eq 1 ]] && _build_image_docker
-        [[ "${arg_build_podman:-0}" -eq 1 ]] && _build_image_podman
+        [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
         [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
         [[ "${arg_deploy_rsync_ssh:-0}" -eq 1 ]] && _deploy_rsync_ssh
@@ -1620,13 +1621,9 @@ main() {
 
     ## build
     [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
-    if [[ "${PIPELINE_BUILD_PODMAN:-0}" -eq 1 ]]; then
-        [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_podman
-    else
-        [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image_docker
-    fi
+    _build_image
 
-    ## docker push image
+    ## push image
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
 
     ## deploy k8s
