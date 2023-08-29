@@ -7,7 +7,7 @@
 ## arch: x86_64
 # ARG IMAGE_MVN=maven:3.8-jdk-17
 ARG IMAGE_MVN=maven:3.6-jdk-8
-ARG IMAGE_JDK=openjdk:8
+ARG IMAGE_JDK=amazoncorretto:8
 
 ## arch: arm64
 # ARG IMAGE_MVN=arm64v8/maven:3.6-jdk-8

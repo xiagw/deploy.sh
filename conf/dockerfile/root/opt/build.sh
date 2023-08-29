@@ -39,6 +39,8 @@ _set_mirror() {
             cp -vf settings.xml $m2_dir/
         elif [ -f docs/settings.xml ]; then
             cp -vf docs/settings.xml $m2_dir/
+        elif [ -f /opt/settings.xml ]; then
+            mv -vf /opt/settings.xml $m2_dir/
         else
             curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
         fi
@@ -50,7 +52,6 @@ _set_mirror() {
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
     fi
     ## node, npm, yarn
-    # npm_mirror=https://registry.npm.taobao.org/
     npm_mirror=https://registry.npmmirror.com/
     if command -v npm; then
         addgroup -g 1000 -S php
@@ -63,6 +64,17 @@ _set_mirror() {
     if command -v pip; then
         pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
     fi
+}
+
+_check_run_sh() {
+    ## startup run.sh
+    if [ -f "$run_sh" ]; then
+        echo "Found $run_sh"
+    else
+        echo "Download $run_sh ..."
+        curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
+    fi
+    chmod +x $run_sh
 }
 
 _build_nginx() {
@@ -201,14 +213,7 @@ _onbuild_php() {
     curl -fLo /etc/nginx/sites-enabled/default \
         "$url_laradock_raw"/php-fpm/root/opt/nginx.conf
 
-    ## startup run.sh
-    if [ -f "$run_sh" ]; then
-        echo "Found $run_sh"
-    else
-        echo "Download $run_sh ..."
-        curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
-    fi
-    chmod +x /opt/run.sh
+    _check_run_sh
 }
 
 _build_mysql() {
@@ -284,16 +289,9 @@ _build_jdk_runtime_amzn() {
     if [[ -f $sec_file ]]; then
         sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $sec_file
     fi
-    ## startup run.sh
-    if [ -f "$run_sh" ]; then
-        echo "Found $run_sh"
-    else
-        echo "Download $run_sh ..."
-        curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
-    fi
-    chmod +x $run_sh
 
-    useradd -u 1000 spring
+    _check_run_sh
+
     chown -R 1000:1000 /app
     for file in /app/*.{yml,yaml}; do
         if [ -f "$file" ]; then
@@ -302,6 +300,8 @@ _build_jdk_runtime_amzn() {
             touch "/app/profile.${MVN_PROFILE:-main}"
         fi
     done
+    yum clean all
+    rm -rf /var/cache/yum
 }
 
 _build_jdk_runtime() {
@@ -323,16 +323,9 @@ _build_jdk_runtime() {
     if [[ -f $sec_file ]]; then
         sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $sec_file
     fi
-    ## startup run.sh
-    if [ -f "$run_sh" ]; then
-        echo "Found $run_sh"
-    else
-        echo "Download $run_sh ..."
-        curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
-    fi
-    chmod +x $run_sh
 
-    useradd -u 1000 spring
+    _check_run_sh
+
     chown -R 1000:1000 /app
     for file in /app/*.{yml,yaml}; do
         if [ -f "$file" ]; then

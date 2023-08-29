@@ -1183,6 +1183,9 @@ _probe_langs() {
         pom.xml)
             project_lang=java
             build_arg="${build_arg:+"$build_arg "}--build-arg MVN_PROFILE=${gitlab_project_branch}"
+            if [[ "$debug_on" -eq 1 ]]; then
+                build_arg="${build_arg:+"$build_arg "}--build-arg MVN_DEBUG="
+            fi
             break
             ;;
         requirements*.txt)
