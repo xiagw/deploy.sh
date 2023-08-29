@@ -22,18 +22,18 @@ _msg() {
     orange) color_on='\033[1;33m' ;;
     time)
         if [ -z "$STEP" ]; then
-            color_on="[+] $(date +%Y%m%d-%T-%u), "
+            color_on="[+] $(date +%Y%m%d-%u-%T.%3N), "
         else
-            color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%T-%u), "
+            color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N), "
         fi
-        color_off=''
+        color_off=
         ;;
     step | timestep)
         STEP=$((${STEP:-0} + 1))
-        color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%T-%u), \033[0m"
+        color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N), \033[0m"
         ;;
     stepend | end)
-        color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%T-%u), "
+        color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N), "
         color_off=' ... end'
         ;;
     *)
@@ -50,7 +50,7 @@ _msg() {
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
 _log() {
-    echo "$(date +%Y%m%d-%T-%u), $*" | tee -a $me_log
+    echo "$(date +%Y%m%d-%u-%T.%3N), $*" | tee -a $me_log
 }
 
 _is_github_action() {

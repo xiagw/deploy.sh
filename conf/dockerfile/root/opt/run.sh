@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 _msg() {
-    echo "[$(date +%Y%m%d-%T-%u)], [RUN] $*"
+    echo "[$(date +%Y%m%d-%u-%T.%3N)], [RUN] $*"
 }
 
 _log() {
-    echo "[$(date +%Y%m%d-%T-%u)], [RUN] $*" | tee -a "$me_log"
+    echo "[$(date +%Y%m%d-%u-%T.%3N)], [RUN] $*" >>"$me_log"
 }
 
 _start_java() {
