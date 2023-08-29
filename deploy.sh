@@ -702,10 +702,8 @@ _get_balance_aliyun() {
 }
 
 _install_python_gitlab() {
-    python3 -m pip list 2>/dev/null | grep -q python-gitlab && return
+    command -v gitlab >/dev/null || return
     _msg info "installing python3 gitlab api..."
-    [ -d $HOME/.local/bin ] || mkdir -p $HOME/.local/bin
-    export PATH="${PATH:+"$PATH:"}$HOME/.local/bin"
     python3 -m pip install --user --upgrade python-gitlab
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg info "python-gitlab is installed successfully"
@@ -1571,7 +1569,7 @@ main() {
         [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
         [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
-        _is_github_action && return 0
+        _is_github_action || return 0
     fi
     ################################################################################
 
