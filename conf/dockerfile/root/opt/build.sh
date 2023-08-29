@@ -278,6 +278,32 @@ _build_maven() {
     fi
 }
 
+_build_jdk_runtime_amzn() {
+    ## set ssl
+    sec_file=/usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security
+    if [[ -f $sec_file ]]; then
+        sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $sec_file
+    fi
+    ## startup run.sh
+    if [ -f "$run_sh" ]; then
+        echo "Found $run_sh"
+    else
+        echo "Download $run_sh ..."
+        curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
+    fi
+    chmod +x $run_sh
+
+    useradd -u 1000 spring
+    chown -R 1000:1000 /app
+    for file in /app/*.{yml,yaml}; do
+        if [ -f "$file" ]; then
+            break
+        else
+            touch "/app/profile.${MVN_PROFILE:-main}"
+        fi
+    done
+}
+
 _build_jdk_runtime() {
     apt-get update -yqq
     $apt_opt less apt-utils
@@ -365,7 +391,11 @@ main() {
     elif command -v mvn && [ -n "$MVN_PROFILE" ]; then
         _build_maven
     elif command -v java && [ -n "$MVN_PROFILE" ]; then
-        _build_jdk_runtime
+        if command -v apt-get; then
+            _build_jdk_runtime
+        else
+            _build_jdk_runtime_amzn
+        fi
     elif command -v node; then
         _build_node
     elif command -v mysql; then

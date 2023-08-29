@@ -1039,8 +1039,8 @@ _inject_files() {
                 case "$(grep '^jdk_version=' "${f}")" in
                 *=1.7) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.6-jdk-7 --build-arg IMAGE_JDK=openjdk:7" ;;
                 *=1.8 | *=8) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-jdk-8 --build-arg IMAGE_JDK=openjdk:8" ;;
-                *=11) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=openjdk:11" ;;
-                *=17) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=openjdk:17" ;;
+                *=11) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=amazoncorretto:11" ;;
+                *=17) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=amazoncorretto:17" ;;
                 *) echo "jdk_version unknown." ;;
                 esac
                 break

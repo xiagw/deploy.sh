@@ -10,11 +10,14 @@ _log() {
 
 _start_java() {
     ## 修改内存占用值，
+    # shellcheck disable=1091
     if [ -f $app_path/.java_opts ]; then
         source $app_path/.java_opts
     elif [ -z "$JAVA_OPTS" ]; then
         JAVA_OPTS='java -Xms256m -Xmx384m'
     fi
+    java -version
+    echo "$JAVA_OPTS"
     # -XX:+UseG1GC
 
     ## 启动方式三，nohup 后台启动
