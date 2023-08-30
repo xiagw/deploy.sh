@@ -672,9 +672,8 @@ _renew_cert() {
 _get_balance_aliyun() {
     _is_github_action && return 0
     _msg step "check balance of aliyun"
-    local alarm_balance=${ENV_ALARM_BALANCE_ALIYUN:-3000}
     for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
-        if [[ $ENV_TAKE_ALIYUN_PROFILE == "$p" ]]; then
+        if [[ "$ENV_ALARM_ALIYUN_PROFILE" == *"$p"* ]]; then
             _msg time "Aliyun profile is: $p"
         else
             continue
@@ -685,9 +684,9 @@ _get_balance_aliyun() {
             continue
         fi
         _msg red "Current balance: $amount"
-        if [[ $(echo "$amount < $alarm_balance" | bc) -eq 1 ]]; then
+        if [[ $(echo "$amount < ${ENV_ALARM_ALIYUN_BALANCE:-3000}" | bc) -eq 1 ]]; then
             msg_body="Aliyun账号:$p 当前余额 $amount, 需要充值。"
-            _notify_wechat_work $ENV_WECHAT_KEY_ALARM
+            _notify_wechat_work $ENV_ALARM_WECHAT_KEY
         fi
     done
     echo
@@ -1621,7 +1620,7 @@ main() {
 
     ## build
     [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
-    _build_image
+    [[ "${exec_build_image:-1}" -eq 1 ]] && _build_image
 
     ## push image
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
