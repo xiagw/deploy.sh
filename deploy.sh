@@ -26,7 +26,7 @@ _msg() {
         else
             color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N), "
         fi
-        color_off=
+        unset color_off
         ;;
     step | timestep)
         STEP=$((${STEP:-0} + 1))
@@ -42,8 +42,7 @@ _msg() {
         return
         ;;
     *)
-        color_on=
-        color_off=
+        unset color_on color_off
         ;;
     esac
     [ "$#" -gt 1 ] && shift
@@ -295,7 +294,7 @@ _push_image() {
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
         $build_cmd push $quiet_flag "$image_tag_flyway" || push_error=1
     fi
-    [[ $push_error -eq 1 ]] && _msg error "got an error here, probably caused by network..."
+    [[ "${push_error:-0}" -eq 1 ]] && _msg error "got an error here, probably caused by network..."
     _msg stepend "[image] push image"
 }
 
@@ -321,7 +320,7 @@ _deploy_k8s() {
         path_helm="${me_path_data}/helm/${gitlab_project_name}"
     fi
 
-    ## helm install / helm 安装
+    ## find helm files / 查找 helm 文件
     if [ -z "$path_helm" ]; then
         _msg purple "Not found helm files"
         echo "Try to generate helm files with bin/helm-new.sh"
@@ -339,6 +338,7 @@ $helm_opt upgrade ${helm_release} $path_helm/ \
 --timeout 120s
 EOF
     _is_github_action && return 0
+    ## helm install / helm 安装
     $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
         --namespace "${env_namespace}" --create-namespace \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
@@ -349,6 +349,7 @@ EOF
     $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs &>/dev/null || true
     $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
     sleep 3
+    ## 检测 helm upgrade 状态
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s || deploy_result=1
 
     ## helm install flyway jobs / helm 安装 flyway 任务
@@ -434,6 +435,7 @@ _deploy_aliyun_oss() {
     fi
 
     # Read config file
+    # shellcheck disable=1091
     source ${me_path_data}/aliyun.oss.key.conf
 
     # Check if OSS CLI is installed
