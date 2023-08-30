@@ -46,9 +46,7 @@ _msg() {
         color_off=
         ;;
     esac
-    if [ "$#" -gt 1 ]; then
-        shift
-    fi
+    [ "$#" -gt 1 ] && shift
     echo -e "${color_on}$*${color_off}"
 }
 

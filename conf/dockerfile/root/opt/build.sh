@@ -52,8 +52,8 @@ _set_mirror() {
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
     fi
     ## node, npm, yarn
-    npm_mirror=https://registry.npmmirror.com/
     if command -v npm; then
+        npm_mirror=https://registry.npmmirror.com/
         addgroup -g 1000 -S php
         adduser -u 1000 -D -S -G php php
         yarn config set registry $npm_mirror
