@@ -10,10 +10,7 @@ _msg() {
     blue) color_on='\033[0;34m' ;;                     # Blue
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
-    *)
-        color_on=''
-        color_off=''
-        ;;
+    *) unset color_on color_off ;;
     esac
     shift
     echo -e "${color_on}$*${color_off}"
@@ -89,8 +86,8 @@ main() {
         _msg warn "  startcad"
         _msg info "# Before start Synopsys tools, execute:"
         _msg warn "  startsyn"
-        _msg info "# If you want to copy $eda_home/PDKs/share/ to current dir, execute:"
-        _msg warn "  copyenv"
+        # _msg info "# If you want to copy $eda_home/PDKs/share/ to current dir, execute:"
+        # _msg warn "  copyenv"
     fi
 }
 
