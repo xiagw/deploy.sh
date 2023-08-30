@@ -996,9 +996,9 @@ _inject_files() {
     fi
 
     ## from data/deploy.env， 使用 data/ 全局模板文件替换项目文件
-    echo ENV_ENABLE_INJECT: ${ENV_ENABLE_INJECT:-keep}
+    echo ENV_INJECT: ${ENV_INJECT:-keep}
     build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-    case ${ENV_ENABLE_INJECT:-keep} in
+    case ${ENV_INJECT:-keep} in
     keep)
         echo 'Keep Dockerfile in project.'
         ;;
