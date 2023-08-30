@@ -40,8 +40,11 @@ jar_files=(
 )
 for jar in "${jar_files[@]}"; do
     [ -f "$jar" ] || continue
-    echo "$jar" | grep -E 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' ||
-        cp -vf "$jar" "$jars_path"/
+    case "$jar" in
+    framework*.jar | gdp-module*.jar | sdk*.jar | *-commom-*.jar) echo 'skip' ;;
+    *-dao-*.jar | lop-opensdk*.jar | core-*.jar) echo 'skip' ;;
+    *) mv -vf "$jar" "$jars_path"/ ;;
+    esac
 done
 
 if [[ "${MVN_COPY_YAML:-false}" == true || "${exec_deploy_k8s:-0}" -ne 1 ]]; then
