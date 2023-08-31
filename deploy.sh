@@ -1478,9 +1478,6 @@ main() {
     export PATH
 
     run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
-    kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
-    helm_opt="helm --kubeconfig $HOME/.kube/config"
-
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _detect_os
 
@@ -1495,6 +1492,14 @@ main() {
 
     ## source ENV, get global variables / 获取 ENV_ 开头的所有全局变量
     source "$me_env"
+
+    if [ -f "$HOME/.kube/$env_namespace/config" ]; then
+        kubectl_opt="kubectl --kubeconfig $HOME/.kube/$env_namespace/config"
+        helm_opt="helm --kubeconfig $HOME/.kube/$env_namespace/config"
+    else
+        kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
+        helm_opt="helm --kubeconfig $HOME/.kube/config"
+    fi
 
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
