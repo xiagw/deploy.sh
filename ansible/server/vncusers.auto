@@ -5,7 +5,7 @@
 ## 第一列表示 vnc 的端口号，例如 :13 表示 :5913
 ## 第二列表示 用户名 <USER>，此用户名表示 linux 系统帐号
 ## 第三列表示 用户所属组 <GROUP>
-## 第四列表示 用户的家目录 <HOME>，此列如果没有配置则会使用默认路径 /home21/linlylab
+## 第四列表示 用户的家目录 <HOME>，此列如果没有配置则会使用默认路径 $HOME
 
-:11=xia=home2=/home2/xia
-:12=wangwu=home2=/home2/wangwu
+:11=xia=xia=/home2/xia
+:12=wangwu=wangwu=/home2/wangwu
