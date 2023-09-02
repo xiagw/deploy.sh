@@ -674,12 +674,7 @@ _renew_cert() {
 _get_balance_aliyun() {
     _is_github_action && return 0
     _msg step "check balance of aliyun"
-    for p in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
-        if [[ "$ENV_ALARM_ALIYUN_PROFILE" == *"$p"* ]]; then
-            _msg time "Aliyun profile is: $p"
-        else
-            continue
-        fi
+    for p in "${ENV_ALARM_ALIYUN_PROFILE[@]}"; do
         local amount
         amount="$(aliyun -p "$p" bssopenapi QueryAccountBalance 2>/dev/null | jq -r .Data.AvailableAmount | sed 's/,//')"
         if [[ -z "$amount" ]]; then
