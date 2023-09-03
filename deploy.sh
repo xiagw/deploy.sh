@@ -21,24 +21,20 @@ _msg() {
     cyan) color_on='\033[0;36m' ;;                     # Cyan
     orange) color_on='\033[1;33m' ;;
     time)
-        if [ -z "$STEP" ]; then
-            color_on="[+] $(date +%Y%m%d-%u-%T.%3N), "
-        else
-            color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N), "
-        fi
+        color_on="[$(if [ -z "$STEP" ]; then echo '+'; else for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done; fi)] $(date +%Y%m%d-%u-%T.%3N) "
         unset color_off
         ;;
     step | timestep)
         STEP=$((${STEP:-0} + 1))
-        color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N), \033[0m"
+        color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N) \033[0m"
         ;;
     stepend | end)
-        color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N), "
+        color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N) "
         color_off=' ... end'
         ;;
     log)
         shift
-        echo "$(date +%Y%m%d-%u-%T.%3N), $*" >>$me_log
+        echo "$(date +%Y%m%d-%u-%T.%3N) $*" >>$me_log
         return
         ;;
     *)
@@ -99,7 +95,7 @@ _test_function() {
 _check_quality_sonar() {
     local sonar_url="${ENV_SONAR_URL:?empty}"
     local sonar_conf="$gitlab_project_dir/sonar-project.properties"
-    if ! curl --silent --head --fail "$sonar_url" >/dev/null 2>&1; then
+    if ! curl --silent --head --fail --connect-timeout 5 "$sonar_url" >/dev/null 2>&1; then
         _msg warning "Could not found sonarqube server, exit."
         return
     fi
@@ -199,7 +195,7 @@ _deploy_flyway_helm_job() {
     _msg step "[database] deploy SQL with flyway helm job"
     echo "$image_tag_flyway"
     _is_github_action && return 0
-    DOCKER_BUILDKIT=1 $build_cmd build $quiet_flag --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+    DOCKER_BUILDKIT=1 $build_cmd build $build_cmd_opt $quiet_flag --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     $build_cmd run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
         _msg green "Result = OK"
@@ -250,7 +246,7 @@ _build_image() {
 
     ## build flyway image / 构建 flyway 模板
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        $build_cmd build $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        $build_cmd build $build_cmd_opt $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## build from Dockerfile.base
     dockerfile_base="${gitlab_project_dir}/Dockerfile.base"
@@ -263,11 +259,11 @@ _build_image() {
             _msg time "found $image_base, skip build."
         else
             _msg time "not found $image_base, build it..."
-            $build_cmd build $ENV_ADD_HOST $quiet_flag --tag $image_base -f "${dockerfile_base}" $build_arg "${gitlab_project_dir}"
+            $build_cmd build $build_cmd_opt $ENV_ADD_HOST $quiet_flag --tag $image_base -f "${dockerfile_base}" $build_arg "${gitlab_project_dir}"
         fi
     fi
     ## build image
-    $build_cmd build $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
+    $build_cmd build $build_cmd_opt $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     ## push image to ttl.sh
     if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
         image_uuid="ttl.sh/$(uuidgen):1h"
@@ -459,12 +455,12 @@ _deploy_aliyun_oss() {
 _deploy_rsync() {
     _msg step "[deploy] deploy files to rsyncd server"
     # Load configuration from file
-    CONFIG_FILE="$me_path_data/rsyncd.conf"
-    source "$CONFIG_FILE"
+    rsyncd_conf="$me_path_data/rsyncd.conf"
+    source "$rsyncd_conf"
 
     # Deploy files with rsync
-    RSYNC_OPTIONS="-avz"
-    rsync $RSYNC_OPTIONS --exclude-from="$EXCLUDE_FILE" "$SOURCE_DIR/" "$RSYNC_USER@$RSYNC_HOST::$TARGET_DIR"
+    rsync_options="rsync -avz"
+    $rsync_options --exclude-from="$EXCLUDE_FILE" "$SOURCE_DIR/" "$RSYNC_USER@$RSYNC_HOST::$TARGET_DIR"
 }
 
 _deploy_ftp() {
@@ -1094,7 +1090,7 @@ _set_deploy_conf() {
     ## ssh config and key files
     if [[ ! -d "${path_conf_ssh}" ]]; then
         mkdir -m 700 "$path_conf_ssh"
-        _msg warning "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
+        _msg warn "Generate ssh key file for gitlab-runner: $path_conf_ssh/id_ed25519"
         _msg purple "Please: cat $path_conf_ssh/id_ed25519.pub >> [dest_server]:\~/.ssh/authorized_keys"
         ssh-keygen -t ed25519 -N '' -f "$path_conf_ssh/id_ed25519"
     fi
@@ -1186,10 +1182,10 @@ _probe_langs() {
             project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
             project_lang=${project_lang// /}
             project_lang=${project_lang,,}
-            project_lang=${project_lang:-unknown}
             ;;
         esac
     done
+    project_lang=${project_lang:-unknown}
     echo "Probe lang: ${project_lang:-unknown}"
 }
 
@@ -1318,12 +1314,11 @@ _set_args() {
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
     exec_single=0
     build_cmd=docker
-    while [[ "${#}" -ge 0 ]]; do
+    while [[ -n "${1}" ]]; do
         case "$1" in
         --debug | -d)
             set -x
             debug_on=1
-            unset quiet_flag
             ;;
         --cron | --loop)
             run_crontab=1
@@ -1334,7 +1329,6 @@ _set_args() {
         --github-action)
             set -x
             debug_on=1
-            unset quiet_flag
             github_action=1
             ;;
         --svn-checkout)
@@ -1379,6 +1373,7 @@ _set_args() {
             arg_build_image=1
             exec_single=$((exec_single + 1))
             build_cmd=podman
+            build_cmd_opt='--force-rm --format=docker'
             ;;
         --push-image)
             arg_push_image=1
@@ -1417,16 +1412,17 @@ _set_args() {
             exec_single=$((exec_single + 1))
             ;;
         *)
-            if [[ "${#}" -gt 0 ]]; then
-                _usage
-                exit 1
-            fi
-            [[ "${debug_on:-0}" -eq 0 ]] && quiet_flag='--quiet'
-            break
+            _usage
+            exit 1
             ;;
         esac
         shift
     done
+    if [[ "${debug_on:-0}" -ne 1 ]]; then
+        quiet_flag='--quiet'
+    else
+        unset quiet_flag
+    fi
 }
 
 main() {
@@ -1530,7 +1526,7 @@ main() {
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
     if _is_github_action || [[ "${arg_renew_cert:-0}" -eq 1 ]] || [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
-        exec_single=1
+        exec_single=$((exec_single + 1))
         _renew_cert
     fi
 
@@ -1552,14 +1548,26 @@ main() {
     ################################################################################
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
     if [[ "${exec_single:-0}" -gt 0 ]]; then
-        echo "exec single jobs..."
+        _msg time "exec single jobs..."
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _check_quality_sonar
-        [[ "${arg_code_style:-0}" -eq 1 && -f "$code_style_sh" ]] && source "$code_style_sh"
+        if [[ "${arg_code_style:-0}" -eq 1 ]]; then
+            if [[ -f "$code_style_sh" ]]; then
+                source "$code_style_sh"
+            else
+                _msg time "not found $code_style_sh"
+            fi
+        fi
         [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
         [[ "${arg_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
         # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
         [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
-        [[ "${arg_build_langs:-0}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
+        if [[ "${arg_build_langs:-0}" -eq 1 ]]; then
+            if [[ -f "$build_langs_sh" ]]; then
+                source "$build_langs_sh"
+            else
+                _msg time "not found $build_langs_sh"
+            fi
+        fi
         [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image
         [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
         [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
@@ -1568,7 +1576,7 @@ main() {
         [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
         [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
-        echo "exec single jobs...end"
+        _msg time "exec single jobs...end"
         _is_github_action || return 0
     fi
     ################################################################################
