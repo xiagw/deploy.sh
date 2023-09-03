@@ -1418,10 +1418,10 @@ _set_args() {
         esac
         shift
     done
-    if [[ "${debug_on:-0}" -ne 1 ]]; then
-        quiet_flag='--quiet'
-    else
+    if [[ "${debug_on:-0}" -eq 1 ]]; then
         unset quiet_flag
+    else
+        quiet_flag='--quiet'
     fi
 }
 
