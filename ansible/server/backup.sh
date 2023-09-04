@@ -16,7 +16,7 @@ servers=(
 rsync_opt="rsync -az"
 rsync_exclude=$me_path/rsync.exclude.conf
 rsync_include=$me_path/rsync.include.conf
-rsync_dest='/volume1/backup'
+rsync_dest='/volume1/nas1/backup'
 host_nas=nas
 
 if [ -f "$rsync_exclude" ]; then
