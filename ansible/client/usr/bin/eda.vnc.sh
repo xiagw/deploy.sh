@@ -3,8 +3,10 @@
 _vnc_status() {
     echo -e "\nList all existing vnc port...\n"
     ss -4lntu | grep '\:59..\ '
-    echo -e "\nList my vnc port...\n"
+    echo '##########################################'
+    echo -e "\n##  List MINE vnc port...\n"
     vncserver -list
+    echo '##########################################'
 }
 
 _vnc_start() {

@@ -1191,23 +1191,23 @@ _probe_langs() {
 
 _probe_deploy_method() {
     _msg step "[probe] deploy method"
+    exec_build_image=0
+    exec_push_image=0
+    exec_deploy_k8s=0
     for f in Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         echo "Found $f"
         case $f in
         docker-compose.yml)
-            exec_build_image=0
-            exec_push_image=0
-            exec_deploy_k8s=0
             exec_deploy_single_host=1
             ;;
         Dockerfile)
             echo "build container image"
             echo "deploy with helm"
-            exec_build_langs=0
             exec_build_image=1
             exec_push_image=1
             exec_deploy_k8s=1
+            exec_build_langs=0
             exec_deploy_rsync_ssh=0
             ;;
         esac
@@ -1627,7 +1627,7 @@ main() {
 
     ## build
     [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
-    [[ "${exec_build_image:-1}" -eq 1 ]] && _build_image
+    [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image
 
     ## push image
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
