@@ -94,11 +94,12 @@ _change_password() {
 _remove_user() {
     _msg log "remove user..."
     _get_username remove
+    cmd_del=userdel
     # if _get_yes_no "[remove] Do you want remove user HOME dir?"; then
-    #     remove_home_confirm='-r'
+    #     cmd_del='userdel -r'
     # fi
     if id "$user_name"; then
-        userdel $remove_home_confirm "$user_name" && removed=1
+        $cmd_del "$user_name" && removed=1
         if [[ "${removed:-0}" -eq 1 ]]; then
             [ -d /var/yp ] && make -C /var/yp
         else
