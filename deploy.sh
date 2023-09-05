@@ -414,7 +414,7 @@ _deploy_rsync_ssh() {
             bash "$me_path_data_bin/custom.deploy.sh" ${ssh_host} ${rsync_dest}
             _msg time "end custom deploy."
         fi
-        if [[ $exec_deploy_single_host -eq 1 ]]; then
+        if [[ $exec_deploy_docker_compose -eq 1 ]]; then
             _msg step "deploy to singl host with docker-compose"
             $ssh_opt -n "$ssh_host" "cd $HOME/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
@@ -991,7 +991,7 @@ _inject_files() {
     build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
     case ${ENV_INJECT:-keep} in
     keep)
-        echo 'Keep Dockerfile in project.'
+        echo '<skip>'
         ;;
     overwrite)
         ## inject build container image files
@@ -1191,27 +1191,26 @@ _probe_langs() {
 
 _probe_deploy_method() {
     _msg step "[probe] deploy method"
-    exec_build_image=0
-    exec_push_image=0
-    exec_deploy_k8s=0
+    local deploy_method=rsync
     for f in Dockerfile docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         echo "Found $f"
         case $f in
         docker-compose.yml)
-            exec_deploy_single_host=1
+            exec_deploy_docker_compose=1
+            deploy_method=docker-compose
             ;;
         Dockerfile)
-            echo "build container image"
-            echo "deploy with helm"
             exec_build_image=1
             exec_push_image=1
             exec_deploy_k8s=1
             exec_build_langs=0
             exec_deploy_rsync_ssh=0
+            deploy_method=helm
             ;;
         esac
     done
+    echo "deploy method: $deploy_method"
 }
 
 _checkout_svn_repo() {
@@ -1595,8 +1594,12 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用，0 禁用[default]
     _msg step "[style] check code style"
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 && -f "$code_style_sh" ]]; then
-        source "$code_style_sh"
+    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]]; then
+        if [[ -f "$code_style_sh" ]]; then
+            source "$code_style_sh"
+        else
+            _msg time "not found $code_style_sh"
+        fi
     else
         echo '<skip>'
     fi
@@ -1626,7 +1629,13 @@ main() {
     # _generate_apidoc
 
     ## build
-    [[ "${exec_build_langs:-1}" -eq 1 && -f "$build_langs_sh" ]] && source "$build_langs_sh"
+    if [[ "${exec_build_langs:-1}" -eq 1 ]]; then
+        if [[ -f "$build_langs_sh" ]]; then
+            source "$build_langs_sh"
+        else
+            _msg time "not found $build_langs_sh"
+        fi
+    fi
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image
 
     ## push image
@@ -1643,8 +1652,6 @@ main() {
     ## deploy with rsync / 使用 rsync 发布
     [[ "${ENV_DISABLE_RSYNC:-0}" -eq 1 ]] && exec_deploy_rsync_ssh=0
     [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
-
-    ## clean
 
     ## function test / 功能测试
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用，0 禁用[default]
