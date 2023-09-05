@@ -380,7 +380,7 @@ _deploy_rsync_ssh() {
         # db_host=${array[7]}
         # db_name=${array[8]}
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        _msg time "ssh host is: ${ssh_host:?if stop here, check $me_conf}"
+        echo "ssh host is: ${ssh_host:?if stop here, check $me_conf}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
         ## node/java use rsync --delete / node/java 使用 rsync --delete
@@ -406,7 +406,7 @@ _deploy_rsync_ssh() {
             return
         fi
         $ssh_opt -n "${ssh_host}" "[[ -d $rsync_dest ]] || mkdir -p $rsync_dest"
-        echo "to ${ssh_host}:${rsync_dest}"
+        echo "destination: ${ssh_host}:${rsync_dest}"
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
         if [ -f "$me_path_data_bin/custom.deploy.sh" ]; then
