@@ -1,24 +1,16 @@
 #!/usr/bin/bash
 
 # set -x
-_log() {
-    echo "$(date +%F_%T): $*" | tee -a "$me_log"
-}
-
-_log_pass() {
-    echo "$(date +%F_%T): $*" | tee -a "$password_log"
-}
 
 _get_yes_no() {
     read -rp "${1:-Confirm the action?} [y/N]" read_yes_no
-    if [[ ${read_yes_no:-n} =~ ^(y|Y|yes|YES)$ ]]; then
-        return 0
-    else
-        return 1
-    fi
+    case ${read_yes_no:-n} in
+    [yY] | [yY][eE][sS]) return 0 ;;
+    *) return 1 ;;
+    esac
 }
 
-_color_msg() {
+_msg() {
     color_off='\033[0m' # Text Reset
     case "$1" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
@@ -27,9 +19,19 @@ _color_msg() {
     blue) color_on='\033[0;34m' ;;                     # Blue
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
-    *) color_on='' && color_off='' ;;
+    log)
+        shift
+        echo "$(date +%Y%m%d-%u-%T.%3N) $*" | tee -a "$me_log"
+        return
+        ;;
+    logpass)
+        shift
+        echo "$(date +%Y%m%d-%u-%T.%3N) $*" | tee -a "$password_log"
+        return
+        ;;
+    *) unset color_on color_off ;;
     esac
-    shift
+    [ "$#" -gt 1 ] && shift
     echo -e "${color_on}$*${color_off}"
 }
 
@@ -49,12 +51,12 @@ _create_user() {
         useradd -m -s "$user_shell" -b $path_home "$user_name" && create_ok=1
         echo "$user_pass_sys" | passwd --stdin "$user_name"
     else
-        _color_msg warn "sys user $user_name exists, skip."
+        _msg warn "sys user $user_name exists, skip."
         return 1
     fi
     if [ "${create_ok:-0}" -eq 1 ]; then
         [ -d /var/yp ] && make -C /var/yp
-        _log_pass "system password: $user_name / $user_pass_sys"
+        _msg logpass "system password: $user_name / $user_pass_sys"
         if [ ! -d "$path_vnc_home" ]; then
             mkdir -p "$path_vnc_home"
         fi
@@ -62,47 +64,49 @@ _create_user() {
             echo "$user_pass_vnc" | vncpasswd -f >"$file_vnc_passwd"
             chmod 600 "$file_vnc_passwd"
             chown -R "$user_name:$user_group" "$path_vnc_home"
-            _log_pass "vnc password: $user_name / $user_pass_vnc"
+            _msg logpass "vnc password: $user_name / $user_pass_vnc"
         fi
     else
-        _color_msg red "ERR: create system user $user_name failed."
+        _msg red "ERR: create system user $user_name failed."
         return 1
     fi
 
 }
 
 _change_password() {
+    _msg log "change password..."
     _get_username password
     if _get_yes_no "[ssh] Do you want change system password of ${user_name}?"; then
         echo "$user_pass_sys" | passwd --stdin "$user_name"
-        _log_pass "system password: $user_name / $user_pass_sys"
+        _msg logpass "system password: $user_name / $user_pass_sys"
         [ -d /var/yp ] && make -C /var/yp
     else
-        _color_msg warn "give up. (change system password)"
+        _msg warn "give up. (change system password)"
     fi
     if _get_yes_no "[vnc] Do you want change vnc password of ${user_name}?"; then
         echo "$user_pass_vnc" | vncpasswd -f >"$file_vnc_passwd"
-        _log_pass "vnc password: $user_name / $user_pass_vnc"
+        _msg logpass "vnc password: $user_name / $user_pass_vnc"
     else
-        _color_msg warn "give up. (change vnc password)"
+        _msg warn "give up. (change vnc password)"
     fi
 }
 
 _remove_user() {
+    _msg log "remove user..."
     _get_username remove
-    if _get_yes_no "[remove] Do you want remove user HOME dir?"; then
-        remove_home_confirm='-r'
-    fi
+    # if _get_yes_no "[remove] Do you want remove user HOME dir?"; then
+    #     remove_home_confirm='-r'
+    # fi
     if id "$user_name"; then
         userdel $remove_home_confirm "$user_name" && removed=1
         if [[ "${removed:-0}" -eq 1 ]]; then
             [ -d /var/yp ] && make -C /var/yp
         else
-            _color_msg red "Remove user $user_name failed!"
+            _msg red "Remove user $user_name failed!"
             echo "try \`ps -ef | grep $user_name\` on all servers, maybe help you"
         fi
     else
-        _color_msg warn "sys user $user_name not exists, skip."
+        _msg warn "sys user $user_name not exists, skip."
     fi
 }
 
