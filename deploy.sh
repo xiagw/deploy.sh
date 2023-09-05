@@ -996,31 +996,29 @@ _inject_files() {
     overwrite)
         ## inject build container image files
         if [ -d "${gitlab_project_dir}/root/opt" ]; then
-            _msg "found ${gitlab_project_dir}/root/opt"
+            echo "found exist ${gitlab_project_dir}/root/opt"
         else
+            echo "overwriting: ${me_dockerfile}/root/ --> $gitlab_project_dir/root/"
             rsync -a "${me_dockerfile}/root/" "$gitlab_project_dir/root/"
         fi
         ## Dockerfile 优先查找 data/ 目录
         if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-            echo "Found ${me_data_dockerfile}/Dockerfile.${project_lang}"
-            echo "overwriting ${gitlab_project_dir}/Dockerfile"
+            echo "overwriting: ${me_data_dockerfile}/Dockerfile.${project_lang} --> ${gitlab_project_dir}/Dockerfile"
             rsync -a "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         ## Dockerfile 其次查找 conf/ 目录
         elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-            echo "Found ${me_dockerfile}/Dockerfile.${project_lang}"
-            echo "overwriting ${gitlab_project_dir}/Dockerfile"
+            echo "overwriting: ${me_dockerfile}/Dockerfile.${project_lang} --> ${gitlab_project_dir}/Dockerfile"
             rsync -a "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         else
-            echo "Not found custom Dockerfile from data/ or conf/"
+            echo "Not found custom files from data/ or conf/"
         fi
         if [[ "${project_lang}" == java ]]; then
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
-                echo "Found ${me_data_dockerfile}/settings.xml"
-                echo "overwriting ${gitlab_project_dir}/"
+                echo "overwriting: ${me_data_dockerfile}/settings.xml --> ${gitlab_project_dir}/settings.xml"
                 rsync -a "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
-                echo "IN_CHINA=true, copy ${me_dockerfile}/root/opt/settings.xml"
+                echo "overwriting: ${me_dockerfile}/root/opt/settings.xml --> ${me_dockerfile}/root/opt/settings.xml"
                 rsync -a "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/settings.xml"
             fi
             ## find jdk version
@@ -1046,11 +1044,11 @@ _inject_files() {
         esac
         ;;
     remove)
-        echo 'Removing Dockerfile (disabling build)'
+        echo 'Removing Dockerfile (disable docker build)'
         rm -f "${gitlab_project_dir}/Dockerfile"
         ;;
     create)
-        echo "Generating docker-compose.yml (enabling deployment with docker-compose)"
+        echo "Generating docker-compose.yml (enable deploy docker-compose)"
         echo '## deploy with docker-compose' >>"${gitlab_project_dir}/docker-compose.yml"
         ;;
     esac
@@ -1547,7 +1545,7 @@ main() {
     ################################################################################
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
     if [[ "${exec_single:-0}" -gt 0 ]]; then
-        _msg time "exec single jobs..."
+        _msg green "exec single jobs..."
         [[ "${arg_code_quality:-0}" -eq 1 ]] && _check_quality_sonar
         if [[ "${arg_code_style:-0}" -eq 1 ]]; then
             if [[ -f "$code_style_sh" ]]; then
@@ -1575,7 +1573,7 @@ main() {
         [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
         [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
-        _msg time "exec single jobs...end"
+        _msg green "exec single jobs...end"
         _is_github_action || return 0
     fi
     ################################################################################
