@@ -283,7 +283,7 @@ _push_image() {
     _is_demo_mode "push-image" && return 0
     _docker_login
     if $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        $build_cmd rmi "${ENV_DOCKER_REGISTRY}:${image_tag}"
+        $build_cmd rmi "${ENV_DOCKER_REGISTRY}:${image_tag}" >/dev/null
     else
         push_error=1
     fi
