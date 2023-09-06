@@ -515,7 +515,6 @@ EOF
 }
 
 _deploy_notify() {
-    _msg step "[notify] message for result"
     msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
 
     msg_body="
@@ -1425,7 +1424,7 @@ _set_args() {
 main() {
     set -e ## 出现错误自动退出
     # set -u ## 变量未定义报错
-    _msg time "[deploy] BEGIN"
+    _msg step "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _set_args "$@"
 
@@ -1679,13 +1678,14 @@ main() {
     fi
 
     ## deploy notify info / 发布通知信息
+    _msg step "[notify] message for result"
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
     echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-0}"
     _is_github_action && deploy_result=0
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
     [[ "${ENV_DISABLE_MSG}" -eq 1 ]] && exec_deploy_notify=0
-    [[ "${PIPELINE_NOTIFY:-0}" -eq 1 ]] && exec_deploy_notify=1
     [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
+    [[ "${PIPELINE_NOTIFY:-0}" -eq 1 ]] && exec_deploy_notify=1
     if [[ "${exec_deploy_notify:-1}" -eq 1 ]]; then
         _deploy_notify
     fi
