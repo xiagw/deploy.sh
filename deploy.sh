@@ -1424,6 +1424,7 @@ _set_args() {
 main() {
     set -e ## 出现错误自动退出
     # set -u ## 变量未定义报错
+    begin_seconds=$(date +%s)
     _msg step "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _set_args "$@"
@@ -1690,7 +1691,13 @@ main() {
         _deploy_notify
     fi
 
-    _msg time "[deploy] END"
+    end_seconds=$(date +%s)
+    seconds=$((end_seconds - begin_seconds))
+    hours=$((seconds / 3600))
+    mins=$(((seconds - hours * 3600) / 60))
+    secs=$((seconds - hours * 3600 - mins * 60))
+    _msg time "[deploy] END. Duration: ${seconds}s, $hours:$mins:$secs"
+
     ## deploy result:  0 成功， 1 失败
     return ${deploy_result:-0}
 }
