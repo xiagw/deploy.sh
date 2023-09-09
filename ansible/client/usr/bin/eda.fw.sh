@@ -75,6 +75,10 @@ _rule_reload() {
 }
 
 main() {
+    if [[ $(id -u) -ne 0 ]]; then
+        echo "Need root. exit."
+        exit 1
+    fi
     if [[ -z "$1" ]]; then
         select choice in disable_out enable_out enable_only_web firewall_status quit; do
             break

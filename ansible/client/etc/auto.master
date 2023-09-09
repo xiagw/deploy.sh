@@ -6,9 +6,10 @@
 #
 /misc	/etc/auto.misc
 #
-# add for nis nfs client
+######## add for nis nfs client
 /home2  /etc/auto.home
 /-      /etc/auto.eda
+######## add for nis nfs client
 #
 # NOTE: mounts done from a hosts map will be mounted with the
 #	"nosuid" and "nodev" options unless the "suid" and "dev"

@@ -112,6 +112,10 @@ _remove_user() {
 }
 
 main() {
+    if [[ $(id -u) -ne 0 ]]; then
+        echo "Need root. exit."
+        exit 1
+    fi
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_path_bin="$me_path/bin"
