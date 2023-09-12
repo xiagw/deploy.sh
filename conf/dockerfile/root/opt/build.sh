@@ -1,5 +1,13 @@
 #!/bin/bash
 
+_is_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 _set_mirror() {
     if [ "$1" = shanghai ]; then
         export TZ=Asia/Shanghai
@@ -20,15 +28,16 @@ _set_mirror() {
     if [ "$IN_CHINA" = false ] && [ "${CHANGE_SOURCE}" = false ]; then
         return
     fi
-
-    ## OS ubuntu:22.04 php
-    if [ -f /etc/apt/sources.list ]; then
-        sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
-            -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-    ## OS alpine, nginx:alpine
-    elif [ -f /etc/apk/repositories ]; then
-        # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
-        sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+    if _is_root; then
+        ## OS ubuntu:22.04 php
+        if [ -f /etc/apt/sources.list ]; then
+            sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
+                -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+        ## OS alpine, nginx:alpine
+        elif [ -f /etc/apk/repositories ]; then
+            # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
+            sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+        fi
     fi
     ## maven
     if command -v mvn; then
@@ -46,7 +55,7 @@ _set_mirror() {
         fi
     fi
     ## PHP composer
-    if command -v composer; then
+    if command -v composer && _is_root; then
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
         mkdir -p /var/www/.composer /.composer
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
@@ -54,11 +63,8 @@ _set_mirror() {
     ## node, npm, yarn
     if command -v npm; then
         npm_mirror=https://registry.npmmirror.com/
-        addgroup -g 1000 -S php
-        adduser -u 1000 -D -S -G php php
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
-        su - node -c "yarn config set registry $npm_mirror; npm config set registry $npm_mirror"
     fi
     ## python pip
     if command -v pip; then
@@ -247,10 +253,13 @@ _build_redis() {
 
 _build_node() {
     echo "build node ..."
-
-    mkdir /.cache
-    chown -R node:node /.cache /apps
-    npm install -g rnpm@1.9.0
+    if _is_root; then
+        [ -d /.cache ] || mkdir /.cache
+        chown -R node:node /.cache /app
+    fi
+    rm -rf root/
+    # npm install -g rnpm@1.9.0
+    _is_root || npm install
 }
 
 _build_maven() {
@@ -396,12 +405,14 @@ main() {
     fi
 
     ## clean
-    if command -v apt-get; then
-        apt-get autoremove -y
-        apt-get clean all
-        rm -rf /var/lib/apt/lists/*
+    if _is_root; then
+        if command -v apt-get; then
+            apt-get autoremove -y
+            apt-get clean all
+            rm -rf /var/lib/apt/lists/*
+        fi
+        rm -rf /tmp/* /opt/*.{cnf,xml,log}
     fi
-    rm -rf /tmp/* /opt/*.{cnf,xml,log}
 }
 
 main "$@"
