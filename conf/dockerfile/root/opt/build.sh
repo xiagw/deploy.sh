@@ -257,7 +257,6 @@ _build_node() {
         [ -d /.cache ] || mkdir /.cache
         chown -R node:node /.cache /app
     fi
-    rm -rf root/
     # npm install -g rnpm@1.9.0
     _is_root || npm install
 }
@@ -413,6 +412,7 @@ main() {
         fi
         rm -rf /tmp/* /opt/*.{cnf,xml,log}
     fi
+    [ -d root ] && rm -rf root
 }
 
 main "$@"
