@@ -10,6 +10,7 @@ _msg() {
 }
 
 _start_java() {
+    command -v java || return
     ## 修改内存占用值，
     # shellcheck disable=1091
     if [ -f $app_path/.java_opts ]; then
@@ -121,6 +122,11 @@ _start_php() {
     else
         _msg "Not found php."
     fi
+}
+
+_start_node() {
+    command -v npm || return
+    npm run start
 }
 
 _schedule_upgrade() {
@@ -238,6 +244,7 @@ main() {
     if [[ "$1" == debug || -f "$app_path"/.debug ]]; then
         start_debug=1
     fi
+    _start_node "$@"
     ## 统一兼容启动 start php
     _start_php "$@"
     ## 统一兼容启动 start java

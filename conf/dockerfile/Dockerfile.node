@@ -16,8 +16,10 @@ CMD [ "npm", "run", "start" ]
 
 USER node
 
-COPY ./package.json .
+COPY --chown=node:node ./package.json .
 
-RUN npm install
+RUN set -xe; bash $BUILD_SH
 
-COPY . .
+COPY --chown=node:node . .
+
+RUN rm -rf root
