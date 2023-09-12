@@ -1,4 +1,4 @@
-ARG NODE_VER=16
+ARG NODE_VER=18
 FROM node:${NODE_VER}
 
 ARG IN_CHINA=false
@@ -6,7 +6,7 @@ ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/op
 ARG NPM_MIRROR=https://registry.npmmirror.com/
 
 WORKDIR /app
-
+COPY . .
 COPY ./root/ /
 RUN set -xe; \
     if [ -f /opt/build.sh ]; then \
@@ -18,9 +18,12 @@ RUN set -xe; \
 
 USER node
 RUN set -xe; \
-    if [ "$IN_CHINA" = true ]; then \
-    yarn config set registry $NPM_MIRROR; \
-    npm config set registry $NPM_MIRROR; \
+    if [ -f /opt/build.sh ]; then \
+    echo "found /opt/build.sh"; \
     else \
-    :; \
-    fi
+    curl -fLo /opt/build.sh $BUILD_URL; \
+    fi; \
+    bash /opt/build.sh
+
+# CMD [ "/opt/run.sh" ]
+CMD [ "npm", "run", "start" ]
