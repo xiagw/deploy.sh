@@ -3,27 +3,21 @@ FROM node:${NODE_VER}
 
 ARG IN_CHINA=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
-ARG NPM_MIRROR=https://registry.npmmirror.com/
+ARG BUILD_SH=/opt/build.sh
 
 WORKDIR /app
-COPY . .
 COPY ./root/ /
 RUN set -xe; \
-    if [ -f /opt/build.sh ]; then \
-    echo "found /opt/build.sh"; \
-    else \
-    curl -fLo /opt/build.sh $BUILD_URL; \
-    fi; \
-    bash /opt/build.sh
-
-USER node
-RUN set -xe; \
-    if [ -f /opt/build.sh ]; then \
-    echo "found /opt/build.sh"; \
-    else \
-    curl -fLo /opt/build.sh $BUILD_URL; \
-    fi; \
-    bash /opt/build.sh
+    if [ -f $BUILD_SH ]; then echo "found $BUILD_SH"; else curl -fLo $BUILD_SH $BUILD_URL; fi; \
+    bash $BUILD_SH
 
 # CMD [ "/opt/run.sh" ]
 CMD [ "npm", "run", "start" ]
+
+USER node
+
+COPY ./package.json .
+
+RUN set -xe; bash $BUILD_SH
+
+COPY . .
