@@ -18,6 +18,8 @@ USER node
 
 COPY ./package.json .
 
-RUN set -xe; bash $BUILD_SH
+RUN npm install
 
 COPY . .
+
+RUN rm -rf root
