@@ -24,13 +24,9 @@ _msg() {
         color_on="[$(if [ -z "$STEP" ]; then echo '+'; else for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done; fi)] $(date +%Y%m%d-%u-%T.%3N) "
         unset color_off
         ;;
-    step | timestep)
+    step)
         STEP=$((${STEP:-0} + 1))
         color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N) \033[0m"
-        ;;
-    stepend | end)
-        color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N) "
-        color_off=' ... end'
         ;;
     log)
         shift
@@ -75,7 +71,6 @@ _test_unit() {
     else
         _msg purple "not found tests/unit_test.sh, skip unit test."
     fi
-    _msg stepend "[test] unit test"
 }
 
 ## install jdk/ant/jmeter
@@ -89,7 +84,6 @@ _test_function() {
     else
         echo "Not found tests/func_test.sh, skip function test."
     fi
-    _msg stepend "[test] function test"
 }
 
 _check_quality_sonar() {
@@ -119,7 +113,6 @@ EOF
     fi
     _is_github_action && return 0
     $run_cmd -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
-    _msg stepend "[quality] check code with sonarqube"
     exit 0
 }
 
@@ -138,7 +131,6 @@ _scan_zap() {
     else
         _msg error "ZAP scan failed."
     fi
-    _msg stepend "[scan] run ZAP scan"
 }
 # _security_scan_zap "http://example.com" "my/zap-image" "-t http://example.com -r report.html -x report.xml"
 
@@ -188,7 +180,6 @@ _deploy_flyway_docker() {
     else
         _msg error "Result = FAIL"
     fi
-    _msg stepend "[database] deploy SQL files with flyway"
 }
 
 _deploy_flyway_helm_job() {
@@ -202,7 +193,6 @@ _deploy_flyway_helm_job() {
     else
         _msg error "Result = FAIL"
     fi
-    _msg stepend "[database] deploy SQL with flyway helm job"
 }
 
 # python-gitlab list all projects / 列出所有项目
@@ -240,7 +230,7 @@ _docker_login() {
 }
 
 _build_image() {
-    _msg step "[image] build image"
+    _msg step "[image] build container image"
     _docker_login
     _is_github_action && return 0
 
@@ -262,7 +252,7 @@ _build_image() {
             $build_cmd build $build_cmd_opt $ENV_ADD_HOST $quiet_flag --tag $image_base -f "${dockerfile_base}" $build_arg "${gitlab_project_dir}"
         fi
     fi
-    ## build image
+    ## build container image
     $build_cmd build $build_cmd_opt $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     ## push image to ttl.sh
     if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
@@ -274,11 +264,10 @@ _build_image() {
         echo "  $build_cmd pull $image_uuid"
         echo "  $build_cmd tag $image_uuid laradock_spring"
     fi
-    _msg stepend "[image] build image"
 }
 
 _push_image() {
-    _msg step "[image] push image"
+    _msg step "[image] push container image"
     _is_github_action && return 0
     _is_demo_mode "push-image" && return 0
     _docker_login
@@ -291,7 +280,6 @@ _push_image() {
         $build_cmd push $quiet_flag "$image_tag_flyway" || push_error=1
     fi
     [[ "${push_error:-0}" -eq 1 ]] && _msg error "got an error here, probably caused by network..."
-    _msg stepend "[image] push image"
 }
 
 _deploy_k8s() {
@@ -324,15 +312,7 @@ _deploy_k8s() {
         bash "$me_path_bin/helm-new.sh" ${helm_release}
     fi
     echo "Found helm files: $path_helm"
-    cat <<EOF
-$helm_opt upgrade ${helm_release} $path_helm/ \
---install --history-max 1 \
---namespace ${env_namespace} --create-namespace \
---set image.repository=${ENV_DOCKER_REGISTRY} \
---set image.tag=${image_tag} \
---set image.pullPolicy=Always \
---timeout 120s
-EOF
+    echo "$helm_opt upgrade ${helm_release} $path_helm/ --install --history-max 1 --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
     _is_github_action && return 0
     ## helm install / helm 安装
     $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
@@ -346,7 +326,7 @@ EOF
     $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
     sleep 3
     ## 检测 helm upgrade 状态
-    $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s || deploy_result=1
+    $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s >/dev/null || deploy_result=1
 
     ## helm install flyway jobs / helm 安装 flyway 任务
     if [[ "$ENV_FLYWAY_HELM_JOB" == 1 && -d "${me_path_conf}"/helm/flyway ]]; then
@@ -356,7 +336,6 @@ EOF
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    _msg stepend "[deploy] deploy with helm"
 }
 
 _deploy_rsync_ssh() {
@@ -419,7 +398,6 @@ _deploy_rsync_ssh() {
             $ssh_opt -n "$ssh_host" "cd $HOME/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
-    _msg stepend "[deploy] deploy files"
 }
 
 _deploy_aliyun_oss() {
@@ -449,7 +427,6 @@ _deploy_aliyun_oss() {
         _msg error "Result = FAIL"
     fi
     _msg time "End time: $(date +'%F %T')"
-    _msg stepend "[oss] deploy files to Aliyun OSS"
 }
 
 _deploy_rsync() {
@@ -477,7 +454,6 @@ put $upload_file
 passive off
 bye
 EOF
-    _msg stepend "[deploy] deploy files to ftp server"
 }
 
 _deploy_sftp() {
@@ -659,7 +635,6 @@ _renew_cert() {
         bash "${acme_home}/custom.acme.sh"
     fi
 
-    _msg stepend "[cert] renew cert with acme.sh using dns+api"
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         _is_github_action || exit 0
     fi
@@ -682,7 +657,6 @@ _get_balance_aliyun() {
         fi
     done
     echo
-    _msg stepend "check balance of aliyun"
     if [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 ]]; then
         return 0
     fi
@@ -962,7 +936,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    _msg step "[inject] inject files: conf/env/Dockerfile..."
+    _msg step "[inject] files conf/env/Dockerfile..."
     ## backend (PHP/Java/Python) project_conf files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     local path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
@@ -1028,7 +1002,7 @@ _inject_files() {
                 *=1.8 | *=8) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-jdk-8 --build-arg IMAGE_JDK=openjdk:8" ;;
                 *=11) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=amazoncorretto:11" ;;
                 *=17) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=amazoncorretto:17" ;;
-                *) echo "jdk_version unknown." ;;
+                *) _msg warn "jdk_version unknown, using default amazoncorretto:8." ;;
                 esac
                 break
             done
