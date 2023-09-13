@@ -11,8 +11,8 @@ _is_root() {
 _set_mirror() {
     if [ "$1" = shanghai ]; then
         export TZ=Asia/Shanghai
-        ln -snf /usr/share/zoneinfo/"${TZ:-Asia/Shanghai}" /etc/localtime
-        echo "${TZ:-Asia/Shanghai}" >/etc/timezone
+        ln -snf /usr/share/zoneinfo/"${TZ}" /etc/localtime
+        echo "${TZ}" >/etc/timezone
         return
     fi
     url_fly_cdn="http://cdn.flyh6.com/docker"
@@ -41,7 +41,7 @@ _set_mirror() {
     fi
     ## maven
     if command -v mvn; then
-        m2_dir=/root/.m2
+        local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
         ## 项目内自带 settings.xml docs/settings.xml
         if [ -f settings.xml ]; then
@@ -73,18 +73,17 @@ _set_mirror() {
 }
 
 _check_run_sh() {
-    ## startup run.sh
     if [ -f "$run_sh" ]; then
         echo "Found $run_sh"
     else
-        echo "Download $run_sh ..."
+        echo "Not found $run_sh, download it..."
         curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
     fi
     chmod +x $run_sh
 }
 
 _build_nginx() {
-    echo "build nginx alpine ..."
+    echo "build nginx:alpine..."
     apk update
     apk upgrade
     apk add --no-cache openssl bash curl shadow
@@ -138,12 +137,8 @@ _build_php() {
         apt-get install -yqq lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
         LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
         case "$PHP_VERSION" in
-        8.*)
-            :
-            ;;
-        *)
-            $apt_opt php"${PHP_VERSION}"-mcrypt
-            ;;
+        8.*) : ;;
+        *) $apt_opt php"${PHP_VERSION}"-mcrypt ;;
         esac
         ;;
     esac
@@ -216,8 +211,7 @@ _onbuild_php() {
 
     ## setup nginx for ThinkPHP
     rm -f /etc/nginx/sites-enabled/default
-    curl -fLo /etc/nginx/sites-enabled/default \
-        "$url_laradock_raw"/php-fpm/root/opt/nginx.conf
+    curl -fLo /etc/nginx/sites-enabled/default "$url_laradock_raw"/php-fpm/root/opt/nginx.conf
 
     _check_run_sh
 }
@@ -249,6 +243,9 @@ _build_mysql() {
 
 _build_redis() {
     echo "build redis ..."
+    [ -n "${REDIS_PASSWORD}" ] && sed -i -e "s/.*requirepass foobared/requirepass ${REDIS_PASSWORD}/" /etc/redis.conf
+    mkdir /run/redis
+    chown redis:redis /run/redis
 }
 
 _build_node() {
@@ -256,9 +253,10 @@ _build_node() {
     if _is_root; then
         [ -d /.cache ] || mkdir /.cache
         chown -R node:node /.cache /app
+        # npm install -g rnpm@1.9.0
+    else
+        npm install
     fi
-    # npm install -g rnpm@1.9.0
-    _is_root || npm install
 }
 
 _build_maven() {
