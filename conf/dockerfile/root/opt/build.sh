@@ -254,6 +254,7 @@ _build_node() {
         [ -d /.cache ] || mkdir /.cache
         chown -R node:node /.cache /app
         # npm install -g rnpm@1.9.0
+        [ -d root ] && rm -rf root
     else
         npm install
     fi
@@ -402,7 +403,6 @@ main() {
     fi
 
     ## clean
-    [ -d root ] && rm -rf root
     if _is_root; then
         if command -v apt-get; then
             apt-get autoremove -y

@@ -31,7 +31,7 @@ COPY ./root/ /
 RUN set -xe; \
     ## 若此处出现错误，请检查 maven build 是否正常
     if [ -f /opt/build.sh ]; then echo "found /opt/build.sh"; else curl -fLo /opt/build.sh $BUILD_URL; fi
-RUN bash -xe /opt/build.sh
+RUN bash /opt/build.sh
 
 
 
