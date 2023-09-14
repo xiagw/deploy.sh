@@ -254,7 +254,7 @@ _build_node() {
         [ -d /.cache ] || mkdir /.cache
         chown -R node:node /.cache /app
         # npm install -g rnpm@1.9.0
-        [ -d root ] && rm -rf root
+        [ -d root ] && rm -rf root || true
     else
         npm install
     fi
