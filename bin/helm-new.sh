@@ -37,7 +37,7 @@ sed -i \
     -e "s@port: 80@port: ${port_number:-8080}@" \
     -e "s/create: true/create: false/" \
     "$values_file"
-sed -i -e '4 a cnfs: cnfs-nas-pvc-www' "$values_file"
+sed -i -e '4 a #cnfs: cnfs-nas-pvc-www' "$values_file"
 
 ## change service.yaml
 sed -i -e "s@targetPort: http@targetPort: {{ .Values.service.port }}@" "$svc_file"
