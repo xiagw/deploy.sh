@@ -26,7 +26,7 @@ _set_mirror() {
         url_laradock_raw=https://github.com/xiagw/laradock/raw/main
     fi
 
-    if [ "$IN_CHINA" = false ] && [ "${CHANGE_SOURCE}" = false ]; then
+    if [ "${IN_CHINA}" = false ] && [ "${CHANGE_SOURCE}" = false ]; then
         return
     fi
     if _is_root; then
@@ -34,6 +34,7 @@ _set_mirror() {
         if [ -f /etc/apt/sources.list ]; then
             sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
                 -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+        ## OS Debian
         elif [ -f /etc/apt/sources.list.d/debian.sources ]; then
             sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
         ## OS alpine, nginx:alpine
@@ -68,7 +69,7 @@ _set_mirror() {
         npm_mirror=https://registry.npmmirror.com/
         # npm_mirror=https://mirrors.ustc.edu.cn/node/
         # npm_mirror=http://mirrors.cloud.tencent.com/npm/
-        #npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
+        # npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
     fi
@@ -80,9 +81,9 @@ _set_mirror() {
 
 _check_run_sh() {
     if [ -f "$run_sh" ]; then
-        echo "Found $run_sh"
+        echo "Found $run_sh, skip download."
     else
-        echo "Not found $run_sh, download it..."
+        echo "Not found $run_sh, download..."
         curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
     fi
     chmod +x $run_sh
@@ -100,9 +101,10 @@ _build_nginx() {
     # Set upstream conf and remove the default conf
     # echo "upstream php-upstream { server ${PHP_UPSTREAM_CONTAINER}:${PHP_UPSTREAM_PORT}; }" >/etc/nginx/php-upstream.conf
     # rm /etc/nginx/conf.d/default.conf
-    if [ -f /docker-entrypoint.d/run.sh ]; then
-        sed -i 's/\r//g' /docker-entrypoint.d/run.sh
-        chmod +x /docker-entrypoint.d/run.sh
+    if [ -f $run_sh ]; then
+        sed -i 's/\r//g' $run_sh
+        chmod +x $run_sh
+        cp -vf $run_sh /docker-entrypoint.d/
     fi
 }
 
@@ -258,6 +260,7 @@ _build_node() {
     echo "build node ..."
     if _is_root; then
         [ -d /.cache ] || mkdir /.cache
+        [ -d /app ] || mkdir /app
         chown -R node:node /.cache /app
         # npm install -g rnpm@1.9.0
         [ -d root ] && rm -rf root || true
