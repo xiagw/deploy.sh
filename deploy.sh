@@ -195,7 +195,7 @@ _deploy_flyway_helm_job() {
     _msg step "[database] deploy SQL with flyway helm job"
     echo "$image_tag_flyway"
     _is_github_action && return 0
-    DOCKER_BUILDKIT=1 $build_cmd build $build_cmd_opt $quiet_flag --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+    DOCKER_BUILDKIT=1 $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     $build_cmd run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
         _msg green "Result = OK"
@@ -246,7 +246,7 @@ _build_image() {
 
     ## build flyway image / 构建 flyway 模板
     if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        $build_cmd build $build_cmd_opt $ENV_ADD_HOST ${quiet_flag} --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
     ## build from Dockerfile.base
     dockerfile_base="${gitlab_project_dir}/Dockerfile.base"
@@ -259,11 +259,11 @@ _build_image() {
             _msg time "found $image_base, skip build."
         else
             _msg time "not found $image_base, build it..."
-            $build_cmd build $build_cmd_opt $ENV_ADD_HOST $quiet_flag --tag $image_base -f "${dockerfile_base}" $build_arg "${gitlab_project_dir}"
+            $build_cmd build $build_cmd_opt --tag $image_base -f "${dockerfile_base}" $build_arg "${gitlab_project_dir}"
         fi
     fi
     ## build container image
-    $build_cmd build $build_cmd_opt $ENV_ADD_HOST $quiet_flag --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
+    $build_cmd build $build_cmd_opt --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     ## push image to ttl.sh
     if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
         image_uuid="ttl.sh/$(uuidgen):1h"
@@ -989,28 +989,23 @@ _inject_files() {
         if [ -d "${gitlab_project_dir}/root/opt" ]; then
             echo "found exist ${gitlab_project_dir}/root/opt"
         else
-            echo "overwriting: ${me_dockerfile}/root/ --> $gitlab_project_dir/root/"
-            rsync -a "${me_dockerfile}/root/" "$gitlab_project_dir/root/"
+            \cp -avf "${me_dockerfile}/root" "$gitlab_project_dir/"
         fi
         ## Dockerfile 优先查找 data/ 目录
         if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-            echo "overwriting: ${me_data_dockerfile}/Dockerfile.${project_lang} --> ${gitlab_project_dir}/Dockerfile"
-            rsync -a "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+            \cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         ## Dockerfile 其次查找 conf/ 目录
         elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-            echo "overwriting: ${me_dockerfile}/Dockerfile.${project_lang} --> ${gitlab_project_dir}/Dockerfile"
-            rsync -a "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+            \cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
         else
-            echo "Not found custom files from data/ or conf/"
+            echo "Not found custom files in data/ or conf/"
         fi
         if [[ "${project_lang}" == java ]]; then
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
-                echo "overwriting: ${me_data_dockerfile}/settings.xml --> ${gitlab_project_dir}/settings.xml"
-                rsync -a "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
+                \cp -avf "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
             elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
-                echo "overwriting: ${me_dockerfile}/root/opt/settings.xml --> ${me_dockerfile}/root/opt/settings.xml"
-                rsync -a "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/settings.xml"
+                \cp -avf "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/"
             fi
             ## find jdk version
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
@@ -1027,10 +1022,10 @@ _inject_files() {
         fi
         case ${gitlab_project_name} in
         *-php*)
-            rsync -a "${me_dockerfile}/Dockerfile.php" "${gitlab_project_dir}/Dockerfile.base"
+            \cp -avf "${me_dockerfile}/Dockerfile.php" "${gitlab_project_dir}/Dockerfile.base"
             ;;
         *-nginx*)
-            rsync -a "${me_dockerfile}/Dockerfile.nginx" "${gitlab_project_dir}/Dockerfile.base"
+            \cp -avf "${me_dockerfile}/Dockerfile.nginx" "${gitlab_project_dir}/Dockerfile.base"
             ;;
         esac
         ;;
@@ -1045,8 +1040,7 @@ _inject_files() {
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
     if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
-        echo "Not found .dockerignore, using global .dockerignore."
-        rsync -a "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
+        \cp -avf "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
     fi
 
     ## flyway files sql & conf
@@ -1065,7 +1059,7 @@ _inject_files() {
         [[ -d "$path_flyway_sql_proj" && ! -d "$path_flyway_sql" ]] && rsync -a "$path_flyway_sql_proj/" "$path_flyway_sql/"
         [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
-        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || rsync -av "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || \cp -avf "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
 }
 
@@ -1458,6 +1452,7 @@ main() {
     export PATH
 
     run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
+    build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "} $ENV_ADD_HOST $quiet_flag"
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _detect_os
 
