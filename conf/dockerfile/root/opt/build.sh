@@ -15,6 +15,7 @@ _set_mirror() {
         echo "${TZ}" >/etc/timezone
         return
     fi
+
     url_fly_cdn="http://cdn.flyh6.com/docker"
 
     if [ "$IN_CHINA" = true ] || [ "$CHANGE_SOURCE" = true ]; then
@@ -33,6 +34,8 @@ _set_mirror() {
         if [ -f /etc/apt/sources.list ]; then
             sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
                 -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+        elif [ -f /etc/apt/sources.list.d/debian.sources ]; then
+            sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
         ## OS alpine, nginx:alpine
         elif [ -f /etc/apk/repositories ]; then
             # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
@@ -63,6 +66,9 @@ _set_mirror() {
     ## node, npm, yarn
     if command -v npm; then
         npm_mirror=https://registry.npmmirror.com/
+        # npm_mirror=https://mirrors.ustc.edu.cn/node/
+        # npm_mirror=http://mirrors.cloud.tencent.com/npm/
+        #npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
     fi
@@ -256,7 +262,8 @@ _build_node() {
         # npm install -g rnpm@1.9.0
         [ -d root ] && rm -rf root || true
     else
-        npm install
+        # npm install
+        yarn install
     fi
 }
 
@@ -307,7 +314,7 @@ _build_jdk_runtime_amzn() {
             touch "/app/profile.${MVN_PROFILE:-main}"
         fi
     done
-    yum clean all
+    # yum clean all
     rm -rf /var/cache/yum
 }
 
@@ -388,9 +395,9 @@ main() {
     elif [ -n "$PHP_VERSION" ]; then
         _set_mirror shanghai
         _build_php
-    elif command -v mvn && [ -n "$MVN_PROFILE" ]; then
+    elif command -v mvn; then
         _build_maven
-    elif command -v java && [ -n "$MVN_PROFILE" ]; then
+    elif command -v java; then
         if command -v apt-get; then
             _build_jdk_runtime
         else
