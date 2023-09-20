@@ -9,37 +9,20 @@ FROM ${IMAGE_NAME}:22.04
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
 ARG PHP_VERSION=8.1
-ARG BUILD_URL=https://github.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 
-## for apt to be noninteractive
-ENV DEBIAN_FRONTEND=noninteractive \
-    DEBCONF_NONINTERACTIVE_SEEN=true \
-    TIME_ZOME=Asia/Shanghai \
-    PHP_VERSION=${PHP_VERSION}
+ENV PHP_VERSION=${PHP_VERSION}
 
 EXPOSE 80 443 9000
-WORKDIR /var/www/html
+# WORKDIR /var/www/html
 WORKDIR /app
 CMD ["bash", "/opt/run.sh"]
 
 # SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 COPY ./root/ /
-RUN set -xe; \
-    if [ -f /opt/build.sh ]; then \
-    echo "Found /opt/build.sh"; \
-    else \
-    echo "Downloading build.sh..."; \
-    if [ "$CHANGE_SOURCE" = true ] || [ "$IN_CHINA" = true ]; then \
-    sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
-    fi; \
-    apt-get update -yqq; \
-    apt-get install -yqq --no-install-recommends curl ca-certificates vim; \
-    apt-get clean all; \
-    rm -rf /tmp/*; \
-    BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh; \
-    curl -fLo /opt/build.sh $BUILD_URL; \
-    fi; \
-    bash /opt/build.sh
+RUN set -xe; bash /opt/build.sh
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi
+
+# podman build --force-rm --format=docker -t deploy/base:php8.1 -f Dockerfile.node.base .
+# docker build --force-rm -t deploy/base:php8.1 -f Dockerfile.node.base .

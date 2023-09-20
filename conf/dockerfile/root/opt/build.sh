@@ -124,7 +124,7 @@ _build_php() {
     rm -f /etc/timezone /etc/localtime
 
     export DEBIAN_FRONTEND=noninteractive
-    # export TZ=Asia/Shanghai
+    export DEBCONF_NONINTERACTIVE_SEEN=true
 
     $apt_opt tzdata
     $apt_opt locales
