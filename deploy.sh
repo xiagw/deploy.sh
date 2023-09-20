@@ -243,9 +243,9 @@ _build_image() {
     _is_github_action && return 0
     _msg step "[image] build container image"
 
+    ## build from Dockerfile.base
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
-        ## build from Dockerfile.base
-        $build_cmd build $build_cmd_opt --tag deploy/base:$gitlab_project_name -f "${gitlab_project_dir}/Dockerfile.base" $build_arg "${gitlab_project_dir}"
+        $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} -f "${gitlab_project_dir}/Dockerfile.base" $build_arg "${gitlab_project_dir}"
 
         ## just build base image, disable deploy
         exec_push_image=0
@@ -1012,14 +1012,6 @@ _inject_files() {
                 break
             done
         fi
-        case ${gitlab_project_name} in
-        *-php*)
-            \cp -avf "${me_dockerfile}/Dockerfile.php" "${gitlab_project_dir}/Dockerfile.base"
-            ;;
-        *-nginx*)
-            \cp -avf "${me_dockerfile}/Dockerfile.nginx" "${gitlab_project_dir}/Dockerfile.base"
-            ;;
-        esac
         ;;
     remove)
         echo 'Removing Dockerfile (disable docker build)'
