@@ -424,13 +424,7 @@ main() {
             apt-get clean all
             rm -rf /var/lib/apt/lists/*
         fi
-        rm -rf /tmp/*
-        while read -r line; do
-            case "$line" in
-            /opt/run.sh | /opt/build.sh) continue ;;
-            *) rm -rf "$line" ;;
-            esac
-        done < <(find /opt/* 2>/dev/null)
+        rm -rf /tmp/* /opt/*.{cnf,xml,log}
     else
         :
     fi
