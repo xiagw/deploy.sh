@@ -242,27 +242,18 @@ _build_maven() {
     mvn --threads 1C --update-snapshots -DskipTests $MVN_DEBUG -Dmaven.compile.fork=true clean package
 
     mkdir /jars
-    jar_files=(
-        ./target/*.jar
-        ./*/target/*.jar
-        ./*/*/target/*.jar
-    )
-    for jar in "${jar_files[@]}"; do
+    while read -r jar; do
         [ -f "$jar" ] || continue
         echo "$jar" | grep -E 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' ||
             cp -vf "$jar" /jars/
-    done
+    done < <(find ./target/*.jar ./*/target/*.jar ./*/*/target/*.jar 2>/dev/null)
     if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
-        yml_files=(
-            ./*/*/*/resources/*"${MVN_PROFILE:-main}".yml
-            ./*/*/*/resources/*"${MVN_PROFILE:-main}".yaml
-        )
         c=0
-        for yml in "${yml_files[@]}"; do
+        while read -r yml; do
             [ -f "$yml" ] || continue
             c=$((c + 1))
             cp -vf "$yml" /jars/"${c}.${yml##*/}"
-        done
+        done < <(find ./*/*/*/resources/*"${MVN_PROFILE:-main}".yml ./*/*/*/resources/*"${MVN_PROFILE:-main}".yaml 2>/dev/null)
     fi
 }
 
