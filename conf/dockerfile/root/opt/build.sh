@@ -226,7 +226,8 @@ _build_node() {
         # npm install
         yarn install
     fi
-    [ -d root ] && rm -rf root || true
+    [ -d root ] && rm -rf root
+    rm -rf /opt/*
 }
 
 _build_maven() {
@@ -426,7 +427,10 @@ main() {
             apt-get clean all
             rm -rf /var/lib/apt/lists/*
         fi
-        rm -rf /tmp/* /opt/*.{cnf,xml,log}
+        rm -rf /tmp/*
+        while read -r line; do
+            [ "$line" = '/opt/run.sh' ] || rm -rf "$line"
+        done < <(find /opt 2>/dev/null)
     else
         :
     fi
