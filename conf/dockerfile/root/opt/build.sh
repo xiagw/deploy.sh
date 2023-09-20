@@ -377,7 +377,7 @@ main() {
         build_type=nginx
     elif command -v composer; then
         build_type=composer
-    elif command -v php && [ -n "$PHP_VERSION" ]; then
+    elif [ -n "$PHP_VERSION" ]; then
         build_type=php
     elif command -v mvn; then
         build_type=maven
