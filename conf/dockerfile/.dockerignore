@@ -15,7 +15,7 @@
 Dockerfile
 docker-compose.yml
 docker-compose.yaml
-Dockerfile.flyway
+Dockerfile*
 flyway_conf/
 flyway_sql/
 

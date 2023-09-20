@@ -1040,7 +1040,7 @@ _inject_files() {
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
     if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
-        \cp -avf "${me_path_conf}/.dockerignore" "${gitlab_project_dir}/"
+        \cp -avf "${me_dockerfile}/.dockerignore" "${gitlab_project_dir}/"
     fi
 
     ## flyway files sql & conf
