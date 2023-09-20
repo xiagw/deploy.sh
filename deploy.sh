@@ -211,9 +211,9 @@ _deploy_flyway_helm_job() {
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
 _docker_login() {
+    _is_github_action && return 0
     local lock_docker_login="$me_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     local time_last
-    _is_github_action && return 0
     case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
     aws)
         time_last="$(stat -t -c %Y "$lock_docker_login" 2>/dev/null || echo 0)"
@@ -240,27 +240,20 @@ _docker_login() {
 }
 
 _build_image() {
-    _msg step "[image] build container image"
-    _docker_login
     _is_github_action && return 0
+    _msg step "[image] build container image"
 
-    ## build flyway image / 构建 flyway 模板
-    if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
-    fi
-    ## build from Dockerfile.base
-    dockerfile_base="${gitlab_project_dir}/Dockerfile.base"
-    if [[ -f "${dockerfile_base}" ]]; then
-        image_base=deploy/base:$gitlab_project_name
-        php_ver="${gitlab_project_name##*php}"
-        build_arg="${build_arg:+"$build_arg "}--build-arg PHP_VERSION=${php_ver:0:1}.${php_ver:1}"
-        build_arg="${build_arg:+"$build_arg "}--build-arg BASE_TAG=${gitlab_project_name}"
-        if $build_cmd images | grep "deploy/base.*$gitlab_project_name"; then
-            _msg time "found $image_base, skip build."
-        else
-            _msg time "not found $image_base, build it..."
-            $build_cmd build $build_cmd_opt --tag $image_base -f "${dockerfile_base}" $build_arg "${gitlab_project_dir}"
-        fi
+    if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
+        ## build from Dockerfile.base
+        $build_cmd build $build_cmd_opt --tag deploy/base:$gitlab_project_name -f "${gitlab_project_dir}/Dockerfile.base" $build_arg "${gitlab_project_dir}"
+
+        ## just build base image, disable deploy
+        exec_push_image=0
+        exec_deploy_k8s=0
+        exec_build_langs=0
+        exec_deploy_rsync_ssh=0
+        deploy_method=none
+        return
     fi
     ## build container image
     $build_cmd build $build_cmd_opt --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
@@ -279,7 +272,6 @@ _build_image() {
 
 _push_image() {
     _msg step "[image] push container image"
-    _is_github_action && return 0
     _is_demo_mode "push-image" && return 0
     _docker_login
     if $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
