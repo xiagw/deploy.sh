@@ -62,10 +62,10 @@ _set_mirror() {
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
         ;;
     node)
-        npm_mirror=https://registry.npmmirror.com/
+        # npm_mirror=https://registry.npmmirror.com/
         # npm_mirror=https://mirrors.ustc.edu.cn/node/
         # npm_mirror=http://mirrors.cloud.tencent.com/npm/
-        # npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
+        npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
         ;;
