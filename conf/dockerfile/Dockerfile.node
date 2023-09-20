@@ -1,1 +1,1 @@
-FROM deploy/base:node18
+FROM deploy/base:node-18

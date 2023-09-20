@@ -221,13 +221,10 @@ _build_node() {
         [ -d /.cache ] || mkdir /.cache
         [ -d /app ] || mkdir /app
         chown -R node:node /.cache /app
-        # npm install -g rnpm@1.9.0
     else
-        # npm install
         yarn install
+        [ -d root ] && rm -rf root || :
     fi
-    [ -d root ] && rm -rf root
-    rm -rf /opt/*
 }
 
 _build_maven() {
@@ -429,7 +426,10 @@ main() {
         fi
         rm -rf /tmp/*
         while read -r line; do
-            [ "$line" = '/opt/run.sh' ] || rm -rf "$line"
+            case "$line" in
+            /opt/run.sh | /opt/build.sh) continue ;;
+            *) rm -rf "$line" ;;
+            esac
         done < <(find /opt/* 2>/dev/null)
     else
         :
