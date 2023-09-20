@@ -71,7 +71,7 @@ _set_mirror() {
         ;;
     python)
         pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
-        pip config set global.index-url $pip_mirror
+        python -m pip config set global.index-url $pip_mirror
         ;;
     esac
 }
@@ -221,8 +221,10 @@ _build_node() {
         [ -d /.cache ] || mkdir /.cache
         [ -d /app ] || mkdir /app
         chown -R node:node /.cache /app
+        npm install -g npm
+        npm install -g cnpm
     else
-        yarn install
+        cnpm install
         [ -d root ] && rm -rf root || :
     fi
 }
@@ -385,7 +387,7 @@ main() {
         build_type=java
     elif command -v node; then
         build_type=node
-    elif command -v python && command -v pip; then
+    elif command -v python; then
         build_type=python
     elif command -v mysql; then
         build_type=mysql
