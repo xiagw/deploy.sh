@@ -24,9 +24,6 @@ _set_mirror() {
     else
         url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
         url_laradock_raw=https://github.com/xiagw/laradock/raw/main
-    fi
-
-    if [ "${IN_CHINA}" = false ] && [ "${CHANGE_SOURCE}" = false ]; then
         return
     fi
     if _is_root; then
@@ -43,8 +40,8 @@ _set_mirror() {
             sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
         fi
     fi
-    ## maven
-    if command -v mvn; then
+    case $build_type in
+    maven)
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
         ## 项目内自带 settings.xml docs/settings.xml
@@ -57,26 +54,26 @@ _set_mirror() {
         else
             curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
         fi
-    fi
-    ## PHP composer
-    if command -v composer && _is_root; then
+        ;;
+    composer)
+        _is_root || return
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
         mkdir -p /var/www/.composer /.composer
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
-    fi
-    ## node, npm, yarn
-    if command -v npm; then
-        npm_mirror=https://registry.npmmirror.com/
+        ;;
+    node)
+        # npm_mirror=https://registry.npmmirror.com/
         # npm_mirror=https://mirrors.ustc.edu.cn/node/
-        # npm_mirror=http://mirrors.cloud.tencent.com/npm/
+        npm_mirror=http://mirrors.cloud.tencent.com/npm/
         # npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
-    fi
-    ## python pip
-    if command -v pip; then
-        pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-    fi
+        ;;
+    python)
+        pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
+        pip config set global.index-url $pip_mirror
+        ;;
+    esac
 }
 
 _check_run_sh() {
@@ -110,6 +107,7 @@ _build_nginx() {
 
 _build_php() {
     echo "build php ..."
+    _set_mirror shanghai
     apt-get update -yqq
     # apt-get install -yqq libjemalloc2
     $apt_opt apt-utils
@@ -224,38 +222,6 @@ _onbuild_php() {
     _check_run_sh
 }
 
-_build_mysql() {
-    echo "build mysql ..."
-    chown -R mysql:root /var/lib/mysql/
-    chmod o-rw /var/run/mysqld
-
-    my_cnf=/etc/mysql/conf.d/my.cnf
-    if mysqld --version | grep '8\..\.'; then
-        cp -f "$me_path"/my.8.cnf $my_cnf
-    else
-        cp -f "$me_path"/my.cnf $my_cnf
-    fi
-    chmod 0444 $my_cnf
-    if [ "$MYSQL_SLAVE" = 'true' ]; then
-        sed -i -e "/server_id/s/1/${MYSQL_SLAVE_ID:-2}/" -e "/auto_increment_offset/s/1/2/" $my_cnf
-    fi
-    if [ -f /etc/my.cnf ]; then
-        sed -i '/skip-host-cache/d' /etc/my.cnf
-    fi
-
-    printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >"$HOME"/.my.cnf
-    printf "export LANG=C.UTF-8\alias l='ls -al'" >"$HOME"/.bashrc
-
-    chmod +x /opt/*.sh
-}
-
-_build_redis() {
-    echo "build redis ..."
-    [ -n "${REDIS_PASSWORD}" ] && sed -i -e "s/.*requirepass foobared/requirepass ${REDIS_PASSWORD}/" /etc/redis.conf
-    mkdir /run/redis
-    chown redis:redis /run/redis
-}
-
 _build_node() {
     echo "build node ..."
     if _is_root; then
@@ -353,6 +319,43 @@ _build_jdk_runtime() {
     done
 }
 
+_build_python() {
+    echo TODO...
+    return 1
+}
+
+_build_mysql() {
+    echo "build mysql ..."
+    chown -R mysql:root /var/lib/mysql/
+    chmod o-rw /var/run/mysqld
+
+    my_cnf=/etc/mysql/conf.d/my.cnf
+    if mysqld --version | grep '8\..\.'; then
+        cp -f "$me_path"/my.8.cnf $my_cnf
+    else
+        cp -f "$me_path"/my.cnf $my_cnf
+    fi
+    chmod 0444 $my_cnf
+    if [ "$MYSQL_SLAVE" = 'true' ]; then
+        sed -i -e "/server_id/s/1/${MYSQL_SLAVE_ID:-2}/" -e "/auto_increment_offset/s/1/2/" $my_cnf
+    fi
+    if [ -f /etc/my.cnf ]; then
+        sed -i '/skip-host-cache/d' /etc/my.cnf
+    fi
+
+    printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >"$HOME"/.my.cnf
+    printf "export LANG=C.UTF-8\alias l='ls -al'" >"$HOME"/.bashrc
+
+    chmod +x /opt/*.sh
+}
+
+_build_redis() {
+    echo "build redis ..."
+    [ -n "${REDIS_PASSWORD}" ] && sed -i -e "s/.*requirepass foobared/requirepass ${REDIS_PASSWORD}/" /etc/redis.conf
+    mkdir /run/redis
+    chown redis:redis /run/redis
+}
+
 _build_tomcat() {
     # FROM bitnami/tomcat:8.5 as tomcat
     sed -i -e '/Connector port="8080"/ a maxConnections="800" acceptCount="500" maxThreads="400"' /opt/bitnami/tomcat/conf/server.xml
@@ -377,12 +380,34 @@ main() {
 
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
-    me_log="$me_path/${me_name}.log"
+    if [ -w "$me_path" ]; then
+        me_log="$me_path/${me_name}.log"
+    else
+        me_log="/tmp/${me_name}.log"
+    fi
 
     run_sh=/opt/run.sh
     echo "build log file: $me_log"
 
     apt_opt="apt-get install -yqq --no-install-recommends"
+
+    if command -v nginx; then
+        build_type=nginx
+    elif command -v composer; then
+        build_type=composer
+    elif command -v php && [ -n "$PHP_VERSION" ]; then
+        build_type=php
+    elif command -v mvn; then
+        build_type=maven
+    elif command -v java; then
+        build_type=java
+    elif command -v node; then
+        build_type=node
+    elif command -v python && command -v pip; then
+        build_type=python
+    elif command -v mysql; then
+        build_type=mysql
+    fi
 
     _set_mirror
 
@@ -393,24 +418,22 @@ main() {
         ;;
     esac
 
-    if command -v nginx; then
-        _build_nginx
-    elif [ -n "$PHP_VERSION" ]; then
-        _set_mirror shanghai
-        _build_php
-    elif command -v mvn; then
-        _build_maven
-    elif command -v java; then
+    case $build_type in
+    nginx) _build_nginx ;;
+    php) _build_php ;;
+    composer) _build_composer ;;
+    maven) _build_maven ;;
+    java)
         if command -v apt-get; then
             _build_jdk_runtime
         else
             _build_jdk_runtime_amzn
         fi
-    elif command -v node; then
-        _build_node
-    elif command -v mysql; then
-        _build_mysql
-    fi
+        ;;
+    node) _build_node ;;
+    python) _build_python ;;
+    mysql) _build_mysql ;;
+    esac
 
     ## clean
     if _is_root; then

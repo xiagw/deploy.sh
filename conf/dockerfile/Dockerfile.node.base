@@ -1,0 +1,25 @@
+ARG NODE_VER=18-slim
+FROM node:${NODE_VER}
+
+ARG IN_CHINA=false
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG BUILD_SH=/opt/build.sh
+
+WORKDIR /app
+COPY ./root/opt/build.sh /opt/
+RUN set -xe; \
+    if [ -f $BUILD_SH ]; then echo "found $BUILD_SH"; else curl -fLo $BUILD_SH $BUILD_URL; fi; \
+    bash $BUILD_SH
+
+# CMD [ "/opt/run.sh" ]
+CMD [ "npm", "run", "start" ]
+
+USER node
+COPY --chown=node:node ./package.json .
+RUN set -xe; bash $BUILD_SH
+
+ONBUILD COPY --chown=node:node . .
+# ONBUILD RUN rm -rf root
+
+# podman build --force-rm --format=docker -t deploy/base:node18 -f Dockerfile.node.base .
+# docker build --force-rm -t deploy/base:node18 -f Dockerfile.node.base .
