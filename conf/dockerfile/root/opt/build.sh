@@ -229,11 +229,11 @@ _build_node() {
         [ -d /app ] || mkdir /app
         chown -R node:node /.cache /app
         # npm install -g rnpm@1.9.0
-        [ -d root ] && rm -rf root || true
     else
         # npm install
         yarn install
     fi
+    [ -d root ] && rm -rf root || true
 }
 
 _build_maven() {
