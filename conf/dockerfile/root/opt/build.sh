@@ -95,14 +95,7 @@ _build_nginx() {
 
     groupmod -g 1000 nginx
     usermod -u 1000 nginx
-    # Set upstream conf and remove the default conf
-    # echo "upstream php-upstream { server ${PHP_UPSTREAM_CONTAINER}:${PHP_UPSTREAM_PORT}; }" >/etc/nginx/php-upstream.conf
-    # rm /etc/nginx/conf.d/default.conf
-    if [ -f $run_sh ]; then
-        sed -i 's/\r//g' $run_sh
-        chmod +x $run_sh
-        cp -vf $run_sh /docker-entrypoint.d/
-    fi
+    rm -rf /opt/*
 }
 
 _build_php() {
