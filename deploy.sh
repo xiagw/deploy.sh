@@ -245,7 +245,8 @@ _build_image() {
 
     ## build from Dockerfile.base
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
-        $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} -f "${gitlab_project_dir}/Dockerfile.base" $build_arg "${gitlab_project_dir}"
+        echo "deploy/base:${gitlab_project_name}-${gitlab_project_branch}"
+        $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
 
         ## just build base image, disable deploy
         exec_push_image=0
