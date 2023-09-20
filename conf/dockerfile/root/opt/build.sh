@@ -430,7 +430,7 @@ main() {
         rm -rf /tmp/*
         while read -r line; do
             [ "$line" = '/opt/run.sh' ] || rm -rf "$line"
-        done < <(find /opt 2>/dev/null)
+        done < <(find /opt/* 2>/dev/null)
     else
         :
     fi
