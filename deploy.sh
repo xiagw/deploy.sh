@@ -1159,7 +1159,7 @@ _probe_langs() {
 _probe_deploy_method() {
     _msg step "[probe] deploy method"
     local deploy_method=rsync
-    for f in Dockerfile docker-compose.yml; do
+    for f in Dockerfile Dockerfile.base docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         echo "Found $f"
         case $f in
@@ -1167,7 +1167,7 @@ _probe_deploy_method() {
             exec_deploy_docker_compose=1
             deploy_method=docker-compose
             ;;
-        Dockerfile)
+        Dockerfile | Dockerfile.base)
             exec_build_image=1
             exec_push_image=1
             exec_deploy_k8s=1
