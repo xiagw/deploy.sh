@@ -16,7 +16,7 @@ COPY --chown=node:node ./package.json .
 RUN set -xe; bash /opt/build.sh
 
 ONBUILD COPY --chown=node:node . .
-ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi
+ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi; if [ -d root ]; then rm -rf root; else :; fi
 
 # podman build --force-rm --format=docker -t deploy/base:node-18 -f Dockerfile.node.base .
 # docker build --force-rm -t deploy/base:node-18 -f Dockerfile.node.base .
