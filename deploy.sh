@@ -247,6 +247,7 @@ _build_image() {
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
         echo "deploy/base:${gitlab_project_name}-${gitlab_project_branch}"
         if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
+            echo "Found ${gitlab_project_dir}/build.base.sh, run..."
             bash "${gitlab_project_dir}/build.base.sh"
         else
             $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
@@ -983,13 +984,13 @@ _inject_files() {
             \cp -avf "${me_dockerfile}/root" "$gitlab_project_dir/"
         fi
         ## Dockerfile 优先查找 data/ 目录
-        if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-            \cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
-        ## Dockerfile 其次查找 conf/ 目录
-        elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-            \cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
-        else
-            echo "Not found custom files in data/ or conf/"
+        if [ ! -f "${gitlab_project_dir}/Dockerfile" ]; then
+            if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
+                \cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+            ## Dockerfile 其次查找 conf/ 目录
+            elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
+                \cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+            fi
         fi
         if [[ "${project_lang}" == java ]]; then
             ## java settings.xml 优先查找 data/ 目录
