@@ -968,9 +968,9 @@ _inject_files() {
             [[ -f "$file" ]] || continue
             echo "Found $file"
             if [[ "$file" =~ 'config' ]]; then
-                rsync -av "$file" "${file/${env_namespace}./}" # vue2.x
+                \cp -avf "$file" "${file/${env_namespace}./}" # vue2.x
             else
-                rsync -av "$file" "${file/${env_namespace}/}" # vue3.x
+                \cp -avf "$file" "${file/${env_namespace}/}" # vue3.x
             fi
         done
     fi
@@ -990,7 +990,9 @@ _inject_files() {
             \cp -avf "${me_dockerfile}/root" "$gitlab_project_dir/"
         fi
         ## Dockerfile 优先查找 data/ 目录
-        if [ ! -f "${gitlab_project_dir}/Dockerfile" ]; then
+        if [[ "${project_lang}" == node && -f "${gitlab_project_dir}/Dockerfile" ]]; then
+            echo "skip cp Dockerfile."
+        else
             if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
                 \cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
             ## Dockerfile 其次查找 conf/ 目录
@@ -999,13 +1001,6 @@ _inject_files() {
             fi
         fi
         if [[ "${project_lang}" == java ]]; then
-            ## Dockerfile 优先查找 data/ 目录
-            if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                \cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
-            ## Dockerfile 其次查找 conf/ 目录
-            elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                \cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
-            fi
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
                 \cp -avf "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"

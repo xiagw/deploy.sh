@@ -175,7 +175,7 @@ export QRC_MOS_LW_PRECISION=Y
 
 # Set up foundry DFM PATH for Assura - CRNxxG/CRNxxLP process for current project
 export TSMC_ASU_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxG/Assura/lvs_rcx/DFM
-#export TSMC_ASU_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxLP/Assura/lvs_rcx/DFM
+# export TSMC_ASU_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxLP/Assura/lvs_rcx/DFM
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Cadence Physical Verification System, MaskCompose, & QuickView (PVS)
@@ -191,8 +191,8 @@ export LM_LICENSE_FILE=$CDS_LIC_FILE
 export XKEYSYMDB=$CDSDIR/tools/plot/etc/XKeysymDB
 
 # Commands on terminal to launch Quickview or MaskCompose
-#k2_viewer &
-#k2_mcs &
+# k2_viewer &
+# k2_mcs &
 
 ##############################################################
 # Cadence Digital Flow - HDL Simulations, Synthesis, P&R
