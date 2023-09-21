@@ -130,11 +130,11 @@ _start_node() {
 }
 
 _schedule_upgrade() {
-    local file_local=upgrade_auto
-    if [[ -f "$html_path/$file_local" ]]; then
+    local trigger_file=.trigger_file
+    if [[ -f "$html_path/$trigger_file" ]]; then
         upgrade_type="$html_path"
     fi
-    if [[ -f $app_path/$file_local ]]; then
+    if [[ -f $app_path/$trigger_file ]]; then
         upgrade_type="$app_path"
     fi
     if [[ -z "$upgrade_type" ]]; then
@@ -143,14 +143,15 @@ _schedule_upgrade() {
 
     upgrade_url=http://cdn.flyh6.com/docker
     upgrade_file=upgrade_check.txt
-    upgrade_file_path=/tmp/upgrade_check.txt
-    touch $upgrade_file_path
-    curl -fsSLo "$upgrade_file_path" "${upgrade_url}/$upgrade_file" 2>/dev/null
-    app_id_remote=$(awk -F= '/^app_id=/ {print $2}' "$upgrade_file_path")
-    app_ver_remote=$(awk -F= '/^app_ver=/ {print $2}' "$upgrade_file_path")
+    upgrade_file_tmp=/tmp/$upgrade_file
+    touch $upgrade_file_tmp
+    curl -fsSLo "$upgrade_file_tmp" "${upgrade_url}/$upgrade_file" 2>/dev/null
+    # source "$upgrade_file_tmp"
+    app_id_remote=$(awk -F= '/^app_id=/ {print $2}' "$upgrade_file_tmp")
+    app_ver_remote=$(awk -F= '/^app_ver=/ {print $2}' "$upgrade_file_tmp")
 
     # shellcheck source=/dev/null
-    source "$upgrade_type/$file_local"
+    source "$upgrade_type/$trigger_file"
     if [[ "${app_id:-1}" == "$app_id_remote" && "${app_ver:-1}" == "$app_ver_remote" ]]; then
         return 0
     fi
@@ -161,9 +162,9 @@ _schedule_upgrade() {
             _msg "decompress $line."
             tar -C "$upgrade_type/" -zxf /tmp/"${line}" && rm -f /tmp/"${line}"*
         fi
-    done < <(awk -F= '/^app_zip=/ {print $2}' "$upgrade_file_path")
-    _msg "set app_ver=$app_ver_remote to $upgrade_type/$file_local"
-    sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$upgrade_type/$file_local"
+    done < <(awk -F= '/^app_zip=/ {print $2}' "$upgrade_file_tmp")
+    _msg "set app_ver=$app_ver_remote to $upgrade_type/$trigger_file"
+    sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$upgrade_type/$trigger_file"
     rm -f /tmp/${upgrade_file}*
 }
 

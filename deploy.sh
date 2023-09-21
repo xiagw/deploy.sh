@@ -64,6 +64,14 @@ _is_demo_mode() {
     fi
 }
 
+_is_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 ## install phpunit
 _test_unit() {
     if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
@@ -245,11 +253,11 @@ _build_image() {
 
     ## build from Dockerfile.base
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
-        echo "deploy/base:${gitlab_project_name}-${gitlab_project_branch}"
         if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
-            echo "Found ${gitlab_project_dir}/build.base.sh, run..."
+            echo "Found ${gitlab_project_dir}/build.base.sh, run it..."
             bash "${gitlab_project_dir}/build.base.sh"
         else
+            echo "deploy/base:${gitlab_project_name}-${gitlab_project_branch}"
             $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
         fi
         exit_directly=1
@@ -814,7 +822,7 @@ _install_jmeter() {
 _install_docker() {
     command -v docker &>/dev/null && return
     _msg info "installing docker"
-    [[ $(/usr/bin/id -u) -eq 0 ]] || use_sudo=sudo
+    _is_root || use_sudo=sudo
     [[ "${ENV_IN_CHINA:-false}" == 'true' ]] && install_arg='-s --mirror Aliyun'
     curl -fsSL https://get.docker.com | $use_sudo bash $install_arg
 }
@@ -827,9 +835,7 @@ _install_podman() {
 }
 
 _detect_os() {
-    if [[ "$(/usr/bin/id -u)" != 0 ]]; then
-        use_sudo=sudo
-    fi
+    _is_root || use_sudo=sudo
     if [[ -e /etc/os-release ]]; then
         # shellcheck disable=1091
         os_type="$(source /etc/os-release && echo ${ID})"
@@ -993,6 +999,13 @@ _inject_files() {
             fi
         fi
         if [[ "${project_lang}" == java ]]; then
+            ## Dockerfile 优先查找 data/ 目录
+            if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
+                \cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+            ## Dockerfile 其次查找 conf/ 目录
+            elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
+                \cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+            fi
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
                 \cp -avf "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
