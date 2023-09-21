@@ -72,7 +72,7 @@ deploy:
   #     - target/
   #     - dist/
   script:
-    - bash $HOME/runner/deploy.sh
+    - bash deploy.sh
     # - bash $HOME/runner/deploy.sh --deploy-rsync-ssh
     # - bash $HOME/runner/deploy.sh --deploy-rsync
     # - bash $HOME/runner/deploy.sh --deploy-ftp
