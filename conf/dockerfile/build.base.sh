@@ -11,15 +11,15 @@ fi
 
 if command -v podman; then
     cmd='podman'
-    cmd_opt="$cmd build --force-rm --format=docker"
+    cmd_opt="$cmd build --progress=plain --force-rm --format=docker"
 else
     cmd='docker'
-    cmd_opt="$cmd build"
+    cmd_opt="$cmd build --progress=plain"
 fi
 for ver in "${vers[@]}"; do
     ## build base
     tag="php-${ver}"
-    DOCKER_BUILDKIT=0 $cmd_opt \
+    $cmd_opt \
         --build-arg PHP_VERSION="$ver" \
         --build-arg IN_CHINA="true" \
         -f Dockerfile.php.base \
@@ -27,7 +27,7 @@ for ver in "${vers[@]}"; do
         "$me_path"
     ## build for laradock
     echo "FROM deploy/base:$tag" >Dockerfile.php
-    DOCKER_BUILDKIT=0 $cmd_opt \
+    $cmd_opt \
         -f Dockerfile.php \
         -t deploy/php:"$ver" \
         "$me_path"
