@@ -8,6 +8,14 @@ _is_root() {
     fi
 }
 
+_is_china() {
+    if [ "$IN_CHINA" = true ] || [ "$CHANGE_SOURCE" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 _set_mirror() {
     if [ "$1" = shanghai ]; then
         export TZ=Asia/Shanghai
@@ -18,7 +26,7 @@ _set_mirror() {
 
     url_fly_cdn="http://cdn.flyh6.com/docker"
 
-    if [ "$IN_CHINA" = true ] || [ "$CHANGE_SOURCE" = true ]; then
+    if _is_china; then
         url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
         url_laradock_raw=https://gitee.com/xiagw/laradock/raw/in-china
     else
@@ -95,7 +103,6 @@ _build_nginx() {
 
     groupmod -g 1000 nginx
     usermod -u 1000 nginx
-    rm -rf /opt/*
 }
 
 _build_php() {
@@ -197,7 +204,7 @@ _build_php() {
 
 _onbuild_php() {
     if command -v php && [ -n "$PHP_VERSION" ]; then
-        echo "command php exists, php ver is $PHP_VERSION"
+        php -v
     else
         return
     fi
@@ -209,7 +216,6 @@ _onbuild_php() {
     fi
 
     ## setup nginx for ThinkPHP
-    rm -f /etc/nginx/sites-enabled/default
     curl -fLo /etc/nginx/sites-enabled/default "$url_laradock_raw"/php-fpm/root/opt/nginx.conf
 
     _check_run_sh
@@ -222,9 +228,15 @@ _build_node() {
         [ -d /app ] || mkdir /app
         chown -R node:node /.cache /app
         npm install -g npm
-        npm install -g cnpm
+        if _is_china; then
+            npm install -g cnpm
+        fi
     else
-        cnpm install
+        if _is_china; then
+            cnpm install
+        else
+            npm install
+        fi
         [ -d root ] && rm -rf root || :
     fi
 }
@@ -250,46 +262,42 @@ _build_maven() {
     fi
 }
 
-_build_jdk_runtime_amzn() {
-    ## set ssl
-    sec_file=/usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security
-    if [[ -f $sec_file ]]; then
-        sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $sec_file
-    fi
-
-    _check_run_sh
-
-    chown -R 1000:1000 /app
-    for file in /app/*.{yml,yaml}; do
-        if [ -f "$file" ]; then
-            break
-        else
-            touch "/app/profile.${MVN_PROFILE:-main}"
-        fi
-    done
-    # yum clean all
-    rm -rf /var/cache/yum
-}
-
 _build_jdk_runtime() {
-    apt-get update -yqq
-    $apt_opt less apt-utils
-    ## disable --no-install-recommends
-    apt-get install -yqq libjemalloc2
+    # apt-get update -yqq
+    if [ "$INSTALL_JEMALLOC" = true ]; then
+        if [ "${update_cache:-0}" -eq 1 ]; then
+            $install_cmd update -yqq
+            # $install_cmd less apt-utils
+            $install_cmd install -yqq libjemalloc2
+        else
+            $install_cmd install -y memkind
+        fi
+    fi
     if [ "$INSTALL_FFMPEG" = true ]; then
-        $apt_opt ffmpeg
+        if [ "${update_cache:-0}" -eq 1 ]; then
+            $install_cmd update -yqq
+            $apt_opt ffmpeg
+        else
+            $install_cmd install -y ffmpeg
+        fi
     fi
     if [ "$INSTALL_FONTS" = true ]; then
-        $apt_opt fontconfig
+        if [ "${update_cache:-0}" -eq 1 ]; then
+            $install_cmd update -yqq
+            $apt_opt fontconfig
+        else
+            $install_cmd install -y fontconfig
+        fi
         fc-cache --force
         curl --referer http://cdn.flyh6.com/ -Lo - "$url_fly_cdn"/fonts-2022.tgz |
             tar -C /usr/share -zxf -
     fi
     ## set ssl
-    sec_file=/usr/local/openjdk-8/jre/lib/security/java.security
-    if [[ -f $sec_file ]]; then
-        sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $sec_file
-    fi
+    for f in /usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security /usr/local/openjdk-8/jre/lib/security/java.security; do
+        if [[ -f $f ]]; then
+            sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $f
+        fi
+    done
 
     _check_run_sh
 
@@ -335,7 +343,9 @@ _build_mysql() {
 
 _build_redis() {
     echo "build redis ..."
-    [ -n "${REDIS_PASSWORD}" ] && sed -i -e "s/.*requirepass foobared/requirepass ${REDIS_PASSWORD}/" /etc/redis.conf
+    if [ -f /etc/redis.conf ] && [ -n "${REDIS_PASSWORD}" ]; then
+        sed -i -e "s/.*requirepass foobared/requirepass ${REDIS_PASSWORD}/" /etc/redis.conf
+    fi
     mkdir /run/redis
     chown redis:redis /run/redis
 }
@@ -373,7 +383,15 @@ main() {
     run_sh=/opt/run.sh
     echo "build log file: $me_log"
 
-    apt_opt="apt-get install -yqq --no-install-recommends"
+    if command -v apt-get; then
+        install_cmd=apt-get
+        apt_opt="$install_cmd install -yqq --no-install-recommends"
+        update_cache=1
+    elif command -v yum; then
+        install_cmd=yum
+    elif command -v apk; then
+        install_cmd=apk
+    fi
 
     if command -v nginx; then
         build_type=nginx
@@ -407,13 +425,7 @@ main() {
     php) _build_php ;;
     composer) _build_composer ;;
     maven) _build_maven ;;
-    java)
-        if command -v apt-get; then
-            _build_jdk_runtime
-        else
-            _build_jdk_runtime_amzn
-        fi
-        ;;
+    java) _build_jdk_runtime ;;
     node) _build_node ;;
     python) _build_python ;;
     mysql) _build_mysql ;;
@@ -421,10 +433,13 @@ main() {
 
     ## clean
     if _is_root; then
-        if command -v apt-get; then
+        if [ "${update_cache:-0}" -eq 1 ]; then
             apt-get autoremove -y
             apt-get clean all
             rm -rf /var/lib/apt/lists/*
+        fi
+        if [ -d /var/cache/yum ]; then
+            rm -rf /var/cache/yum
         fi
         rm -rf /tmp/* /opt/*.{cnf,xml,log}
     else
