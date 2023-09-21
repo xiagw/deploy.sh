@@ -246,14 +246,12 @@ _build_image() {
     ## build from Dockerfile.base
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
         echo "deploy/base:${gitlab_project_name}-${gitlab_project_branch}"
-        $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
-
-        ## just build base image, disable deploy
-        exec_push_image=0
-        exec_deploy_k8s=0
-        exec_build_langs=0
-        exec_deploy_rsync_ssh=0
-        deploy_method=none
+        if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
+            bash "${gitlab_project_dir}/build.base.sh"
+        else
+            $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
+        fi
+        exit_directly=1
         return
     fi
     ## build container image
@@ -1607,6 +1605,7 @@ main() {
         fi
     fi
     [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image
+    [[ "${exit_directly:-0}" -eq 1 ]] && return
 
     ## push image
     [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image

@@ -5,8 +5,8 @@ ARG IN_CHINA=false
 
 EXPOSE 8080
 WORKDIR /app
-# CMD [ "/opt/run.sh" ]
 CMD [ "npm", "run", "start" ]
+# CMD [ "/opt/run.sh" ]
 
 COPY ./root/ /
 RUN set -xe; bash /opt/build.sh
@@ -18,5 +18,5 @@ RUN set -xe; bash /opt/build.sh
 ONBUILD COPY --chown=node:node . .
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi
 
-# podman build --force-rm --format=docker -t deploy/base:node18 -f Dockerfile.node.base .
-# docker build --force-rm -t deploy/base:node18 -f Dockerfile.node.base .
+# podman build --force-rm --format=docker -t deploy/base:node-18 -f Dockerfile.node.base .
+# docker build --force-rm -t deploy/base:node-18 -f Dockerfile.node.base .

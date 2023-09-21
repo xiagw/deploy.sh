@@ -18,21 +18,19 @@ else
 fi
 for ver in "${vers[@]}"; do
     ## build base
-    tag="fly-php${ver/./}"
+    tag="php-${ver}"
     DOCKER_BUILDKIT=0 $cmd_opt \
         --build-arg PHP_VERSION="$ver" \
         --build-arg IN_CHINA="true" \
-        -f Dockerfile.php \
+        -f Dockerfile.php.base \
         -t deploy/base:"$tag" \
         "$me_path"
     ## build for laradock
-    echo "FROM deploy/base:$tag" >Dockerfile.php2
+    echo "FROM deploy/base:$tag" >Dockerfile.php
     DOCKER_BUILDKIT=0 $cmd_opt \
-        --build-arg BASE_TAG="$tag" \
-        -f Dockerfile.php2 \
+        -f Dockerfile.php \
         -t deploy/php:"$ver" \
         "$me_path"
-    rm -f Dockerfile.php2
     ## upload to OSS:
     $cmd tag deploy/php:"$ver" laradock-php-fpm
     $cmd save laradock-php-fpm | gzip -c >/tmp/laradock-php-fpm.$ver.tar.gz

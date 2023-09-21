@@ -1,1 +1,1 @@
-FROM deploy/base:php-81
+FROM deploy/base:php-8.1
