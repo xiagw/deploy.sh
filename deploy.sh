@@ -198,7 +198,7 @@ _deploy_flyway_helm_job() {
     _msg step "[database] deploy SQL with flyway helm job"
     echo "$image_tag_flyway"
     ${github_action:-false} && return 0
-    DOCKER_BUILDKIT=1 $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+    $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     $build_cmd run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
         _msg green "Result = OK"
@@ -261,7 +261,7 @@ _build_image() {
     ## build container image
     $build_cmd build $build_cmd_opt --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     ## push image to ttl.sh
-    if [[ "${ENV_IMAGE_TTL:-false}" == true || "${PIPELINE_IMAGE_TTL:-0}" -eq 1 ]]; then
+    if ${ENV_IMAGE_TTL:-false} || ${PIPELINE_IMAGE_TTL:-false}; then
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
         echo "  $build_cmd tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
@@ -280,12 +280,12 @@ _push_image() {
     if $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
         $build_cmd rmi "${ENV_DOCKER_REGISTRY}:${image_tag}" >/dev/null
     else
-        push_error=1
+        push_error=true
     fi
-    if [[ "$ENV_FLYWAY_HELM_JOB" -eq 1 ]]; then
-        $build_cmd push $quiet_flag "$image_tag_flyway" || push_error=1
+    if ${ENV_FLYWAY_HELM_JOB:-false}; then
+        $build_cmd push $quiet_flag "$image_tag_flyway" || push_error=true
     fi
-    [[ "${push_error:-0}" -eq 1 ]] && _msg error "got an error here, probably caused by network..."
+    ${push_error:-false} && _msg error "got an error here, probably caused by network..."
     _msg stepend "[image] push container image"
 }
 
@@ -336,7 +336,7 @@ _deploy_k8s() {
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s >/dev/null || deploy_result=1
 
     ## helm install flyway jobs / helm 安装 flyway 任务
-    if [[ "$ENV_FLYWAY_HELM_JOB" == 1 && -d "${me_path_conf}"/helm/flyway ]]; then
+    if ${ENV_FLYWAY_HELM_JOB:-false} && [[ -d "${me_path_conf}"/helm/flyway ]]; then
         $helm_opt upgrade flyway "${me_path_conf}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}" \
@@ -401,7 +401,7 @@ _deploy_rsync_ssh() {
             bash "$me_path_data_bin/custom.deploy.sh" ${ssh_host} ${rsync_dest}
             _msg time "end custom deploy."
         fi
-        if [[ $exec_deploy_docker_compose -eq 1 ]]; then
+        if ${exec_deploy_docker_compose:-false}; then
             _msg step "deploy to singl host with docker-compose"
             $ssh_opt -n "$ssh_host" "cd $HOME/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
@@ -670,7 +670,7 @@ _get_balance_aliyun() {
     done
     echo
     _msg stepend "check balance of aliyun"
-    if [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] || ${arg_renew_cert:-false}; then
+    if ${PIPELINE_RENEW_CERT:-false} || ${arg_renew_cert:-false}; then
         return 0
     fi
     if [[ "${exec_single:-0}" -gt 0 ]]; then
@@ -1034,13 +1034,13 @@ _inject_files() {
     for sql in ${ENV_FLYWAY_SQL:-docs/sql} flyway_sql doc/sql sql; do
         path_flyway_sql_proj="${gitlab_project_dir}/${sql}"
         if [[ -d "${path_flyway_sql_proj}" ]]; then
-            exec_deploy_flyway=1
-            copy_flyway_file=1
+            exec_deploy_flyway=true
+            copy_flyway_file=true
             break
         fi
     done
 
-    if [[ "${copy_flyway_file:-0}" -eq 1 ]]; then
+    if ${copy_flyway_file:-false}; then
         path_flyway_conf="$gitlab_project_dir/flyway_conf"
         path_flyway_sql="$gitlab_project_dir/flyway_sql"
         [[ -d "$path_flyway_sql_proj" && ! -d "$path_flyway_sql" ]] && rsync -a "$path_flyway_sql_proj/" "$path_flyway_sql/"
@@ -1167,7 +1167,7 @@ _probe_deploy_method() {
         echo "Found $f"
         case $f in
         docker-compose.yml)
-            exec_deploy_docker_compose=1
+            exec_deploy_docker_compose=true
             deploy_method=docker-compose
             ;;
         Dockerfile | Dockerfile.base)
@@ -1466,18 +1466,18 @@ main() {
     image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
-    [[ "${ENV_INSTALL_AWS}" == 'true' ]] && _install_aws
-    [[ "${ENV_INSTALL_ALIYUN}" == 'true' ]] && _install_aliyun_cli
-    [[ "${ENV_INSTALL_JQ}" == 'true' ]] && _install_jq_cli
-    [[ "${ENV_INSTALL_TERRAFORM}" == 'true' ]] && _install_terraform
-    [[ "${ENV_INSTALL_KUBECTL}" == 'true' ]] && _install_kubectl
-    [[ "${ENV_INSTALL_HELM}" == 'true' ]] && _install_helm
-    [[ "${ENV_INSTALL_PYTHON_ELEMENT}" == 'true' ]] && _install_python_element
-    [[ "${ENV_INSTALL_PYTHON_GITLAB}" == 'true' ]] && _install_python_gitlab
-    [[ "${ENV_INSTALL_JMETER}" == 'true' ]] && _install_jmeter
-    [[ "${ENV_INSTALL_FLARECTL}" == 'true' ]] && _install_flarectl
-    [[ "${ENV_INSTALL_DOCKER}" == 'true' ]] && _install_docker
-    [[ "${ENV_INSTALL_PODMAN}" == 'true' ]] && _install_podman
+    ${ENV_INSTALL_AWS:-false} && _install_aws
+    ${ENV_INSTALL_ALIYUN:-false} && _install_aliyun_cli
+    ${ENV_INSTALL_JQ:-false} && _install_jq_cli
+    ${ENV_INSTALL_TERRAFORM:-false} && _install_terraform
+    ${ENV_INSTALL_KUBECTL:-false} && _install_kubectl
+    ${ENV_INSTALL_HELM:-false} && _install_helm
+    ${ENV_INSTALL_PYTHON_ELEMENT:-false} && _install_python_element
+    ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab
+    ${ENV_INSTALL_JMETER:-false} && _install_jmeter
+    ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
+    ${ENV_INSTALL_DOCKER:-false} && _install_docker
+    ${ENV_INSTALL_PODMAN:-false} && _install_podman
 
     ## clean up disk space / 清理磁盘空间
     _clean_disk
@@ -1489,14 +1489,14 @@ main() {
     _set_deploy_conf
 
     ## get balance of aliyun / 获取 aliyun 账户现金余额
-    echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-0}"
-    if [[ "${PIPELINE_GET_BALANCE:-0}" -eq 1 ]] || ${arg_get_balance:-false}; then
+    echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-false}"
+    if ${PIPELINE_GET_BALANCE:-false} || ${arg_get_balance:-false}; then
         _get_balance_aliyun
     fi
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
-    echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-    if ${github_action:-false} || ${arg_renew_cert:-false} || [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+    echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-false}"
+    if ${github_action:-false} || ${arg_renew_cert:-false} || ${PIPELINE_RENEW_CERT:-false}; then
         exec_single=$((exec_single + 1))
         _renew_cert
     fi
@@ -1530,8 +1530,8 @@ main() {
         fi
         ${arg_test_unit:-false} && _test_unit
         ${arg_deploy_flyway:-false} && _deploy_flyway_docker
-        # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-        [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
+        # ${exec_deploy_flyway:-false} && _deploy_flyway_helm_job
+        ${exec_deploy_flyway:-false} && _deploy_flyway_docker
         if ${arg_build_langs:-false}; then
             if [[ -f "$build_langs_sh" ]]; then
                 source "$build_langs_sh"
@@ -1554,18 +1554,18 @@ main() {
 
     ## default exec all tasks / 默认执行所有任务
 
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
     _msg step "[quality] check code with sonarqube"
-    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
+    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-false}"
     if ${PIPELINE_SONAR:-false}; then
         _check_quality_sonar
     else
         echo "<skip>"
     fi
 
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用，0 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，true 启用，false 禁用[default]
     _msg step "[style] check code style"
-    echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
+    echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-false}"
     if ${PIPELINE_CODE_STYLE:-false}; then
         if [[ -f "$code_style_sh" ]]; then
             source "$code_style_sh"
@@ -1577,9 +1577,9 @@ main() {
     fi
 
     ## unit test / 单元测试
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用，0 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，true 启用，false 禁用[default]
     _msg step "[test] unit test"
-    echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
+    echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-false}"
     if ${PIPELINE_UNIT_TEST:-false}; then
         _test_unit
     else
@@ -1626,7 +1626,7 @@ main() {
     ${exec_deploy_rsync_ssh:-true} && _deploy_rsync_ssh
 
     ## function test / 功能测试
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用，0 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，true 启用，false 禁用[default]
     _msg step "[test] function test"
     echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-false}"
     if ${PIPELINE_FUNCTION_TEST:-false}; then
