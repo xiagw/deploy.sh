@@ -9,7 +9,7 @@ _is_root() {
 }
 
 _is_china() {
-    if [ "$IN_CHINA" = true ] || [ "$CHANGE_SOURCE" = true ]; then
+    if ${IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
         return 0
     else
         return 1
@@ -264,8 +264,8 @@ _build_maven() {
 
 _build_jdk_runtime() {
     # apt-get update -yqq
-    if [ "$INSTALL_JEMALLOC" = true ]; then
-        if [ "${update_cache:-0}" -eq 1 ]; then
+    if ${INSTALL_JEMALLOC:-false}; then
+        if ${update_cache:-false}; then
             $install_cmd update -yqq
             # $install_cmd less apt-utils
             $install_cmd install -yqq libjemalloc2
@@ -273,16 +273,16 @@ _build_jdk_runtime() {
             $install_cmd install -y memkind
         fi
     fi
-    if [ "$INSTALL_FFMPEG" = true ]; then
-        if [ "${update_cache:-0}" -eq 1 ]; then
+    if ${INSTALL_FFMPEG:-false}; then
+        if ${update_cache:-false}; then
             $install_cmd update -yqq
             $apt_opt ffmpeg
         else
             $install_cmd install -y ffmpeg
         fi
     fi
-    if [ "$INSTALL_FONTS" = true ]; then
-        if [ "${update_cache:-0}" -eq 1 ]; then
+    if ${INSTALL_FONTS:-false}; then
+        if ${update_cache:-false}; then
             $install_cmd update -yqq
             $apt_opt fontconfig
         else
@@ -386,7 +386,7 @@ main() {
     if command -v apt-get; then
         install_cmd=apt-get
         apt_opt="$install_cmd install -yqq --no-install-recommends"
-        update_cache=1
+        update_cache=true
     elif command -v yum; then
         install_cmd=yum
     elif command -v apk; then
@@ -433,7 +433,7 @@ main() {
 
     ## clean
     if _is_root; then
-        if [ "${update_cache:-0}" -eq 1 ]; then
+        if ${update_cache:-false}; then
             apt-get autoremove -y
             apt-get clean all
             rm -rf /var/lib/apt/lists/*
