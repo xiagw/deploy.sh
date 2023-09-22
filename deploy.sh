@@ -12,6 +12,7 @@
 _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
+    duration=$SECONDS
     case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
     green | info) color_on='\033[0;32m' ;;             # Green
@@ -22,15 +23,16 @@ _msg() {
     orange) color_on='\033[1;33m' ;;
     time)
         color_on="[$(if [ -z "$STEP" ]; then echo '+'; else for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done; fi)] $(date +%Y%m%d-%u-%T.%3N) "
-        unset color_off
+        color_off=" $((duration / 60))m$((duration % 60))s"
         ;;
     step | timestep)
         STEP=$((${STEP:-0} + 1))
         color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N) \033[0m"
+        color_off=" $((duration / 60))m$((duration % 60))s"
         ;;
     stepend | end)
         color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N) "
-        color_off=' ... end'
+        color_off=" $((duration / 60))m$((duration % 60))s"
         ;;
     log)
         shift
@@ -46,14 +48,6 @@ _msg() {
 }
 
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
-
-_is_github_action() {
-    if [[ "${github_action:-0}" -eq 1 ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
 
 _is_demo_mode() {
     if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
@@ -125,7 +119,7 @@ sonar.projectVersion=1.0
 sonar.import_unknown_files=true
 EOF
     fi
-    _is_github_action && return 0
+    ${github_action:-false} && return 0
     $run_cmd -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     _msg stepend "[quality] check code with sonarqube"
     exit 0
@@ -202,7 +196,7 @@ _deploy_flyway_docker() {
 _deploy_flyway_helm_job() {
     _msg step "[database] deploy SQL with flyway helm job"
     echo "$image_tag_flyway"
-    _is_github_action && return 0
+    ${github_action:-false} && return 0
     DOCKER_BUILDKIT=1 $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     $build_cmd run --rm "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
@@ -219,7 +213,7 @@ _deploy_flyway_helm_job() {
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
 _docker_login() {
-    _is_github_action && return 0
+    ${github_action:-false} && return 0
     local lock_docker_login="$me_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     local time_last
     case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
@@ -248,7 +242,7 @@ _docker_login() {
 }
 
 _build_image() {
-    _is_github_action && return 0
+    ${github_action:-false} && return 0
     _msg step "[image] build container image"
 
     ## build from Dockerfile.base
@@ -325,7 +319,7 @@ _deploy_k8s() {
     fi
     echo "Found helm files: $path_helm"
     echo "$helm_opt upgrade ${helm_release} $path_helm/ --install --history-max 1 --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
-    _is_github_action && return 0
+    ${github_action:-false} && return 0
     ## helm install / helm 安装
     $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
         --namespace "${env_namespace}" --create-namespace \
@@ -653,13 +647,13 @@ _renew_cert() {
 
     _msg stepend "[cert] renew cert with acme.sh using dns+api"
     if [[ "${exec_single:-0}" -gt 0 ]]; then
-        _is_github_action || exit 0
+        ${github_action:-false} || exit 0
     fi
     return 0
 }
 
 _get_balance_aliyun() {
-    _is_github_action && return 0
+    ${github_action:-false} && return 0
     _msg step "check balance of aliyun"
     for p in "${ENV_ALARM_ALIYUN_PROFILE[@]}"; do
         local amount
@@ -983,16 +977,16 @@ _inject_files() {
         echo '<skip>'
         ;;
     overwrite)
-        ## inject build container image files
+        ## inject files for build container image
         if [ -d "${gitlab_project_dir}/root/opt" ]; then
             echo "found exist ${gitlab_project_dir}/root/opt"
         else
             \cp -avf "${me_dockerfile}/root" "$gitlab_project_dir/"
         fi
-        ## Dockerfile 优先查找 data/ 目录
         if [[ "${project_lang}" == node && -f "${gitlab_project_dir}/Dockerfile" ]]; then
             echo "skip cp Dockerfile."
         else
+            ## Dockerfile 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
                 \cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
             ## Dockerfile 其次查找 conf/ 目录
@@ -1015,7 +1009,7 @@ _inject_files() {
                 *=1.8 | *=8) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-jdk-8 --build-arg IMAGE_JDK=openjdk:8" ;;
                 *=11) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=amazoncorretto:11" ;;
                 *=17) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=amazoncorretto:17" ;;
-                *) _msg warn "jdk_version unknown, using default amazoncorretto:8." ;;
+                *) _msg warn "not found jdk_version= from ${f}, using default \"amazoncorretto:8\"." ;;
                 esac
                 break
             done
@@ -1144,7 +1138,7 @@ _probe_langs() {
         pom.xml)
             project_lang=java
             build_arg="${build_arg:+"$build_arg "}--build-arg MVN_PROFILE=${gitlab_project_branch}"
-            if [[ "$debug_on" -eq 1 ]]; then
+            if ${debug_on:-false}; then
                 build_arg="${build_arg:+"$build_arg "}--build-arg MVN_DEBUG="
             fi
             break
@@ -1154,7 +1148,7 @@ _probe_langs() {
             break
             ;;
         *)
-            project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | head -n 1)}
+            project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | tail -n 1)}
             project_lang=${project_lang// /}
             project_lang=${project_lang,,}
             ;;
@@ -1292,7 +1286,7 @@ _set_args() {
         case "$1" in
         --debug | -d)
             set -x
-            debug_on=1
+            debug_on=true
             ;;
         --cron | --loop)
             run_crontab=1
@@ -1302,8 +1296,8 @@ _set_args() {
             ;;
         --github-action)
             set -x
-            debug_on=1
-            github_action=1
+            debug_on=true
+            github_action=true
             ;;
         --svn-checkout)
             arg_svn_checkout=1
@@ -1392,7 +1386,7 @@ _set_args() {
         esac
         shift
     done
-    if [[ "${debug_on:-0}" -eq 1 ]]; then
+    if ${debug_on:-false}; then
         unset quiet_flag
     else
         quiet_flag='--quiet'
@@ -1402,7 +1396,7 @@ _set_args() {
 main() {
     set -e ## 出现错误自动退出
     # set -u ## 变量未定义报错
-    begin_seconds=$(date +%s)
+    SECONDS=0
     _msg step "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _set_args "$@"
@@ -1501,7 +1495,7 @@ main() {
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-    if _is_github_action || [[ "${arg_renew_cert:-0}" -eq 1 ]] || [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+    if ${github_action:-false} || [[ "${arg_renew_cert:-0}" -eq 1 ]] || [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
         exec_single=$((exec_single + 1))
         _renew_cert
     fi
@@ -1553,7 +1547,7 @@ main() {
         [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
         [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
         _msg green "exec single jobs...end"
-        _is_github_action || return 0
+        ${github_action:-false} || return 0
     fi
     ################################################################################
 
@@ -1662,7 +1656,7 @@ main() {
     _msg step "[notify] message for result"
     ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
     echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-0}"
-    _is_github_action && deploy_result=0
+    ${github_action:-false} && deploy_result=0
     [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
     [[ "${ENV_DISABLE_MSG}" -eq 1 ]] && exec_deploy_notify=0
     [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
@@ -1671,12 +1665,7 @@ main() {
         _deploy_notify
     fi
 
-    end_seconds=$(date +%s)
-    seconds=$((end_seconds - begin_seconds))
-    hours=$((seconds / 3600))
-    mins=$(((seconds - hours * 3600) / 60))
-    secs=$((seconds - hours * 3600 - mins * 60))
-    _msg time "[deploy] END. Duration: ${seconds}s, $hours:$mins:$secs"
+    _msg time "[deploy] END."
 
     ## deploy result:  0 成功， 1 失败
     return ${deploy_result:-0}

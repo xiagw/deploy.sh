@@ -168,13 +168,14 @@ export QRC_MOS_LW_PRECISION=Y
 # These executables should be on the PATH after DFII executables
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # export ASSURAHOME=$CDS_HOME/ASSURA41
+export ASSURAHOME=$CDS_HOME/ASSURA04.16.001-618
 
 # Setting this variable enables Assura to work with PVS licenses only without
 # attempts to check-out Assura licenses first and thus speeds up execution.
 # export ASSURA_USE_PVS_LICENSE=1
 
 # Set up foundry DFM PATH for Assura - CRNxxG/CRNxxLP process for current project
-export TSMC_ASU_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxG/Assura/lvs_rcx/DFM
+# export TSMC_ASU_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxG/Assura/lvs_rcx/DFM
 # export TSMC_ASU_DFM_PATH=$EDA_HOME/PDKs/tsmc/CRNxxLP/Assura/lvs_rcx/DFM
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -567,3 +568,8 @@ alias icfb=virtuoso
 # the current terminal.
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # virtuoso &
+
+
+【超级会员V6】通过百度网盘分享的文件：ASSURA04....tar
+链接： https://pan.baidu.com/s/1SIXVfsyWKK4Dbjz9WXBG-w
+提取码： xtA1
