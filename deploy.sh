@@ -9,6 +9,7 @@
 #
 ################################################################################
 
+# echo "$((duration / 3600)) hours, $(((duration / 60) % 60)) minutes and $((duration % 60)) seconds elapsed."
 _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
@@ -254,7 +255,7 @@ _build_image() {
             echo "deploy/base:${gitlab_project_name}-${gitlab_project_branch}"
             $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
         fi
-        exit_directly=1
+        exit_directly=true
         return
     fi
     ## build container image
@@ -669,7 +670,7 @@ _get_balance_aliyun() {
     done
     echo
     _msg stepend "check balance of aliyun"
-    if [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 || "${arg_renew_cert:-0}" -eq 1 ]]; then
+    if [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]] || ${arg_renew_cert:-false}; then
         return 0
     fi
     if [[ "${exec_single:-0}" -gt 0 ]]; then
@@ -1106,7 +1107,7 @@ _setup_gitlab_vars() {
     gitlab_username="${GITLAB_USER_LOGIN:-unknown}"
     env_namespace=$gitlab_project_branch
 
-    if [[ $run_crontab -eq 1 ]]; then
+    if ${run_with_crontab:-false}; then
         cron_save_file="$(find "${me_path_data}" -name "crontab.${gitlab_project_id}.*" -print -quit)"
         if [[ -n "$cron_save_file" ]]; then
             cron_save_id="${cron_save_file##*.}"
@@ -1170,11 +1171,11 @@ _probe_deploy_method() {
             deploy_method=docker-compose
             ;;
         Dockerfile | Dockerfile.base)
-            exec_build_image=1
-            exec_push_image=1
-            exec_deploy_k8s=1
-            exec_build_langs=0
-            exec_deploy_rsync_ssh=0
+            exec_build_image=true
+            exec_push_image=true
+            exec_deploy_k8s=true
+            exec_build_langs=false
+            exec_deploy_rsync_ssh=false
             deploy_method=helm
             ;;
         esac
@@ -1183,28 +1184,28 @@ _probe_deploy_method() {
 }
 
 _checkout_svn_repo() {
-    [[ "${arg_svn_checkout:-0}" -eq 1 ]] || return 0
+    ${checkout_with_svn:-false} || return 0
     if [[ ! -d "$me_path_builds" ]]; then
         echo "Not found $me_path_builds, create it..."
         mkdir -p "$me_path_builds"
     fi
     local svn_repo_name
-    svn_repo_name=$(echo "$arg_svn_checkout_url" | awk -F '/' '{print $NF}')
+    svn_repo_name=$(echo "$svn_url" | awk -F '/' '{print $NF}')
     local svn_repo_dir="${me_path_builds}/${svn_repo_name}"
     if [ -d "$svn_repo_dir" ]; then
         echo "\"$svn_repo_dir\" exists"
         cd "$svn_repo_dir" && svn update
     else
-        echo "checkout svn repo: $arg_svn_checkout_url"
-        svn checkout "$arg_svn_checkout_url" "$svn_repo_dir" || {
-            echo "Failed to checkout svn repo: $arg_svn_checkout_url"
+        echo "checkout svn repo: $svn_url"
+        svn checkout "$svn_url" "$svn_repo_dir" || {
+            echo "Failed to checkout svn repo: $svn_url"
             exit 1
         }
     fi
 }
 
 _clone_git_repo() {
-    [[ "${arg_git_clone:-0}" -eq 1 ]] || return 0
+    ${arg_git_clone:-false} || return 0
     if [[ ! -d "$me_path_builds" ]]; then
         echo "Not found $me_path_builds, create it..."
         mkdir -p "$me_path_builds"
@@ -1231,7 +1232,7 @@ _clone_git_repo() {
 }
 
 _create_k8s() {
-    [[ "$create_k8s" -eq 1 ]] || return 0
+    ${create_k8s_with_terraform:-false} || return 0
     local terraform_dir="$me_path_data/terraform"
     if [ ! -d "$terraform_dir" ]; then
         return 0
@@ -1289,10 +1290,10 @@ _set_args() {
             debug_on=true
             ;;
         --cron | --loop)
-            run_crontab=1
+            run_with_crontab=true
             ;;
         --create-k8s)
-            create_k8s=1
+            create_k8s_with_terraform=true
             ;;
         --github-action)
             set -x
@@ -1300,12 +1301,12 @@ _set_args() {
             github_action=true
             ;;
         --svn-checkout)
-            arg_svn_checkout=1
-            arg_svn_checkout_url="${2:?empty svn url}"
+            checkout_with_svn=true
+            svn_url="${2:?empty svn url}"
             shift
             ;;
         --git-clone)
-            arg_git_clone=1
+            arg_git_clone=true
             arg_git_clone_url="${2:?empty git clone url}"
             shift
             ;;
@@ -1314,69 +1315,69 @@ _set_args() {
             shift
             ;;
         --get-balance)
-            arg_get_balance=1
+            arg_get_balance=true
             exec_single=$((exec_single + 1))
             ;;
         --renew-cert | -r)
-            arg_renew_cert=1
+            arg_renew_cert=true
             exec_single=$((exec_single + 1))
             ;;
         --code-style)
-            arg_code_style=1
+            arg_code_style=true
             exec_single=$((exec_single + 1))
             ;;
         --code-quality)
-            arg_code_quality=1
+            arg_code_quality=true
             exec_single=$((exec_single + 1))
             ;;
         --build-langs)
-            arg_build_langs=1
+            arg_build_langs=true
             exec_single=$((exec_single + 1))
             ;;
         --build-docker)
-            arg_build_image=1
+            arg_build_image=true
             exec_single=$((exec_single + 1))
             ;;
         --build-podman)
-            arg_build_image=1
+            arg_build_image=true
             exec_single=$((exec_single + 1))
             build_cmd=podman
             build_cmd_opt='--force-rm --format=docker'
             ;;
         --push-image)
-            arg_push_image=1
+            arg_push_image=true
             exec_single=$((exec_single + 1))
             ;;
         --deploy-k8s)
-            arg_deploy_k8s=1
+            arg_deploy_k8s=true
             exec_single=$((exec_single + 1))
             ;;
         --deploy-flyway)
-            arg_deploy_flyway=1
+            arg_deploy_flyway=true
             exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync-ssh)
-            arg_deploy_rsync_ssh=1
+            arg_deploy_rsync_ssh=true
             exec_single=$((exec_single + 1))
             ;;
         --deploy-rsync)
-            arg_deploy_rsync=1
+            arg_deploy_rsync=true
             exec_single=$((exec_single + 1))
             ;;
         --deploy-ftp)
-            arg_deploy_ftp=1
+            arg_deploy_ftp=true
             exec_single=$((exec_single + 1))
             ;;
         --deploy-sftp)
-            arg_deploy_sftp=1
+            arg_deploy_sftp=true
             exec_single=$((exec_single + 1))
             ;;
         --test-unit)
-            arg_test_unit=1
+            arg_test_unit=true
             exec_single=$((exec_single + 1))
             ;;
         --test-function)
-            arg_test_function=1
+            arg_test_function=true
             exec_single=$((exec_single + 1))
             ;;
         *)
@@ -1489,13 +1490,13 @@ main() {
 
     ## get balance of aliyun / 获取 aliyun 账户现金余额
     echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-0}"
-    if [[ "${PIPELINE_GET_BALANCE:-0}" -eq 1 || "${arg_get_balance:-0}" -eq 1 ]]; then
+    if [[ "${PIPELINE_GET_BALANCE:-0}" -eq 1 ]] || ${arg_get_balance:-false}; then
         _get_balance_aliyun
     fi
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-0}"
-    if ${github_action:-false} || [[ "${arg_renew_cert:-0}" -eq 1 ]] || [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
+    if ${github_action:-false} || ${arg_renew_cert:-false} || [[ "${PIPELINE_RENEW_CERT:-0}" -eq 1 ]]; then
         exec_single=$((exec_single + 1))
         _renew_cert
     fi
@@ -1519,33 +1520,33 @@ main() {
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         _msg green "exec single jobs..."
-        [[ "${arg_code_quality:-0}" -eq 1 ]] && _check_quality_sonar
-        if [[ "${arg_code_style:-0}" -eq 1 ]]; then
+        ${arg_code_quality:-false} && _check_quality_sonar
+        if ${arg_code_style:-false}; then
             if [[ -f "$code_style_sh" ]]; then
                 source "$code_style_sh"
             else
                 _msg time "not found $code_style_sh"
             fi
         fi
-        [[ "${arg_test_unit:-0}" -eq 1 ]] && _test_unit
-        [[ "${arg_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
+        ${arg_test_unit:-false} && _test_unit
+        ${arg_deploy_flyway:-false} && _deploy_flyway_docker
         # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
         [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_docker
-        if [[ "${arg_build_langs:-0}" -eq 1 ]]; then
+        if ${arg_build_langs:-false}; then
             if [[ -f "$build_langs_sh" ]]; then
                 source "$build_langs_sh"
             else
                 _msg time "not found $build_langs_sh"
             fi
         fi
-        [[ "${arg_build_image:-0}" -eq 1 ]] && _build_image
-        [[ "${arg_push_image:-0}" -eq 1 ]] && _push_image
-        [[ "${arg_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
-        [[ "${arg_deploy_rsync_ssh:-0}" -eq 1 ]] && _deploy_rsync_ssh
-        [[ "${arg_deploy_rsync:-0}" -eq 1 ]] && _deploy_rsync
-        [[ "${arg_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
-        [[ "${arg_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
-        [[ "${arg_test_function:-0}" -eq 1 ]] && _test_function
+        ${arg_build_image:-false} && _build_image
+        ${arg_push_image:-false} && _push_image
+        ${arg_deploy_k8s:-false} && _deploy_k8s
+        ${arg_deploy_rsync_ssh:-false} && _deploy_rsync_ssh
+        ${arg_deploy_rsync:-false} && _deploy_rsync
+        ${arg_deploy_ftp:-false} && _deploy_ftp
+        ${arg_deploy_sftp:-false} && _deploy_sftp
+        ${arg_test_function:-false} && _test_function
         _msg green "exec single jobs...end"
         ${github_action:-false} || return 0
     fi
@@ -1556,7 +1557,7 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，1 启用，0 禁用[default]
     _msg step "[quality] check code with sonarqube"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-0}"
-    if [[ "${PIPELINE_SONAR:-0}" -eq 1 ]]; then
+    if ${PIPELINE_SONAR:-false}; then
         _check_quality_sonar
     else
         echo "<skip>"
@@ -1565,7 +1566,7 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，1 启用，0 禁用[default]
     _msg step "[style] check code style"
     echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-0}"
-    if [[ "${PIPELINE_CODE_STYLE:-0}" -eq 1 ]]; then
+    if ${PIPELINE_CODE_STYLE:-false}; then
         if [[ -f "$code_style_sh" ]]; then
             source "$code_style_sh"
         else
@@ -1579,7 +1580,7 @@ main() {
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，1 启用，0 禁用[default]
     _msg step "[test] unit test"
     echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-0}"
-    if [[ "${PIPELINE_UNIT_TEST:-0}" -eq 1 ]]; then
+    if ${PIPELINE_UNIT_TEST:-false}; then
         _test_unit
     else
         echo "<skip>"
@@ -1587,10 +1588,10 @@ main() {
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
     _msg step "[database] deploy SQL files with flyway"
-    # [[ "${ENV_FLYWAY_HELM_JOB:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-    # [[ "${exec_deploy_flyway:-0}" -eq 1 ]] && _deploy_flyway_helm_job
-    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-0}"
-    if [[ "${PIPELINE_FLYWAY:-0}" -eq 1 || "${exec_deploy_flyway:-0}" -eq 1 ]]; then
+    # ${ENV_FLYWAY_HELM_JOB:-false} && _deploy_flyway_helm_job
+    # ${exec_deploy_flyway:-false} && _deploy_flyway_helm_job
+    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-false}"
+    if ${PIPELINE_FLYWAY:-false} || ${exec_deploy_flyway:-false}; then
         _deploy_flyway_docker
     else
         echo '<skip>'
@@ -1600,36 +1601,35 @@ main() {
     # _generate_apidoc
 
     ## build
-    if [[ "${exec_build_langs:-1}" -eq 1 ]]; then
+    if ${exec_build_langs:-true}; then
         if [[ -f "$build_langs_sh" ]]; then
             source "$build_langs_sh"
         else
             _msg time "not found $build_langs_sh"
         fi
     fi
-    [[ "${exec_build_image:-0}" -eq 1 ]] && _build_image
-    [[ "${exit_directly:-0}" -eq 1 ]] && return
+    ${exec_build_image:-false} && _build_image
+    ${exit_directly:-false} && return
 
     ## push image
-    [[ "${exec_push_image:-0}" -eq 1 ]] && _push_image
+    ${exec_push_image:-false} && _push_image
 
     ## deploy k8s
-    [[ "${exec_deploy_k8s:-0}" -eq 1 ]] && _deploy_k8s
+    ${exec_deploy_k8s:-false} && _deploy_k8s
     ## deploy rsync server
-    [[ "${exec_deploy_rsync:-0}" -eq 1 ]] && _deploy_rsync
+    ${exec_deploy_rsync:-false} && _deploy_rsync
     ## deploy ftp server
-    [[ "${exec_deploy_ftp:-0}" -eq 1 ]] && _deploy_ftp
+    ${exec_deploy_ftp:-false} && _deploy_ftp
     ## deploy sftp server
-    [[ "${exec_deploy_sftp:-0}" -eq 1 ]] && _deploy_sftp
+    ${exec_deploy_sftp:-false} && _deploy_sftp
     ## deploy with rsync / 使用 rsync 发布
-    [[ "${ENV_DISABLE_RSYNC:-0}" -eq 1 ]] && exec_deploy_rsync_ssh=0
-    [[ "${exec_deploy_rsync_ssh:-1}" -eq 1 ]] && _deploy_rsync_ssh
+    ${exec_deploy_rsync_ssh:-true} && _deploy_rsync_ssh
 
     ## function test / 功能测试
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，1 启用，0 禁用[default]
     _msg step "[test] function test"
-    echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-0}"
-    if [[ "${PIPELINE_FUNCTION_TEST:-0}" -eq 1 ]]; then
+    echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-false}"
+    if ${PIPELINE_FUNCTION_TEST:-false}; then
         _test_function
     else
         echo "<skip>"
@@ -1637,16 +1637,16 @@ main() {
 
     ## 安全扫描
     _msg step "[scan] run ZAP scan"
-    echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-0}"
-    if [[ "${PIPELINE_SCAN_ZAP:-0}" -eq 1 ]]; then
+    echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-false}"
+    if ${PIPELINE_SCAN_ZAP:-false}; then
         _scan_zap
     else
         echo '<skip>'
     fi
 
     _msg step "[scan] vulmap scan"
-    echo "PIPELINE_SCAN_VULMAP: ${PIPELINE_SCAN_VULMAP:-0}"
-    if [[ "${PIPELINE_SCAN_VULMAP:-0}" -eq 1 ]]; then
+    echo "PIPELINE_SCAN_VULMAP: ${PIPELINE_SCAN_VULMAP:-false}"
+    if ${PIPELINE_SCAN_VULMAP:-false}; then
         _scan_vulmap
     else
         echo '<skip>'
@@ -1654,14 +1654,14 @@ main() {
 
     ## deploy notify info / 发布通知信息
     _msg step "[notify] message for result"
-    ## 发送消息到群组, exec_deploy_notify， 0 不发， 1 发.
-    echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-0}"
+    ## 发送消息到群组, exec_deploy_notify， false 不发， true 发.
+    echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-false}"
     ${github_action:-false} && deploy_result=0
-    [[ "${deploy_result}" -eq 1 ]] && exec_deploy_notify=1
-    [[ "${ENV_DISABLE_MSG}" -eq 1 ]] && exec_deploy_notify=0
-    [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=0
-    [[ "${PIPELINE_NOTIFY:-0}" -eq 1 ]] && exec_deploy_notify=1
-    if [[ "${exec_deploy_notify:-1}" -eq 1 ]]; then
+    ((${deploy_result:-0})) && exec_deploy_notify=true
+    ${ENV_DISABLE_MSG:-false} && exec_deploy_notify=false
+    [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=false
+    ${PIPELINE_NOTIFY:-false} && exec_deploy_notify=true
+    if ${exec_deploy_notify:-true}; then
         _deploy_notify
     fi
 
