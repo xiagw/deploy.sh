@@ -9,7 +9,6 @@
 #
 ################################################################################
 
-# echo "$((duration / 3600)) hours, $(((duration / 60) % 60)) minutes and $((duration % 60)) seconds elapsed."
 _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
@@ -24,16 +23,16 @@ _msg() {
     orange) color_on='\033[1;33m' ;;
     time)
         color_on="[$(if [ -z "$STEP" ]; then echo '+'; else for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done; fi)] $(date +%Y%m%d-%u-%T.%3N) "
-        color_off=" $((duration / 60))m$((duration % 60))s"
+        color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
         ;;
     step | timestep)
         STEP=$((${STEP:-0} + 1))
         color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N) \033[0m"
-        color_off=" $((duration / 60))m$((duration % 60))s"
+        color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
         ;;
     stepend | end)
         color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N) "
-        color_off=" $((duration / 60))m$((duration % 60))s"
+        color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
         ;;
     log)
         shift
@@ -292,7 +291,7 @@ _push_image() {
 _deploy_k8s() {
     _msg step "[deploy] deploy with helm"
     _is_demo_mode "deploy-helm" && return 0
-    if [[ "${ENV_REMOVE_PROJ_PREFIX:-false}" == 'true' ]]; then
+    if ${ENV_REMOVE_PROJ_PREFIX:-false}; then
         echo "remove project name prefix"
         helm_release=${gitlab_project_name#*-}
     else
@@ -818,7 +817,7 @@ _install_docker() {
     command -v docker &>/dev/null && return
     _msg info "installing docker"
     _is_root || use_sudo=sudo
-    [[ "${ENV_IN_CHINA:-false}" == 'true' ]] && install_arg='-s --mirror Aliyun'
+    ${ENV_IN_CHINA:-false} && install_arg='-s --mirror Aliyun'
     curl -fsSL https://get.docker.com | $use_sudo bash $install_arg
 }
 
@@ -858,7 +857,7 @@ _detect_os() {
 
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
             ## OS ubuntu:22.04 php
-            if [[ ${ENV_IN_CHINA:-false} == true && -f /etc/apt/sources.list ]]; then
+            if ${ENV_IN_CHINA:-false} && [[ -f /etc/apt/sources.list ]]; then
                 sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
                     -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
             fi
@@ -999,7 +998,7 @@ _inject_files() {
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
                 \cp -avf "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
-            elif [[ "$ENV_IN_CHINA" == 'true' ]]; then
+            elif ${ENV_IN_CHINA:-false}; then
                 \cp -avf "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/"
             fi
             ## find jdk version
