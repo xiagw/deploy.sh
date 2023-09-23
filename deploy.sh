@@ -833,8 +833,12 @@ _install_jmeter() {
 _install_docker() {
     command -v docker &>/dev/null && return
     _msg info "installing docker"
-    _is_china && install_arg='-s --mirror Aliyun'
-    curl -fsSL https://get.docker.com | $use_sudo bash $install_arg
+    curl -fsSLo /tmp/d.sh https://get.docker.com
+    if _is_china; then
+        $use_sudo bash /tmp/d.sh --mirror Aliyun
+    else
+        $use_sudo bash /tmp/d.sh
+    fi
 }
 
 _install_podman() {
