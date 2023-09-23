@@ -726,8 +726,23 @@ _install_aliyun_cli() {
 _install_jq_cli() {
     command -v jq >/dev/null && return
     _msg info "install jq cli..."
-    $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq jq >/dev/null
+    case "$os_type" in
+    debian | ubuntu | linuxmint)
+        $use_sudo apt-get update -qq
+        $use_sudo apt-get install -yqq jq >/dev/null
+        ;;
+    centos | amzn | rhel | fedora)
+        $use_sudo yum install -y jq >/dev/null
+        ;;
+    alpine)
+        $use_sudo apk add --no-cache "jq" >/dev/null
+        ;;
+    *)
+        echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
+        _msg error "Unsupported. exit."
+        return 1
+        ;;
+    esac
 }
 
 _install_terraform() {
@@ -816,7 +831,6 @@ _install_jmeter() {
 _install_docker() {
     command -v docker &>/dev/null && return
     _msg info "installing docker"
-    _is_root || use_sudo=sudo
     ${ENV_IN_CHINA:-false} && install_arg='-s --mirror Aliyun'
     curl -fsSL https://get.docker.com | $use_sudo bash $install_arg
 }
@@ -872,6 +886,8 @@ _detect_os() {
                 $use_sudo amazon-linux-extras install -y epel >/dev/null
             else
                 $use_sudo yum install -y epel-release >/dev/null
+                # DNF="dnf --setopt=tsflags=nodocs -y"
+                # $DNF install epel-release
             fi
         }
         command -v git >/dev/null || pkgs+=(git2u)
