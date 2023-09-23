@@ -211,31 +211,31 @@ _deploy_flyway_helm_job() {
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
-_docker_login() {
+_login_registry() {
     ${github_action:-false} && return 0
-    local lock_docker_login="$me_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
+    local lock_login_registry="$me_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
     local time_last
     case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
     aws)
-        time_last="$(stat -t -c %Y "$lock_docker_login" 2>/dev/null || echo 0)"
+        time_last="$(stat -t -c %Y "$lock_login_registry" 2>/dev/null || echo 0)"
         ## Compare the last login time, login again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
         if [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]]; then
             return 0
         fi
         _msg time "[login] aws ecr login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
         aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" |
-            docker login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*} >/dev/null &&
-            touch "$lock_docker_login"
+            $build_cmd login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*} >/dev/null &&
+            touch "$lock_login_registry"
         ;;
     *)
         _is_demo_mode "docker-login" && return 0
 
-        if [[ -f "$lock_docker_login" ]]; then
+        if [[ -f "$lock_login_registry" ]]; then
             return 0
         fi
         echo "${ENV_DOCKER_PASSWORD}" |
-            docker login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" &&
-            touch "$lock_docker_login"
+            $build_cmd login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" &&
+            touch "$lock_login_registry"
         ;;
     esac
 }
@@ -274,7 +274,7 @@ _build_image() {
 _push_image() {
     _msg step "[image] push container image"
     _is_demo_mode "push-image" && return 0
-    _docker_login
+    _login_registry
     if $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
         $build_cmd rmi "${ENV_DOCKER_REGISTRY}:${image_tag}" >/dev/null
     else
@@ -1083,7 +1083,7 @@ _inject_files() {
         if [ -d "${gitlab_project_dir}/root/opt" ]; then
             echo "found exist ${gitlab_project_dir}/root/opt"
         else
-            \cp -avf "${me_dockerfile}/root" "$gitlab_project_dir/"
+            \cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
         fi
         if [[ "${project_lang}" == node && -f "${gitlab_project_dir}/Dockerfile" ]]; then
             echo "skip cp Dockerfile."
@@ -1276,7 +1276,7 @@ _probe_deploy_method() {
             # if ! ${ENV_DISABLE_DOCKER:-false}; then
             exec_push_image=true
             exec_deploy_k8s=true
-            # fiF
+            # fi
             exec_build_langs=false
             exec_deploy_rsync_ssh=false
             deploy_method=helm
@@ -1523,8 +1523,8 @@ main() {
     ## create deploy.sh/data dir  /  创建 data 目录
     [[ -d $me_path_data ]] || mkdir -p $me_path_data
     ## 准备配置文件
-    [[ -f "$me_conf" ]] || cp "${me_path_conf}/example-deploy.conf" "$me_conf"
-    [[ -f "$me_env" ]] || cp "${me_path_conf}/example-deploy.env" "$me_env"
+    [[ -f "$me_conf" ]] || \cp -v "${me_path_conf}/example-deploy.conf" "$me_conf"
+    [[ -f "$me_env" ]] || \cp -v "${me_path_conf}/example-deploy.env" "$me_env"
     ## 设定 PATH
     declare -a paths_to_append=(
         "/usr/local/sbin"
@@ -1742,7 +1742,7 @@ main() {
     fi
 
     ## 安全扫描
-    _msg step "[scan] run ZAP scan"
+    _msg step "[scan] ZAP scan"
     echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-false}"
     if ${PIPELINE_SCAN_ZAP:-false}; then
         _scan_zap
