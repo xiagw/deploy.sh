@@ -50,8 +50,8 @@ _msg() {
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
 _is_demo_mode() {
-    if [[ "$ENV_DOCKER_PASSWORD" == 'your_password' && "$ENV_DOCKER_USERNAME" == 'your_username' ]]; then
-        _msg purple "Found default username/password, skip $1 ..."
+    if grep -q -E '=your_password|=your_username' $me_env; then
+        _msg purple "Found default docker username/password, skip $1 ..."
         return 0
     else
         return 1
@@ -132,7 +132,6 @@ _scan_zap() {
     local zap_report_file
     zap_report_file="zap_report_$(date +%Y%m%d_%H%M%S).html"
 
-    # $build_cmd pull "$zap_image"
     $build_cmd run -t --rm -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh $zap_options
     if [[ $? -eq 0 ]]; then
         mv "$zap_report_file" "zap_report_latest.html"
@@ -355,8 +354,8 @@ _deploy_rsync_ssh() {
     fi
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     while read -r line; do
-        # shellcheck disable=2116
-        read -ra array <<<"$(echo "$line")"
+        # shellcheck disable=2206
+        array=($line)
         # git_branch=${array[1]}
         ssh_host=${array[2]}
         ssh_port=${array[3]}
@@ -496,7 +495,8 @@ _notify_wechat_work() {
 }
 EOF
     wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wechat_key"
-    curl -s -X POST -H 'Content-Type: application/json' -d @$file_msg_body "$wechat_api"
+    # curl -s -X POST -H 'Content-Type: application/json' -d @$file_msg_body "$wechat_api"
+    curl -s -X POST -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" "$wechat_api"
     rm -f $file_msg_body
 }
 
@@ -680,6 +680,7 @@ _get_balance_aliyun() {
 _install_python_gitlab() {
     command -v gitlab >/dev/null && return
     _msg info "installing python3 gitlab api..."
+    _set_mirror python
     python3 -m pip install --user --upgrade python-gitlab
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg info "python-gitlab is installed successfully"
@@ -691,6 +692,7 @@ _install_python_gitlab() {
 _install_python_element() {
     python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
     _msg info "installing python3 element api..."
+    _set_mirror python
     if python3 -m pip install --user --upgrade matrix-nio; then
         _msg info "matrix-nio is installed successfully"
     else
@@ -842,19 +844,92 @@ _install_podman() {
     $use_sudo apt-get install -yqq podman >/dev/null
 }
 
+_is_china() {
+    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
+        inchina=true
+    fi
+    if grep -q 'ENV_IN_CHINA=true' $me_env; then
+        inchina=true
+    fi
+    if ${inchina:-false}; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+_set_mirror() {
+    if _is_china; then
+        url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
+        url_laradock_raw=https://gitee.com/xiagw/laradock/raw/in-china
+    else
+        url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
+        url_laradock_raw=https://github.com/xiagw/laradock/raw/main
+        return
+    fi
+    if _is_root; then
+        ## OS ubuntu:22.04 php
+        if [ -f /etc/apt/sources.list ]; then
+            sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
+                -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+        ## OS Debian
+        elif [ -f /etc/apt/sources.list.d/debian.sources ]; then
+            sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
+        ## OS alpine, nginx:alpine
+        elif [ -f /etc/apk/repositories ]; then
+            # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
+            sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+        fi
+    fi
+    case ${1:-none} in
+    maven)
+        local m2_dir=/root/.m2
+        [ -d $m2_dir ] || mkdir -p $m2_dir
+        ## 项目内自带 settings.xml docs/settings.xml
+        if [ -f settings.xml ]; then
+            cp -vf settings.xml $m2_dir/
+        elif [ -f docs/settings.xml ]; then
+            cp -vf docs/settings.xml $m2_dir/
+        elif [ -f /opt/settings.xml ]; then
+            mv -vf /opt/settings.xml $m2_dir/
+        else
+            curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
+        fi
+        ;;
+    composer)
+        _is_root || return
+        composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
+        mkdir -p /var/www/.composer /.composer
+        chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
+        ;;
+    node)
+        # npm_mirror=https://mirrors.ustc.edu.cn/node/
+        # npm_mirror=http://mirrors.cloud.tencent.com/npm/
+        # npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
+        npm_mirror=https://registry.npmmirror.com/
+        yarn config set registry $npm_mirror
+        npm config set registry $npm_mirror
+        ;;
+    python)
+        pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
+        python -m pip config set global.index-url $pip_mirror
+        ;;
+    esac
+}
+
 _detect_os() {
     _is_root || use_sudo=sudo
+    _set_mirror os
     if [[ -e /etc/os-release ]]; then
         # shellcheck disable=1091
-        os_type="$(source /etc/os-release && echo ${ID})"
+        source <(grep '^ID=' /etc/os-release)
+        os_type="${ID}"
     elif [[ -e /etc/centos-release ]]; then
         os_type=centos
     elif [[ -e /etc/arch-release ]]; then
         os_type=arch
-    else
-        echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        _msg error "Unsupported. exit."
-        return 1
+    elif [[ $OSTYPE == darwin* ]]; then
+        os_type=macos
     fi
     pkgs=()
     case "$os_type" in
@@ -908,6 +983,17 @@ _detect_os() {
         command -v rsync >/dev/null || pkgs+=(rsync)
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
             $use_sudo apk add --no-cache "${pkgs[@]}" >/dev/null
+        fi
+        ;;
+    macos)
+        command -v openssl >/dev/null || pkgs+=(openssl)
+        command -v git >/dev/null || pkgs+=(git)
+        git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
+        command -v curl >/dev/null || pkgs+=(curl)
+        command -v unzip >/dev/null || pkgs+=(unzip)
+        command -v rsync >/dev/null || pkgs+=(rsync)
+        if (("${#pkgs[*]}")); then
+            brew install "${pkgs[@]}"
         fi
         ;;
     *)
@@ -1187,8 +1273,10 @@ _probe_deploy_method() {
             ;;
         Dockerfile | Dockerfile.base)
             exec_build_image=true
+            # if ! ${ENV_DISABLE_DOCKER:-false}; then
             exec_push_image=true
             exec_deploy_k8s=true
+            # fiF
             exec_build_langs=false
             exec_deploy_rsync_ssh=false
             deploy_method=helm
@@ -1297,7 +1385,7 @@ _set_args() {
     ## All tasks are performed by default / 默认执行所有任务
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
     exec_single=0
-    build_cmd=docker
+    build_cmd=$(command -v podman || command -v docker || echo docker)
     while [[ -n "${1}" ]]; do
         case "$1" in
         --debug | -d)
@@ -1454,7 +1542,7 @@ main() {
     export PATH
 
     run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
-    build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "} $ENV_ADD_HOST $quiet_flag"
+    build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}$ENV_ADD_HOST $quiet_flag"
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _detect_os
 
