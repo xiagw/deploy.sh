@@ -833,7 +833,7 @@ _install_jmeter() {
 _install_docker() {
     command -v docker &>/dev/null && return
     _msg info "installing docker"
-    ${ENV_IN_CHINA:-false} && install_arg='-s --mirror Aliyun'
+    _is_china && install_arg='-s --mirror Aliyun'
     curl -fsSL https://get.docker.com | $use_sudo bash $install_arg
 }
 
@@ -945,11 +945,6 @@ _detect_os() {
         # command -v shc >/dev/null || $use_sudo apt-get install -qq -y shc
 
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            ## OS ubuntu:22.04 php
-            if ${ENV_IN_CHINA:-false} && [[ -f /etc/apt/sources.list ]]; then
-                sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
-                    -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-            fi
             $use_sudo apt-get update -qq
             $use_sudo apt-get install -yqq apt-utils >/dev/null
             $use_sudo apt-get install -yqq "${pkgs[@]}" >/dev/null
@@ -1100,7 +1095,7 @@ _inject_files() {
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
                 \cp -avf "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
-            elif ${ENV_IN_CHINA:-false}; then
+            elif _is_china; then
                 \cp -avf "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/"
             fi
             ## find jdk version
@@ -1402,6 +1397,9 @@ _set_args() {
             set -x
             debug_on=true
             github_action=true
+            ;;
+        --in-china)
+            sed -i -e '/ENV_IN_CHINA=/s/false/true/' $me_env
             ;;
         --svn-checkout)
             checkout_with_svn=true
