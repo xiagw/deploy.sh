@@ -1614,10 +1614,10 @@ main() {
     _probe_deploy_method
 
     ## code style check / 代码格式检查
-    code_style_sh="$me_path/langs/style.${project_lang}.sh"
+    code_style_sh="$me_path_bin/style.${project_lang}.sh"
 
     ## code build / 代码编译打包
-    build_langs_sh="$me_path/langs/build.${project_lang}.sh"
+    build_langs_sh="$me_path_bin/build.${project_lang}.sh"
 
     ################################################################################
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
