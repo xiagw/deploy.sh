@@ -358,7 +358,7 @@ _deploy_rsync_ssh() {
         # git_branch=${array[1]}
         ssh_host=${array[2]}
         ssh_port=${array[3]}
-        rsync_src=${array[4]}
+        rsync_src_from_conf=${array[4]}
         rsync_dest=${array[5]} ## 从配置文件读取目标路径
         # db_user=${array[6]}
         # db_host=${array[7]}
@@ -372,10 +372,19 @@ _deploy_rsync_ssh() {
         rsync_opt="rsync -acvzt --exclude=.svn --exclude=.git --timeout=10 --no-times --exclude-from=${rsync_exclude} $rsync_delete"
 
         ## rsync source folder / rsync 源目录
-        ## define path_for_rsync in langs/build.*.sh / 在 langs/build.*.sh 中定义 path_for_rsync
-        ## default: path_for_rsync=''
-        # shellcheck disable=2154
-        rsync_src="${gitlab_project_dir}/$path_for_rsync/"
+        ## define rsync_relative_path in bin/build.*.sh / 在 bin/build.*.sh 中定义 rsync_relative_path
+        ## default: rsync_relative_path=''
+        rsync_src="${gitlab_project_dir}/"
+        if [[ "$project_lang" == java ]]; then
+            rsync_relative_path=jars
+        elif [[ "$project_lang" == node ]]; then
+            rsync_relative_path=dist
+        fi
+        if [[ "${rsync_src_from_conf}" != 'null' ]]; then
+            rsync_src="${gitlab_project_dir}/${rsync_src_from_conf}/"
+        elif [ -n "$rsync_relative_path" ]; then
+            rsync_src="${gitlab_project_dir}/$rsync_relative_path/"
+        fi
 
         ## rsycn dest folder / rsync 目标目录
         if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
