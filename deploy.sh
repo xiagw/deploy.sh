@@ -859,12 +859,13 @@ _is_china() {
 }
 
 _set_mirror() {
+    if ${set_in_china:-false}; then
+        sed -i -e '/ENV_IN_CHINA=/s/false/true/' $me_env
+    fi
     if _is_china; then
         url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
-        url_laradock_raw=https://gitee.com/xiagw/laradock/raw/in-china
     else
         url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
-        url_laradock_raw=https://github.com/xiagw/laradock/raw/main
         return
     fi
     if _is_root; then
@@ -1399,7 +1400,7 @@ _set_args() {
             github_action=true
             ;;
         --in-china)
-            sed -i -e '/ENV_IN_CHINA=/s/false/true/' $me_env
+            set_in_china=true
             ;;
         --svn-checkout)
             checkout_with_svn=true
