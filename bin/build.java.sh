@@ -17,7 +17,7 @@ else
         maven_quiet='--quiet'
     fi
     ## 创建 cache
-    if $build_cmd voluem ls | grep maven-repo; then
+    if $build_cmd volume ls | grep maven-repo; then
         :
     else
         $build_cmd volume create --name maven-repo
