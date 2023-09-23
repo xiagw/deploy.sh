@@ -316,7 +316,6 @@ _deploy_k8s() {
         path_helm="${me_path_data}/helm/${helm_release}"
         bash "$me_path_bin/helm-new.sh" ${helm_release}
     fi
-    echo "Found helm files: $path_helm"
     echo "$helm_opt upgrade ${helm_release} $path_helm/ --install --history-max 1 --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
     ${github_action:-false} && return 0
     ## helm install / helm 安装
@@ -1111,7 +1110,7 @@ _inject_files() {
                 *=1.8 | *=8) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-jdk-8 --build-arg IMAGE_JDK=openjdk:8" ;;
                 *=11) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=amazoncorretto:11" ;;
                 *=17) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=amazoncorretto:17" ;;
-                *) _msg warn "not found jdk_version= from ${f}, using default \"amazoncorretto:8\"." ;;
+                *) : ;;
                 esac
                 break
             done
