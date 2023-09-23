@@ -912,7 +912,7 @@ _set_mirror() {
         ;;
     python)
         pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
-        python -m pip config set global.index-url $pip_mirror
+        python3 -m pip config set global.index-url $pip_mirror
         ;;
     esac
 }
