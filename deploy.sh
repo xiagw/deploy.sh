@@ -935,7 +935,7 @@ _detect_os() {
     _set_mirror os
     if [[ -e /etc/os-release ]]; then
         # shellcheck disable=1091
-        source <(grep '^ID=' /etc/os-release)
+        source /etc/os-release
         os_type="${ID}"
     elif [[ -e /etc/centos-release ]]; then
         os_type=centos
