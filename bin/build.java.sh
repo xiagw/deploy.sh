@@ -11,7 +11,7 @@ else
     if [[ -f $gitlab_project_dir/settings.xml ]]; then
         maven_settings="--settings settings.xml"
     fi
-    if [[ "$debug_on" -eq 1 ]]; then
+    if ${debug_on:-false}; then
         unset maven_quiet
     else
         maven_quiet='--quiet'

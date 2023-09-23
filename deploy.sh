@@ -1063,9 +1063,9 @@ _inject_files() {
             [[ -f "$file" ]] || continue
             echo "Found $file"
             if [[ "$file" =~ 'config' ]]; then
-                \cp -avf "$file" "${file/${env_namespace}./}" # vue2.x
+                cp -avf "$file" "${file/${env_namespace}./}" # vue2.x
             else
-                \cp -avf "$file" "${file/${env_namespace}/}" # vue3.x
+                cp -avf "$file" "${file/${env_namespace}/}" # vue3.x
             fi
         done
     fi
@@ -1082,17 +1082,17 @@ _inject_files() {
         if [ -d "${gitlab_project_dir}/root/opt" ]; then
             echo "found exist ${gitlab_project_dir}/root/opt"
         else
-            \cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
+            cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
         fi
         if [[ "${project_lang}" == node && -f "${gitlab_project_dir}/Dockerfile" ]]; then
             echo "skip cp Dockerfile."
         else
             ## Dockerfile 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                \cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+                cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
             ## Dockerfile 其次查找 conf/ 目录
             elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                \cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+                cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
             fi
         fi
         if [[ "${project_lang}" == java ]]; then
@@ -1127,7 +1127,7 @@ _inject_files() {
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
     if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
-        \cp -avf "${me_dockerfile}/.dockerignore" "${gitlab_project_dir}/"
+        cp -avf "${me_dockerfile}/.dockerignore" "${gitlab_project_dir}/"
     fi
 
     ## flyway files sql & conf
@@ -1146,7 +1146,7 @@ _inject_files() {
         [[ -d "$path_flyway_sql_proj" && ! -d "$path_flyway_sql" ]] && rsync -a "$path_flyway_sql_proj/" "$path_flyway_sql/"
         [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
         [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
-        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || \cp -avf "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
+        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || cp -avf "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
     fi
 }
 
@@ -1522,8 +1522,8 @@ main() {
     ## create deploy.sh/data dir  /  创建 data 目录
     [[ -d $me_path_data ]] || mkdir -p $me_path_data
     ## 准备配置文件
-    [[ -f "$me_conf" ]] || \cp -v "${me_path_conf}/example-deploy.conf" "$me_conf"
-    [[ -f "$me_env" ]] || \cp -v "${me_path_conf}/example-deploy.env" "$me_env"
+    [[ -f "$me_conf" ]] || cp -v "${me_path_conf}/example-deploy.conf" "$me_conf"
+    [[ -f "$me_env" ]] || cp -v "${me_path_conf}/example-deploy.env" "$me_env"
     ## 设定 PATH
     declare -a paths_to_append=(
         "/usr/local/sbin"
