@@ -23,16 +23,17 @@ else
         $build_cmd volume create --name maven-repo
     fi
 
-    $build_cmd run $ENV_ADD_HOST --rm -i --user "$(id -u):$(id -g)" \
-        -e MAVEN_CONFIG=/tmp/maven/.m2 \
-        -v maven-repo:/tmp/maven/.m2:rw \
+    # $build_cmd run $ENV_ADD_HOST --rm -i --user "$(id -u):$(id -g)" \
+    $build_cmd run $ENV_ADD_HOST --rm -i \
+        -e MAVEN_CONFIG=/var/maven/.m2 \
+        -v maven-repo:/var/maven/.m2:rw \
         -v "$gitlab_project_dir":/src:rw \
         -w /src \
         maven:"${ENV_MAVEN_VER:-3.8-jdk-8}" \
         mvn -T 1C clean $maven_quiet \
         --update-snapshots package \
         --define skipTests \
-        --define user.home=/tmp/maven \
+        --define user.home=/var/maven \
         --define maven.compile.fork=true \
         --activate-profiles "${gitlab_project_branch}" $maven_settings
 fi
