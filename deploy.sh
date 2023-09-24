@@ -352,6 +352,9 @@ _deploy_rsync_ssh() {
         rsync_exclude="${me_path_conf}/rsync.exclude"
     fi
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
+    local tmp_file
+    tmp_file=$(mktemp)
+    grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" >$tmp_file
     while read -r line; do
         # shellcheck disable=2206
         array=($line)
@@ -411,7 +414,8 @@ _deploy_rsync_ssh() {
             _msg step "deploy to singl host with docker-compose"
             $ssh_opt -n "$ssh_host" "cd $HOME/docker/laradock && docker compose up -d $gitlab_project_name"
         fi
-    done < <(grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf")
+    done <$tmp_file
+    rm -f $tmp_file
     _msg stepend "[deploy] deploy files"
 }
 
