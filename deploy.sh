@@ -955,7 +955,7 @@ _detect_os() {
         #        apt-get -y install sudo dialog apt-utils
         # RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
         export DEBIAN_FRONTEND=noninteractive
-        echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+        # echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
         [[ -f "$HOME"/.bash_logout ]] && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         command -v git >/dev/null || pkgs+=(git)
