@@ -258,7 +258,7 @@ _build_maven() {
             [ -f "$yml" ] || continue
             c=$((c + 1))
             cp -vf "$yml" /jars/"${c}.${yml##*/}"
-        done < <(find ./*/*/*/resources/*"${MVN_PROFILE:-main}".yml ./*/*/*/resources/*"${MVN_PROFILE:-main}".yaml 2>/dev/null)
+        done < <(find ./*/*/*/*"${MVN_PROFILE:-main}".yml ./*/*/*/*"${MVN_PROFILE:-main}".yaml 2>/dev/null)
     fi
 }
 
@@ -293,9 +293,12 @@ _build_jdk_runtime() {
             tar -C /usr/share -zxf -
     fi
     ## set ssl
-    for f in /usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security /usr/local/openjdk-8/jre/lib/security/java.security; do
+    s1=/usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security
+    s2=/usr/lib/jvm/java-1.8.0-amazon-corretto/jre/lib/security/java.security
+    s3=/usr/local/openjdk-8/jre/lib/security/java.security
+    for f in $s1 $s2 $s3; do
         if [[ -f $f ]]; then
-            sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' $f
+            sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' "$f"
         fi
     done
 
