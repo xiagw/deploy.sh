@@ -82,7 +82,7 @@ setenv MOZILLA_HOME /usr/bin/firefox
 #
 # IC Schematic Entry, Simulation, Layout, Verification (Diva)
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-setenv CDS ${CDS_HOME}/IC617
+# setenv CDS ${CDS_HOME}/IC617
 setenv CDS $CDS_HOME/IC618
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

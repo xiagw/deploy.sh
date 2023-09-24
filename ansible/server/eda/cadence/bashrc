@@ -353,8 +353,8 @@ export SPECMAN_PATH=$CDN_VIP_ROOT/utils:$CDN_VIP_ROOT/packages:$CDN_VIP_ROOT/vip
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 # Commands on terminal to launch Litho Analyzers, CMP Predictor
-#lpa &
-#lea &
+# lpa &
+# lea &
 # need to figure out correct license keys in license.dat for CMP Predictor
 # (current ones don't work)
 #cmms -ccp &
