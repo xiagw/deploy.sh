@@ -38,7 +38,7 @@ _msg() {
 
 _set_peer2peer() {
     if [[ "$new_key_flag" -ne 1 ]]; then
-        _msg green "### Please select << client >> side conf..."
+        _msg green "### Please select == CLIENT == conf..."
         select c_conf in $me_data/wg*.conf quit; do
             [[ "$c_conf" == 'quit' ]] && exit
             break
@@ -51,7 +51,7 @@ _set_peer2peer() {
         c_port="$(awk '/^ListenPort/ {print $3}' "$c_conf" | head -n 1)"
     fi
     ## select server
-    _msg red "### Please select ====< server >==== side conf"
+    _msg red "### Please select ==== SERVER ==== side conf"
     select s_conf in $me_data/wg*.conf quit; do
         [[ "$s_conf" == 'quit' ]] && break
         _msg red "(Have selected $s_conf)"
@@ -206,7 +206,7 @@ _reload_conf() {
 main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_name="$(basename "$0")"
-    me_data="${me_path}/../data/wireguard"
+    me_data="${me_path}/../../data/wireguard"
     me_log="${me_data}/${me_name}.log"
     [ -d "$me_data" ] || mkdir -p "$me_data"
     exec &> >(tee -a "$me_log")

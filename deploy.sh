@@ -344,7 +344,7 @@ _deploy_k8s() {
 }
 
 _deploy_rsync_ssh() {
-    _msg step "[deploy] with rsync+ssh"
+    _msg step "[deploy] rsync+ssh"
     ## rsync exclude some files / rsync 排除某些文件
     if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
         rsync_exclude="${gitlab_project_dir}/rsync.exclude"
@@ -367,7 +367,7 @@ _deploy_rsync_ssh() {
         # db_host=${array[7]}
         # db_name=${array[8]}
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo "ssh host is: ${ssh_host:?if stop here, check $me_conf}"
+        echo "ssh host: ${ssh_host:?if stop here, check $me_conf} port ${ssh_port:-22}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
         ## node/java use rsync --delete / node/java 使用 rsync --delete
@@ -383,7 +383,7 @@ _deploy_rsync_ssh() {
         elif [[ "$project_lang" == node ]]; then
             rsync_relative_path=dist
         fi
-        if [[ "${rsync_src_from_conf}" != 'null' ]]; then
+        if [[ "${rsync_src_from_conf}" != 'null' || -z "${rsync_src_from_conf}" ]]; then
             rsync_src="${gitlab_project_dir}/${rsync_src_from_conf}/"
         elif [ -n "$rsync_relative_path" ]; then
             rsync_src="${gitlab_project_dir}/$rsync_relative_path/"
@@ -405,47 +405,45 @@ _deploy_rsync_ssh() {
         echo "destination: ${ssh_host}:${rsync_dest}"
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
-        if [ -f "$me_path_data_bin/custom.deploy.sh" ]; then
+        if [ -f "$me_path_data_bin/deploy.custom.sh" ]; then
             _msg time "custom deploy..."
-            bash "$me_path_data_bin/custom.deploy.sh" ${ssh_host} ${rsync_dest}
-            _msg time "end custom deploy."
+            bash "$me_path_data_bin/deploy.custom.sh" ${ssh_host} ${rsync_dest}
+            _msg time "custom deploy."
         fi
         if ${exec_deploy_docker_compose:-false}; then
             _msg step "deploy to singl host with docker-compose"
-            $ssh_opt -n "$ssh_host" "cd $HOME/docker/laradock && docker compose up -d $gitlab_project_name"
+            $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done <$tmp_file
     rm -f $tmp_file
-    _msg stepend "[deploy] deploy files"
+    _msg stepend "[deploy] rsync+ssh"
 }
 
 _deploy_aliyun_oss() {
-    _msg step "[deploy] deploy files to Aliyun OSS"
+    _msg step "[deploy] Aliyun OSS"
     # Check if deployment is enabled
-    if [[ "${DEPLOYMENT_ENABLED:-0}" -ne 1 ]]; then
+    if ${DEPLOYMENT_ENABLED:-false}; then
         echo '<skip>'
         return
     fi
-
-    # Read config file
-    # shellcheck disable=1091
-    source ${me_path_data}/aliyun.oss.key.conf
 
     # Check if OSS CLI is installed
     if ! command -v ossutil >/dev/null 2>&1; then
         sudo -v
         curl https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
     fi
+    oss_config_file=${me_path_data}/aliyun.oss.key.conf
+    bucket_name=demo-bucket
+    remote_dir=demo-dir
 
     # Deploy files to Aliyun OSS
-    _msg time "Start time: $(date +'%F %T')"
-    ossutil cp -r "${LOCAL_DIR}" "oss://${BUCKET_NAME}/${REMOTE_DIR}" --config="${OSS_CONFIG_FILE}"
+    _msg time "copy start"
+    ossutil cp -r "${gitlab_project_dir}/" "oss://${bucket_name}/${remote_dir}" --config="${oss_config_file}"
     if [[ $? -eq 0 ]]; then
         _msg green "Result = OK"
     else
         _msg error "Result = FAIL"
     fi
-    _msg time "End time: $(date +'%F %T')"
     _msg stepend "[oss] deploy files to Aliyun OSS"
 }
 

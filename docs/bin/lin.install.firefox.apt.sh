@@ -360,7 +360,7 @@ ensure_firefox_is_updated_automatically() {
 #######################################
 install_firefox_using_ppa() {
   if [ "$(firefox_via_apt)" == "NOTFOUND" ]; then
-    yes | sudo apt install firefox 2>&1
+    sudo apt install -yqq firefox
   fi
   assert_firefox_is_installed_using_ppa
   echo "Firefox is installed successfully using ppa and apt." >/dev/tty
