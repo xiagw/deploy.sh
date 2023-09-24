@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://github.com/xiagw/deploy.sh/raw/main/docs/logo.png" alt="deploy.sh" width="200">
+  <img src="https://gitee.com/xiagw/deploy.sh/raw/main/docs/logo.png" alt="deploy.sh" width="200">
   <br>deploy.sh<br>
 </h1>
 
@@ -202,7 +202,7 @@ cache_m -- pri --> db_m[mysql cluster];
 
 | Alipay | WeChat Pay |
 | ---- | ---- |
-| <img src=docs/pay-alipay.jpg width="125" height="125"> | <img src=docs/pay-wechatpay.jpg width="125" height="125"> |
+| <img src=docs/pay-alipay.jpg width="200" height="200"> | <img src=docs/pay-wechatpay.jpg width="200" height="200"> |
 
 ### 数字币:
 **比特币**

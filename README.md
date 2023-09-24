@@ -202,7 +202,7 @@ Alipay, WeChat Pay, BitCoin are avaliable for donation. You can chose any of the
 
 | Alipay | WeChat Pay |
 | ---- | ---- |
-| <img src=docs/pay-alipay.jpg width="125" height="125"> | <img src=docs/pay-wechatpay.jpg width="125" height="125"> |
+| <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/pay-alipay.jpg width="200" height="200"> | <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/pay-wechatpay.jpg width="200" height="200"> |
 
 ### Digital Currency:
 **BitCoin**
