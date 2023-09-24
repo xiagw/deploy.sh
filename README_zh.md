@@ -202,7 +202,7 @@ cache_m -- pri --> db_m[mysql cluster];
 
 | Alipay | WeChat Pay |
 | ---- | ---- |
-| <img src=https://gitee.com/xiagw/deploy.sh/raw/main/docs/pay-alipay.jpg width="250" height="250"> | <img src=https://gitee.com/xiagw/deploy.sh/raw/main/docs/pay-wechatpay.jpg width="250" height="250"> |
+| <img src=docs/pay-alipay.jpg width="250" height="250"> | <img src=docs/pay-wechatpay.jpg width="250" height="250"> |
 
 ### 数字币:
 **比特币**
