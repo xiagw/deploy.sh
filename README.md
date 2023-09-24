@@ -43,6 +43,7 @@ git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 - java: exist pom.xml or include `project_lang=java` in README.md of your project
 - python: exist requirements.txt or include `project_lang=python` in README.md of your project
 - [other]: include `project_lang=[other]` in README.md of your project
+
 project_lang=shell
 
 # Quickstart

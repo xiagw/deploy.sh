@@ -43,6 +43,7 @@ git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 - java: git库存在`pom.xml`或在 README.md 包含文本 `project_lang=java`
 - python: git库存在`requirements.txt`或在 README.md 包含文本 `project_lang=python`
 - [other]: git库内 README.md 包含文本 `project_lang=[other]`
+
 project_lang=shell
 
 ## 快速开始
