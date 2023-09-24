@@ -354,7 +354,7 @@ _deploy_rsync_ssh() {
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     local tmp_file
     tmp_file=$(mktemp)
-    grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" >$tmp_file
+    grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" >$tmp_file || true
     while read -r line; do
         # shellcheck disable=2206
         array=($line)
@@ -951,6 +951,13 @@ _detect_os() {
     pkgs=()
     case "$os_type" in
     debian | ubuntu | linuxmint)
+        # ARG DEBIAN_FRONTEND=noninteractive
+        # ENV DEBIAN_FRONTEND noninteractive
+        # RUN apt-get update && \
+        #        apt-get -y install sudo dialog apt-utils
+        # RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+        export DEBIAN_FRONTEND=noninteractive
+        echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
         [[ -f "$HOME"/.bash_logout ]] && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         command -v git >/dev/null || pkgs+=(git)
