@@ -54,3 +54,8 @@
 ## centos8, aliyun, default gateway on VPC
 # 进入专有网络VPC中，进入路由表，进入路由表管理界面，选择添加路由条目
 # 新添加的路由条目，0.0.0.0/0 , 选择有公网IP和带宽的ECS实例作为下一跳。
+
+# How to Masquerade / NAT IPv4 traffic using ufw on Ubuntu CLI – SecNetLinux
+# https://securitynetworkinglinux.wordpress.com/2019/07/03/how-to-masquerade-nat-ipv4-traffic-using-ufw-on-ubuntu-cli/
+# iptables 添加，删除，查看，修改«海底苍鹰(tank)博客
+# http://blog.51yip.com/linux/1404.html
