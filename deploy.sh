@@ -13,6 +13,7 @@ _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
     duration=$SECONDS
+
     case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
     green | info) color_on='\033[0;32m' ;;             # Green
@@ -21,16 +22,12 @@ _msg() {
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
     orange) color_on='\033[1;33m' ;;
-    time)
-        color_on="[$(if [ -z "$STEP" ]; then echo '+'; else for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done; fi)] $(date +%Y%m%d-%u-%T.%3N) "
-        color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
-        ;;
-    step | timestep)
-        STEP=$((${STEP:-0} + 1))
+    step)
+        STEP=$((++STEP))
         color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N) \033[0m"
         color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
         ;;
-    stepend | end)
+    time)
         color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N) "
         color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
         ;;
@@ -77,7 +74,7 @@ _test_unit() {
     else
         _msg purple "not found tests/unit_test.sh, skip unit test."
     fi
-    _msg stepend "[test] unit test"
+    _msg time "[test] unit test"
 }
 
 ## install jdk/ant/jmeter
@@ -91,7 +88,7 @@ _test_function() {
     else
         echo "Not found tests/func_test.sh, skip function test."
     fi
-    _msg stepend "[test] function test"
+    _msg time "[test] function test"
 }
 
 _check_quality_sonar() {
@@ -121,7 +118,7 @@ EOF
     fi
     ${github_action:-false} && return 0
     $run_cmd -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
-    _msg stepend "[quality] check code with sonarqube"
+    _msg time "[quality] check code with sonarqube"
     exit 0
 }
 
@@ -139,7 +136,7 @@ _scan_zap() {
     else
         _msg error "ZAP scan failed."
     fi
-    _msg stepend "[scan] run ZAP scan"
+    _msg time "[scan] run ZAP scan"
 }
 # _security_scan_zap "http://example.com" "my/zap-image" "-t http://example.com -r report.html -x report.xml"
 
@@ -189,7 +186,7 @@ _deploy_flyway_docker() {
     else
         _msg error "Result = FAIL"
     fi
-    _msg stepend "[database] deploy SQL files with flyway"
+    _msg time "[database] deploy SQL files with flyway"
 }
 
 _deploy_flyway_helm_job() {
@@ -203,7 +200,7 @@ _deploy_flyway_helm_job() {
     else
         _msg error "Result = FAIL"
     fi
-    _msg stepend "[database] deploy SQL with flyway helm job"
+    _msg time "[database] deploy SQL with flyway helm job"
 }
 
 # python-gitlab list all projects / 列出所有项目
@@ -268,7 +265,7 @@ _build_image() {
         echo "  $build_cmd pull $image_uuid"
         echo "  $build_cmd tag $image_uuid laradock_spring"
     fi
-    _msg stepend "[image] build container image"
+    _msg time "[image] build container image"
 }
 
 _push_image() {
@@ -284,7 +281,7 @@ _push_image() {
         $build_cmd push $quiet_flag "$image_tag_flyway" || push_error=true
     fi
     ${push_error:-false} && _msg error "got an error here, probably caused by network..."
-    _msg stepend "[image] push container image"
+    _msg time "[image] push container image"
 }
 
 _deploy_k8s() {
@@ -340,7 +337,7 @@ _deploy_k8s() {
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    _msg stepend "[deploy] deploy with helm"
+    _msg time "[deploy] deploy with helm"
 }
 
 _deploy_rsync_ssh() {
@@ -416,7 +413,7 @@ _deploy_rsync_ssh() {
         fi
     done <$tmp_file
     rm -f $tmp_file
-    _msg stepend "[deploy] rsync+ssh"
+    _msg time "[deploy] rsync+ssh"
 }
 
 _deploy_aliyun_oss() {
@@ -444,7 +441,7 @@ _deploy_aliyun_oss() {
     else
         _msg error "Result = FAIL"
     fi
-    _msg stepend "[oss] deploy files to Aliyun OSS"
+    _msg time "[oss] deploy files to Aliyun OSS"
 }
 
 _deploy_rsync() {
@@ -472,7 +469,7 @@ put $upload_file
 passive off
 bye
 EOF
-    _msg stepend "[deploy] deploy files to ftp server"
+    _msg time "[deploy] deploy files to ftp server"
 }
 
 _deploy_sftp() {
@@ -655,7 +652,7 @@ _renew_cert() {
         bash "${acme_home}/custom.acme.sh"
     fi
 
-    _msg stepend "[cert] renew cert with acme.sh using dns+api"
+    _msg time "[cert] renew cert with acme.sh using dns+api"
     if [[ "${exec_single:-0}" -gt 0 ]]; then
         ${github_action:-false} || exit 0
     fi
@@ -678,7 +675,7 @@ _get_balance_aliyun() {
         fi
     done
     echo
-    _msg stepend "check balance of aliyun"
+    _msg time "check balance of aliyun"
     if ${PIPELINE_RENEW_CERT:-false} || ${arg_renew_cert:-false}; then
         return 0
     fi
@@ -1612,13 +1609,13 @@ main() {
     _set_deploy_conf
 
     ## get balance of aliyun / 获取 aliyun 账户现金余额
-    echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-false}"
+    # echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-false}"
     if ${PIPELINE_GET_BALANCE:-false} || ${arg_get_balance:-false}; then
         _get_balance_aliyun
     fi
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
-    echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-false}"
+    # echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-false}"
     if ${github_action:-false} || ${arg_renew_cert:-false} || ${PIPELINE_RENEW_CERT:-false}; then
         exec_single=$((exec_single + 1))
         _renew_cert
