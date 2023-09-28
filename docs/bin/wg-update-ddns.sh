@@ -2,7 +2,7 @@
 
 _update_ddns() {
     if [ "$(id -u)" -eq 0 ]; then
-        return 0
+        : # return 0
     else
         use_sudo=sudo
     fi
