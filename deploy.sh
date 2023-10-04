@@ -47,8 +47,9 @@ _msg() {
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
 _is_demo_mode() {
+    local skip_msg="$1"
     if grep -q -E '=your_password|=your_username' $me_env; then
-        _msg purple "Found default docker username/password, skip $1 ..."
+        _msg purple "Found default docker username/password, skip $skip_msg ..."
         return 0
     else
         return 1
@@ -59,6 +60,7 @@ _is_root() {
     if [ "$(id -u)" -eq 0 ]; then
         return 0
     else
+        use_sudo=sudo
         return 1
     fi
 }
@@ -129,8 +131,7 @@ _scan_zap() {
     local zap_report_file
     zap_report_file="zap_report_$(date +%Y%m%d_%H%M%S).html"
 
-    $build_cmd run -t --rm -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh $zap_options
-    if [[ $? -eq 0 ]]; then
+    if $build_cmd run -t --rm -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh $zap_options; then
         mv "$zap_report_file" "zap_report_latest.html"
         _msg green "ZAP scan completed. Report saved to zap_report_latest.html"
     else
@@ -144,7 +145,6 @@ _scan_vulmap() {
     # https://github.com/zhzyker/vulmap
     # $build_cmd run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
     # Load environment variables from config file
-    # shellcheck disable=1091
     source $me_path_data/config.cfg
     # Run vulmap scan
     $build_cmd run --rm -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/vulmap_report.html"
@@ -171,7 +171,6 @@ _deploy_flyway_docker() {
     flyway_docker_run="$build_cmd run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
     ## ssh port-forward mysql 3306 to localhost / 判断是否需要通过 ssh 端口转发建立数据库远程连接
-    # shellcheck disable=1091
     [ -f "$me_path_bin/ssh-port-forward.sh" ] && source "$me_path_bin/ssh-port-forward.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
@@ -492,19 +491,8 @@ _notify_feishu() {
 _notify_wechat_work() {
     # Send message to weixin_work 企业微信
     local wechat_key=$1
-    file_msg_body=$(mktemp)
-    cat >$file_msg_body <<EOF
-{
-    "msgtype": "text",
-    "text": {
-        "content": "$msg_body"
-    }
-}
-EOF
     wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wechat_key"
-    # curl -s -X POST -H 'Content-Type: application/json' -d @$file_msg_body "$wechat_api"
     curl -s -X POST -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" "$wechat_api"
-    rm -f $file_msg_body
 }
 
 _deploy_notify() {
@@ -623,12 +611,20 @@ _renew_cert() {
         /usr/bin/cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
-            if [ -d "${acme_home}/$domain" ] && "${acme_cmd}" list | grep -q "$domain"; then
+            if [ -d "${acme_home}/$domain" ] && "${acme_cmd}" list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" && touch $file_reload_nginx || true
+                if "${acme_cmd}" --renew -d "${domain}"; then
+                    touch $file_reload_nginx
+                else
+                    true
+                fi
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type && touch $file_reload_nginx || true
+                if "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type; then
+                    touch $file_reload_nginx
+                else
+                    true
+                fi
             fi
             ## install certs to dest folder
             "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.crt"
@@ -653,7 +649,7 @@ _renew_cert() {
     fi
 
     _msg time "[cert] renew cert with acme.sh using dns+api"
-    if [[ "${exec_single:-0}" -gt 0 ]]; then
+    if ${exec_single:-false}; then
         ${github_action:-false} || exit 0
     fi
     return 0
@@ -679,7 +675,7 @@ _get_balance_aliyun() {
     if ${PIPELINE_RENEW_CERT:-false} || ${arg_renew_cert:-false}; then
         return 0
     fi
-    if [[ "${exec_single:-0}" -gt 0 ]]; then
+    if ${exec_single:-false}; then
         exit 0
     fi
 }
@@ -879,21 +875,21 @@ _set_mirror() {
         url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
         return
     fi
-    if _is_root; then
+    case ${1:-none} in
+    os)
         ## OS ubuntu:22.04 php
         if [ -f /etc/apt/sources.list ]; then
-            sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
+            $use_sudo sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
                 -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
         ## OS Debian
         elif [ -f /etc/apt/sources.list.d/debian.sources ]; then
-            sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
+            $use_sudo sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
         ## OS alpine, nginx:alpine
         elif [ -f /etc/apk/repositories ]; then
             # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
-            sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+            $use_sudo sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
         fi
-    fi
-    case ${1:-none} in
+        ;;
     maven)
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
@@ -926,6 +922,9 @@ _set_mirror() {
         pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
         python3 -m pip config set global.index-url $pip_mirror
         ;;
+    *)
+        echo "Nothing to do."
+        ;;
     esac
 }
 
@@ -933,7 +932,6 @@ _detect_os() {
     _is_root || use_sudo=sudo
     _set_mirror os
     if [[ -e /etc/os-release ]]; then
-        # shellcheck disable=1091
         source /etc/os-release
         os_type="${ID}"
     elif [[ -e /etc/centos-release ]]; then
@@ -946,13 +944,10 @@ _detect_os() {
     pkgs=()
     case "$os_type" in
     debian | ubuntu | linuxmint)
-        # ARG DEBIAN_FRONTEND=noninteractive
-        # ENV DEBIAN_FRONTEND noninteractive
         # RUN apt-get update && \
         #        apt-get -y install sudo dialog apt-utils
         # RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
         export DEBIAN_FRONTEND=noninteractive
-        # echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
         [[ -f "$HOME"/.bash_logout ]] && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
         command -v git >/dev/null || pkgs+=(git)
@@ -1277,7 +1272,7 @@ _probe_langs() {
 _probe_deploy_method() {
     _msg step "[probe] deploy method"
     local deploy_method=rsync
-    for f in Dockerfile Dockerfile.base docker-compose.yml; do
+    for f in Dockerfile* docker-compose.yml; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         echo "Found $f"
         case $f in
@@ -1285,7 +1280,7 @@ _probe_deploy_method() {
             exec_deploy_docker_compose=true
             deploy_method=docker-compose
             ;;
-        Dockerfile | Dockerfile.base)
+        Dockerfile*)
             exec_build_image=true
             # if ! ${ENV_DISABLE_DOCKER:-false}; then
             exec_push_image=true
@@ -1398,9 +1393,8 @@ Parameters:
 _set_args() {
     ## All tasks are performed by default / 默认执行所有任务
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
-    exec_single=0
     build_cmd=$(command -v podman || command -v docker || echo docker)
-    while [[ -n "${1}" ]]; do
+    while [[ "$#" -gt 0 ]]; do
         case "$1" in
         --debug | -d)
             set -x
@@ -1436,69 +1430,70 @@ _set_args() {
             ;;
         --get-balance)
             arg_get_balance=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --renew-cert | -r)
             arg_renew_cert=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --code-style)
             arg_code_style=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --code-quality)
             arg_code_quality=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --build-langs)
             arg_build_langs=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --build-docker)
             arg_build_image=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
+            build_cmd=podman
             ;;
         --build-podman)
             arg_build_image=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             build_cmd=podman
             build_cmd_opt='--force-rm --format=docker'
             ;;
         --push-image)
             arg_push_image=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --deploy-k8s)
             arg_deploy_k8s=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --deploy-flyway)
             arg_deploy_flyway=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --deploy-rsync-ssh)
             arg_deploy_rsync_ssh=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --deploy-rsync)
             arg_deploy_rsync=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --deploy-ftp)
             arg_deploy_ftp=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --deploy-sftp)
             arg_deploy_sftp=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --test-unit)
             arg_test_unit=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         --test-function)
             arg_test_function=true
-            exec_single=$((exec_single + 1))
+            exec_single=true
             ;;
         *)
             _usage
@@ -1617,7 +1612,7 @@ main() {
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     # echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-false}"
     if ${github_action:-false} || ${arg_renew_cert:-false} || ${PIPELINE_RENEW_CERT:-false}; then
-        exec_single=$((exec_single + 1))
+        exec_single=true
         _renew_cert
     fi
 
@@ -1638,7 +1633,7 @@ main() {
 
     ################################################################################
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
-    if [[ "${exec_single:-0}" -gt 0 ]]; then
+    if ${exec_single:-false}; then
         _msg green "exec single jobs..."
         ${arg_code_quality:-false} && _check_quality_sonar
         if ${arg_code_style:-false}; then
@@ -1667,13 +1662,13 @@ main() {
         ${arg_deploy_ftp:-false} && _deploy_ftp
         ${arg_deploy_sftp:-false} && _deploy_sftp
         ${arg_test_function:-false} && _test_function
+
         _msg green "exec single jobs...end"
         ${github_action:-false} || return 0
     fi
     ################################################################################
 
-    ## default exec all tasks / 默认执行所有任务
-
+    ## default exec all tasks / 单个任务未启动时默认执行所有任务
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
     _msg step "[quality] check code with sonarqube"
     echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-false}"
@@ -1774,7 +1769,7 @@ main() {
 
     ## deploy notify info / 发布通知信息
     _msg step "[notify] message for result"
-    ## 发送消息到群组, exec_deploy_notify， false 不发， true 发.
+    ## 发送消息到群组, exec_deploy_notify ， false 不发， true 发.
     echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-false}"
     ${github_action:-false} && deploy_result=0
     ((${deploy_result:-0})) && exec_deploy_notify=true
