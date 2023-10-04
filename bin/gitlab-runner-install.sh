@@ -14,10 +14,8 @@ if _get_yes_no "[+] Do you want install the latest version of gitlab-runner?"; t
         sudo $bin_runner stop
     fi
     echo "[+] Downloading gitlab-runner..."
-    url_runner=https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64
-    curl -LO $url_runner
-    sudo install -m 0755 gitlab-runner-linux-amd64 $bin_runner
-    rm -f gitlab-runner-linux-amd64
+    curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | sudo bash
+    sudo apt install -y gitlab-runner
 fi
 
 ## Install and run as service
