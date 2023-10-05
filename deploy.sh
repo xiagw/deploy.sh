@@ -649,7 +649,7 @@ _renew_cert() {
     fi
 
     _msg time "[cert] renew cert with acme.sh using dns+api"
-    if ${exec_single:-false}; then
+    if ${exec_single_job:-false}; then
         ${github_action:-false} || exit 0
     fi
     return 0
@@ -675,7 +675,7 @@ _get_balance_aliyun() {
     if ${PIPELINE_RENEW_CERT:-false} || ${arg_renew_cert:-false}; then
         return 0
     fi
-    if ${exec_single:-false}; then
+    if ${exec_single_job:-false}; then
         exit 0
     fi
 }
@@ -1430,70 +1430,70 @@ _set_args() {
             ;;
         --get-balance)
             arg_get_balance=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --renew-cert | -r)
             arg_renew_cert=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --code-style)
             arg_code_style=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --code-quality)
             arg_code_quality=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --build-langs)
             arg_build_langs=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --build-docker)
             arg_build_image=true
-            exec_single=true
+            exec_single_job=true
             build_cmd=podman
             ;;
         --build-podman)
             arg_build_image=true
-            exec_single=true
+            exec_single_job=true
             build_cmd=podman
             build_cmd_opt='--force-rm --format=docker'
             ;;
         --push-image)
             arg_push_image=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --deploy-k8s)
             arg_deploy_k8s=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --deploy-flyway)
             arg_deploy_flyway=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --deploy-rsync-ssh)
             arg_deploy_rsync_ssh=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --deploy-rsync)
             arg_deploy_rsync=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --deploy-ftp)
             arg_deploy_ftp=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --deploy-sftp)
             arg_deploy_sftp=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --test-unit)
             arg_test_unit=true
-            exec_single=true
+            exec_single_job=true
             ;;
         --test-function)
             arg_test_function=true
-            exec_single=true
+            exec_single_job=true
             ;;
         *)
             _usage
@@ -1612,8 +1612,9 @@ main() {
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     # echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-false}"
     if ${github_action:-false} || ${arg_renew_cert:-false} || ${PIPELINE_RENEW_CERT:-false}; then
-        exec_single=true
+        exec_single_job=true
         _renew_cert
+        _msg time "renew cert end"
     fi
 
     ## probe program lang / 探测项目的程序语言
@@ -1633,7 +1634,7 @@ main() {
 
     ################################################################################
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
-    if ${exec_single:-false}; then
+    if ${exec_single_job:-false}; then
         _msg green "exec single jobs..."
         ${arg_code_quality:-false} && _check_quality_sonar
         if ${arg_code_style:-false}; then
