@@ -103,6 +103,7 @@ _check_quality_sonar() {
 
     if [[ ! -f "$sonar_conf" ]]; then
         _msg info "Creating $sonar_conf"
+
         cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
 sonar.projectKey=${gitlab_project_namespace}_${gitlab_project_name}
@@ -117,11 +118,12 @@ test/**/*
 sonar.projectVersion=1.0
 sonar.import_unknown_files=true
 EOF
+
     fi
+
     ${github_action:-false} && return 0
     $run_cmd -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
     _msg time "[quality] check code with sonarqube"
-    exit 0
 }
 
 _scan_zap() {
@@ -131,7 +133,7 @@ _scan_zap() {
     local zap_report_file
     zap_report_file="zap_report_$(date +%Y%m%d_%H%M%S).html"
 
-    if $build_cmd run -t --rm -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh $zap_options; then
+    if $run_cmd_root -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh $zap_options; then
         mv "$zap_report_file" "zap_report_latest.html"
         _msg green "ZAP scan completed. Report saved to zap_report_latest.html"
     else
@@ -147,7 +149,7 @@ _scan_vulmap() {
     # Load environment variables from config file
     source $me_path_data/config.cfg
     # Run vulmap scan
-    $build_cmd run --rm -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/vulmap_report.html"
+    $run_cmd_root -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/vulmap_report.html"
 
     # Display scan results
     if [[ -f "vulmap_report.html" ]]; then
@@ -162,7 +164,7 @@ _check_gitleaks() {
     local path="$1"
     local config_file="$2"
 
-    $build_cmd run --rm -v "$path:/repo" -v "$config_file:/config.toml" zricethezav/gitleaks:v7.5.0 gitleaks --path=/repo --config=/config.toml
+    $run_cmd_root -v "$path:/repo" -v "$config_file:/config.toml" zricethezav/gitleaks:v7.5.0 gitleaks --path=/repo --config=/config.toml
 }
 
 _deploy_flyway_docker() {
@@ -181,9 +183,9 @@ _deploy_flyway_docker() {
         _msg warning "No SQL migrations to apply."
     fi
     if [ ${deploy_result:-0} = 0 ]; then
-        _msg green "Result = OK"
+        _msg green "flyway migrate result = OK"
     else
-        _msg error "Result = FAIL"
+        _msg error "flyway migrate result = FAIL"
     fi
     _msg time "[database] deploy SQL files with flyway"
 }
@@ -193,11 +195,11 @@ _deploy_flyway_helm_job() {
     echo "$image_tag_flyway"
     ${github_action:-false} && return 0
     $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
-    $build_cmd run --rm "$image_tag_flyway" || deploy_result=1
+    $run_cmd_root "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
-        _msg green "Result = OK"
+        _msg green "flyway migrate result = OK"
     else
-        _msg error "Result = FAIL"
+        _msg error "flyway migrate result = FAIL"
     fi
     _msg time "[database] deploy SQL with flyway helm job"
 }
@@ -308,7 +310,7 @@ _deploy_k8s() {
     ## find helm files / 查找 helm 文件
     if [ -z "$path_helm" ]; then
         _msg purple "Not found helm files"
-        echo "Try to generate helm files with bin/helm-new.sh"
+        echo "Try to generate helm files with $me_path_bin/helm-new.sh"
         path_helm="${me_path_data}/helm/${helm_release}"
         bash "$me_path_bin/helm-new.sh" ${helm_release}
     fi
@@ -352,8 +354,7 @@ _deploy_rsync_ssh() {
     tmp_file=$(mktemp)
     grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" >$tmp_file || true
     while read -r line; do
-        # shellcheck disable=2206
-        array=($line)
+        read -r -a array <<<"$line"
         # git_branch=${array[1]}
         ssh_host=${array[2]}
         ssh_port=${array[3]}
@@ -363,7 +364,7 @@ _deploy_rsync_ssh() {
         # db_host=${array[7]}
         # db_name=${array[8]}
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo "ssh host: ${ssh_host:?if stop here, check $me_conf} port ${ssh_port:-22}"
+        echo "ssh host: ${ssh_host:?if stop here, check $me_conf}, port: ${ssh_port:-22}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
         ## node/java use rsync --delete / node/java 使用 rsync --delete
@@ -379,7 +380,9 @@ _deploy_rsync_ssh() {
         elif [[ "$project_lang" == node ]]; then
             rsync_relative_path=dist
         fi
-        if [[ "${rsync_src_from_conf}" != 'null' || -z "${rsync_src_from_conf}" ]]; then
+        if [[ -z "${rsync_src_from_conf}" ]]; then
+            rsync_src="${gitlab_project_dir}/"
+        elif [[ "${rsync_src_from_conf}" != 'null' ]]; then
             rsync_src="${gitlab_project_dir}/${rsync_src_from_conf}/"
         elif [ -n "$rsync_relative_path" ]; then
             rsync_src="${gitlab_project_dir}/$rsync_relative_path/"
@@ -425,8 +428,7 @@ _deploy_aliyun_oss() {
 
     # Check if OSS CLI is installed
     if ! command -v ossutil >/dev/null 2>&1; then
-        sudo -v
-        curl https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
+        curl https://gosspublic.alicdn.com/ossutil/install.sh | $use_sudo bash
     fi
     oss_config_file=${me_path_data}/aliyun.oss.key.conf
     bucket_name=demo-bucket
@@ -555,7 +557,7 @@ _renew_cert() {
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_install_dest="${acme_home}/${ENV_CERT_INSTALL:-dest}"
-    file_reload_nginx="${acme_home}/.need.reload.nginx"
+    file_reload_nginx="$(mktemp).need.reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
@@ -634,11 +636,11 @@ _renew_cert() {
     ## deploy with gitlab CI/CD,
     if [ -f "$file_reload_nginx" ]; then
         _msg info "found $file_reload_nginx"
-        rm -f "$file_reload_nginx"
         for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
             _msg "gitlab create pipeline, project id is $id"
             gitlab project-pipeline create --ref main --project-id $id
         done
+        rm -f "$file_reload_nginx"
     else
         _msg warn "not found $file_reload_nginx"
     fi
@@ -661,12 +663,10 @@ _get_balance_aliyun() {
     for p in "${ENV_ALARM_ALIYUN_PROFILE[@]}"; do
         local amount
         amount="$(aliyun -p "$p" bssopenapi QueryAccountBalance 2>/dev/null | jq -r .Data.AvailableAmount | sed 's/,//')"
-        if [[ -z "$amount" ]]; then
-            continue
-        fi
+        [[ -z "$amount" ]] && continue
         _msg red "Current balance: $amount"
         if [[ $(echo "$amount < ${ENV_ALARM_ALIYUN_BALANCE:-3000}" | bc) -eq 1 ]]; then
-            msg_body="Aliyun账号:$p 当前余额 $amount, 需要充值。"
+            msg_body="Aliyun account: $p, balance: $amount 余额过低需要充值"
             _notify_wechat_work $ENV_ALARM_WECHAT_KEY
         fi
     done
@@ -836,12 +836,15 @@ _install_jmeter() {
 _install_docker() {
     command -v docker &>/dev/null && return
     _msg info "installing docker"
-    curl -fsSLo /tmp/d.sh https://get.docker.com
+    local tmp_file
+    tmp_file=$(mktemp)
+    curl -fsSLo $tmp_file https://get.docker.com
     if _is_china; then
-        $use_sudo bash /tmp/d.sh --mirror Aliyun
+        $use_sudo bash $tmp_file --mirror Aliyun
     else
-        $use_sudo bash /tmp/d.sh
+        $use_sudo bash $tmp_file
     fi
+    rm -f $tmp_file
 }
 
 _install_podman() {
@@ -852,6 +855,7 @@ _install_podman() {
 }
 
 _is_china() {
+    local inchina
     if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
         inchina=true
     fi
@@ -1554,6 +1558,7 @@ main() {
     export PATH
 
     run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
+    run_cmd_root="$build_cmd run $ENV_ADD_HOST --interactive --rm"
     build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}$ENV_ADD_HOST $quiet_flag"
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _detect_os
