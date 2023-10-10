@@ -28,7 +28,7 @@ _msg() {
         color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
         ;;
     time)
-        color_on="[$(for ((i = 1; i <= ${#STEP}; i++)); do echo -n '+'; done)] $(date +%Y%m%d-%u-%T.%3N) "
+        color_on="[${STEP}] $(date +%Y%m%d-%u-%T.%3N) "
         color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
         ;;
     log)
@@ -257,7 +257,7 @@ _build_image() {
     ## build container image
     $build_cmd build $build_cmd_opt --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     ## push image to ttl.sh
-    if ${ENV_IMAGE_TTL:-false} || ${PIPELINE_IMAGE_TTL:-false}; then
+    if [[ "${MAN_TTL:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
         echo "  $build_cmd tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
@@ -672,7 +672,7 @@ _get_balance_aliyun() {
     done
     echo
     _msg time "check balance of aliyun"
-    if ${PIPELINE_RENEW_CERT:-false} || ${arg_renew_cert:-false}; then
+    if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${arg_renew_cert:-false}; then
         return 0
     fi
     if ${exec_single_job:-false}; then
@@ -1204,7 +1204,7 @@ _setup_gitlab_vars() {
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD || true)}
     gitlab_project_branch=${gitlab_project_branch:-develop}
-    [[ "${gitlab_project_branch}" == 'HEAD' ]] && gitlab_project_branch=main
+    [[ "${gitlab_project_branch}" == HEAD ]] && gitlab_project_branch=main
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
     if [[ -z "$gitlab_commit_short_sha" ]]; then
         _msg warn "WARN: \"\$gitlab_commit_short_sha\" set to \"1234567\""
@@ -1609,14 +1609,14 @@ main() {
     _set_deploy_conf
 
     ## get balance of aliyun / 获取 aliyun 账户现金余额
-    # echo "PIPELINE_GET_BALANCE: ${PIPELINE_GET_BALANCE:-false}"
-    if ${PIPELINE_GET_BALANCE:-false} || ${arg_get_balance:-false}; then
+    # echo "MAN_GET_BALANCE: ${MAN_GET_BALANCE:-false}"
+    if [[ "${MAN_GET_BALANCE:-false}" == true ]] || ${arg_get_balance:-false}; then
         _get_balance_aliyun
     fi
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
-    # echo "PIPELINE_RENEW_CERT: ${PIPELINE_RENEW_CERT:-false}"
-    if ${github_action:-false} || ${arg_renew_cert:-false} || ${PIPELINE_RENEW_CERT:-false}; then
+    # echo "MAN_RENEW_CERT: ${MAN_RENEW_CERT:-false}"
+    if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${github_action:-false} || ${arg_renew_cert:-false}; then
         exec_single_job=true
         _renew_cert
         _msg time "renew cert end"
@@ -1675,19 +1675,19 @@ main() {
     ################################################################################
 
     ## default exec all tasks / 单个任务未启动时默认执行所有任务
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 MAN_SONAR ，true 启用，false 禁用[default]
     _msg step "[quality] check code with sonarqube"
-    echo "PIPELINE_SONAR: ${PIPELINE_SONAR:-false}"
-    if ${PIPELINE_SONAR:-false}; then
+    echo "MAN_SONAR: ${MAN_SONAR:-false}"
+    if [[ "${MAN_SONAR:-false}" == true ]]; then
         _check_quality_sonar
     else
         echo "<skip>"
     fi
 
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，true 启用，false 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 MAN_CODE_STYLE ，true 启用，false 禁用[default]
     _msg step "[style] check code style"
-    echo "PIPELINE_CODE_STYLE: ${PIPELINE_CODE_STYLE:-false}"
-    if ${PIPELINE_CODE_STYLE:-false}; then
+    echo "MAN_CODE_STYLE: ${MAN_CODE_STYLE:-false}"
+    if [[ "${MAN_CODE_STYLE:-false}" == true ]]; then
         if [[ -f "$code_style_sh" ]]; then
             source "$code_style_sh"
         else
@@ -1698,10 +1698,10 @@ main() {
     fi
 
     ## unit test / 单元测试
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，true 启用，false 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 MAN_UNIT_TEST ，true 启用，false 禁用[default]
     _msg step "[test] unit test"
-    echo "PIPELINE_UNIT_TEST: ${PIPELINE_UNIT_TEST:-false}"
-    if ${PIPELINE_UNIT_TEST:-false}; then
+    echo "MAN_UNIT_TEST: ${MAN_UNIT_TEST:-false}"
+    if [[ "${MAN_UNIT_TEST:-false}" == true ]]; then
         _test_unit
     else
         echo "<skip>"
@@ -1711,8 +1711,8 @@ main() {
     _msg step "[database] deploy SQL files with flyway"
     # ${ENV_FLYWAY_HELM_JOB:-false} && _deploy_flyway_helm_job
     # ${exec_deploy_flyway:-false} && _deploy_flyway_helm_job
-    echo "PIPELINE_FLYWAY: ${PIPELINE_FLYWAY:-false}"
-    if ${PIPELINE_FLYWAY:-false} || ${exec_deploy_flyway:-false}; then
+    echo "MAN_FLYWAY: ${MAN_FLYWAY:-false}"
+    if [[ "${MAN_FLYWAY:-false}" == true ]] || ${exec_deploy_flyway:-false}; then
         _deploy_flyway_docker
     else
         echo '<skip>'
@@ -1747,10 +1747,10 @@ main() {
     ${exec_deploy_rsync_ssh:-true} && _deploy_rsync_ssh
 
     ## function test / 功能测试
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，true 启用，false 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 MAN_FUNCTION_TEST ，true 启用，false 禁用[default]
     _msg step "[test] function test"
-    echo "PIPELINE_FUNCTION_TEST: ${PIPELINE_FUNCTION_TEST:-false}"
-    if ${PIPELINE_FUNCTION_TEST:-false}; then
+    echo "MAN_FUNCTION_TEST: ${MAN_FUNCTION_TEST:-false}"
+    if [[ "${MAN_FUNCTION_TEST:-false}" == true ]]; then
         _test_function
     else
         echo "<skip>"
@@ -1758,16 +1758,16 @@ main() {
 
     ## 安全扫描
     _msg step "[scan] ZAP scan"
-    echo "PIPELINE_SCAN_ZAP: ${PIPELINE_SCAN_ZAP:-false}"
-    if ${PIPELINE_SCAN_ZAP:-false}; then
+    echo "MAN_SCAN_ZAP: ${MAN_SCAN_ZAP:-false}"
+    if [[ "${MAN_SCAN_ZAP:-false}" == true ]]; then
         _scan_zap
     else
         echo '<skip>'
     fi
 
     _msg step "[scan] vulmap scan"
-    echo "PIPELINE_SCAN_VULMAP: ${PIPELINE_SCAN_VULMAP:-false}"
-    if ${PIPELINE_SCAN_VULMAP:-false}; then
+    echo "MAN_SCAN_VULMAP: ${MAN_SCAN_VULMAP:-false}"
+    if [[ "${MAN_SCAN_VULMAP:-false}" == true ]]; then
         _scan_vulmap
     else
         echo '<skip>'
@@ -1776,12 +1776,12 @@ main() {
     ## deploy notify info / 发布通知信息
     _msg step "[notify] message for result"
     ## 发送消息到群组, exec_deploy_notify ， false 不发， true 发.
-    echo "PIPELINE_NOTIFY: ${PIPELINE_NOTIFY:-false}"
+    echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
     ${github_action:-false} && deploy_result=0
     ((${deploy_result:-0})) && exec_deploy_notify=true
     ${ENV_DISABLE_MSG:-false} && exec_deploy_notify=false
     [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=false
-    ${PIPELINE_NOTIFY:-false} && exec_deploy_notify=true
+    ${MAN_NOTIFY:-false} && exec_deploy_notify=true
     if ${exec_deploy_notify:-true}; then
         _deploy_notify
     fi
