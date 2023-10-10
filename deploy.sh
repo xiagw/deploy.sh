@@ -651,15 +651,18 @@ _renew_cert() {
     fi
 
     _msg time "[cert] renew cert with acme.sh using dns+api"
-    if ${exec_single_job:-false}; then
-        ${github_action:-false} || exit 0
+
+    if ${github_action:-false}; then
+        return 0
     fi
-    return 0
+    if ${exec_single_job:-false}; then
+        exit 0
+    fi
 }
 
 _get_balance_aliyun() {
     ${github_action:-false} && return 0
-    _msg step "check balance of aliyun"
+    _msg step "[balance] check balance of aliyun"
     for p in "${ENV_ALARM_ALIYUN_PROFILE[@]}"; do
         local amount
         amount="$(aliyun -p "$p" bssopenapi QueryAccountBalance 2>/dev/null | jq -r .Data.AvailableAmount | sed 's/,//')"
@@ -671,7 +674,7 @@ _get_balance_aliyun() {
         fi
     done
     echo
-    _msg time "check balance of aliyun"
+    _msg time "[balance] check balance of aliyun"
     if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${arg_renew_cert:-false}; then
         return 0
     fi
@@ -1619,7 +1622,6 @@ main() {
     if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${github_action:-false} || ${arg_renew_cert:-false}; then
         exec_single_job=true
         _renew_cert
-        _msg time "renew cert end"
     fi
 
     ## probe program lang / 探测项目的程序语言
