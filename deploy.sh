@@ -285,48 +285,129 @@ _push_image() {
     _msg time "[image] push container image"
 }
 
+_helm_new() {
+    ## 获取 release 名称/端口/协议等信息
+    release_name_path="$1"
+    port_number=8080
+    port_number2=8081
+    protocol=tcp
+
+    ## 创建 helm chart
+    helm create "$release_name_path"
+    echo "$(date), helm create $release_name_path" >>"$me_log"
+    ## 需要修改的配置文件
+    file_values="$release_name_path/values.yaml"
+    file_svc="$release_name_path/templates/service.yaml"
+    file_deploy="$release_name_path/templates/deployment.yaml"
+    ## remove serviceaccount.yaml
+    # rm -f "$release_name_path/templates/serviceaccount.yaml"
+
+    ## change values.yaml
+    sed -i \
+        -e "/port: 80/ a \ \ #port2: ${port_number2:-8081}" \
+        -e "s@port: 80@port: ${port_number:-8080}@" \
+        -e "s/create: true/create: false/" "$file_values"
+    sed -i -e '4 a #cnfs: cnfs-nas-pvc-www' "$file_values"
+
+    ## change service.yaml
+    sed -i -e "s@targetPort: http@targetPort: {{ .Values.service.port }}@" "$file_svc"
+    sed -i -e '13 a \    {{- if .Values.service.port2 }}' "$file_svc"
+    sed -i -e '14 a \    - port: {{ .Values.service.port2 }}' "$file_svc"
+    sed -i -e '15 a \      targetPort: {{ .Values.service.port2 }}' "$file_svc"
+    sed -i -e '16 a \      protocol: TCP' "$file_svc"
+    sed -i -e '17 a \      name: http2' "$file_svc"
+    sed -i -e '18 a \    {{- end }}' "$file_svc"
+
+    ## change deployment.yaml
+    sed -i -e '39 a \            {{- if .Values.service.port2 }}' "$file_deploy"
+    sed -i -e '40 a \            - name: http2' "$file_deploy"
+    sed -i -e '41 a \              containerPort: {{ .Values.service.port2 }}' "$file_deploy"
+    sed -i -e '42 a \              protocol: TCP' "$file_deploy"
+    sed -i -e '43 a \            {{- end }}' "$file_deploy"
+    ## add volume
+    sed -i -e '54 a \          {{- if or .Values.cnfs .Values.nas .Values.nfs }}' "$file_deploy"
+    sed -i -e '55 a \          volumeMounts:' "$file_deploy"
+    sed -i -e '56 a \          {{- end }}' "$file_deploy"
+    sed -i -e '57 a \          {{- if .Values.cnfs }}' "$file_deploy"
+    sed -i -e '58 a \            - name: volume-cnfs' "$file_deploy"
+    sed -i -e '59 a \              mountPath: "/app"' "$file_deploy"
+    sed -i -e '60 a \          {{- end }}' "$file_deploy"
+    cat >>"$file_deploy" <<EOF
+      {{- if or .Values.cnfs .Values.nas .Values.nfs }}
+      volumes:
+      {{- end }}
+      {{- if .Values.cnfs }}
+        - name: volume-cnfs
+          persistentVolumeClaim:
+            claimName: {{ .Values.cnfs }}
+      {{- end }}
+EOF
+    ## set port
+    if [[ "${protocol:-tcp}" == 'tcp' ]]; then
+        sed -i \
+            -e "s@containerPort: 80@containerPort: {{ .Values.service.port }}@" \
+            -e "s@port: http@port: {{ .Values.service.port }}@g" \
+            -e "s@httpGet:@tcpSocket:@g" \
+            -e "s@path: /@# path: /@g" \
+            "$file_deploy"
+    else
+        sed -i \
+            -e "s@containerPort: 80@containerPort: {{ .Values.service.port }}@" \
+            -e "s@port: http@port: {{ .Values.service.port }}@g" \
+            "$file_deploy"
+    fi
+    sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
+    #                initialDelaySeconds: 50
+}
+
 _deploy_k8s() {
     _msg step "[deploy] deploy with helm"
     _is_demo_mode "deploy-helm" && return 0
     if ${ENV_REMOVE_PROJ_PREFIX:-false}; then
-        echo "remove project name prefix"
+        echo "remove project name prefix-"
         helm_release=${gitlab_project_name#*-}
     else
         helm_release=${gitlab_project_name}
     fi
     ## Convert to lower case / 转换为小写
     helm_release="${helm_release,,}"
+    helm_release="${helm_release//[@#$%^&*_.\/]/-}"
     ## finding helm files folder / 查找 helm 文件目录
-    if [ -d "$gitlab_project_dir/helm" ]; then
-        path_helm="$gitlab_project_dir/helm"
-    elif [ -d "$gitlab_project_dir/docs/helm" ]; then
-        path_helm="$gitlab_project_dir/docs/helm"
-    elif [ -d "${me_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}" ]; then
-        path_helm="${me_path_data}/helm/${gitlab_project_name}.${gitlab_project_branch}"
-    elif [ -d "${me_path_data}/helm/${gitlab_project_name}" ]; then
-        path_helm="${me_path_data}/helm/${gitlab_project_name}"
-    fi
+    helm_dirs=(
+        "$gitlab_project_dir/helm"
+        "$gitlab_project_dir/docs/helm"
+        "$gitlab_project_dir/doc/helm"
+        "${me_path_data}/helm/${gitlab_project_path_slug}"
+        "${me_path_data}/helm/${gitlab_project_name}"
+    )
+    for i in "${helm_dirs[@]}"; do
+        if [ -d "$i" ]; then
+            helm_dir="$i"
+            break
+        fi
+    done
 
-    ## find helm files / 查找 helm 文件
-    if [ -z "$path_helm" ]; then
+    ## create helm files / 创建 helm 文件
+    if [ -z "$helm_dir" ]; then
         _msg purple "Not found helm files"
-        echo "Try to generate helm files with $me_path_bin/helm-new.sh"
-        path_helm="${me_path_data}/helm/${helm_release}"
-        bash "$me_path_bin/helm-new.sh" ${helm_release}
+        echo "Try to generate helm files"
+        helm_dir="${me_path_data}/helm/${gitlab_project_path_slug}/${helm_release}"
+        [ -d "$helm_dir" ] || mkdir -p "$helm_dir"
+        _helm_new "${helm_dir}"
     fi
-    echo "$helm_opt upgrade ${helm_release} $path_helm/ --install --history-max 1 --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
+    echo "$helm_opt upgrade ${helm_release} $helm_dir/ --install --history-max 1 --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
     ${github_action:-false} && return 0
     ## helm install / helm 安装
-    $helm_opt upgrade "${helm_release}" "$path_helm/" --install --history-max 1 \
+    $helm_opt upgrade "${helm_release}" "$helm_dir/" --install --history-max 1 \
         --namespace "${env_namespace}" --create-namespace \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${image_tag}" \
         --set image.pullPolicy='Always' \
         --timeout 120s >/dev/null
     ## Clean up rs 0 0 / 清理 rs 0 0
-    $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs &>/dev/null || true
+    $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
     $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
-    sleep 3
+    # sleep 3
     ## 检测 helm upgrade 状态
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s >/dev/null || deploy_result=1
 
@@ -1204,6 +1285,7 @@ _setup_gitlab_vars() {
     gitlab_project_namespace=${CI_PROJECT_NAMESPACE:-root}
     # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
     gitlab_project_path=${CI_PROJECT_PATH:-$gitlab_project_namespace/$gitlab_project_name}
+    gitlab_project_path_slug=${CI_PROJECT_PATH_SLUG:-${gitlab_project_path//[.\/]/-}}
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
     gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD || true)}
     gitlab_project_branch=${gitlab_project_branch:-develop}
@@ -1400,6 +1482,7 @@ Parameters:
 _set_args() {
     ## All tasks are performed by default / 默认执行所有任务
     ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
+    [[ ${CI_DEBUG_TRACE:-false} == true ]] && debug_on=true
     build_cmd=$(command -v podman || command -v docker || echo docker)
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
