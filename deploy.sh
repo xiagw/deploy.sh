@@ -14,6 +14,7 @@ _msg() {
     local color_off='\033[0m' # Text Reset
     duration=$SECONDS
     h_m_s="$((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
+    time_now="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
@@ -25,16 +26,16 @@ _msg() {
     orange) color_on='\033[1;33m' ;;                   # Orange
     step)
         ((++STEP))
-        color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N) \033[0m"
+        color_on="\033[0;36m[${STEP}] $time_now \033[0m"
         color_off=" $h_m_s"
         ;;
     time)
-        color_on="[${STEP}] $(date +%Y%m%d-%u-%T.%3N) "
+        color_on="[${STEP}] $time_now "
         color_off=" $h_m_s"
         ;;
     log)
         shift
-        echo "$(date +%Y%m%d-%u-%T.%3N) $*" >>$me_log
+        echo "$time_now $*" >>$me_log
         return
         ;;
     *)
