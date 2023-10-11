@@ -13,6 +13,7 @@ _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
     duration=$SECONDS
+    h_m_s="$((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
 
     case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
@@ -21,15 +22,15 @@ _msg() {
     blue) color_on='\033[0;34m' ;;                     # Blue
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
-    orange) color_on='\033[1;33m' ;;
+    orange) color_on='\033[1;33m' ;;                   # Orange
     step)
         ((++STEP))
         color_on="\033[0;36m[${STEP}] $(date +%Y%m%d-%u-%T.%3N) \033[0m"
-        color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
+        color_off=" $h_m_s"
         ;;
     time)
         color_on="[${STEP}] $(date +%Y%m%d-%u-%T.%3N) "
-        color_off=" $((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
+        color_off=" $h_m_s"
         ;;
     log)
         shift
@@ -251,6 +252,7 @@ _build_image() {
             echo "deploy/base:${gitlab_project_name}-${gitlab_project_branch}"
             $build_cmd build $build_cmd_opt --tag deploy/base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
         fi
+        _msg time "[image] build base image"
         exit_directly=true
         return
     fi
