@@ -60,6 +60,7 @@ _is_demo_mode() {
 
 _is_root() {
     if [ "$(id -u)" -eq 0 ]; then
+        unset use_sudo
         return 0
     else
         use_sudo=sudo
