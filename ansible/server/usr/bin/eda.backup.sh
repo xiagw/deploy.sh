@@ -1,6 +1,14 @@
 #!/bin/bash
 
 # set -xe
+_get_time() {
+    if [[ "$(uname)" == Darwin ]]; then
+        gdate +%Y%m%d-%u-%H%M%S.%3N
+    else
+        date +%Y%m%d-%u-%H%M%S.%3N
+    fi
+}
+
 if [[ $(id -u) -ne 0 ]]; then
     echo "Need root. exit."
     exit 1
@@ -13,9 +21,9 @@ rsync_opt=(
     rsync
     -az
     --backup
-    --suffix=".$(date +%Y%m%d-%u-%H%M%S.%3N)"
+    --suffix=".$(_get_time)"
     --exclude={'.swp','*.log','CDS.log*','*panic.log*','matlab_crash_dump.*'}
-    )
+)
 
 rsync_exclude=$me_path/rsync.exclude.conf
 rsync_include=$me_path/rsync.include.conf
@@ -38,7 +46,7 @@ pull)
     for svr in "${dest_servers[@]}"; do
         for dir in "${src_dirs[@]}"; do
             ssh "$svr" "test -d $dir" || continue
-            echo "$(date +%Y%m%d-%u-%H%M%S.%3N)  sync $dir" >>"$me_log"
+            echo "$(_get_time)  sync $dir" >>"$me_log"
             "${rsync_opt[@]}" "$svr:$dir"/ "$dest_dir$dir"/
         done
     done
@@ -48,7 +56,7 @@ push)
     rsync_opt+=(--rsync-path=/bin/rsync)
     for dir in "${src_dirs[@]}"; do
         test -d "$dir" || continue
-        echo "$(date +%Y%m%d-%u-%H%M%S.%3N)  sync $dir" >>"$me_log"
+        echo "$(_get_time)  sync $dir" >>"$me_log"
         "${rsync_opt[@]}" "$dir"/ "$host_nas:$dest_dir$dir"/
     done
     ;;

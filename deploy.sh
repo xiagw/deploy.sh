@@ -943,14 +943,7 @@ _install_podman() {
 }
 
 _is_china() {
-    local inchina
-    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
-        inchina=true
-    fi
-    if grep -q 'ENV_IN_CHINA=true' $me_env; then
-        inchina=true
-    fi
-    if ${inchina:-false}; then
+    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} || grep -q 'ENV_IN_CHINA=true' $me_env; then
         return 0
     else
         return 1
@@ -1352,14 +1345,14 @@ _probe_langs() {
             break
             ;;
         *)
-            project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}"/${f} | tail -n 1)}
+            project_lang=${project_lang:-$(awk -F= '/^project_lang/ {print $2}' "${gitlab_project_dir}/${f}" | tail -n 1)}
             project_lang=${project_lang// /}
             project_lang=${project_lang,,}
             ;;
         esac
     done
     project_lang=${project_lang:-unknown}
-    echo "Probe lang: ${project_lang:-unknown}"
+    echo "Probe lang: ${project_lang}"
 }
 
 _probe_deploy_method() {
@@ -1545,7 +1538,7 @@ _set_args() {
         --build-docker)
             arg_build_image=true
             exec_single_job=true
-            build_cmd=podman
+            build_cmd=docker
             ;;
         --build-podman)
             arg_build_image=true
