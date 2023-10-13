@@ -399,10 +399,11 @@ _deploy_k8s() {
         [ -d "$helm_dir" ] || mkdir -p "$helm_dir"
         _helm_new "${helm_dir}"
     fi
-    echo "$helm_opt upgrade ${helm_release} $helm_dir/ --install --history-max 1 --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
+    echo "$helm_opt upgrade --install --history-max 1 ${helm_release} $helm_dir/ --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
     ${github_action:-false} && return 0
-    ## helm install / helm 安装
-    $helm_opt upgrade "${helm_release}" "$helm_dir/" --install --history-max 1 \
+    ## helm install / helm 安装  --atomic
+    $helm_opt upgrade --install --history-max 1 \
+        "${helm_release}" "$helm_dir/" \
         --namespace "${env_namespace}" --create-namespace \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${image_tag}" \
