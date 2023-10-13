@@ -669,26 +669,41 @@ _renew_cert() {
         case "${dns_type}" in
         dns_gd)
             _msg warn "dns type: Goddady"
-            api_goddady="https://api.godaddy.com/v1/domains"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
-            [ -z "$ENV_HTTP_PROXY" ] || curl_opt="curl -x $ENV_HTTP_PROXY"
-            domains="$(${curl_opt:-curl} -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain')"
+            api_goddady="https://api.godaddy.com/v1/domains"
+            if [ -z "$ENV_HTTP_PROXY" ]; then
+                _msg warn "no http_proxy"
+            else
+                _msg time "set http_proxy"
+                export http_proxy="$ENV_HTTP_PROXY"
+                export https_proxy="$ENV_HTTP_PROXY"
+            fi
+            domains="$(
+                curl -fsSL -X GET -H "$api_head" "$api_goddady" |
+                    jq -r '.[].domain'
+            )"
             ;;
         dns_cf)
             _msg warn "dns type: cloudflare"
             _install_flarectl
-            domains="$(flarectl zone list | awk '/active/ {print $3}')"
+            domains="$(
+                flarectl zone list |
+                    awk '/active/ {print $3}'
+            )"
             ;;
         dns_ali)
             _msg warn "dns type: aliyun"
             _install_aliyun_cli
             aliyun configure set \
-                --profile "deploy_${profile_name}" \
                 --mode AK \
+                --profile "deploy_${profile_name}" \
                 --region "${SAVED_Ali_region:-none}" \
                 --access-key-id "${SAVED_Ali_Key:-none}" \
                 --access-key-secret "${SAVED_Ali_Secret:-none}"
-            domains="$(aliyun --profile "deploy_${profile_name}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d')"
+            domains="$(
+                aliyun --profile "deploy_${profile_name}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 |
+                    sed -e '1,2d' -e '/^$/d'
+            )"
             ;;
         *)
             _msg warn "unknown dns type: $dns_type"
@@ -715,7 +730,6 @@ _renew_cert() {
                 fi
             fi
             ## install certs to dest folder
-            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.crt"
             "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
         done
     done
@@ -1144,12 +1158,12 @@ _generate_apidoc() {
 
 _inject_files() {
     _msg step "[inject] files conf/env/Dockerfile..."
-    ## backend (PHP/Java/Python) project_conf files
+    ## backend (PHP/Java/Python) inject files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
-    local path_project_conf="${me_path_data}/project_conf/${gitlab_project_name}/${env_namespace}"
-    if [ -d "$path_project_conf" ]; then
-        _msg warning "found $path_project_conf, sync to ${gitlab_project_dir}/"
-        rsync -av "$path_project_conf"/ "${gitlab_project_dir}"/
+    local inject_dir="${me_path_data}/inject/${gitlab_project_name}/${env_namespace}"
+    if [ -d "$inject_dir" ]; then
+        _msg warning "found $inject_dir, sync to ${gitlab_project_dir}/"
+        rsync -av "$inject_dir"/ "${gitlab_project_dir}"/
     fi
 
     ## frontend (VUE) .env file
