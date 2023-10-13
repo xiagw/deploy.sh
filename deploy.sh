@@ -378,11 +378,11 @@ _deploy_k8s() {
     helm_release="${helm_release//[@#$%^&*_.\/]/-}"
     ## finding helm files folder / 查找 helm 文件目录
     helm_dirs=(
-        "$gitlab_project_dir/helm"
-        "$gitlab_project_dir/docs/helm"
-        "$gitlab_project_dir/doc/helm"
-        "${me_path_data}/helm/${gitlab_project_path_slug}"
-        "${me_path_data}/helm/${gitlab_project_name}"
+        "$gitlab_project_dir/helm/${helm_release}"
+        "$gitlab_project_dir/docs/helm/${helm_release}"
+        "$gitlab_project_dir/doc/helm/${helm_release}"
+        "${me_path_data}/helm/${gitlab_project_path_slug}/${helm_release}"
+        "${me_path_data}/helm/${helm_release}"
     )
     for i in "${helm_dirs[@]}"; do
         if [ -d "$i" ]; then
@@ -390,7 +390,6 @@ _deploy_k8s() {
             break
         fi
     done
-
     ## create helm files / 创建 helm 文件
     if [ -z "$helm_dir" ]; then
         _msg purple "Not found helm files"
@@ -399,8 +398,10 @@ _deploy_k8s() {
         [ -d "$helm_dir" ] || mkdir -p "$helm_dir"
         _helm_new "${helm_dir}"
     fi
+
     echo "$helm_opt upgrade --install --history-max 1 ${helm_release} $helm_dir/ --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
     ${github_action:-false} && return 0
+
     ## helm install / helm 安装  --atomic
     $helm_opt upgrade --install --history-max 1 \
         "${helm_release}" "$helm_dir/" \
