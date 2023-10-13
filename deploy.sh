@@ -381,6 +381,7 @@ _deploy_k8s() {
         "$gitlab_project_dir/helm/${helm_release}"
         "$gitlab_project_dir/docs/helm/${helm_release}"
         "$gitlab_project_dir/doc/helm/${helm_release}"
+        "${me_path_data}/helm/${gitlab_project_path_slug}/${env_namespace}/${helm_release}"
         "${me_path_data}/helm/${gitlab_project_path_slug}/${helm_release}"
         "${me_path_data}/helm/${helm_release}"
     )
