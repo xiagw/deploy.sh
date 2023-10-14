@@ -66,6 +66,7 @@ export CDS_Netlisting_Mode=Analog
 # Load .cdsenv in the working directory ($CWD)
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 export CDS_LOAD_ENV=CSF
+export CDS_LOG_PATH=$HOME/.logs
 #CDS_LOG_VERSION to either "sequential" or "pid".
 export CDS_LOG_VERSION=sequential
 

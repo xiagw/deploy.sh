@@ -5,6 +5,10 @@
 _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
+    duration=$SECONDS
+    h_m_s="$((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
+    time_now="$(date +%Y%m%d-%u-%T.%3N)"
+
     case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
     green | info) color_on='\033[0;32m' ;;             # Green
@@ -12,120 +16,127 @@ _msg() {
     blue) color_on='\033[0;34m' ;;                     # Blue
     purple | question | ques) color_on='\033[0;35m' ;; # Purple
     cyan) color_on='\033[0;36m' ;;                     # Cyan
+    orange) color_on='\033[1;33m' ;;                   # Orange
+    step)
+        ((++STEP))
+        color_on="\033[0;36m[${STEP}] $time_now \033[0m"
+        color_off=" $h_m_s"
+        ;;
     time)
-        color_on="[+] $(date +%Y%m%d-%T-%u), "
-        color_off=''
+        color_on="[${STEP}] $time_now "
+        color_off=" $h_m_s"
         ;;
-    step | timestep)
-        color_on="\033[0;36m[$((${STEP:-0} + 1))] $(date +%Y%m%d-%T-%u), \033[0m"
-        STEP=$((${STEP:-0} + 1))
-        color_off=' ... start'
-        ;;
-    stepend | end)
-        color_on="[+] $(date +%Y%m%d-%T-%u), "
-        color_off=' ... end'
+    log)
+        shift
+        echo "$time_now $*" >>$me_log
+        return
         ;;
     *)
-        color_on=
-        color_off=
+        unset color_on color_off
         ;;
     esac
-    if [ "$#" -gt 1 ]; then
-        shift
-    fi
+    [ "$#" -gt 1 ] && shift
     echo -e "${color_on}$*${color_off}"
 }
 
 _set_peer2peer() {
-    if [[ "$new_key_flag" -ne 1 ]]; then
-        _msg green "### Please select == CLIENT == conf..."
-        select c_conf in $me_data/wg*.conf quit; do
-            [[ "$c_conf" == 'quit' ]] && exit
+    ## 新建的client，直接选择 服务器端
+    if [[ "$new_key_flag" -eq 1 ]]; then
+        _msg green "### is new key..."
+    ## 不是新建的client，需要选择已存在的client
+    else
+        _msg green "### Please select <<<<<< CLIENT <<<<<< conf..."
+        select client_conf in $me_data/wg*.conf quit; do
+            [[ "$client_conf" == 'quit' ]] && exit
             break
         done
-        c_key_pub="$(awk '/^### pubkey:/ {print $3}' "$c_conf" | head -n 1)"
-        c_key_pre="$(awk '/PresharedKey/ {print $4}' "$c_conf" | head -n 1)"
-        c_ip_pub="$(awk '/^### pubip:/ {print $3}' "$c_conf" | head -n 1)"
-        c_ip_pri="$(awk '/^Address/ {print $3}' "$c_conf" | head -n 1)"
-        c_ip_pri="${c_ip_pri%/24}"
-        c_port="$(awk '/^ListenPort/ {print $3}' "$c_conf" | head -n 1)"
+        client_key_pub="$(awk '/^### public_key:/ {print $3}' "$client_conf" | head -n 1)"
+        client_key_pre="$(awk '/PresharedKey/ {print $4}' "$client_conf" | head -n 1)"
+        client_ip_public="$(awk '/^### public_ip:/ {print $3}' "$client_conf" | head -n 1)"
+        client_ip_pri="$(awk '/^Address/ {print $3}' "$client_conf" | head -n 1)"
+        client_ip_pri="${client_ip_pri%/24}"
+        client_ip_port="$(awk '/^ListenPort/ {print $3}' "$client_conf" | head -n 1)"
     fi
     ## select server
-    _msg red "### Please select ==== SERVER ==== side conf"
-    select s_conf in $me_data/wg*.conf quit; do
-        [[ "$s_conf" == 'quit' ]] && break
-        _msg red "(Have selected $s_conf)"
-        s_key_pub="$(awk '/^### pubkey:/ {print $3}' "$s_conf" | head -n 1)"
-        s_ip_pub="$(awk '/^### pubip:/ {print $3}' "$s_conf" | head -n 1)"
-        s_ip_pri="$(awk '/^Address/ {print $3}' "$s_conf" | head -n 1)"
-        s_ip_pri=${s_ip_pri%/24}
-        s_port="$(awk '/^ListenPort/ {print $3}' "$s_conf" | head -n 1)"
-        _msg red "From: $s_conf"
-        _msg green "To: $c_conf"
-        read -rp "Set route: [IP/MASK,IP/MASK] " read_ip_route
-        if ! grep -q "### ${s_conf##*/} begin" "$c_conf"; then
+    _msg red "### Please select >>>>>> SERVER >>>>>> side conf"
+    select svr_conf in $me_data/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
+        [[ "$svr_conf" == 'quit' ]] && break
+        svr_key_pub="$(awk '/^### public_key:/ {print $3}' "$svr_conf" | head -n 1)"
+        svr_ip_pub="$(awk '/^### public_ip:/ {print $3}' "$svr_conf" | head -n 1)"
+        svr_ip_pri="$(awk '/^Address/ {print $3}' "$svr_conf" | head -n 1)"
+        svr_ip_pri=${svr_ip_pri%/24}
+        svr_ip_port="$(awk '/^ListenPort/ {print $3}' "$svr_conf" | head -n 1)"
+        read -rp "Set route(client-to-server): [192.168.1.0/24,172.16.0.0/16] " read_ip_route
+        _msg red "From: >>>>>> $svr_conf >>>>>> "
+        _msg green "To: <<<<<< $client_conf <<<<<< "
+        _msg green "generate client conf... $client_conf"
+        if ! grep -q "### ${svr_conf##*/} begin" "$client_conf"; then
             (
                 echo ""
-                echo "### ${s_conf##*/} begin"
+                echo "### ${svr_conf##*/} begin"
                 echo "[Peer]"
-                echo "PublicKey = $s_key_pub"
-                echo "# PresharedKey = $c_key_pre"
-                echo "endpoint = $s_ip_pub:$s_port"
+                echo "PublicKey = $svr_key_pub"
+                echo "# PresharedKey = $client_key_pre"
+                echo "endpoint = $svr_ip_pub:$svr_ip_port"
                 if [[ -z ${read_ip_route} ]]; then
-                    echo "AllowedIPs = ${s_ip_pri}/32"
+                    echo "AllowedIPs = ${svr_ip_pri}/32"
                 else
-                    echo "AllowedIPs = ${s_ip_pri}/32, ${read_ip_route}"
+                    echo "AllowedIPs = ${svr_ip_pri}/32, ${read_ip_route}"
                 fi
                 echo "PersistentKeepalive = 60"
-                echo "### ${s_conf##*/} end"
+                echo "### ${svr_conf##*/} end"
                 echo ""
-            ) >>"$c_conf"
+            ) >>"$client_conf"
         fi
-        echo "set from $c_conf to $s_conf..."
-        if ! grep -q "### ${c_conf##*/} begin" "$s_conf"; then
+        echo "set from <<<<<< $client_conf to >>>>>> $svr_conf..."
+        if ! grep -q "### ${client_conf##*/} begin" "$svr_conf"; then
             (
                 echo ""
-                echo "### ${c_conf##*/} begin  $c_comment"
+                echo "### ${client_conf##*/} begin  $client_comment"
                 echo "[Peer]"
-                echo "PublicKey = $c_key_pub"
-                echo "# PresharedKey = $c_key_pre"
-                echo "AllowedIPs = ${c_ip_pri}/32"
-                echo "### ${c_conf##*/} end"
+                echo "PublicKey = $client_key_pub"
+                echo "# PresharedKey = $client_key_pre"
+                echo "AllowedIPs = ${client_ip_pri}/32"
+                echo "### ${client_conf##*/} end"
                 echo ""
-            ) >>"$s_conf"
+            ) >>"$svr_conf"
         fi
     done
 }
 
 _new_key() {
-    c_num="${1:-20}"
-    c_conf="$me_data/wg${c_num}.conf"
-    until [[ "${c_num}" -lt 254 ]]; do
-        read -rp "Error! enter ip again [1-254]: " c_num
-        c_conf="$me_data/wg${c_num}.conf"
+    # ip_prefix="10.10.10."
+    # port_prefix="40000"
+    ip_prefix="10.9.0."
+    port_prefix="39000"
+    client_num="${1:-20}"
+    client_conf="$me_data/wg${client_num}.conf"
+    until [[ "${client_num}" -lt 254 ]]; do
+        read -rp "Error! enter ip again [1-254]: " client_num
+        client_conf="$me_data/wg${client_num}.conf"
     done
-    while [ -f "$c_conf" ]; do
-        c_num=$((c_num + 1))
-        c_conf="$me_data/wg${c_num}.conf"
+    while [ -f "$client_conf" ]; do
+        client_num=$((client_num + 1))
+        client_conf="$me_data/wg${client_num}.conf"
     done
-    _msg green "IP: 10.9.0.$c_num, filename: $c_conf"
-    read -rp "Who use this file? (username or hostname): " -e -i "client$c_num" c_comment
-    read -rp 'Enter public ip (empty for client behind NAT): ' -e -i "wg${c_num}.vpn.com" c_ip_pub
-    c_ip_pri="10.9.0.${c_num}"
-    c_port="$((c_num + 39000))"
-    c_key_pri="$(wg genkey)"
-    c_key_pub="$(echo "$c_key_pri" | wg pubkey)"
-    c_key_pre="$(wg genpsk)"
-    cat >"$c_conf" <<EOF
+    _msg green "client IP: $ip_prefix${client_num}, filename: $client_conf"
+    read -rp "Who use this file? (username or hostname): " -e -i "host${client_num}" client_comment
+    read -rp 'Input public IP (Empty for client behind NAT): ' -e -i "wg${client_num}.vpn.lan" client_ip_public
+    client_ip_pri="$ip_prefix${client_num}"
+    client_ip_port="$((client_num + port_prefix))"
+    client_key_pri="$(wg genkey)"
+    client_key_pub="$(echo "$client_key_pri" | wg pubkey)"
+    client_key_pre="$(wg genpsk)"
+    cat >"$client_conf" <<EOF
 
-### ${c_conf##*/} $c_comment
+### ${client_conf##*/} $client_comment
 [Interface]
-PrivateKey = $c_key_pri
-### PresharedKey = $c_key_pre
-### pubkey: $c_key_pub
-### pubip: $c_ip_pub
-Address = $c_ip_pri/24
-ListenPort = $c_port
+PrivateKey = $client_key_pri
+Address = $client_ip_pri/24
+ListenPort = $client_ip_port
+### PresharedKey = $client_key_pre
+### public_key: $client_key_pub
+### public_ip: $client_ip_public
 ## DNS = 192.168.1.1, 8.8.8.8, 8.8.4.4, 114.114.114.114
 ## MTU = 1420
 ## PostUp   = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
@@ -207,17 +218,17 @@ main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_name="$(basename "$0")"
     me_data="${me_path}/../../data/wireguard"
+    # me_data="${me_path}/wireguard"
     me_log="${me_data}/${me_name}.log"
     [ -d "$me_data" ] || mkdir -p "$me_data"
-    exec &> >(tee -a "$me_log")
 
     echo "
 What do you want to do?
-    1) New key (client or server)
+    1) New key (key for client/server)
     2) Set peer to peer (exists conf)
     3) Upload conf and reload (client/server)
     4) Convert conf to qrcode
-    5) Revoke server/client conf
+    5) Revoke client/server conf
     6) Quit
 "
     until [[ ${MENU_OPTION} =~ ^[1-6]$ ]]; do

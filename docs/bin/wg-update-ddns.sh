@@ -15,17 +15,24 @@ _update_ddns() {
         break
     done
 
-    $use_sudo wg show utun3 latest-handshakes |
-        while read -r line; do
-            pub_key=$(echo "$line" | awk '{print $1}')
-            handshake_time=$(echo "$line" | awk '{print $2}')
+    while read -r line; do
+        read -r -a array <<<"$line"
+        public_key=${array[0]}
+        handshake_time=${array[1]}
+        wg_endpoint=$(
+            grep -A 10 "${public_key}" "$wg_conf" |
+                awk -F= 'BEGIN{IGNORECASE=1} /[E|e]ndpoint/ {print $NF}' | head -n1
+        )
+        wg_endpoint=${wg_endpoint// /}
 
-            wg_endpoint=$(grep -A 10 "${pub_key}" "$wg_conf" | awk -F= 'BEGIN{IGNORECASE=1} /[E|e]ndpoint/ {print $NF}' | head -n1)
-            wg_endpoint=${wg_endpoint// /}
-            if (($(($(date +%s) - handshake_time)) > 300)); then
-                sudo wg set "$wg_interface" peer "$pub_key" endpoint "$wg_endpoint"
-            fi
-        done
+        time_now=$(($(date +%s) - handshake_time))
+        if ((time_now > 300)); then
+            echo "wg set $wg_interface peer $public_key endpoint $wg_endpoint"
+            sudo wg set "$wg_interface" peer "$public_key" endpoint "$wg_endpoint"
+        fi
+    done < <(
+        $use_sudo wg show "$wg_interface" latest-handshakes
+    )
 
 }
 
