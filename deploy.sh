@@ -586,7 +586,7 @@ _notify_wechat_work() {
 }
 
 _deploy_notify() {
-    msg_describe="${msg_describe:-$(git --no-pager log --no-merges --oneline -1 || true)}"
+    msg_describe="${msg_describe:-$(if [ -d .git ]; then git --no-pager log --no-merges --oneline -1; else echo 'not-git'; fi)}"
 
     msg_body="
 [Gitlab Deploy]
@@ -1183,6 +1183,7 @@ _inject_files() {
     fi
 
     ## from data/deploy.env， 使用 data/ 全局模板文件替换项目文件
+    ${arg_disable_inject:-false} && ENV_INJECT=keep
     echo ENV_INJECT: ${ENV_INJECT:-keep}
     build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
     case ${ENV_INJECT:-keep} in
@@ -1301,10 +1302,10 @@ _setup_gitlab_vars() {
     gitlab_project_path=${CI_PROJECT_PATH:-$gitlab_project_namespace/$gitlab_project_name}
     gitlab_project_path_slug=${CI_PROJECT_PATH_SLUG:-${gitlab_project_path//[.\/]/-}}
     # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
-    gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(git rev-parse --abbrev-ref HEAD || true)}
+    gitlab_project_branch=${CI_COMMIT_REF_NAME:-$(if [ -d .git ]; then git rev-parse --abbrev-ref HEAD; else echo dev; fi)}
     gitlab_project_branch=${gitlab_project_branch:-develop}
     [[ "${gitlab_project_branch}" == HEAD ]] && gitlab_project_branch=main
-    gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(git rev-parse --short HEAD || true)}
+    gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$(if [ -d .git ]; then git rev-parse --short HEAD; else echo 1234567; fi)}
     if [[ -z "$gitlab_commit_short_sha" ]]; then
         _msg warn "WARN: \"\$gitlab_commit_short_sha\" set to \"1234567\""
         gitlab_commit_short_sha=1234567
@@ -1535,6 +1536,9 @@ _set_args() {
         --get-balance)
             arg_get_balance=true
             exec_single_job=true
+            ;;
+        --disable-inject)
+            arg_disable_inject=true
             ;;
         --renew-cert | -r)
             arg_renew_cert=true
