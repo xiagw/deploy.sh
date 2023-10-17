@@ -73,7 +73,7 @@ _set_mirror() {
         npm_mirror=https://registry.npmmirror.com/
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
-    elif command -v python; then
+    elif command -v python && ! command -v java; then
         pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
         python -m pip config set global.index-url $pip_mirror
     fi
