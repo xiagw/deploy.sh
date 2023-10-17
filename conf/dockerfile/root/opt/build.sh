@@ -48,7 +48,7 @@ _set_mirror() {
             sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
         fi
     fi
-    if command -v maven; then
+    if command -v mvn; then
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
         ## 项目内自带 settings.xml docs/settings.xml
