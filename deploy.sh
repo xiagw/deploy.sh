@@ -1561,11 +1561,7 @@ _set_args() {
             arg_build_image=true
             exec_single_job=true
             build_cmd=podman
-            if ${debug_on:-false}; then
-                build_cmd_opt='--progress plain --force-rm --format=docker'
-            else
-                build_cmd_opt='--force-rm --format=docker'
-            fi
+            build_cmd_opt='--force-rm --format=docker'
             ;;
         --push-image)
             arg_push_image=true
@@ -1663,7 +1659,11 @@ main() {
 
     run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
     run_cmd_root="$build_cmd run $ENV_ADD_HOST --interactive --rm"
-    build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}$ENV_ADD_HOST $quiet_flag"
+    if ${debug_on:-false}; then
+        build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}--progress plain $ENV_ADD_HOST $quiet_flag"
+    else
+        build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}$ENV_ADD_HOST $quiet_flag"
+    fi
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _detect_os
 
