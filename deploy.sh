@@ -308,7 +308,7 @@ _helm_new() {
 
     ## change values.yaml
     sed -i \
-        -e "/port: 80/ a \ \ #port2: ${port_number2:-8081}" \
+        -e "/port: 80/ a \ \ port2: ${port_number2:-8081}" \
         -e "s@port: 80@port: ${port_number:-8080}@" \
         -e "s/create: true/create: false/" "$file_values"
     sed -i -e '4 a #cnfs: cnfs-nas-pvc-www' "$file_values"
