@@ -1561,7 +1561,11 @@ _set_args() {
             arg_build_image=true
             exec_single_job=true
             build_cmd=podman
-            build_cmd_opt='--force-rm --format=docker'
+            if ${debug_on:-false}; then
+                build_cmd_opt='--progress plain --force-rm --format=docker'
+            else
+                build_cmd_opt='--force-rm --format=docker'
+            fi
             ;;
         --push-image)
             arg_push_image=true

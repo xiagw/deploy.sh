@@ -27,12 +27,10 @@ ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/op
 WORKDIR /src
 COPY . .
 COPY ./root/ /
-
 RUN set -xe; \
+    if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
     ## 若此处出现错误，请检查 maven build 是否正常
-    if [ -f /opt/build.sh ]; then echo "found /opt/build.sh"; else curl -fLo /opt/build.sh $BUILD_URL; fi
-RUN bash /opt/build.sh
-
+    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
 
 
 ##############################
