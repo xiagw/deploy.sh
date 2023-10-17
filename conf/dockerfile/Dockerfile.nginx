@@ -17,13 +17,8 @@ WORKDIR /app
 
 COPY ./root/ /
 RUN set -xe; \
-    if [ -f /opt/build.sh ]; then \
-    echo "found /opt/build.sh,skip download."; \
-    else \
-    echo "Not found /opt/build.sh, downloading..."; \
-    curl -fLo /opt/build.sh $BUILD_URL; \
-    fi; \
-    sh /opt/build.sh
+    if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
+    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then sh /opt/onbuild.sh; else :; fi

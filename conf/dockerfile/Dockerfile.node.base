@@ -2,6 +2,7 @@ ARG NODE_VERSION=18
 FROM node:${NODE_VERSION}-slim
 
 ARG IN_CHINA=false
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 
 EXPOSE 8080
 WORKDIR /app
@@ -13,10 +14,12 @@ RUN set -xe; bash /opt/build.sh
 
 USER node
 COPY --chown=node:node ./package.json .
-RUN set -xe; bash /opt/build.sh
+RUN set -xe; \
+    if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
+    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
 
 ONBUILD COPY --chown=node:node . .
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi; if [ -d root ]; then rm -rf root; else :; fi
 
-# podman build --force-rm --format=docker -t deploy/base:node-18 -f Dockerfile.node.base .
-# docker build --force-rm -t deploy/base:node-18 -f Dockerfile.node.base .
+# podman build --force-rm --format=docker -t deploy/base:node-v18t01 -f Dockerfile.node.base .
+# docker build --force-rm -t deploy/base:node-v18t01 -f Dockerfile.node.base .

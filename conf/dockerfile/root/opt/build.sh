@@ -48,8 +48,7 @@ _set_mirror() {
             sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
         fi
     fi
-    case $build_type in
-    maven)
+    if command -v maven; then
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
         ## 项目内自带 settings.xml docs/settings.xml
@@ -62,26 +61,22 @@ _set_mirror() {
         else
             curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
         fi
-        ;;
-    composer)
+    elif command -v composer; then
         _is_root || return
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
         mkdir -p /var/www/.composer /.composer
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
-        ;;
-    node)
+    elif command -v node; then
         # npm_mirror=https://mirrors.ustc.edu.cn/node/
         # npm_mirror=http://mirrors.cloud.tencent.com/npm/
         # npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
         npm_mirror=https://registry.npmmirror.com/
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
-        ;;
-    python)
+    elif command -v python; then
         pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
         python -m pip config set global.index-url $pip_mirror
-        ;;
-    esac
+    fi
 }
 
 _check_run_sh() {
@@ -237,7 +232,11 @@ _build_node() {
         else
             npm install
         fi
-        [ -d root ] && rm -rf root || :
+        if [ -d root ]; then
+            rm -rf root
+        else
+            :
+        fi
     fi
 }
 
@@ -251,14 +250,18 @@ _build_maven() {
         [ -f "$jar" ] || continue
         echo "$jar" | grep -E 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' ||
             cp -vf "$jar" /jars/
-    done < <(find ./target/*.jar ./*/target/*.jar ./*/*/target/*.jar 2>/dev/null)
+    done < <(
+        find ./target/*.jar ./*/target/*.jar ./*/*/target/*.jar 2>/dev/null
+    )
     if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
-        c=0
+        unset c
         while read -r yml; do
             [ -f "$yml" ] || continue
-            c=$((c + 1))
+            ((++c))
             cp -vf "$yml" /jars/"${c}.${yml##*/}"
-        done < <(find ./*/*/*/*"${MVN_PROFILE:-main}".yml ./*/*/*/*"${MVN_PROFILE:-main}".yaml 2>/dev/null)
+        done < <(
+            find ./*/*/*/*"${MVN_PROFILE:-main}".yml ./*/*/*/*"${MVN_PROFILE:-main}".yaml 2>/dev/null
+        )
     fi
 }
 
@@ -396,43 +399,32 @@ main() {
         install_cmd=apk
     fi
 
-    if command -v nginx; then
-        build_type=nginx
-    elif command -v composer; then
-        build_type=composer
-    elif [ -n "$PHP_VERSION" ]; then
-        build_type=php
-    elif command -v mvn; then
-        build_type=maven
-    elif command -v java; then
-        build_type=java
-    elif command -v node; then
-        build_type=node
-    elif command -v python; then
-        build_type=python
-    elif command -v mysql; then
-        build_type=mysql
-    fi
-
     _set_mirror
 
     case "$1" in
-    --onbuild)
+    --onbuild | onbuild)
         _onbuild_php
         return 0
         ;;
     esac
 
-    case $build_type in
-    nginx) _build_nginx ;;
-    php) _build_php ;;
-    composer) _build_composer ;;
-    maven) _build_maven ;;
-    java) _build_jdk_runtime ;;
-    node) _build_node ;;
-    python) _build_python ;;
-    mysql) _build_mysql ;;
-    esac
+    if command -v nginx; then
+        _build_nginx
+    elif command -v composer; then
+        _build_composer
+    elif [ -n "$PHP_VERSION" ]; then
+        _build_php
+    elif command -v mvn; then
+        _build_maven
+    elif command -v java; then
+        _build_jdk_runtime
+    elif command -v node; then
+        _build_node
+    elif command -v python; then
+        _build_python
+    elif command -v mysql; then
+        _build_mysql
+    fi
 
     ## clean
     if _is_root; then

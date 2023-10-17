@@ -54,8 +54,8 @@ WORKDIR /app
 COPY --from=builder /jars/ .
 COPY ./root/ /
 RUN set -xe; \
-    if [ -f /opt/build.sh ]; then echo "found /opt/build.sh"; else curl -fLo /opt/build.sh $BUILD_URL; fi; \
-    bash /opt/build.sh
+    if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
+    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
 
 USER 1000
 EXPOSE 8080 8081 8082

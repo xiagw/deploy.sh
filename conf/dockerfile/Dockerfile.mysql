@@ -15,6 +15,7 @@ ARG IN_CHINA=false
 ARG TZ=UTC
 ARG MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 ARG MYSQL_SLAVE=false
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 
 ENV TZ ${TZ}
 # ENV MYSQL_RANDOM_ROOT_PASSWORD=true
@@ -25,4 +26,6 @@ EXPOSE 3306
 
 COPY ./root/ /
 
-RUN if [ -f /opt/build.sh ]; then bash /opt/build.sh; else :; fi
+RUN set -xe; \
+    if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
+    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi

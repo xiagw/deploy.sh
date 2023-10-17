@@ -33,18 +33,18 @@ _start_java() {
         _msg "Found $profile_name ..."
         break
     done
-    cj=0
+    unset cj
     for jar in "$app_path"/*.jar; do
         [[ -f "$jar" ]] || continue
-        cj=$((cj + 1))
+        ((++cj))
         ## 启动方式二，配置文件 yml 在 jar 包外，非内置
         ## !!!! 注意 !!!!,
         ## 自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
-        cy=0
+        unset cy
         config_yml=
         for yml in "$app_path"/*.yml "$app_path"/*.yaml; do
             [[ -f "$yml" ]] || continue
-            cy=$((cy + 1))
+            ((++cy))
             if [[ "$cj" -eq "$cy" ]]; then
                 config_yml="-Dspring.config.location=${yml}"
                 break
@@ -83,28 +83,26 @@ _start_php() {
     while [ -d $html_path ]; do
         for dir in $html_path/ "$html_path"/*/ "$html_path"/*/*/; do
             [ -d "$dir" ] || continue
-            need_runtime=0
-            ## ThinkPHP 5.1
-            [[ -f "${dir}"think && -d ${dir}thinkphp && -d ${dir}application ]] && need_runtime=1
-            ## ThinkPHP 6.0
-            [[ -f "${dir}"think && -d ${dir}thinkphp && -d ${dir}app ]] && need_runtime=1
-            if [[ "$need_runtime" -eq 1 ]]; then
-                run_dir="${dir}runtime"
-                [[ -d "$run_dir" ]] || mkdir "$run_dir"
-                dir_owner="$(stat -t -c %U "$run_dir")"
-                [[ "$dir_owner" == www-data ]] || chown -R www-data:www-data "$run_dir"
+            if [[ -f "${dir}"think && -d ${dir}thinkphp ]]; then
+                ## ThinkPHP 5.1 = application, ThinkPHP 6.0 = app
+                if [[ -d ${dir}application || -d ${dir}app ]]; then
+                    run_dir="${dir}runtime"
+                    [[ -d "$run_dir" ]] || mkdir "$run_dir"
+                    dir_owner="$(stat -t -c %U "$run_dir")"
+                    [[ "$dir_owner" == www-data ]] || chown -R www-data:www-data "$run_dir"
+                fi
             fi
         done
-        sleep 600
+        sleep 10m
     done &
 
     ## remove runtime log files
     while [ -d $html_path ]; do
         for dir in $html_path/runtime/ "$html_path"/*/runtime/ "$html_path"/*/*/runtime/; do
             [ -d "$dir" ] || continue
-            find "${dir}" -type f -iname '*.log' -ctime +7 -print0 | xargs -t --null rm -f >/dev/null 2>&1
+            find "${dir}" -type f -iname '*.log' -ctime +3 -print0 | xargs -0 rm -f >/dev/null 2>&1
         done
-        sleep 86400
+        sleep 1d
     done &
 
     ## start php-fpm*
