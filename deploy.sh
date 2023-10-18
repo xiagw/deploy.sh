@@ -375,7 +375,13 @@ _deploy_k8s() {
     fi
     ## Convert to lower case / 转换为小写
     helm_release="${helm_release,,}"
+    ## remove space / 去除空格
+    helm_release="${helm_release// /}"
+    ## replace special characters / 替换特殊字符
     helm_release="${helm_release//[@#$%^&*_.\/]/-}"
+    if [[ "$helm_release" == [0-9]* ]]; then # 数字开头
+        helm_release="a${helm_release}"
+    fi
     ## finding helm files folder / 查找 helm 文件目录
     helm_dirs=(
         "$gitlab_project_dir/helm/${helm_release}"
@@ -440,7 +446,7 @@ _deploy_rsync_ssh() {
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     local tmp_file
     tmp_file=$(mktemp)
-    grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" >$tmp_file || true
+    grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $tmp_file || true
     while read -r line; do
         read -r -a array <<<"$line"
         # git_branch=${array[1]}
