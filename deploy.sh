@@ -379,8 +379,18 @@ _deploy_k8s() {
     helm_release="${helm_release// /}"
     ## replace special characters / 替换特殊字符
     helm_release="${helm_release//[@#$%^&*_.\/]/-}"
-    if [[ "$helm_release" == [0-9]* ]]; then # 数字开头
+    ## start with numbers / 开头是数字
+    if [[ "$helm_release" == [0-9]* ]]; then
         helm_release="a${helm_release}"
+    fi
+    ## characters greate than 15 / 字符大于 15
+    if [[ ${#helm_release} -gt 15 ]]; then
+        ## replace - with '' / 替换 - 为 ''
+        helm_release="${helm_release//-/}"
+    fi
+    if [[ ${#helm_release} -gt 15 ]]; then
+        ## cut 15 characters / 截取 15 个字符
+        helm_release="${helm_release:0:15}"
     fi
     ## finding helm files folder / 查找 helm 文件目录
     helm_dirs=(
