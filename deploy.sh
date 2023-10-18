@@ -384,14 +384,14 @@ _deploy_k8s() {
         helm_release="a${helm_release}"
     fi
     ## characters greate than 15 / 字符大于 15
-    if [[ ${#helm_release} -gt 15 ]]; then
-        ## replace - with '' / 替换 - 为 ''
-        helm_release="${helm_release//-/}"
-    fi
-    if [[ ${#helm_release} -gt 15 ]]; then
-        ## cut 15 characters / 截取 15 个字符
-        helm_release="${helm_release:0:15}"
-    fi
+    # if [[ ${#helm_release} -gt 15 ]]; then
+    #     ## replace - with '' / 替换 - 为 ''
+    #     helm_release="${helm_release//-/}"
+    # fi
+    # if [[ ${#helm_release} -gt 15 ]]; then
+    #     ## cut 15 characters / 截取 15 个字符
+    #     helm_release="${helm_release:0:15}"
+    # fi
     ## finding helm files folder / 查找 helm 文件目录
     helm_dirs=(
         "$gitlab_project_dir/helm/${helm_release}"

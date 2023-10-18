@@ -4,7 +4,7 @@ set -xe
 me_path="$(dirname "$(readlink -f "$0")")"
 
 if [[ -z "$1" ]]; then
-    vers=(5.6 7.1 7.4 8.1 8.2)
+    vers=(5.6 7.1 7.3 7.4 8.1 8.2)
 else
     vers=("$1")
 fi
