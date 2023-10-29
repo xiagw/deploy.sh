@@ -1235,7 +1235,7 @@ _inject_files() {
             ## find jdk version
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
                 [ -f "$f" ] || continue
-                case "$(grep '^jdk_version=' "${f}")" in
+                case "$(grep -i 'jdk_version=' "${f}")" in
                 *=1.7 | *=7)
                     sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.6-jdk-7/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=openjdk:7/g" "${project_dockerfile}"
                     ;;
@@ -1247,6 +1247,18 @@ _inject_files() {
                     ;;
                 *=17)
                     sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.8-openjdk-17/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=amazoncorretto:17/g" "${project_dockerfile}"
+                    ;;
+                *) : ;;
+                esac
+                case "$(grep -i 'INSTALL_FFMPEG=' "${f}")" in
+                *=true)
+                    sed -i -e "s/INSTALL_FFMPEG=false/INSTALL_FFMPEG=true/g" "${project_dockerfile}"
+                    ;;
+                *) : ;;
+                esac
+                case "$(grep -i 'INSTALL_FONTS=' "${f}")" in
+                *=true)
+                    sed -i -e "s/INSTALL_FONTS=false/INSTALL_FONTS=true/g" "${project_dockerfile}"
                     ;;
                 *) : ;;
                 esac
