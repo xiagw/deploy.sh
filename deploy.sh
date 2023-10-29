@@ -1202,6 +1202,7 @@ _inject_files() {
     ${arg_disable_inject:-false} && ENV_INJECT=keep
     echo ENV_INJECT: ${ENV_INJECT:-keep}
     build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+    project_dockerfile="${gitlab_project_dir}/Dockerfile"
     case ${ENV_INJECT:-keep} in
     keep)
         echo '<skip>'
@@ -1213,15 +1214,15 @@ _inject_files() {
         else
             cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
         fi
-        if [[ "${project_lang}" == node && -f "${gitlab_project_dir}/Dockerfile" ]]; then
+        if [[ "${project_lang}" == node && -f "${project_dockerfile}" ]]; then
             echo "skip cp Dockerfile."
         else
             ## Dockerfile 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+                cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
             ## Dockerfile 其次查找 conf/ 目录
             elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${gitlab_project_dir}/Dockerfile"
+                cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
             fi
         fi
         if [[ "${project_lang}" == java ]]; then
@@ -1235,19 +1236,33 @@ _inject_files() {
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
                 [ -f "$f" ] || continue
                 case "$(grep '^jdk_version=' "${f}")" in
-                *=1.7 | *=7) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.6-jdk-7 --build-arg IMAGE_JDK=openjdk:7" ;;
-                *=1.8 | *=8) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-jdk-8 --build-arg IMAGE_JDK=openjdk:8" ;;
-                *=11) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-11 --build-arg IMAGE_JDK=amazoncorretto:11" ;;
-                *=17) build_arg="${build_arg:+"$build_arg "}--build-arg IMAGE_MVN=maven:3.8-openjdk-17 --build-arg IMAGE_JDK=amazoncorretto:17" ;;
+                *=1.7 | *=7)
+                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.6-jdk-7/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=openjdk:7/g" "${project_dockerfile}"
+                    ;;
+                *=1.8 | *=8)
+                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.8-jdk-8/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=openjdk:8/g" "${project_dockerfile}"
+                    ;;
+                *=11)
+                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.8-openjdk-11/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=amazoncorretto:11/g" "${project_dockerfile}"
+                    ;;
+                *=17)
+                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.8-openjdk-17/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=amazoncorretto:17/g" "${project_dockerfile}"
+                    ;;
                 *) : ;;
                 esac
                 break
             done
+            if [[ ${INSTALL_FFMPEG:-false} == true ]]; then
+                sed -i -e "s/INSTALL_FFMPEG=false/INSTALL_FFMPEG=true/g" "${project_dockerfile}"
+            fi
+            if [[ ${INSTALL_FONTS:-false} == true ]]; then
+                sed -i -e "s/INSTALL_FONTS=false/INSTALL_FONTS=true/g" "${project_dockerfile}"
+            fi
         fi
         ;;
     remove)
         echo 'Removing Dockerfile (disable docker build)'
-        rm -f "${gitlab_project_dir}/Dockerfile"
+        rm -f "${project_dockerfile}"
         ;;
     create)
         echo "Generating docker-compose.yml (enable deploy docker-compose)"
@@ -1255,7 +1270,7 @@ _inject_files() {
         ;;
     esac
     ## docker ignore file / 使用全局模板文件替换项目文件
-    if [[ -f "${gitlab_project_dir}/Dockerfile" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
+    if [[ -f "${project_dockerfile}" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
         cp -avf "${me_dockerfile}/.dockerignore" "${gitlab_project_dir}/"
     fi
 
