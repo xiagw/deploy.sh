@@ -1,15 +1,17 @@
 #!/usr/bin/bash
 
 # set -x
-
 _get_yes_no() {
     read -rp "${1:-Confirm the action?} [y/N]" read_yes_no
     case ${read_yes_no:-n} in
-    [yY] | [yY][eE][sS]) return 0 ;;
-    *) return 1 ;;
+    [yY] | [yY][eE][sS])
+        return 0
+        ;;
+    *)
+        return 1
+        ;;
     esac
 }
-
 _msg() {
     color_off='\033[0m' # Text Reset
     case "$1" in
@@ -21,21 +23,36 @@ _msg() {
     cyan) color_on='\033[0;36m' ;;                     # Cyan
     log)
         shift
-        echo "$(date +%Y%m%d-%u-%T.%3N) $*" | tee -a "$me_log"
+        echo "$(date +%Y%m%d-%u-%H%M%S.%3N) $*" | tee -a "$me_log"
         return
         ;;
     logpass)
         shift
-        echo "$(date +%Y%m%d-%u-%T.%3N) $*" | tee -a "$password_log"
+        echo "$(date +%Y%m%d-%u-%H%M%S.%3N) $*" | tee -a "$me_log_password"
         return
         ;;
-    *) unset color_on color_off ;;
+    *)
+        unset color_on color_off
+        ;;
     esac
     [ "$#" -gt 1 ] && shift
     echo -e "${color_on}$*${color_off}"
 }
 
+_check_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        _msg green "is root, continue..."
+        return 0
+    else
+        _msg red "not root, run with \"sudo $0\" ..."
+        return 1
+    fi
+}
+
 _get_username() {
+    _msg green "all existing users..."
+    ls $path_home
+    echo
     read -rp "[$1] Input <USER> name: " read_user_name
     # read -rp "[$1] Input <GROUP> name: " read_user_group
     user_name=${read_user_name:?empty var}
@@ -81,13 +98,27 @@ _change_password() {
         _msg logpass "system password: $user_name / $user_pass_sys"
         [ -d /var/yp ] && make -C /var/yp
     else
-        _msg warn "give up. (change system password)"
+        _msg warn "skip change system password"
     fi
     if _get_yes_no "[vnc] Do you want change vnc password of ${user_name}?"; then
         echo "$user_pass_vnc" | vncpasswd -f >"$file_vnc_passwd"
         _msg logpass "vnc password: $user_name / $user_pass_vnc"
     else
-        _msg warn "give up. (change vnc password)"
+        _msg warn "skip change vnc password"
+    fi
+}
+
+_disable_user() {
+    _msg log "disable user..."
+    _get_username disable
+    if id "$user_name"; then
+        usermod --lock "$user_name" && disabled=1
+    fi
+    if [ "${disabled:-0}" -eq 1 ]; then
+        _msg logpass "disabled user: $user_name"
+    else
+        _msg red "ERR: disable(lock) user $user_name failed."
+        return 1
     fi
 }
 
@@ -111,18 +142,68 @@ _remove_user() {
     fi
 }
 
+_backup() {
+    _msg log "backup..."
+
+    rsync_opt=(
+        rsync
+        -az
+        --backup
+        --suffix=".$(date +%Y%m%d-%u-%H%M%S.%3N)"
+        --exclude={'.swp','*.log','CDS.log*','*panic.log*','matlab_crash_dump.*'}
+    )
+
+    rsync_exclude=$me_path/rsync.exclude.conf
+    rsync_include=$me_path/rsync.include.conf
+    [ -f "$rsync_exclude" ] && rsync_opt+=(--exclude-from="$rsync_exclude")
+    [ -f "$rsync_include" ] && rsync_opt+=(--files-from="$rsync_include")
+
+    src_dirs=(
+        /eda
+        /home2
+    )
+    dest_dir='/volume1/nas1/backup'
+    dest_servers=(
+        node11
+    )
+    host_nas=nas
+
+    case "$1" in
+    pull)
+        ## pull files from SERVERS, run on NAS
+        for svr in "${dest_servers[@]}"; do
+            for dir in "${src_dirs[@]}"; do
+                ssh "$svr" "test -d $dir" || continue
+                echo "$(date +%Y%m%d-%u-%H%M%S.%3N)  sync $dir" >>"$me_log"
+                "${rsync_opt[@]}" "$svr:$dir"/ "$dest_dir$dir"/
+            done
+        done
+        ;;
+    push)
+        ## push to NAS, run on SERVERS
+        rsync_opt+=(--rsync-path=/bin/rsync)
+        for dir in "${src_dirs[@]}"; do
+            test -d "$dir" || continue
+            echo "$(date +%Y%m%d-%u-%H%M%S.%3N)  sync $dir" >>"$me_log"
+            "${rsync_opt[@]}" "$dir"/ "$host_nas:$dest_dir$dir"/
+        done
+        ;;
+    *)
+        echo "$0  pull      pull files from SERVERS, run on NAS"
+        echo "$0  push      push files to NAS, run on SERVERS"
+        ;;
+    esac
+}
+
 main() {
-    if [[ $(id -u) -ne 0 ]]; then
-        echo "Need root. exit."
-        exit 1
-    fi
+    _check_root || return 1
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_path_bin="$me_path/bin"
     me_path_data="$me_path/data"
     me_path_conf="$me_path/conf"
     me_log="${me_path_data}/${me_name}.log"
-    password_log="${me_path_data}/password.log"
+    me_log_password="${me_path_data}/password.log"
 
     [ -d "${me_path_data}" ] || mkdir "${me_path_data}"
     echo "$me_path_bin , $me_path_conf" >/dev/null
@@ -131,12 +212,16 @@ main() {
 
     # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
     ## user_password
-    command -v md5sum && bin_hash=md5sum
-    command -v sha256sum && bin_hash=sha256sum
-    command -v md5 && bin_hash=md5
+    if command -v md5sum; then
+        bin_hash=md5sum
+    elif command -v sha256sum; then
+        bin_hash=sha256sum
+    elif command -v md5; then
+        bin_hash=md5
+    fi
     count=0
     while [ -z "$user_pass_sys" ]; do
-        count=$((count + 1))
+        ((++count))
         case $count in
         1)
             user_pass_sys="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
@@ -161,11 +246,7 @@ main() {
         esac
     done
 
-    echo -e "\nList all existing users...\n"
-    ls $path_home
-    echo
-
-    select choice in create_user change_password remove_user quit; do
+    select choice in create_user change_password disable_user remove_user backup quit; do
         case $choice in
         create_user)
             _create_user
@@ -173,8 +254,14 @@ main() {
         change_password)
             _change_password
             ;;
+        disable_user)
+            _disable_user
+            ;;
         remove_user)
             _remove_user
+            ;;
+        backup)
+            _backup push
             ;;
         esac
         break

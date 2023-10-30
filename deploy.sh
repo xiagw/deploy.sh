@@ -671,12 +671,19 @@ _renew_cert() {
     fi
 
     [ -d "$acme_install_dest" ] || mkdir -p "$acme_install_dest"
-    ## support multiple account.conf.* / 支持多账号
-    ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
-    files_account=("${acme_home}/"account.conf.*.dns_*)
+
+    if [ -z "$ENV_HTTP_PROXY" ]; then
+        _msg warn "no http_proxy"
+    else
+        _msg time "set http_proxy"
+        export http_proxy="$ENV_HTTP_PROXY"
+        export https_proxy="$ENV_HTTP_PROXY"
+    fi
 
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
-    for file in "${files_account[@]}"; do
+    ## support multiple account.conf.* / 支持多账号
+    ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
+    for file in "${acme_home}"/account.conf.*.dns_*; do
         if [ -f "$file" ]; then
             _msg time "Found $file"
         else
@@ -691,13 +698,6 @@ _renew_cert() {
             _msg warn "dns type: Goddady"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
             api_goddady="https://api.godaddy.com/v1/domains"
-            if [ -z "$ENV_HTTP_PROXY" ]; then
-                _msg warn "no http_proxy"
-            else
-                _msg time "set http_proxy"
-                export http_proxy="$ENV_HTTP_PROXY"
-                export https_proxy="$ENV_HTTP_PROXY"
-            fi
             domains="$(
                 curl -fsSL -X GET -H "$api_head" "$api_goddady" |
                     jq -r '.[].domain'
@@ -714,6 +714,7 @@ _renew_cert() {
         dns_ali)
             _msg warn "dns type: aliyun"
             _install_aliyun_cli
+            # unset http_proxy https_proxy all_proxy
             aliyun configure set \
                 --mode AK \
                 --profile "deploy_${profile_name}" \
@@ -744,7 +745,7 @@ _renew_cert() {
         for domain in ${domains}; do
             if "${acme_cmd}" list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" --renew-hook "$run_touch_file" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
+                "${acme_cmd}" --renew -d "${domain}" --reloadcmd "$run_touch_file" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
             else
                 ## create cert / 创建证书
                 "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"

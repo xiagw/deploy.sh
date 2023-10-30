@@ -59,7 +59,8 @@ _set_peer2peer() {
     fi
     ## select server
     _msg red "### Please select >>>>>> SERVER >>>>>> side conf"
-    select svr_conf in $me_data/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
+    # select svr_conf in $me_data/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
+    select svr_conf in $me_data/wg*.conf quit; do
         [[ "$svr_conf" == 'quit' ]] && break
         svr_key_pub="$(awk '/^### public_key:/ {print $3}' "$svr_conf" | head -n 1)"
         svr_ip_pub="$(awk '/^### public_ip:/ {print $3}' "$svr_conf" | head -n 1)"
