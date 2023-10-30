@@ -661,7 +661,10 @@ _renew_cert() {
     acme_cmd="${acme_home}/acme.sh"
     acme_install_dest="${acme_home}/${ENV_CERT_INSTALL:-dest}"
     file_reload_nginx="$(mktemp).need.reload.nginx"
+    run_touch_file="$(mktemp).run.touch.nginx"
 
+    echo "touch ${file_reload_nginx}" >"$run_touch_file"
+    chmod +x "$run_touch_file"
     ## install acme.sh / 安装 acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
         curl https://get.acme.sh | bash -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
@@ -739,23 +742,13 @@ _renew_cert() {
         /usr/bin/cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
-            if [ -d "${acme_home}/$domain" ] && "${acme_cmd}" list | grep -qw "$domain"; then
+            if "${acme_cmd}" list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                if "${acme_cmd}" --renew -d "${domain}"; then
-                    touch $file_reload_nginx
-                else
-                    true
-                fi
+                "${acme_cmd}" --renew -d "${domain}" --renew-hook "$run_touch_file" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
             else
                 ## create cert / 创建证书
-                if "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type; then
-                    touch $file_reload_nginx
-                else
-                    true
-                fi
+                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
             fi
-            ## install certs to dest folder
-            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
         done
     done
     ## deploy with gitlab CI/CD,
@@ -765,7 +758,7 @@ _renew_cert() {
             _msg "gitlab create pipeline, project id is $id"
             gitlab project-pipeline create --ref main --project-id $id
         done
-        rm -f "$file_reload_nginx"
+        rm -f "$file_reload_nginx" "$run_touch_file"
     else
         _msg warn "not found $file_reload_nginx"
     fi
