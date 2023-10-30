@@ -540,8 +540,7 @@ _deploy_aliyun_oss() {
 
     # Deploy files to Aliyun OSS
     _msg time "copy start"
-    ossutil cp -r "${gitlab_project_dir}/" "oss://${bucket_name}/${remote_dir}" --config="${oss_config_file}"
-    if [[ $? -eq 0 ]]; then
+    if ossutil cp -r "${gitlab_project_dir}/" "oss://${bucket_name}/${remote_dir}" --config="${oss_config_file}"; then
         _msg green "Result = OK"
     else
         _msg error "Result = FAIL"
@@ -723,6 +722,14 @@ _renew_cert() {
                     sed -e '1,2d' -e '/^$/d'
             )"
             ;;
+        dns_tencent)
+            _msg warn "dns type: tencent"
+            _install_tencent_cli
+            domains="$(
+                tccli domain DescribeDomainNameList --output json |
+                    jq -r '.DomainSet[] |.DomainName'
+            )"
+            ;;
         *)
             _msg warn "unknown dns type: $dns_type"
             continue
@@ -847,6 +854,14 @@ _install_aliyun_cli() {
     curl -fsSLo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
     tar -C /tmp -zxf /tmp/aliyun.tgz
     $use_sudo install -m 0755 /tmp/aliyun /usr/local/bin/aliyun
+}
+
+_install_tencent_cli() {
+    command -v tccli >/dev/null && return
+    _msg info "install tencent cli..."
+    curl -fsSLo /tmp/tccli.tgz https://mirrors.cloud.tencent.com/tccli/release/v2.0.15/linux_amd64_release.tgz
+    tar -C /tmp -zxf /tmp/tccli.tgz
+    $use_sudo install -m 0755 /tmp/tccli /usr/local/bin/tccli
 }
 
 _install_jq_cli() {

@@ -28,7 +28,7 @@ _msg() {
         ;;
     log)
         shift
-        echo "$time_now $*" >>$me_log
+        echo "$time_now $*" >>"$me_log"
         return
         ;;
     *)

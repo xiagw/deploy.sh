@@ -48,6 +48,17 @@ _set_mirror() {
             sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
         fi
     fi
+    if command -v apt-get; then
+        cmd_pkg=apt-get
+        cmd_pkg_opt="$cmd_pkg install -yqq --no-install-recommends"
+        update_cache=true
+    elif command -v yum; then
+        cmd_pkg=yum
+        cmd_pkg_opt="$cmd_pkg install -y --setopt=tsflags=nodocs"
+    elif command -v apk; then
+        cmd_pkg=apk
+        cmd_pkg_opt="$cmd_pkg add --no-cache"
+    fi
     if command -v mvn; then
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
@@ -91,9 +102,9 @@ _check_run_sh() {
 
 _build_nginx() {
     echo "build nginx:alpine..."
-    apk update
-    apk upgrade
-    apk add --no-cache openssl bash curl shadow
+    $cmd_pkg update
+    $cmd_pkg upgrade
+    $cmd_pkg_opt openssl bash curl shadow
     touch /var/log/messages
 
     groupmod -g 1000 nginx
@@ -103,12 +114,14 @@ _build_nginx() {
 _build_php() {
     echo "build php ..."
     _set_mirror shanghai
-    apt-get update -yqq
-    # apt-get install -yqq libjemalloc2
-    $apt_opt apt-utils
-    # $apt_opt libterm-readkey-perl
-    $apt_opt vim curl ca-certificates
-    # apt-get install -y language-pack-en-base
+    if ${update_cache:-false}; then
+        $cmd_pkg update -yqq
+    fi
+    # $cmd_pkg_opt libjemalloc2
+    $cmd_pkg_opt apt-utils
+    # $cmd_pkg_opt libterm-readkey-perl
+    $cmd_pkg_opt vim curl ca-certificates
+    # $cmd_pkg_opt language-pack-en-base
 
     ## preesed tzdata, update package index, upgrade packages and install needed software
     (
@@ -121,8 +134,8 @@ _build_php() {
     export DEBIAN_FRONTEND=noninteractive
     export DEBCONF_NONINTERACTIVE_SEEN=true
 
-    $apt_opt tzdata
-    $apt_opt locales
+    $cmd_pkg_opt tzdata
+    $cmd_pkg_opt locales
 
     if ! grep '^en_US.UTF-8' /etc/locale.gen; then
         echo 'en_US.UTF-8 UTF-8' >>/etc/locale.gen
@@ -135,17 +148,17 @@ _build_php() {
         ;;
     *)
         echo "install PHP from ppa:ondrej/php..."
-        apt-get install -yqq lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
+        $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
         LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
         case "$PHP_VERSION" in
         8.*) : ;;
-        *) $apt_opt php"${PHP_VERSION}"-mcrypt ;;
+        *) $cmd_pkg_opt php"${PHP_VERSION}"-mcrypt ;;
         esac
         ;;
     esac
 
-    apt-get upgrade -yqq
-    $apt_opt \
+    $cmd_pkg upgrade -yqq
+    $cmd_pkg_opt \
         php"${PHP_VERSION}" \
         php"${PHP_VERSION}"-redis \
         php"${PHP_VERSION}"-mongodb \
@@ -169,12 +182,12 @@ _build_php() {
     # php"${PHP_VERSION}"-pecl-mcrypt  replace by  php"${PHP_VERSION}"-libsodium
 
     if [ "$PHP_VERSION" = 5.6 ]; then
-        $apt_opt apache2 libapache2-mod-fcgid libapache2-mod-php"${PHP_VERSION}"
+        $cmd_pkg_opt apache2 libapache2-mod-fcgid libapache2-mod-php"${PHP_VERSION}"
         sed -i -e '1 i ServerTokens Prod' -e '1 i ServerSignature Off' -e '1 i ServerName www.example.com' /etc/apache2/sites-available/000-default.conf
     else
-        $apt_opt nginx
+        $cmd_pkg_opt nginx
     fi
-    # $apt_opt lsyncd openssh-client
+    # $cmd_pkg_opt lsyncd openssh-client
 
     sed -i \
         -e '/fpm.sock/s/^/;/' \
@@ -219,6 +232,7 @@ _onbuild_php() {
 _build_node() {
     echo "build node ..."
     if _is_root; then
+        $cmd_pkg_opt less vim curl ca-certificates
         [ -d /.cache ] || mkdir /.cache
         [ -d /app ] || mkdir /app
         chown -R node:node /.cache /app
@@ -243,7 +257,7 @@ _build_node() {
 _build_maven() {
     # --settings=settings.xml --activate-profiles=main
     # mvn -T 1C install -pl $moduleName -am --offline
-    mvn --threads 1C --update-snapshots -DskipTests $MVN_DEBUG -Dmaven.compile.fork=true clean package
+    mvn --threads 1C --update-snapshots -DskipTests "$MVN_DEBUG" -Dmaven.compile.fork=true clean package
 
     mkdir /jars
     while read -r jar; do
@@ -266,30 +280,29 @@ _build_maven() {
 }
 
 _build_jdk_runtime() {
-    # apt-get update -yqq
     if ${INSTALL_JEMALLOC:-false}; then
         if ${update_cache:-false}; then
-            $install_cmd update -yqq
-            # $install_cmd less apt-utils
-            $install_cmd install -yqq libjemalloc2
+            $cmd_pkg update -yqq
+            # $cmd_pkg less apt-utils
+            $cmd_pkg install -yqq libjemalloc2
         else
-            $install_cmd install -y memkind
+            $cmd_pkg install -y memkind
         fi
     fi
     if ${INSTALL_FFMPEG:-false}; then
         if ${update_cache:-false}; then
-            $install_cmd update -yqq
-            $apt_opt ffmpeg
+            $cmd_pkg update -yqq
+            $cmd_pkg_opt ffmpeg
         else
-            $install_cmd install -y ffmpeg
+            $cmd_pkg_opt ffmpeg
         fi
     fi
     if ${INSTALL_FONTS:-false}; then
         if ${update_cache:-false}; then
-            $install_cmd update -yqq
-            $apt_opt fontconfig
+            $cmd_pkg update -yqq
+            $cmd_pkg_opt fontconfig
         else
-            $install_cmd install -y fontconfig
+            $cmd_pkg_opt fontconfig
         fi
         fc-cache --force
         curl --referer http://cdn.flyh6.com/ -Lo - "$url_fly_cdn"/fonts-2022.tgz |
@@ -389,16 +402,6 @@ main() {
     run_sh=/opt/run.sh
     echo "build log file: $me_log"
 
-    if command -v apt-get; then
-        install_cmd=apt-get
-        apt_opt="$install_cmd install -yqq --no-install-recommends"
-        update_cache=true
-    elif command -v yum; then
-        install_cmd=yum
-    elif command -v apk; then
-        install_cmd=apk
-    fi
-
     _set_mirror
 
     case "$1" in
@@ -429,8 +432,8 @@ main() {
     ## clean
     if _is_root; then
         if ${update_cache:-false}; then
-            apt-get autoremove -y
-            apt-get clean all
+            $cmd_pkg autoremove -y
+            $cmd_pkg clean all
             rm -rf /var/lib/apt/lists/*
         fi
         if [ -d /var/cache/yum ]; then

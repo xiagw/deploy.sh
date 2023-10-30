@@ -33,10 +33,10 @@ for ver in "${vers[@]}"; do
         "$me_path"
     ## upload to OSS:
     $cmd tag deploy/php:"$ver" laradock-php-fpm
-    $cmd save laradock-php-fpm | gzip -c >/tmp/laradock-php-fpm.$ver.tar.gz
+    $cmd save laradock-php-fpm | gzip -c >/tmp/laradock-php-fpm."$ver".tar.gz
     select b in $(ossutil ls -s | grep '^oss:') quit; do
         [ "$b" = quit ] && break
-        ossutil cp /tmp/laradock-php-fpm.$ver.tar.gz $b/docker/ -f
+        ossutil cp /tmp/laradock-php-fpm."$ver".tar.gz "$b"/docker/ -f
         break
     done
 done
