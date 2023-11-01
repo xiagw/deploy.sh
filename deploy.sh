@@ -655,6 +655,24 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
     esac
 }
 
+_set_proxy() {
+    case "$1" in
+    on | 1)
+        if [ -z "$ENV_HTTP_PROXY" ]; then
+            _msg warn "empty var ENV_HTTP_PROXY"
+        else
+            _msg time "set http_proxy https_proxy all_proxy"
+            export http_proxy="$ENV_HTTP_PROXY"
+            export https_proxy="$ENV_HTTP_PROXY"
+            export all_proxy="$ENV_HTTP_PROXY"
+        fi
+        ;;
+    off | 0)
+        unset http_proxy https_proxy all_proxy
+        ;;
+    esac
+}
+
 _renew_cert() {
     _msg step "[cert] renew cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
@@ -672,14 +690,6 @@ _renew_cert() {
 
     [ -d "$acme_install_dest" ] || mkdir -p "$acme_install_dest"
 
-    if [ -z "$ENV_HTTP_PROXY" ]; then
-        _msg warn "no http_proxy"
-    else
-        _msg time "set http_proxy"
-        export http_proxy="$ENV_HTTP_PROXY"
-        export https_proxy="$ENV_HTTP_PROXY"
-    fi
-
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     ## support multiple account.conf.* / 支持多账号
     ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
@@ -693,6 +703,7 @@ _renew_cert() {
         dns_type=${file##*.}
         profile_name=${file%.dns_*}
         profile_name=${profile_name##*.}
+        _set_proxy on
         case "${dns_type}" in
         dns_gd)
             _msg warn "dns type: Goddady"
@@ -714,7 +725,7 @@ _renew_cert() {
         dns_ali)
             _msg warn "dns type: aliyun"
             _install_aliyun_cli
-            # unset http_proxy https_proxy all_proxy
+            _set_proxy off
             aliyun configure set \
                 --mode AK \
                 --profile "deploy_${profile_name}" \
@@ -729,6 +740,7 @@ _renew_cert() {
         dns_tencent)
             _msg warn "dns type: tencent"
             _install_tencent_cli
+            tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
             domains="$(
                 tccli domain DescribeDomainNameList --output json |
                     jq -r '.DomainSet[] |.DomainName'
@@ -740,6 +752,7 @@ _renew_cert() {
             ;;
         esac
 
+        _set_proxy on
         /usr/bin/cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
@@ -768,7 +781,7 @@ _renew_cert() {
         echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}/custom.acme.sh"
     fi
-
+    _set_proxy off
     _msg time "[cert] renew cert with acme.sh using dns+api"
 
     if ${github_action:-false}; then
