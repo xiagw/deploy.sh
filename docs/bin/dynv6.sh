@@ -8,14 +8,17 @@ me_name="$(basename "$0")"
 me_path="$(dirname "$(readlink -f "$0")")"
 me_log=$me_path/.${me_name}.log
 [ -f "$me_log" ] || touch "$me_log"
+## openwrt interface name
 device=${3:-pppoe-wan}
 
+## get config from file
 export XDG_CONFIG_HOME="$HOME/.config"
 if [ -f "$me_path/dynv6.conf" ]; then
     . "$me_path/dynv6.conf"
 elif [ -f "$XDG_CONFIG_HOME/dynv6.conf" ]; then
     . "$XDG_CONFIG_HOME/dynv6.conf"
 fi
+## get config from args
 if [ -z "$dynv6_host" ] || [ -z "$dynv6_token" ]; then
     if [ "${#1}" -gt 0 ]; then
         dynv6_host=${1}
@@ -27,7 +30,7 @@ if [ -z "$dynv6_host" ] || [ -z "$dynv6_token" ]; then
     fi
 fi
 
-## awk last line
+## get last ip from log
 ip4_last=$(awk 'END {print $3}' "$me_log")
 ip6_last=$(awk 'END {print $5}' "$me_log")
 
@@ -44,6 +47,7 @@ else
     echo "opkg update && opkg install curl"
     exit 1
 fi
+## get current ip from Internet or Interface
 # if [ -n "$device" ]; then
 #   device="dev $device"
 # fi
@@ -72,7 +76,7 @@ if [ -z "$ip4_current" ]; then
 else
     $cmd "http://ipv4.dynv6.com/api/update?ipv4=auto&zone=${dynv6_host}&token=${dynv6_token}"
     # $cmd "http://ipv4.dynv6.com/api/update?ipv4=${ip4_current}&zone=${dynv6_host}&token=${dynv6_token}"
-    log_ipv4=1
+    log_ip=1
     echo
 fi
 if [ -z "$ip6_current" ]; then
@@ -80,11 +84,11 @@ if [ -z "$ip6_current" ]; then
 else
     # $cmd "http://ipv6.dynv6.com/api/update?ipv6=auto&zone=${dynv6_host}&token=${dynv6_token}"
     $cmd "http://ipv6.dynv6.com/api/update?ipv6=${ip6_current}&zone=${dynv6_host}&token=${dynv6_token}"
-    log_ipv6=1
+    log_ip=1
     echo
 fi
 
 ## history log
-if [ "$log_ipv4" = 1 ] || [ "$log_ipv6" = 1 ]; then
+if [ "$log_ip" = 1 ]; then
     echo "$(date +%F_%T)  IPV4:  ${ip4_current:-none}  IPV6:  ${ip6_current:-none}" >>"$me_log"
 fi
