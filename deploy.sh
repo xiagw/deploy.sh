@@ -866,9 +866,7 @@ _install_aliyun_cli() {
 _install_tencent_cli() {
     command -v tccli >/dev/null && return
     _msg info "install tencent cli..."
-    curl -fsSLo /tmp/tccli.tgz https://mirrors.cloud.tencent.com/tccli/release/v2.0.15/linux_amd64_release.tgz
-    tar -C /tmp -zxf /tmp/tccli.tgz
-    $use_sudo install -m 0755 /tmp/tccli /usr/local/bin/tccli
+    python3 -m pip install tccli
 }
 
 _install_jq_cli() {
