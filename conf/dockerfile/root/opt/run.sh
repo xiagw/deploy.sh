@@ -59,7 +59,7 @@ _start_java() {
             ## 启动方式二，配置文件 yml 在 jar 包外，非内置
             $JAVA_OPTS "$config_yml" -jar "$jar" >>"$me_log" 2>&1 &
         else
-            ##
+            _msg "Not found jar files, tail log files..."
             $JAVA_OPTS -jar "$jar" >>"$me_log" 2>&1 &
         fi
         pids+=("$!")

@@ -678,8 +678,8 @@ _renew_cert() {
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_install_dest="${acme_home}/${ENV_CERT_INSTALL:-dest}"
-    file_reload_nginx="$(mktemp).need.reload.nginx"
-    run_touch_file="$(mktemp).run.touch.nginx"
+    file_reload_nginx="$acme_home/reload.nginx"
+    run_touch_file="$acme_home/hook.sh"
 
     echo "touch ${file_reload_nginx}" >"$run_touch_file"
     chmod +x "$run_touch_file"
@@ -743,7 +743,7 @@ _renew_cert() {
             tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
             domains="$(
                 tccli domain DescribeDomainNameList --output json |
-                    jq -r '.DomainSet[] |.DomainName'
+                    jq -r '.DomainSet[] | .DomainName'
             )"
             ;;
         *)
@@ -758,11 +758,12 @@ _renew_cert() {
         for domain in ${domains}; do
             if "${acme_cmd}" list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" --reloadcmd "$run_touch_file" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
+                "${acme_cmd}" --renew -d "${domain}"
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
+                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file"
             fi
+            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
         done
     done
     ## deploy with gitlab CI/CD,
@@ -772,7 +773,6 @@ _renew_cert() {
             _msg "gitlab create pipeline, project id is $id"
             gitlab project-pipeline create --ref main --project-id $id
         done
-        rm -f "$file_reload_nginx" "$run_touch_file"
     else
         _msg warn "not found $file_reload_nginx"
     fi
