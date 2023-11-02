@@ -26,6 +26,18 @@ _set_mirror() {
 
     url_fly_cdn="http://cdn.flyh6.com/docker"
 
+    if command -v apt-get; then
+        cmd_pkg=apt-get
+        cmd_pkg_opt="$cmd_pkg install -yqq --no-install-recommends"
+        update_cache=true
+    elif command -v yum; then
+        cmd_pkg=yum
+        cmd_pkg_opt="$cmd_pkg install -y --setopt=tsflags=nodocs"
+    elif command -v apk; then
+        cmd_pkg=apk
+        cmd_pkg_opt="$cmd_pkg add --no-cache"
+    fi
+
     if _is_china; then
         url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
         url_laradock_raw=https://gitee.com/xiagw/laradock/raw/in-china
@@ -34,6 +46,7 @@ _set_mirror() {
         url_laradock_raw=https://github.com/xiagw/laradock/raw/main
         return
     fi
+
     if _is_root; then
         ## OS ubuntu:22.04 php
         if [ -f /etc/apt/sources.list ]; then
@@ -48,17 +61,7 @@ _set_mirror() {
             sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
         fi
     fi
-    if command -v apt-get; then
-        cmd_pkg=apt-get
-        cmd_pkg_opt="$cmd_pkg install -yqq --no-install-recommends"
-        update_cache=true
-    elif command -v yum; then
-        cmd_pkg=yum
-        cmd_pkg_opt="$cmd_pkg install -y --setopt=tsflags=nodocs"
-    elif command -v apk; then
-        cmd_pkg=apk
-        cmd_pkg_opt="$cmd_pkg add --no-cache"
-    fi
+
     if command -v mvn; then
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
