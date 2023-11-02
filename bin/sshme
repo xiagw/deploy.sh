@@ -49,7 +49,7 @@ _add_host() {
 ### ${read_ssh_name} begin  ## $([[ "${read_byobu:-y}" == y ]] && echo "# byobu")
 Host ${read_ssh_name}
     HostName ${ssh_host}
-    User ${ssh_user} $([[ "${ssh_port}" == 22 ]] || echo -e "\n    Port ${ssh_port}")
+    User ${ssh_user}$([[ "${ssh_port}" == 22 ]] || echo -e "\n    Port ${ssh_port}")
 ### ${read_ssh_name} end
 
 EOF
