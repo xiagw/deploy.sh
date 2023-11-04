@@ -746,6 +746,10 @@ _renew_cert() {
                     jq -r '.DomainSet[] | .DomainName'
             )"
             ;;
+        from_env)
+            _msg warn "get domains from env file"
+            source "$file"
+            ;;
         *)
             _msg warn "unknown dns type: $dns_type"
             continue
@@ -776,7 +780,7 @@ _renew_cert() {
     else
         _msg warn "not found $file_reload_nginx"
     fi
-    ## Custom deployment method / 自定义部署方式
+    ## deploy with custom method / 自定义部署方式
     if [[ -f "${acme_home}/custom.acme.sh" ]]; then
         echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}/custom.acme.sh"
