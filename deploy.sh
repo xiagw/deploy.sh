@@ -758,12 +758,12 @@ _renew_cert() {
         for domain in ${domains}; do
             if "${acme_cmd}" list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}"
+                "${acme_cmd}" --renew -d "${domain}" || true
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file"
+                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" || true
             fi
-            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem"
+            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem" || true
         done
     done
     ## deploy with gitlab CI/CD,

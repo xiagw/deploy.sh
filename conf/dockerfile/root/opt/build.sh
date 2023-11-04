@@ -236,7 +236,7 @@ _build_node() {
     echo "build node ..."
     if _is_root; then
         $cmd_pkg update -yqq
-        $cmd_pkg_opt less vim curl ca-certificates
+        # $cmd_pkg_opt less vim curl ca-certificates
         [ -d /.cache ] || mkdir /.cache
         [ -d /app ] || mkdir /app
         chown -R node:node /.cache /app
