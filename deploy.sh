@@ -214,7 +214,7 @@ _deploy_flyway_helm_job() {
 
 _login_registry() {
     ${github_action:-false} && return 0
-    local lock_login_registry="$me_path_data/.lock.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}"
+    local lock_login_registry="$me_path_data/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
     local time_last
     case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
     aws)
