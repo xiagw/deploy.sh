@@ -680,10 +680,7 @@ _renew_cert() {
     acme_cmd="${acme_home}/acme.sh"
     acme_install_dest="${acme_home}/${ENV_CERT_INSTALL:-dest}"
     file_reload_nginx="$acme_home/reload.nginx"
-    run_touch_file="$acme_home/hook.sh"
 
-    echo "touch ${file_reload_nginx}" >"$run_touch_file"
-    chmod +x "$run_touch_file"
     ## install acme.sh / 安装 acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
         curl https://get.acme.sh | bash -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
@@ -691,6 +688,9 @@ _renew_cert() {
 
     [ -d "$acme_install_dest" ] || mkdir -p "$acme_install_dest"
 
+    run_touch_file="$acme_home/hook.sh"
+    echo "touch ${file_reload_nginx}" >"$run_touch_file"
+    chmod +x "$run_touch_file"
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     ## support multiple account.conf.* / 支持多账号
     ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
