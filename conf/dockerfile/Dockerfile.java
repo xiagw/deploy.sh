@@ -44,6 +44,7 @@ ARG MVN_PROFILE=main
 ARG TZ=Asia/Shanghai
 ARG INSTALL_FONTS=false
 ARG INSTALL_FFMPEG=false
+ARG INSTALL_LIBREOFFICE=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 
 ENV TZ=$TZ

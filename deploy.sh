@@ -1273,15 +1273,15 @@ _inject_files() {
                     ;;
                 *) : ;;
                 esac
-                case "$(grep -i 'INSTALL_FFMPEG=' "${f}")" in
-                *=true)
+                case "$(grep -i 'INSTALL_.*=' "${f}")" in
+                INSTALL_FFMPEG=true)
                     sed -i -e "s/INSTALL_FFMPEG=false/INSTALL_FFMPEG=true/g" "${project_dockerfile}"
                     ;;
-                *) : ;;
-                esac
-                case "$(grep -i 'INSTALL_FONTS=' "${f}")" in
-                *=true)
+                INSTALL_FONTS=true)
                     sed -i -e "s/INSTALL_FONTS=false/INSTALL_FONTS=true/g" "${project_dockerfile}"
+                    ;;
+                INSTALL_LIBREOFFICE=true)
+                    sed -i -e "s/INSTALL_LIBREOFFICE=false/INSTALL_LIBREOFFICE=true/g" "${project_dockerfile}"
                     ;;
                 *) : ;;
                 esac

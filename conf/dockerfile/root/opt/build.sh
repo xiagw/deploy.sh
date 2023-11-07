@@ -296,18 +296,20 @@ _build_jdk_runtime() {
     if ${INSTALL_FFMPEG:-false}; then
         if ${update_cache:-false}; then
             $cmd_pkg update -yqq
-            $cmd_pkg_opt ffmpeg
-        else
-            $cmd_pkg_opt ffmpeg
         fi
+        $cmd_pkg_opt ffmpeg
+    fi
+    if ${INSTALL_LIBREOFFICE:-false}; then
+        if ${update_cache:-false}; then
+            $cmd_pkg update -yqq
+        fi
+        $cmd_pkg_opt libreoffice
     fi
     if ${INSTALL_FONTS:-false}; then
         if ${update_cache:-false}; then
             $cmd_pkg update -yqq
-            $cmd_pkg_opt fontconfig
-        else
-            $cmd_pkg_opt fontconfig
         fi
+        $cmd_pkg_opt fontconfig
         fc-cache --force
         curl --referer http://cdn.flyh6.com/ -Lo - "$url_fly_cdn"/fonts-2022.tgz |
             tar -C /usr/share -zxf -
