@@ -668,6 +668,7 @@ _set_proxy() {
         fi
         ;;
     off | 0)
+        _msg time "unset http_proxy https_proxy all_proxy"
         unset http_proxy https_proxy all_proxy
         ;;
     esac
@@ -707,19 +708,19 @@ _renew_cert() {
         case "${dns_type}" in
         dns_gd)
             _msg warn "dns type: Goddady"
+            _set_proxy on
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
             api_goddady="https://api.godaddy.com/v1/domains"
             domains="$(
-                curl -fsSL -X GET -H "$api_head" "$api_goddady" |
-                    jq -r '.[].domain'
+                curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true
             )"
             ;;
         dns_cf)
             _msg warn "dns type: cloudflare"
+            _set_proxy on
             _install_flarectl
             domains="$(
-                flarectl zone list |
-                    awk '/active/ {print $3}'
+                flarectl zone list | awk '/active/ {print $3}' || true
             )"
             ;;
         dns_ali)
@@ -733,8 +734,7 @@ _renew_cert() {
                 --access-key-id "${SAVED_Ali_Key:-none}" \
                 --access-key-secret "${SAVED_Ali_Secret:-none}"
             domains="$(
-                aliyun --profile "deploy_${profile_name}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 |
-                    sed -e '1,2d' -e '/^$/d'
+                aliyun --profile "deploy_${profile_name}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d' || true
             )"
             ;;
         dns_tencent)
@@ -742,8 +742,7 @@ _renew_cert() {
             _install_tencent_cli
             tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
             domains="$(
-                tccli domain DescribeDomainNameList --output json |
-                    jq -r '.DomainSet[] | .DomainName'
+                tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true
             )"
             ;;
         from_env)
