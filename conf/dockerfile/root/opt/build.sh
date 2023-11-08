@@ -325,7 +325,7 @@ _build_jdk_runtime() {
     done
 
     _check_run_sh
-
+    useradd -u 1000 -m spring
     chown -R 1000:1000 /app
     for file in /app/*.{yml,yaml}; do
         if [ -f "$file" ]; then
