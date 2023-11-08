@@ -108,6 +108,12 @@ _start_php() {
     ## start php-fpm*
     for fpm in /usr/sbin/php-fpm*; do
         [ -x "$fpm" ] && $fpm -F &
+        pids+=("$!")
+        if pgrep -a -i -n php-fpm; then
+            _msg "start php-fpm success."
+        else
+            _msg "start php-fpm FAIL."
+        fi
         ## php-fpm -F, 前台启动
         pids+=("$!")
     done
