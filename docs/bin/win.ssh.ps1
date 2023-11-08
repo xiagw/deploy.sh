@@ -1,7 +1,9 @@
-## 查看当前的执行策略 # Get-ExecutionPolicy -List
-## 设置执行策略为要求远程脚本签名，范围为当前用户 # Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-## in-china # irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
-## not-china # irm https://github.com/xiagw/deploy.sh/raw/main/bin/win.ssh.ps1 | iex
+## 查看当前的执行策略
+# Get-ExecutionPolicy -List
+## 设置执行策略为要求远程脚本签名，范围为当前用户
+# Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+## in-china # irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/bin/win.ssh.ps1 | iex
+## not-china # irm https://github.com/xiagw/deploy.sh/raw/main/docs/bin/win.ssh.ps1 | iex
 
 ## https://github.com/massgravel/Microsoft-Activation-Scripts
 # irm https://massgrave.dev/get | iex
@@ -67,7 +69,7 @@ Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Key Tab -Function M
 Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
 Add-Content -Path $PROFILE -Value '# $env:HTTP_PROXY="http://192.168.41.252:1080"'
 Add-Content -Path $PROFILE -Value '# $env:HTTPS_PROXY="http://192.168.41.252:1080"'
-if (oh-my-posh.exe --version) {
+if (Get-Command oh-my-posh.exe) {
     Write-Host "oh-my-posh already installed"
 } else {
     Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -75,7 +77,7 @@ if (oh-my-posh.exe --version) {
     # winget install JanDeDobbeleer.OhMyPosh --source winget
     # scoop install https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/oh-my-posh.json
 }
-if (oh-my-posh.exe --version) {
+if (Get-Command oh-my-posh.exe) {
     Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
 }
 
