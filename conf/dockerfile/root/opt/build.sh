@@ -310,9 +310,9 @@ _build_jdk_runtime() {
             $cmd_pkg update -yqq
         fi
         $cmd_pkg_opt fontconfig
-        fc-cache --force
-        curl --referer http://cdn.flyh6.com/ -Lo - "$url_fly_cdn"/fonts-2022.tgz |
-            tar -C /usr/share -zxf -
+        curl --referer "$url_fly_cdn" -Lo /tmp/fonts.zip "$url_fly_cdn"/fonts.zip
+        cd /usr/share/fonts && unzip -o /tmp/fonts.zip
+        fc-cache -fv
     fi
     ## set ssl
     s1=/usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security

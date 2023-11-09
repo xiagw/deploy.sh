@@ -26,8 +26,9 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 ## comment authorized_keys for administrators
 (Get-Content -Path C:\ProgramData\ssh\sshd_config -Raw) -replace 'Match Group administrators','#Match Group administrators' | Set-Content -Path C:\ProgramData\ssh\sshd_config
 (Get-Content -Path C:\ProgramData\ssh\sshd_config -Raw) -replace 'AuthorizedKeysFile __PROGRAMDATA__','#AuthorizedKeysFile __PROGRAMDATA__' | Set-Content -Path C:\ProgramData\ssh\sshd_config
-##
+## restart sshd service
 Restart-Service sshd
+## authoized_keys for normal users
 $FileAuthHome = "$HOME\.ssh\authorized_keys"
 if (Test-Path $FileAuthHome) {
     Write-Output "File $FileAuthHome exists."
@@ -36,6 +37,7 @@ if (Test-Path $FileAuthHome) {
 }
 (Invoke-RestMethod 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path $FileAuthHome
 # icacls.exe "$FileAuthHome" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
+## authoized_keys for admin users
 $FileAuthAdmin = "C:\ProgramData\ssh\administrators_authorized_keys"
 if (Test-Path $FileAuthAdmin) {
     Write-Output "File $FileAuthAdmin exists."
@@ -43,7 +45,8 @@ if (Test-Path $FileAuthAdmin) {
     New-Item -Path $FileAuthAdmin -Type File -Force
 }
 # (Invoke-WebRequest 'https://api.github.com/users/xiagw/keys' | ConvertFrom-Json).key | Add-Content -Path $FileAuthHome
-(Invoke-RestMethod 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "$FileAuthAdmin"
+# (Invoke-RestMethod 'https://api.github.com/users/xiagw/keys').key | Add-Content -Path "$FileAuthAdmin"
+Copy-Item -Path $FileAuthHome -Destination $FileAuthAdmin -Force
 icacls.exe "$FileAuthAdmin" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 
 # By default the ssh-agent service is disabled. Allow it to be manually started for the next step to work.
