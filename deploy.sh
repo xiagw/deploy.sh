@@ -208,7 +208,7 @@ _deploy_flyway_helm_job() {
 }
 
 # python-gitlab list all projects / 列出所有项目
-# gitlab -v -o yaml -f path_with_namespace project list --all |awk -F': ' '{print $2}' |sort >p.txt
+# gitlab -o json -f path_with_namespace project list --page 1 --per-page 5 | jq -r '.[].path_with_namespace'
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
@@ -434,9 +434,9 @@ _deploy_k8s() {
     ## 检测 helm upgrade 状态
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s >/dev/null || deploy_result=1
 
-    if [ -f "$me_path_data_bin/deploy.custom.sh" ]; then
+    if [ -f "$gitlab_project_dir/deploy.custom.sh" ]; then
         _msg time "custom deploy."
-        source "$me_path_data_bin/deploy.custom.sh"
+        source "$gitlab_project_dir/deploy.custom.sh"
     fi
 
     ## helm install flyway jobs / helm 安装 flyway 任务
