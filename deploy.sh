@@ -434,6 +434,11 @@ _deploy_k8s() {
     ## 检测 helm upgrade 状态
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s >/dev/null || deploy_result=1
 
+    if [ -f "$me_path_data_bin/deploy.custom.sh" ]; then
+        _msg time "custom deploy."
+        source "$me_path_data_bin/deploy.custom.sh"
+    fi
+
     ## helm install flyway jobs / helm 安装 flyway 任务
     if ${ENV_FLYWAY_HELM_JOB:-false} && [[ -d "${me_path_conf}"/helm/flyway ]]; then
         $helm_opt upgrade flyway "${me_path_conf}/helm/flyway/" --install --history-max 1 \
