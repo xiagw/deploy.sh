@@ -12,6 +12,7 @@ _get_yes_no() {
         ;;
     esac
 }
+
 _msg() {
     color_off='\033[0m' # Text Reset
     case "$1" in
@@ -28,7 +29,7 @@ _msg() {
         ;;
     logpass)
         shift
-        echo "$(date +%Y%m%d-%u-%H%M%S.%3N) $*" | tee -a "$me_log_password"
+        echo "$(date +%Y%m%d-%u-%H%M%S.%3N) $*" | tee -a "$me_log_secret"
         return
         ;;
     *)
@@ -90,7 +91,7 @@ _create_user() {
 
 }
 
-_change_password() {
+_change_user_password() {
     _msg log "change password..."
     _get_username password
     if _get_yes_no "[ssh] Do you want change system password of ${user_name}?"; then
@@ -143,10 +144,10 @@ _remove_user() {
 }
 
 _backup() {
-    _msg log "backup..."
+    _msg log "start backup..."
 
     rsync_opt=(
-        rsync
+        /usr/bin/rsync
         -az
         --backup
         --suffix=".$(date +%Y%m%d-%u-%H%M%S.%3N)"
@@ -166,7 +167,8 @@ _backup() {
     dest_servers=(
         node11
     )
-    host_nas=nas
+    dest_nas=nas
+    # dest_nas=node10
 
     case "$1" in
     pull)
@@ -185,7 +187,7 @@ _backup() {
         for dir in "${src_dirs[@]}"; do
             test -d "$dir" || continue
             echo "$(date +%Y%m%d-%u-%H%M%S.%3N)  sync $dir" >>"$me_log"
-            "${rsync_opt[@]}" "$dir"/ "$host_nas:$dest_dir$dir"/
+            "${rsync_opt[@]}" "$dir"/ "$dest_nas:$dest_dir$dir"/
         done
         ;;
     *)
@@ -193,25 +195,11 @@ _backup() {
         echo "$0  push      push files to NAS, run on SERVERS"
         ;;
     esac
+    _msg log "end backup."
 }
 
-main() {
-    _check_root || return 1
-    me_name="$(basename "$0")"
-    me_path="$(dirname "$(readlink -f "$0")")"
-    me_path_bin="$me_path/bin"
-    me_path_data="$me_path/data"
-    me_path_conf="$me_path/conf"
-    me_log="${me_path_data}/${me_name}.log"
-    me_log_password="${me_path_data}/password.log"
-
-    [ -d "${me_path_data}" ] || mkdir "${me_path_data}"
-    echo "$me_path_bin , $me_path_conf" >/dev/null
-    path_home="/home2"
-    user_shell=/bin/bash
-
+_get_random_password() {
     # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
-    ## user_password
     if command -v md5sum; then
         bin_hash=md5sum
     elif command -v sha256sum; then
@@ -245,6 +233,40 @@ main() {
             ;;
         esac
     done
+}
+
+main() {
+    _check_root || return 1
+    me_name="$(basename "$0")"
+    me_path="$(dirname "$(readlink -f "$0")")"
+    me_path_bin="$me_path/bin"
+    me_path_conf="$me_path/conf"
+    me_log="${me_path}/${me_name}.log"
+    me_log_secret="${me_path}/.password.log"
+
+    echo "$me_path_bin , $me_path_conf" >/dev/null
+    path_home="/home2"
+    user_shell=/bin/bash
+
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+        --backup-push | -b)
+            _backup push
+            return
+            ;;
+        --backup-pull | -bp)
+            _backup pull
+            return
+            ;;
+        *)
+            _usage
+            exit 1
+            ;;
+        esac
+        shift
+    done
+
+    _get_random_password
 
     select choice in create_user change_password disable_user remove_user backup quit; do
         case $choice in
@@ -252,7 +274,7 @@ main() {
             _create_user
             ;;
         change_password)
-            _change_password
+            _change_user_password
             ;;
         disable_user)
             _disable_user
@@ -260,8 +282,9 @@ main() {
         remove_user)
             _remove_user
             ;;
-        backup)
-            _backup push
+        *)
+            _msg warn "unknown action: ${choice:empty}"
+            return 1
             ;;
         esac
         break

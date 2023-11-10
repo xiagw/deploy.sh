@@ -62,6 +62,7 @@ _parse_params() {
 
 _usage() {
     cat <<EOF
+
 Usage: $(basename "${BASH_SOURCE[0]}") [options] [Parameter]
 
 Script description here.
@@ -76,6 +77,7 @@ Available options:
 
 Examples:
     $0 -c -p param arg1 arg2
+
 EOF
     exit
 }
@@ -85,8 +87,10 @@ _myself() {
     me_path="$(dirname "$(readlink -f "$0")")"
     if [ -w "$me_path" ]; then
         me_log="${me_path}/${me_name}.log"
+        me_lock="${me_path}/${me_name}.lock"
     else
         me_log="/tmp/${me_name}.log"
+        me_lock="/tmp/${me_name}.lock"
     fi
     [[ "$enable_log" -eq 1 ]] && echo "Log file is \"$me_log\""
 }
@@ -95,7 +99,7 @@ _connect_server() {
     if [[ "$flag" -eq 1 ]]; then
         :
     elif [[ "$flag2" -eq 1 ]]; then
-        _msg "${RED}Connecting to proxy server...${NOFORMAT}"
+        _msg "${RED}Connecting to stunnel server...${NOFORMAT}"
         sleep 0.5
         _msg "${GREEN}OK.${NOFORMAT}"
     else
