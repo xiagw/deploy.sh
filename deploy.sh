@@ -255,6 +255,7 @@ _build_image() {
             done
         fi
         local file_context_last=${me_path_data}/docker_context_last.log
+        [ -f "$file_context_last" ] || touch "$file_context_last"
         for dk_host in $(docker context ls -q); do
             if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
                 [[ $dk_host == default ]] && continue
@@ -262,6 +263,7 @@ _build_image() {
             grep -F -qw "$dk_host" $file_context_last && continue
             echo $dk_host >$file_context_last
             build_cmd="${build_cmd:+"$build_cmd "} --context $dk_host"
+            echo "$build_cmd"
             break
         done
     fi
