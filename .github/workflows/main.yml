@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@main
 
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag deploy/gitlab-runner:latest
+        run: docker build . --file docs/Dockerfile --tag xiagw/deploy
 
       # - name: Run the Anchore scan action itself with GitHub Advanced Security code scanning integration enabled
       #   uses: anchore/scan-action@main

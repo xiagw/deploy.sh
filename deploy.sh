@@ -245,6 +245,27 @@ _build_image() {
     ${github_action:-false} && return 0
     _msg step "[image] build container image"
 
+    if [[ ${ENV_DOCKER_CONTEXT:-local} != local ]]; then
+        if ! docker context ls -q | grep -q "^remote"; then
+            local c=0
+            for docker_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
+                ((++c))
+                docker context create remote$c --docker "host=${docker_host}" || err=1
+                [[ -z ${err} ]] || _msg error "Failed to create docker context remote$c: ${docker_host}"
+            done
+        fi
+        local file_context_last=${me_path_data}/docker_context_last.log
+        for dk_host in $(docker context ls -q); do
+            if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
+                [[ $dk_host == default ]] && continue
+            fi
+            grep -F -qw "$dk_host" $file_context_last && continue
+            echo $dk_host >$file_context_last
+            build_cmd="${build_cmd:+"$build_cmd "} --context $dk_host"
+            break
+        done
+    fi
+
     ## build from Dockerfile.base
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
         if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
@@ -1292,12 +1313,6 @@ _inject_files() {
                 esac
                 break
             done
-            if [[ ${INSTALL_FFMPEG:-false} == true ]]; then
-                sed -i -e "s/INSTALL_FFMPEG=false/INSTALL_FFMPEG=true/g" "${project_dockerfile}"
-            fi
-            if [[ ${INSTALL_FONTS:-false} == true ]]; then
-                sed -i -e "s/INSTALL_FONTS=false/INSTALL_FONTS=true/g" "${project_dockerfile}"
-            fi
         fi
         ;;
     remove)
@@ -1762,7 +1777,7 @@ main() {
         helm_opt="helm --kubeconfig $HOME/.kube/config"
     fi
 
-    image_tag="${gitlab_project_name}-${gitlab_commit_short_sha}-$(date +%s)"
+    image_tag="${gitlab_commit_short_sha}-$(date +%s%3N)"
     image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     ${ENV_INSTALL_AWS:-false} && _install_aws

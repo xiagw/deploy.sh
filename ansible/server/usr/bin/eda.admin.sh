@@ -4,12 +4,8 @@
 _get_yes_no() {
     read -rp "${1:-Confirm the action?} [y/N]" read_yes_no
     case ${read_yes_no:-n} in
-    [yY] | [yY][eE][sS])
-        return 0
-        ;;
-    *)
-        return 1
-        ;;
+    [yY] | [yY][eE][sS]) return 0 ;;
+    *) return 1 ;;
     esac
 }
 
@@ -36,7 +32,7 @@ _msg() {
         unset color_on color_off
         ;;
     esac
-    [ "$#" -gt 1 ] && shift
+    [[ "$#" -gt 1 ]] && shift
     echo -e "${color_on}$*${color_off}"
 }
 
@@ -145,7 +141,7 @@ _remove_user() {
 
 _backup() {
     _msg log "start backup..."
-
+    ssh_opt='ssh -o StrictHostKeyChecking=no -oConnectTimeout=10'
     rsync_opt=(
         /usr/bin/rsync
         -az
@@ -164,20 +160,19 @@ _backup() {
         /home2
     )
     dest_dir='/volume1/nas1/backup'
-    dest_servers=(
-        node11
-    )
-    dest_nas=nas
-    # dest_nas=node10
+
+    pull_servers=(node11)
+    push_nas=nas
 
     case "$1" in
     pull)
         ## pull files from SERVERS, run on NAS
-        for svr in "${dest_servers[@]}"; do
+        for svr in "${pull_servers[@]}"; do
             for dir in "${src_dirs[@]}"; do
-                ssh "$svr" "test -d $dir" || continue
-                echo "$(date +%Y%m%d-%u-%H%M%S.%3N)  sync $dir" >>"$me_log"
-                "${rsync_opt[@]}" "$svr:$dir"/ "$dest_dir$dir"/
+                $ssh_opt "$svr" "test -d $dir" || continue
+                _msg log "sync $dir"
+                [ -d "$dest_dir$dir" ] || mkdir -p "$dest_dir$dir"
+                "${rsync_opt[@]}" -e "$ssh_opt" "$svr:$dir"/ "$dest_dir$dir"/
             done
         done
         ;;
@@ -186,8 +181,9 @@ _backup() {
         rsync_opt+=(--rsync-path=/bin/rsync)
         for dir in "${src_dirs[@]}"; do
             test -d "$dir" || continue
-            echo "$(date +%Y%m%d-%u-%H%M%S.%3N)  sync $dir" >>"$me_log"
-            "${rsync_opt[@]}" "$dir"/ "$dest_nas:$dest_dir$dir"/
+            _msg log "sync $dir"
+            $ssh_opt $push_nas "[ -d $dest_dir$dir ] || mkdir -p $dest_dir$dir"
+            "${rsync_opt[@]}" -e "$ssh_opt" "$dir"/ "$push_nas:$dest_dir$dir"/
         done
         ;;
     *)
@@ -269,26 +265,27 @@ main() {
     _get_random_password
 
     select choice in create_user change_password disable_user remove_user backup quit; do
-        case $choice in
-        create_user)
-            _create_user
-            ;;
-        change_password)
-            _change_user_password
-            ;;
-        disable_user)
-            _disable_user
-            ;;
-        remove_user)
-            _remove_user
-            ;;
-        *)
-            _msg warn "unknown action: ${choice:empty}"
-            return 1
-            ;;
-        esac
+        _msg "choice: ${choice:empty}"
         break
     done
+    case $choice in
+    create_user)
+        _create_user
+        ;;
+    change_password)
+        _change_user_password
+        ;;
+    disable_user)
+        _disable_user
+        ;;
+    remove_user)
+        _remove_user
+        ;;
+    *)
+        _msg warn "unknown action: ${choice:empty}"
+        return 1
+        ;;
+    esac
 }
 
 main "$@"
