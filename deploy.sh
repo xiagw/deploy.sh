@@ -246,8 +246,7 @@ _build_image() {
     _msg step "[image] build container image"
 
     if [[ ${ENV_DOCKER_CONTEXT:-local} != local ]]; then
-        if ! docker context ls -q | grep -q "^remote"; then
-            local c=0
+        if ! docker context ls -q | grep -q "remote"; then
             for docker_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
                 ((++c))
                 docker context create remote$c --docker "host=${docker_host}" || err=1
@@ -260,9 +259,13 @@ _build_image() {
             if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
                 [[ $dk_host == default ]] && continue
             fi
-            grep -F -qw "$dk_host" $file_context_last && continue
+            if grep -F -qw "$dk_host" $file_context_last; then
+                if [[ $(docker context ls -q | grep -cv default) -gt 1 ]]; then
+                    continue
+                fi
+            fi
             echo $dk_host >$file_context_last
-            build_cmd="${build_cmd:+"$build_cmd "} --context $dk_host"
+            build_cmd="${build_cmd:+"$build_cmd "}--context $dk_host"
             echo "$build_cmd"
             break
         done
