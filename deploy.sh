@@ -241,50 +241,39 @@ _login_registry() {
     esac
 }
 
+_get_docker_context() {
+    ## use local or remote context / 使用本地或远程 context
+    if [[ ${ENV_DOCKER_CONTEXT:-local} == local ]]; then
+        return
+    fi
+    read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
+    read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
+    ## create context when not found remote / 没有 remote 时则根据环境变量创建
+    for dk_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
+        ((++c))
+        if ! echo "${docker_endpoints[@]}" | grep -q "$dk_host"; then
+            docker context create remote$c --docker "host=${dk_host}" || err=1
+            [[ -z ${err} ]] || _msg error "Failed to create docker context remote$c: ${dk_host}"
+        fi
+    done
+    while true; do
+        random_index=$((RANDOM % ${#docker_contexts[@]}))
+        selected_context="${docker_contexts[$random_index]}"
+        if [[ ${ENV_DOCKER_CONTEXT:-local} == remote && "$selected_context" == default ]]; then
+            continue
+        else
+            break
+        fi
+    done
+
+    build_cmd="${build_cmd:+"$build_cmd "}--context $selected_context"
+}
+
 _build_image() {
     ${github_action:-false} && return 0
     _msg step "[image] build container image"
 
-    ## use local or remote context / 使用本地或远程 context
-    if [[ ${ENV_DOCKER_CONTEXT:-local} != local ]]; then
-        ## create context when not found remote / 没有 remote 时则根据环境变量创建
-        if ! docker context ls -q | grep -q "remote"; then
-            for docker_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
-                ((++c))
-                docker context create remote$c --docker "host=${docker_host}" || err=1
-                [[ -z ${err} ]] || _msg error "Failed to create docker context remote$c: ${docker_host}"
-            done
-        fi
-        ## the last context / 上次使用过的 context
-        local file_context_last=${me_path_data}/docker_context_last.log
-        [ -f "$file_context_last" ] || touch "$file_context_last"
-        for dk_host in $(docker context ls -q); do
-            ## only use remote / 只使用 remote
-            if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
-                ## 排除本机 default
-                [[ $dk_host == default ]] && continue
-                ## 搜索上一次已使用过的 context 记录
-                if grep -F -qw "$dk_host" $file_context_last; then
-                    ## remote context 总数大于1,且上次使用的,则跳过,选择下一个
-                    if [[ $(docker context ls -q | grep -cv default) -gt 1 ]]; then
-                        continue
-                    fi
-                fi
-            ## both default and remote / 既有 default 也有 remote
-            else
-                ## 搜索上一次已使用过的 context 记录
-                if grep -F -qw "$dk_host" $file_context_last; then
-                    ## context 总数大于1,且上次使用的,则跳过,选择下一个
-                    if [[ $(docker context ls -q | wc -l) -gt 1 ]]; then
-                        continue
-                    fi
-                fi
-            fi
-            echo $dk_host >$file_context_last
-            build_cmd="${build_cmd:+"$build_cmd "}--context $dk_host"
-            break
-        done
-    fi
+    _get_docker_context
 
     ## build from Dockerfile.base
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
