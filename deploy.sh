@@ -256,14 +256,16 @@ _get_docker_context() {
             [[ -z ${err} ]] || _msg error "Failed to create docker context remote$c: ${dk_host}"
         fi
     done
-    while true; do
+
+    n="${#docker_contexts[@]}"
+    for ((i = 0; i < n; i++)); do
         random_index=$((RANDOM % ${#docker_contexts[@]}))
         selected_context="${docker_contexts[$random_index]}"
         if [[ ${ENV_DOCKER_CONTEXT:-local} == remote && "$selected_context" == default ]]; then
+            ((++n))
             continue
-        else
-            break
         fi
+        break
     done
 
     build_cmd="${build_cmd:+"$build_cmd "}--context $selected_context"
