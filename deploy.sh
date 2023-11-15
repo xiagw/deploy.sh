@@ -246,8 +246,13 @@ _get_docker_context() {
     if [[ ${ENV_DOCKER_CONTEXT:-local} == local ]]; then
         return
     fi
-    read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
-    read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
+    if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
+        read -ra docker_contexts <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .Name' | tr '\n' ' ')"
+        read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .DockerEndpoint' | tr '\n' ' ')"
+    else
+        read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
+        read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
+    fi
     ## create context when not found remote / 没有 remote 时则根据环境变量创建
     for dk_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
         ((++c))
@@ -257,16 +262,25 @@ _get_docker_context() {
         fi
     done
 
-    n="${#docker_contexts[@]}"
-    for ((i = 0; i < n; i++)); do
+    case ${ENV_DOCKER_CONTEXT_ALGO:-rr} in
+    rand)
+        ## random algorithum
         random_index=$((RANDOM % ${#docker_contexts[@]}))
         selected_context="${docker_contexts[$random_index]}"
-        if [[ ${ENV_DOCKER_CONTEXT:-local} == remote && "$selected_context" == default ]]; then
-            ((++n))
-            continue
-        fi
-        break
-    done
+        ;;
+    rr)
+        ## round-robin algorithum
+        position_file="${me_path_data:-.}/.docker_context_history"
+        [[ -f "$position_file" ]] || echo 0 >"$position_file"
+        # 读取当前轮询位置
+        position=$(tail -n 1 $position_file)
+        # 输出当前位置的值
+        selected_context="${docker_contexts[$position]}"
+        # 更新轮询位置
+        position=$(((position + 1) % ${#docker_contexts[@]}))
+        echo $position >$position_file
+        ;;
+    esac
 
     build_cmd="${build_cmd:+"$build_cmd "}--context $selected_context"
 }
