@@ -325,6 +325,7 @@ _build_jdk_runtime() {
     done
 
     _check_run_sh
+    command -v useradd || yum install -y shadow-utils
     useradd -u 1000 -m spring
     chown -R 1000:1000 /app
     for file in /app/*.{yml,yaml}; do
