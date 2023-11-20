@@ -391,6 +391,10 @@ _helm_new() {
           persistentVolumeClaim:
             claimName: {{ .Values.cnfs }}
       {{- end }}
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "2"
 EOF
     ## set port
     if [[ "${protocol:-tcp}" == 'tcp' ]]; then
