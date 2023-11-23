@@ -194,7 +194,7 @@ _deploy_flyway_docker() {
 }
 
 _deploy_flyway_helm_job() {
-    _msg step "[database] deploy SQL with flyway helm job"
+    _msg step "[database] deploy SQL with flyway (helm job)"
     echo "$image_tag_flyway"
     ${github_action:-false} && return 0
     $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
@@ -204,7 +204,7 @@ _deploy_flyway_helm_job() {
     else
         _msg error "flyway migrate result = FAIL"
     fi
-    _msg time "[database] deploy SQL with flyway helm job"
+    _msg time "[database] deploy SQL with flyway (helm job)"
 }
 
 # python-gitlab list all projects / 列出所有项目
@@ -415,7 +415,7 @@ EOF
 }
 
 _deploy_k8s() {
-    _msg step "[deploy] deploy with helm"
+    _msg step "[deploy] deploy k8s with helm"
     _is_demo_mode "deploy-helm" && return 0
     if ${ENV_REMOVE_PROJ_PREFIX:-false}; then
         echo "remove project name prefix-"
@@ -497,11 +497,11 @@ _deploy_k8s() {
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
             --set image.pullPolicy='Always' >/dev/null
     fi
-    _msg time "[deploy] deploy with helm"
+    _msg time "[deploy] deploy k8s with helm"
 }
 
 _deploy_rsync_ssh() {
-    _msg step "[deploy] rsync+ssh"
+    _msg step "[deploy] deploy files with rsync+ssh"
     ## rsync exclude some files / rsync 排除某些文件
     if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
         rsync_exclude="${gitlab_project_dir}/rsync.exclude"
@@ -569,16 +569,16 @@ _deploy_rsync_ssh() {
             _msg time "custom deploy."
         fi
         if ${exec_deploy_docker_compose:-false}; then
-            _msg step "deploy to singl host with docker-compose"
+            _msg step "deploy to server with docker-compose"
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $gitlab_project_name"
         fi
     done <$tmp_file
     rm -f $tmp_file
-    _msg time "[deploy] rsync+ssh"
+    _msg time "[deploy] deploy files with rsync+ssh"
 }
 
 _deploy_aliyun_oss() {
-    _msg step "[deploy] Aliyun OSS"
+    _msg step "[deploy] deploy files to Aliyun OSS"
     # Check if deployment is enabled
     if ${DEPLOYMENT_ENABLED:-false}; then
         echo '<skip>'
@@ -730,7 +730,7 @@ _set_proxy() {
 }
 
 _renew_cert() {
-    _msg step "[cert] renew cert with acme.sh using dns+api"
+    _msg step "[cert] renew SSL cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
     acme_install_dest="${acme_home}/${ENV_CERT_INSTALL:-dest}"
@@ -1253,7 +1253,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    _msg step "[inject] files conf/env/Dockerfile..."
+    _msg step "[inject] inject files (config/env/Dockerfile...)"
     ## backend (PHP/Java/Python) inject files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     local inject_dir="${me_path_data}/inject/${gitlab_project_name}/${env_namespace}"
@@ -1452,7 +1452,7 @@ _setup_gitlab_vars() {
 }
 
 _probe_langs() {
-    _msg step "[langs] probe language"
+    _msg step "[language] probe program language"
     for f in pom.xml {composer,package}.json requirements*.txt {README,readme}.{md,txt}; do
         [[ -f "${gitlab_project_dir}"/${f} ]] || continue
         echo "Found $f"
@@ -1485,7 +1485,7 @@ _probe_langs() {
         esac
     done
     project_lang=${project_lang:-unknown}
-    echo "Probe lang: ${project_lang}"
+    echo "Probe program language: ${project_lang}"
 }
 
 _probe_deploy_method() {
@@ -1979,7 +1979,7 @@ main() {
     fi
 
     ## 安全扫描
-    _msg step "[scan] ZAP scan"
+    _msg step "[security] ZAP scan"
     echo "MAN_SCAN_ZAP: ${MAN_SCAN_ZAP:-false}"
     if [[ "${MAN_SCAN_ZAP:-false}" == true ]]; then
         _scan_zap
@@ -1987,7 +1987,7 @@ main() {
         echo '<skip>'
     fi
 
-    _msg step "[scan] vulmap scan"
+    _msg step "[security] vulmap scan"
     echo "MAN_SCAN_VULMAP: ${MAN_SCAN_VULMAP:-false}"
     if [[ "${MAN_SCAN_VULMAP:-false}" == true ]]; then
         _scan_vulmap

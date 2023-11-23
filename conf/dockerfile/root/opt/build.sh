@@ -139,6 +139,7 @@ _build_php() {
 
     $cmd_pkg_opt tzdata
     $cmd_pkg_opt locales
+    # $cmd_pkg_opt language-pack-en-base
 
     if ! grep '^en_US.UTF-8' /etc/locale.gen; then
         echo 'en_US.UTF-8 UTF-8' >>/etc/locale.gen
@@ -154,6 +155,7 @@ _build_php() {
         $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
         LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
         case "$PHP_VERSION" in
+        8.3) $cmd_pkg_opt php"${PHP_VERSION}"-common ;;
         8.*) : ;;
         *) $cmd_pkg_opt php"${PHP_VERSION}"-mcrypt ;;
         esac
@@ -163,33 +165,37 @@ _build_php() {
     $cmd_pkg upgrade -yqq
     $cmd_pkg_opt \
         php"${PHP_VERSION}" \
-        php"${PHP_VERSION}"-redis \
-        php"${PHP_VERSION}"-mongodb \
-        php"${PHP_VERSION}"-imagick \
+        php"${PHP_VERSION}"-bcmath \
+        php"${PHP_VERSION}"-bz2 \
+        php"${PHP_VERSION}"-curl \
         php"${PHP_VERSION}"-fpm \
         php"${PHP_VERSION}"-gd \
+        php"${PHP_VERSION}"-gmp \
+        php"${PHP_VERSION}"-imagick \
+        php"${PHP_VERSION}"-intl \
+        php"${PHP_VERSION}"-mbstring \
+        php"${PHP_VERSION}"-mongodb \
+        php"${PHP_VERSION}"-msgpack \
         php"${PHP_VERSION}"-mysql \
+        php"${PHP_VERSION}"-redis \
+        php"${PHP_VERSION}"-soap \
+        php"${PHP_VERSION}"-sqlite3 \
         php"${PHP_VERSION}"-xml \
         php"${PHP_VERSION}"-xmlrpc \
-        php"${PHP_VERSION}"-bcmath \
-        php"${PHP_VERSION}"-gmp \
-        php"${PHP_VERSION}"-zip \
-        php"${PHP_VERSION}"-soap \
-        php"${PHP_VERSION}"-curl \
-        php"${PHP_VERSION}"-bz2 \
-        php"${PHP_VERSION}"-mbstring \
-        php"${PHP_VERSION}"-msgpack \
-        php"${PHP_VERSION}"-sqlite3
+        php"${PHP_VERSION}"-zip
 
     # php"${PHP_VERSION}"-process \
     # php"${PHP_VERSION}"-pecl-mcrypt  replace by  php"${PHP_VERSION}"-libsodium
 
-    if [ "$PHP_VERSION" = 5.6 ]; then
+    case "$PHP_VERSION" in
+    5.6)
         $cmd_pkg_opt apache2 libapache2-mod-fcgid libapache2-mod-php"${PHP_VERSION}"
         sed -i -e '1 i ServerTokens Prod' -e '1 i ServerSignature Off' -e '1 i ServerName www.example.com' /etc/apache2/sites-available/000-default.conf
-    else
+        ;;
+    *)
         $cmd_pkg_opt nginx
-    fi
+        ;;
+    esac
     # $cmd_pkg_opt lsyncd openssh-client
 
     sed -i \

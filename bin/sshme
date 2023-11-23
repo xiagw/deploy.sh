@@ -46,7 +46,7 @@ _add_host() {
     ## ssh config
     cat >>"$ssh_conf" <<EOF
 
-### ${read_ssh_name} begin  ## $([[ "${read_byobu:-y}" == y ]] && echo "# byobu")
+### ${read_ssh_name} begin  ##$([[ "${read_byobu:-y}" == y ]] && echo " byobu")
 Host ${read_ssh_name}
     HostName ${ssh_host}
     User ${ssh_user}$([[ "${ssh_port}" == 22 ]] || echo -e "\n    Port ${ssh_port}")
