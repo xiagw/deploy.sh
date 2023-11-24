@@ -283,6 +283,7 @@ _get_docker_context() {
     esac
 
     build_cmd="${build_cmd:+"$build_cmd "}--context $selected_context"
+    echo "$build_cmd"
 }
 
 _build_image() {
