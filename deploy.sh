@@ -294,17 +294,18 @@ _build_image() {
     ## build from Dockerfile.base
     if [[ -z "$ENV_DOCKER_REGISTRY_BASE" ]]; then
         _msg warn "ENV_DOCKER_REGISTRY_BASE is undefined, use $ENV_DOCKER_REGISTRY instead."
-        deploy_base=ENV_DOCKER_REGISTRY
+        registry_base=ENV_DOCKER_REGISTRY
     else
-        deploy_base=ENV_DOCKER_REGISTRY_BASE
+        registry_base=ENV_DOCKER_REGISTRY_BASE
     fi
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
         if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
             echo "Found ${gitlab_project_dir}/build.base.sh, run it..."
             bash "${gitlab_project_dir}/build.base.sh"
         else
-            echo "$deploy_base:${gitlab_project_name}-${gitlab_project_branch}"
-            $build_cmd build $build_cmd_opt --tag $deploy_base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
+            echo "$registry_base:${gitlab_project_name}-${gitlab_project_branch}"
+            $build_cmd build $build_cmd_opt --tag $registry_base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
+            $build_cmd push $quiet_flag $registry_base:${gitlab_project_name}-${gitlab_project_branch}
         fi
         _msg time "[image] build base image"
         exit_directly=true
