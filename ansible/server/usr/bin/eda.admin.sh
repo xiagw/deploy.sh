@@ -289,3 +289,19 @@ main() {
 }
 
 main "$@"
+
+# Synology DS920+
+# /etc/sysconfig/network-scripts/ifcfg-eth0:1
+# NAME=eth0:1
+# DEVICE=eth0:1
+# BOOTPROTO=static
+# IPADDR=192.168.7.10
+# PREFIX=24
+# ONBOOT=yes
+# /etc/sysconfig/network-scripts/ifcfg-eth1:1
+# NAME=eth1:1
+# DEVICE=eth1:1
+# BOOTPROTO=static
+# IPADDR=192.168.7.9
+# PREFIX=24
+# ONBOOT=yes

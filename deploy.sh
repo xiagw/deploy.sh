@@ -549,14 +549,14 @@ _deploy_rsync_ssh() {
         fi
         if [[ -z "${rsync_src_from_conf}" ]]; then
             rsync_src="${gitlab_project_dir}/"
-        elif [[ "${rsync_src_from_conf}" != 'null' ]]; then
+        elif [[ "${rsync_src_from_conf}" != 'none' ]]; then
             rsync_src="${gitlab_project_dir}/${rsync_src_from_conf}/"
         elif [ -n "$rsync_relative_path" ]; then
             rsync_src="${gitlab_project_dir}/$rsync_relative_path/"
         fi
 
         ## rsycn dest folder / rsync 目标目录
-        if [[ "$rsync_dest" == 'null' || -z "$rsync_dest" ]]; then
+        if [[ "$rsync_dest" == 'none' || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${env_namespace}.${gitlab_project_name}/"
         fi
         ## deploy to aliyun oss / 发布到 aliyun oss 存储
