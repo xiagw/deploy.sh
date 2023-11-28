@@ -2,7 +2,6 @@
 
 _get_config() {
     ## get config from file
-    export XDG_CONFIG_HOME="$HOME/.config"
     if [ -f "$me_path/dynv6.conf" ]; then
         . "$me_path/dynv6.conf"
     elif [ -f "$XDG_CONFIG_HOME/ddns/dynv6.conf" ]; then
@@ -14,7 +13,7 @@ _get_config() {
 
     ## get config from args
     if [ -z "$dynv6_host" ] || [ -z "$dynv6_token" ]; then
-        if [ -n "${1}" ]; then
+        if [ "$#" -gt 0 ]; then
             dynv6_host=${1}
             dynv6_token=${2}
             device=${3:-pppoe-wan}
@@ -72,6 +71,8 @@ _compare_ip() {
         else
             return 0
         fi
+    else
+        return 1
     fi
 }
 
@@ -102,12 +103,15 @@ main() {
     # set -x
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
-    me_log=$me_path/.${me_name}.log
+    # me_log=$me_path/.${me_name}.log
+    [ -z "$XDG_CONFIG_HOME" ] && export XDG_CONFIG_HOME="$HOME/.config"
+    [ -d "$XDG_CONFIG_HOME/ddns" ] || mkdir -p "$XDG_CONFIG_HOME/ddns"
+    me_log="$XDG_CONFIG_HOME/ddns/${me_name}.log"
     [ -f "$me_log" ] || touch "$me_log"
 
     ## disable proxy
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
-    ## openwrt interface name
+    ## interface name in openwrt
     device=${3:-pppoe-wan}
 
     _get_config "$@" || return
@@ -115,6 +119,7 @@ main() {
     _get_ip_current
     _compare_ip "$@" && return
     _update_dynv6
+    # _update_aliyun
 }
 
 main "$@"

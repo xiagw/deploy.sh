@@ -487,7 +487,7 @@ _deploy_k8s() {
         --timeout 120s >/dev/null
     ## Clean up rs 0 0 / 清理 rs 0 0
     $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
-    $kubectl_opt -n "${env_namespace}" get pod | grep Evicted | awk '{print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
+    $kubectl_opt -n "${env_namespace}" get pod | awk '/Evicted/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
     # sleep 3
     ## 检测 helm upgrade 状态
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s >/dev/null || deploy_result=1
