@@ -14,7 +14,7 @@ _get_config() {
 
     ## get config from args
     if [ -z "$dynv6_host" ] || [ -z "$dynv6_token" ]; then
-        if [ "${#1}" -gt 0 ]; then
+        if [ -n "${1}" ]; then
             dynv6_host=${1}
             dynv6_token=${2}
             device=${3:-pppoe-wan}
