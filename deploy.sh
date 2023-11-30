@@ -867,7 +867,17 @@ _get_balance_aliyun() {
         [[ -z "$amount" ]] && continue
         _msg red "Current balance: $amount"
         if [[ $(echo "$amount < ${ENV_ALARM_ALIYUN_BALANCE:-3000}" | bc) -eq 1 ]]; then
-            msg_body="Aliyun account: $p, balance: $amount 余额过低需要充值"
+            msg_body="Aliyun account: $p, 余额: $amount 过低需要充值"
+            _notify_wechat_work $ENV_ALARM_WECHAT_KEY
+        fi
+        ## daily / 查询日账单
+        daily_cash_amount=$(
+            aliyun -p "$p" bssopenapi QueryAccountBill --BillingCycle "$(date +%Y-%m)" --BillingDate "$(date +%F -d yesterday)" --Granularity DAILY |
+                jq -r '.Data.Items.Item[].CashAmount'
+        )
+        _msg red "yesterday daily cash amount: $daily_cash_amount"
+        if [[ $(echo "$daily_cash_amount > ${ENV_ALARM_ALIYUN_DAILY:-115}" | bc) -eq 1 ]]; then
+            msg_body="Aliyun account: $p, 昨日消费金额: $daily_cash_amount 偏离日常平均值${ENV_ALARM_ALIYUN_DAILY:-115}"
             _notify_wechat_work $ENV_ALARM_WECHAT_KEY
         fi
     done
