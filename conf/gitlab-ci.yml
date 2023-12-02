@@ -1,13 +1,14 @@
 variables:
+  ## gitlab checkout 时不清理以下文件
   GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e vendor/ -e yarn.lock -e composer.lock -e .dockerignore
 
 stages:
-  - code_style
-  - code_quality
-  - test_unit
-  - build
-  - deploy
-  - test_function
+  - code_style      # 代码风格检查
+  - code_quality    # 代码质量检查
+  - test_unit       # 单元测试
+  - build           # 构建
+  - deploy          # 部署
+  - test_function   # 功能性测试
 
 cache:
   # untracked: true
@@ -72,6 +73,7 @@ deploy:
   #     - target/
   #     - dist/
   script:
+    ## 全自动运行所有步骤
     - bash deploy.sh
     # - bash $HOME/runner/deploy.sh --deploy-rsync-ssh
     # - bash $HOME/runner/deploy.sh --deploy-rsync
@@ -80,17 +82,17 @@ deploy:
   environment:
     name: ENV-${CI_COMMIT_REF_NAME}
   only:
-    - dev
     - develop
-    - test
-    - sit
+    - dev         ## 开发环境，等效于develop
     - testing
-    - uat
+    - test        ## 测试环境，等效于testing
+    - sit         ## 测试环境，等效于testing
     - release
-    - prod
-    - master
+    - uat         ## 测试环境，等效于release
     - main
-  interruptible: true
+    - prod        ## 生产环境，等效于main
+    - master      ## 生产环境，等效于main
+  interruptible: true  ## 中断任务，当有新的提交时，自动取消当前正在运行的job
 
 # test_function:
 #   stage: test_function

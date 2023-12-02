@@ -839,6 +839,7 @@ _renew_cert() {
             _msg "gitlab create pipeline, project id is $id"
             gitlab project-pipeline create --ref main --project-id $id
         done
+        rm -f "$file_reload_nginx"
     else
         _msg warn "not found $file_reload_nginx"
     fi
