@@ -88,13 +88,14 @@ _set_mirror() {
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
     elif command -v python || command -v python3; then
-        if ! command -v java; then
-            pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
-            if command -v python3; then
-                python3 -m pip config set global.index-url $pip_mirror
-            else
-                python -m pip config set global.index-url $pip_mirror
-            fi
+        if command -v java; then
+            return
+        fi
+        pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
+        if command -v python3; then
+            python3 -m pip config set global.index-url $pip_mirror
+        else
+            python -m pip config set global.index-url $pip_mirror
         fi
     fi
 }

@@ -874,7 +874,7 @@ _get_balance_aliyun() {
         ## daily / 查询日账单
         daily_cash_amount=$(
             aliyun -p "$p" bssopenapi QueryAccountBill --BillingCycle "$(date +%Y-%m)" --BillingDate "$(date +%F -d yesterday)" --Granularity DAILY |
-                jq -r '.Data.Items.Item[].CashAmount'
+                jq -r '.Data.Items.Item[].CashAmount' | sed 's/,//'
         )
         _msg red "yesterday daily cash amount: $daily_cash_amount"
         if [[ $(echo "$daily_cash_amount > ${ENV_ALARM_ALIYUN_DAILY:-115}" | bc) -eq 1 ]]; then
