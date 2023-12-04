@@ -797,7 +797,7 @@ _renew_cert() {
                 --access-key-id "${SAVED_Ali_Key:-none}" \
                 --access-key-secret "${SAVED_Ali_Secret:-none}"
             domains="$(
-                aliyun --profile "deploy_${profile_name}" domain QueryDomainList --output cols=DomainName rows=Data.Domain --PageNum 1 --PageSize 100 | sed -e '1,2d' -e '/^$/d' || true
+                aliyun --profile "deploy_${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 | jq -r '.Data.Domain[].DomainName' || true
             )"
             ;;
         dns_tencent)
@@ -827,6 +827,8 @@ _renew_cert() {
                 "${acme_cmd}" --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
             else
                 ## create cert / 创建证书
+                export Ali_Key=$SAVED_Ali_Key
+                export Ali_Secret=$SAVED_Ali_Secret
                 "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" || true
             fi
             "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem" || true
