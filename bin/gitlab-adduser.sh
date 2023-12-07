@@ -34,7 +34,7 @@ _send_msg() {
         wechat_api_key=$ENV_WEIXIN_KEY
     fi
     wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wechat_api_key}"
-    curl -fsSL "$wechat_api" -H 'Content-Type: application/json' -d '{"msgtype": "text", "text": {"content": "'$send_msg'"},"at": {"isAtAll": true}}'
+    curl -fsSL "$wechat_api" -H 'Content-Type: application/json' -d '{"msgtype": "text", "text": {"content": "'"$send_msg"'"},"at": {"isAtAll": true}}'
 }
 
 _new_element_user() {
