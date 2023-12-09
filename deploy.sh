@@ -1242,7 +1242,7 @@ _clean_disk() {
     # Log disk usage and clean up images
     _msg "$(df /)"
     _msg warning "Disk space is less than ${clean_disk_threshold}%, removing images..."
-    $build_cmd images "${ENV_DOCKER_REGISTRY}" -q | sort -u | xargs -r $build_cmd rmi -f >/dev/null || true
+    $build_cmd images "${ENV_DOCKER_REGISTRY}" | awk 'NR>1 {print $1":"$2}' | xargs $build_cmd rmi >/dev/null || true
     $build_cmd system prune -f >/dev/null || true
 }
 

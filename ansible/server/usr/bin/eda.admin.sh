@@ -159,10 +159,10 @@ _backup() {
         /eda
         /home2
     )
-    dest_dir='/volume1/nas1/backup'
+    dest_dir='/volume1/disk1/backup'
 
     pull_servers=(node11)
-    push_nas=nas
+    push_server=nas
 
     case "$1" in
     pull)
@@ -182,8 +182,8 @@ _backup() {
         for dir in "${src_dirs[@]}"; do
             test -d "$dir" || continue
             _msg log "sync $dir"
-            $ssh_opt $push_nas "[ -d $dest_dir$dir ] || mkdir -p $dest_dir$dir"
-            "${rsync_opt[@]}" -e "$ssh_opt" "$dir"/ "$push_nas:$dest_dir$dir"/
+            $ssh_opt $push_server "[ -d $dest_dir$dir ] || mkdir -p $dest_dir$dir"
+            "${rsync_opt[@]}" -e "$ssh_opt" "$dir"/ "$push_server:$dest_dir$dir"/
         done
         ;;
     *)
