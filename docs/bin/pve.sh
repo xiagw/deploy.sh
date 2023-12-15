@@ -33,7 +33,7 @@ systemctl restart pvedaemon
 # scp ~/Downloads/test.com.key /etc/pve/nodes/pve1/pve-ssl.key
 # scp ~/Downloads/test.com.pem /etc/pve/nodes/pve1/pve-ssl.pem
 # pvecm updatecerts -f
-# systemctl restart pveproxy
+# systemctl restart pvedaemon.service pveproxy.service
 # journalctl -b -u pveproxy.service
 
 ## disable subscription
@@ -48,9 +48,26 @@ apt upgrade -y
 # ssh-key
 curl -fsSL 'https://github.com/xiagw.keys' >>~/.ssh/authorized_keys
 
-## install ceph
+## install ceph 17
 # https://forum.proxmox.com/threads/installing-ceph-in-pve8-nosub-repo.131348/
+# yes | pveceph install --repository no-subscription
+## install ceph 18
 yes | pveceph install --repository no-subscription --version reef
 
 ## iso dir
 # /var/lib/pve/local-btrfs/template/iso/
+
+
+# $Installer = "qemu-ga-x86_64.msi"
+# if ([Environment]::Is64BitOperatingSystem -eq $false)
+# {
+#     $Installer = "qemu-ga-i386.msi"
+# }
+# Start-Process msiexec -ArgumentList "/I e:\GUEST-AGENT\$Installer /qn /norestart" -Wait -NoNewWindow
+
+# windows - Unattend Installation with virtio drivers doesn't activate network drivers - Stack Overflow
+# https://stackoverflow.com/questions/70234047/unattend-installation-with-virtio-drivers-doesnt-activate-network-drivers
+
+## import from ESXi
+# qm set 130 --bios ovmf
+# sed -i 's/scsi0:/sata0:/' /etc/pve/qemu-server/130.conf

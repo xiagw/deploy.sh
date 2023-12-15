@@ -365,7 +365,7 @@ _helm_new() {
         -e "/port: 80/ a \ \ port2: ${port_number2:-8081}" \
         -e "s@port: 80@port: ${port_number:-8080}@" \
         -e "s/create: true/create: false/" "$file_values"
-    sed -i -e '4 a #cnfs: cnfs-nas-pvc-www' "$file_values"
+    sed -i -e '4 a cnfs: cnfs-nas-pvc-www' "$file_values"
 
     ## change service.yaml
     sed -i -e "s@targetPort: http@targetPort: {{ .Values.service.port }}@" "$file_svc"
@@ -388,7 +388,7 @@ _helm_new() {
     sed -i -e '56 a \          {{- end }}' "$file_deploy"
     sed -i -e '57 a \          {{- if .Values.cnfs }}' "$file_deploy"
     sed -i -e '58 a \            - name: volume-cnfs' "$file_deploy"
-    sed -i -e '59 a \              mountPath: "/app"' "$file_deploy"
+    sed -i -e '59 a \              mountPath: "/app2"' "$file_deploy"
     sed -i -e '60 a \          {{- end }}' "$file_deploy"
     cat >>"$file_deploy" <<EOF
       {{- if or .Values.cnfs .Values.nas .Values.nfs }}
