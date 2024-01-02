@@ -492,7 +492,7 @@ _deploy_k8s() {
     ## 检测 helm upgrade 状态
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s >/dev/null || deploy_result=1
     if [[ "$deploy_result" -eq 1 ]]; then
-        echo "此处因为超时只设120秒，不能百分之百以此作为探测应用是否正常的依据，如遇持续错误，需要去k8s内检查容器是否正常，或者通过日志去判断"
+        echo "此处探测应用是否正常超时120秒，不能百分之百以此作为依据，如遇错误，需要去k8s内检查容器是否正常，或者通过日志去判断"
     fi
 
     if [ -f "$gitlab_project_dir/deploy.custom.sh" ]; then

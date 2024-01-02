@@ -24,7 +24,7 @@ COPY . .
 COPY ./root/ /
 RUN set -xe; \
     if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
-    ## 若此处出现错误，请检查 maven build 是否正常
+    ## 若此处出现错误表明 maven build 失败，请检查 pom.xml 配置和代码依赖关系是否正常
     if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
 
 
