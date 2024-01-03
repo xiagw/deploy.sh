@@ -68,6 +68,10 @@ yes | pveceph install --repository no-subscription --version reef
 # windows - Unattend Installation with virtio drivers doesn't activate network drivers - Stack Overflow
 # https://stackoverflow.com/questions/70234047/unattend-installation-with-virtio-drivers-doesnt-activate-network-drivers
 
+# https://pve.proxmox.com/pve-docs/pve-admin-guide.html#storage_lvmthin
+# https://pve-doc-cn.readthedocs.io/zh-cn/latest/chapter_storage/lvmthinstorage.html
+
 ## import from ESXi
 # qm set 130 --bios ovmf
 # sed -i 's/scsi0:/sata0:/' /etc/pve/qemu-server/130.conf
+# qm set 215 --bios ovmf --boot cdn --ostype win10 --agent 1 --cpu host --sata0 local-btrfs:215/vm-215-disk-0.raw --net0 virtio,bridge=vmbr0 --ide0 local-btrfs:iso/virtio-win-0.1.225.iso,media=cdrom
