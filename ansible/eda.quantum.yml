@@ -2,17 +2,17 @@
   hosts: all
   become: true
   vars:
-    username: centos
-    host_name: node11
+    user_name: centos
+    host_name: node12
     host_name_server: node11
     firewall_start: false
     firewall_rule: disable_out
     nis_server: true
     eda_home: /eda
-    itcad_home: /mnt/data/ITCAD
+    itcad_home: /home/centos/ITCAD
 
-  # roles:
-  #   - xiagw.eda
+  roles:
+    - xiagw.eda
     # - { role: xiagw.eda, nis_server: true }
     # - { role: shenxianpeng.polaris, myorg: "https://myorg.polaris.synopsys.com"}
     # - { role: foo_app_instance, dir:'/opt/a',port:5000}
