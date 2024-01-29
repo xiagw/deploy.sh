@@ -744,7 +744,7 @@ _renew_cert() {
     _msg step "[cert] renew SSL cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
-    acme_install_dest="${acme_home}/${ENV_CERT_INSTALL:-dest}"
+    acme_install_dest="${ENV_CERT_INSTALL:-${acme_home}/dest}"
     file_reload_nginx="$acme_home/reload.nginx"
 
     ## install acme.sh / 安装 acme.sh

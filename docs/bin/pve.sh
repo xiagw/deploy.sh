@@ -52,7 +52,7 @@ grep -q cen8UtnI13y $HOME/.ssh/authorized_keys ||
 # https://forum.proxmox.com/threads/installing-ceph-in-pve8-nosub-repo.131348/
 ## install ceph 17
 # yes | pveceph install --repository no-subscription
-## install ceph 18
+## install ceph 18  export http_proxy=http://192.168.41.252:1080
 yes | pveceph install --repository no-subscription --version reef
 
 ## iso dir
@@ -94,3 +94,23 @@ yes | pveceph install --repository no-subscription --version reef
 
 # for id in $(qm list | awk '/running/ {print $1}'); do qm shutdown $id; done
 # for h in zd-pve1 zd-pve2 zd-pve3; do ssh $h "reboot"; done
+
+# qemu-img resize --shrink /var/lib/pve/local-btrfs/images/209/vm-209-disk-0/disk.raw -100G && echo ok
+
+
+# sysctl -w vm.swappiness=10
+# /etc/sysctl.conf
+# vm.swappiness = 10
+# echo 3 > /proc/sys/vm/drop_caches
+# Create the file /etc/modprobe.d/zfs.conf and write memory limits in it : (for example, this is for 4G max and 1G min)
+# echo "$[1 * 1024*1024*1024 - 1]" >/sys/module/zfs/parameters/zfs_arc_min
+# echo "$[1 * 1024*1024*1024]" >/sys/module/zfs/parameters/zfs_arc_max
+# echo "options zfs zfs_arc_min=$[1 * 1024*1024*1024 - 1]" >/etc/modprobe.d/zfs.conf
+# echo "options zfs zfs_arc_max=$[1 * 1024*1024*1024]" >>/etc/modprobe.d/zfs.conf
+# update-initramfs -u -k all
+#
+# Workload Tuning — OpenZFS documentation
+# https://openzfs.github.io/openzfs-docs/Performance%20and%20Tuning/Workload%20Tuning.html#basic-concepts
+
+# zfs set dedup=on atime=off compression=lz4 zfs01
+# zfs create -o casesensitivity=insensitive zfs01/samba
