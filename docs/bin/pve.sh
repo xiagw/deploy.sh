@@ -46,9 +46,9 @@ apt install -y byobu
 apt upgrade -y
 
 # ssh-key
-grep -q cen8UtnI13y $HOME/.ssh/authorized_keys ||
-    curl -fsSL 'https://github.com/xiagw.keys' >>$HOME/.ssh/authorized_keys
-
+if ! grep -q cen8UtnI13y "$HOME"/.ssh/authorized_keys; then
+    curl -fsSL 'https://github.com/xiagw.keys' >>"$HOME"/.ssh/authorized_keys
+fi
 # https://forum.proxmox.com/threads/installing-ceph-in-pve8-nosub-repo.131348/
 ## install ceph 17
 # yes | pveceph install --repository no-subscription
@@ -96,7 +96,6 @@ yes | pveceph install --repository no-subscription --version reef
 # for h in zd-pve1 zd-pve2 zd-pve3; do ssh $h "reboot"; done
 
 # qemu-img resize --shrink /var/lib/pve/local-btrfs/images/209/vm-209-disk-0/disk.raw -100G && echo ok
-
 
 # sysctl -w vm.swappiness=10
 # /etc/sysctl.conf
