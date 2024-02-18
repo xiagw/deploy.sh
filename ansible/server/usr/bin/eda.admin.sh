@@ -147,7 +147,7 @@ _backup() {
         -az
         --backup
         --suffix=".$(date +%Y%m%d-%u-%H%M%S.%3N)"
-        --exclude={'.swp','*.log','CDS.log*','*panic.log*','matlab_crash_dump.*'}
+        --exclude={'.swp','*.log','CDS.log*','*panic.log*','matlab_crash_dump.*','.recycle'}
     )
 
     rsync_exclude=$me_path/rsync.exclude.conf

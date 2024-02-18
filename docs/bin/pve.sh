@@ -36,9 +36,13 @@ systemctl restart pvedaemon
 # systemctl restart pvedaemon.service pveproxy.service
 # journalctl -b -u pveproxy.service
 
+
+# https://dannyda.com/2020/05/17/how-to-remove-you-do-not-have-a-valid-subscription-for-this-server-from-proxmox-virtual-environment-6-1-2-proxmox-ve-6-1-2-pve-6-1-2/
 ## disable subscription 禁止注册提示信息
+# sed -i.backup -z "s/res === null || res === undefined || \!res || res\n\t\t\t.data.status.toLowerCase() \!== 'active'/false/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js && systemctl restart pveproxy.service
 sed -i -e "s/data.status.*ctive'/false/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
 sed -i 's/^/#/g' /etc/apt/sources.list.d/pve-enterprise.list
+systemctl restart pveproxy.service
 
 ## byobu and upgrade
 apt update -yq
@@ -112,4 +116,10 @@ yes | pveceph install --repository no-subscription --version reef
 # https://openzfs.github.io/openzfs-docs/Performance%20and%20Tuning/Workload%20Tuning.html#basic-concepts
 
 # zfs set dedup=on atime=off compression=lz4 zfs01
-# zfs create -o casesensitivity=insensitive zfs01/samba
+# apt install nfs-kernel-server
+
+# zfs get compression,dedup,atime,casesensitivity
+# zfs create -o compression=lz4 -o dedup=on -o atime=off -o casesensitivity=insensitive -o normalization=none
+# zfs create -o compression=lz4 -o dedup=on -o atime=off -o casesensitivity=insensitive tank/share
+# net usershare add fly /zfs01/share /zfs01/share Everyone:F
+# zfs set sharenfs='rw' tank/home
