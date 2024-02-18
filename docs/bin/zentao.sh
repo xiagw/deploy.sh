@@ -30,8 +30,8 @@ _add_account() {
 }
 
 _get_project() {
-    doing_path="${zen_project_path:-/cifs/nas/fly/projects/01-进行中}"
-    closed_path="${zen_project_path:-/cifs/nas/fly/projects/01-进行中/已关闭}"
+    doing_path="${zen_project_path:-/cifs/nas/fly/projects/02-进行中}"
+    closed_path="${doing_path}/已关闭"
     file_tmp=$(mktemp)
     ## 获取项目列表
     $curl_opt -H "token:${zen_token}" ${zen_api}/projects\?limit=1000 >"$file_tmp"
@@ -49,19 +49,21 @@ _get_project() {
         fi
         ## 是否已经存在目录
         dir_exist="$(find "$doing_path" -maxdepth 1 -iname "${project_id}-*" | head -n1)"
-        if [[ "$project_status" == 'closed' && -d "$dir_exist" ]]; then
+        if [[ "$project_status" == 'closed' ]]; then
             ## 已关闭项目，移动到已关闭目录
             mv "$doing_path/${project_id}-"* "$closed_path/"
         else
-            if [[ -d "$dir_exist" && "$dir_exist" != "${doing_path}/${dir_name}" ]]; then
-                ## 存在同id目录，修改目录名
-                mv "$dir_exist" "${doing_path}/${dir_name}"
+            if [[ -d "$dir_exist" ]]; then
+                ## 存在同id目录，修改为标准目录名
+                if [[ "$dir_exist" != "${doing_path}/${dir_name}" ]]; then
+                    mv "$dir_exist" "${doing_path}/${dir_name}"
+                fi
             else
-                ## 不存在目录，创建目录
+                ## 不存在目录，创建标准目录
                 mkdir "${doing_path}/${dir_name}"
             fi
         fi
-        # sleep 10
+        # sleep 5
     done < <(jq -r '.projects[] | (.id|tostring) + "-" + .name + ";" + .status' "$file_tmp")
     # jq -c '.projects[] | select (.status | contains("doing","closed"))' "$file_tmp" |
     #         jq -r '(.id|tostring) + "-" + .name + ";" + .status'
