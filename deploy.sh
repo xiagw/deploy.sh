@@ -744,15 +744,16 @@ _renew_cert() {
     _msg step "[cert] renew SSL cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
-    acme_install_dest="${ENV_CERT_INSTALL:-${acme_home}/dest}"
+    acme_cert_dest="${ENV_CERT_INSTALL:-${acme_home}/dest}"
     file_reload_nginx="$acme_home/reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
+        _install_cron
         curl https://get.acme.sh | bash -s email=deploy@deploy.sh
     fi
 
-    [ -d "$acme_install_dest" ] || mkdir -p "$acme_install_dest"
+    [ -d "$acme_cert_dest" ] || mkdir -p "$acme_cert_dest"
 
     run_touch_file="$acme_home/hook.sh"
     echo "touch ${file_reload_nginx}" >"$run_touch_file"
@@ -834,7 +835,7 @@ _renew_cert() {
                 export Ali_Secret=$SAVED_Ali_Secret
                 "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" || true
             fi
-            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_install_dest/${domain}.key" --fullchain-file "$acme_install_dest/${domain}.pem" || true
+            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
         done
     done
     ## deploy with gitlab CI/CD,
@@ -1075,6 +1076,13 @@ _install_podman() {
     _msg info "installing podman"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq podman >/dev/null
+}
+
+_install_cron() {
+    command -v crontab &>/dev/null && return
+    _msg info "installing cron"
+    $use_sudo apt-get update -qq
+    $use_sudo apt-get install -yqq cron >/dev/null
 }
 
 _is_china() {
@@ -1845,6 +1853,7 @@ main() {
     ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
     ${ENV_INSTALL_DOCKER:-false} && _install_docker
     ${ENV_INSTALL_PODMAN:-false} && _install_podman
+    ${ENV_INSTALL_CRON:-false} && _install_cron
 
     ## clean up disk space / 清理磁盘空间
     _clean_disk
