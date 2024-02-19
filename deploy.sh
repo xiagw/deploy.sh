@@ -749,7 +749,7 @@ _renew_cert() {
 
     ## install acme.sh / 安装 acme.sh
     if [[ ! -x "${acme_cmd}" ]]; then
-        curl https://get.acme.sh | bash -s email=deploy@deploy.sh --home ${me_path_data}/.acmd.sh
+        curl https://get.acme.sh | bash -s email=deploy@deploy.sh
     fi
 
     [ -d "$acme_install_dest" ] || mkdir -p "$acme_install_dest"
