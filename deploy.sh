@@ -879,7 +879,7 @@ _get_balance_aliyun() {
         fi
         ## daily / 查询日账单
         daily_cash_amount=$(
-            aliyun -p "$p" bssopenapi QueryAccountBill --BillingCycle "$(date +%Y-%m)" --BillingDate "$(date +%F -d yesterday)" --Granularity DAILY |
+            aliyun -p "$p" bssopenapi QueryAccountBill --BillingCycle "$(date +%Y-%m -d yesterday)" --BillingDate "$(date +%F -d yesterday)" --Granularity DAILY |
                 jq -r '.Data.Items.Item[].CashAmount' | sed 's/,//'
         )
         _msg red "yesterday daily cash amount: $daily_cash_amount"

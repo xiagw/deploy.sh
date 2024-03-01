@@ -28,3 +28,21 @@ ceccnode11
 lingniao1
 lingniao2
 lingniao3
+
+[xray_server]
+hk-aly1
+hk-qq2
+# fly-hk
+# hk-aly3
+[xray_server:vars]
+# ansible_ssh_user="root"
+ansible_python_interpreter=/usr/bin/python3
+
+[xray_client]
+local ansible_ssh_host=127.0.0.1 ansible_connection=local
+# home-10
+# home-11
+# home-12
+[xray_client:vars]
+# ansible_python_interpreter=/usr/local/bin/python3
+ansible_python_interpreter=/usr/bin/python3
