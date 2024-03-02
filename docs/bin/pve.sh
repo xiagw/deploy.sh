@@ -10,11 +10,13 @@
 sed -i 's|^deb http://ftp.debian.org|deb https://mirrors.ustc.edu.cn|g' /etc/apt/sources.list
 sed -i 's|^deb http://security.debian.org|deb https://mirrors.ustc.edu.cn/debian-security|g' /etc/apt/sources.list
 
-# 修改 Proxmox 的源文件，可以使用如下命令：
+## 修改 Proxmox 的源文件，可以使用如下命令：
 source /etc/os-release
 echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pve $VERSION_CODENAME pve-no-subscription" >/etc/apt/sources.list.d/pve-no-subscription.list
-# 对于 Proxmox Backup Server 和 Proxmox Mail Gateway，请将以上命令中的 pve 分别替换为 pbs 和 pmg。
-# PVE 8 之后默认安装 ceph 仓库源文件 /etc/apt/sources.list.d/ceph.list，可以使用如下命令更换源：
+## 对于 Proxmox Backup Server 和 Proxmox Mail Gateway，请将以上命令中的 pve 分别替换为 pbs 和 pmg。
+# echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pbs $VERSION_CODENAME pbs-no-subscription" >/etc/apt/sources.list.d/pbs-no-subscription.list
+# echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pmg $VERSION_CODENAME pmg-no-subscription" >/etc/apt/sources.list.d/pmg-no-subscription.list
+## PVE 8 之后默认安装 ceph 仓库源文件 /etc/apt/sources.list.d/ceph.list，可以使用如下命令更换源：
 if [ -f /etc/apt/sources.list.d/ceph.list ]; then
     CEPH_CODENAME=$(ceph -v | grep ceph | awk '{print $(NF-1)}')
     source /etc/os-release
@@ -29,19 +31,11 @@ sed -i 's|http://download.proxmox.com|https://mirrors.ustc.edu.cn/proxmox|g' /us
 # 针对 /usr/share/perl5/PVE/APLInfo.pm 文件的修改，执行`systemctl restart pvedaemon`后生效。
 systemctl restart pvedaemon
 
-## ssl cert
-# scp ~/Downloads/test.com.key /etc/pve/nodes/pve1/pveproxy-ssl.key
-# scp ~/Downloads/test.com.pem /etc/pve/nodes/pve1/pveproxy-ssl.pem
-# pvecm updatecerts -f
-# systemctl restart pvedaemon.service pveproxy.service
-# journalctl -b -u pveproxy.service
-
-
 # https://dannyda.com/2020/05/17/how-to-remove-you-do-not-have-a-valid-subscription-for-this-server-from-proxmox-virtual-environment-6-1-2-proxmox-ve-6-1-2-pve-6-1-2/
 ## disable subscription 禁止注册提示信息
 # sed -i.backup -z "s/res === null || res === undefined || \!res || res\n\t\t\t.data.status.toLowerCase() \!== 'active'/false/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js && systemctl restart pveproxy.service
 sed -i -e "s/data.status.*ctive'/false/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
-sed -i 's/^/#/g' /etc/apt/sources.list.d/pve-enterprise.list
+sed -i -e 's/^/#/g' /etc/apt/sources.list.d/pve-enterprise.list
 systemctl restart pveproxy.service
 
 ## byobu and upgrade
@@ -58,6 +52,13 @@ fi
 # yes | pveceph install --repository no-subscription
 ## install ceph 18  export http_proxy=http://192.168.41.252:1080
 yes | pveceph install --repository no-subscription --version reef
+
+## ssl cert
+# scp ~/Downloads/test.com.key /etc/pve/nodes/pve1/pveproxy-ssl.key
+# scp ~/Downloads/test.com.pem /etc/pve/nodes/pve1/pveproxy-ssl.pem
+# pvecm updatecerts -f
+# systemctl restart pvedaemon.service pveproxy.service
+# journalctl -b -u pveproxy.service
 
 ## iso dir
 # /var/lib/pve/local-btrfs/template/iso/
