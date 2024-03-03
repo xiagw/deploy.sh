@@ -836,6 +836,7 @@ _renew_cert() {
                 "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" || true
             fi
             "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
+            "${acme_cmd}" -d "${domain}" --install-cert --key-file "${acme_home}/dest/${domain}.key" --fullchain-file "${acme_home}/dest/${domain}.pem" || true
         done
     done
     ## deploy with gitlab CI/CD,

@@ -51,7 +51,7 @@ _get_project() {
         dir_exist="$(find "$doing_path" -maxdepth 1 -iname "${project_id}-*" | head -n1)"
         if [[ "$project_status" == 'closed' ]]; then
             ## 已关闭项目，移动到已关闭目录
-            mv "$doing_path/${project_id}-"* "$closed_path/"
+            mv "$doing_path/${project_id}-"* "$closed_path/" 2>/dev/null
         else
             if [[ -d "$dir_exist" ]]; then
                 ## 存在同id目录，修改为标准目录名
