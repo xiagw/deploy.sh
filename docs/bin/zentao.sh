@@ -25,7 +25,7 @@ _add_account() {
     read -rp "请输入用户姓名: " user_realname
     read -rp "请输入账号: " user_account
     user_password=$(LC_CTYPE=C tr -dc A-Za-z0-9_ </dev/urandom | head -c 16)
-    echo "$user_realname / $user_account / $user_password" >>"$me_log"
+    echo "$user_realname / $user_account / $user_password" | tee -a "$me_log"
     $curl_opt -H "token:${zen_token}" ${zen_api}/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${user_password:?}"'", "group": "1", "gender": "m"}'
 }
 
@@ -34,11 +34,24 @@ _get_project() {
     closed_path="${doing_path}/已关闭"
     file_tmp=$(mktemp)
     ## 获取项目列表
-    $curl_opt -H "token:${zen_token}" ${zen_api}/projects\?limit=1000 >"$file_tmp"
+    $curl_opt -H "token:${zen_token}" "${zen_api}/projects?limit=1000" >"$file_tmp"
+    # echo "Total projects: $(jq -r '.total' "$file_tmp")"
+
     while read -r line; do
         dir_name="${line%;*}"
         project_id=$(echo "$line" | cut -d '-' -f 1)
         project_status=$(echo "$line" | cut -d ';' -f 2)
+        ## 排除 id
+        unset skip_id
+        for id in "${zen_project_exclude[@]}"; do
+            if [[ "${project_id}" -eq "$id" ]]; then
+                skip_id=1
+                break
+            fi
+        done
+        if [[ -n "$skip_id" ]]; then
+            continue
+        fi
         ## 不足3位数前面补0
         if [[ "${#project_id}" -eq 1 ]]; then
             dir_name="00$dir_name"

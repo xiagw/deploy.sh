@@ -124,3 +124,18 @@ yes | pveceph install --repository no-subscription --version reef
 # zfs create -o compression=lz4 -o dedup=on -o atime=off -o casesensitivity=insensitive tank/share
 # net usershare add fly /zfs01/share /zfs01/share Everyone:F
 # zfs set sharenfs='rw' tank/home
+
+## 修改cluster IP
+# https://gist.github.com/matissime/ee7b5d1e937e751a97b0013caab24915
+# systemctl stop corosync pve-cluster
+
+# pmxcfs -l
+
+# Edit your corosync on a newly created file:
+# vi /etc/pve/corosync.conf
+
+# killall pmxcfs
+
+# systemctl start pve-cluster corosync
+
+# reboot
