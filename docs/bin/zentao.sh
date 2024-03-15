@@ -49,7 +49,7 @@ _get_project() {
                 break
             fi
         done
-        if [[ -n "$skip_id" ]]; then
+        if [[ "$skip_id" -eq 1 ]]; then
             continue
         fi
         ## 不足3位数前面补0
@@ -64,7 +64,11 @@ _get_project() {
         dir_exist="$(find "$doing_path" -maxdepth 1 -iname "${project_id}-*" | head -n1)"
         if [[ "$project_status" == 'closed' ]]; then
             ## 已关闭项目，移动到已关闭目录
-            mv "$doing_path/${project_id}-"* "$closed_path/" 2>/dev/null
+            if [ -z "$(ls -A "$doing_path/${project_id}-"*)" ]; then
+                rmdir "$doing_path/${project_id}-"*
+            else
+                mv "$doing_path/${project_id}-"* "$closed_path/" 2>/dev/null
+            fi
         else
             if [[ -d "$dir_exist" ]]; then
                 ## 存在同id目录，修改为标准目录名
