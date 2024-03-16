@@ -215,6 +215,23 @@ _reload_conf() {
 # ssh root@"$host" "systemctl restart wg-quick@wg0"
 # wg genkey | tee privatekey | wg pubkey > publickey; cat privatekey publickey; rm privatekey publickey
 
+_update_ddns() {
+    if [ "$(id -u)" -eq 0 ]; then
+        unset use_sudo
+    else
+        use_sudo=sudo
+    fi
+
+    for wg_interface in $($use_sudo wg show interfaces); do
+        while read -r line; do
+            read -r -a array <<<"$line"
+            sudo wg set "$wg_interface" peer "${array[0]}" endpoint "${array[1]}"
+        done < <($use_sudo wg show "$wg_interface" endpoints)
+    done
+    $use_sudo wg show all dump
+    $use_sudo wg show all latest-handshakes
+}
+
 main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_name="$(basename "$0")"
@@ -230,6 +247,7 @@ What do you want to do?
     3) Upload conf and reload (client/server)
     4) Convert conf to qrcode
     5) Revoke client/server conf
+    6) Update DDNS
     6) Quit
 "
     until [[ ${MENU_OPTION} =~ ^[1-6]$ ]]; do
@@ -241,6 +259,7 @@ What do you want to do?
     3) _reload_conf ;;
     4) _get_qrcode ;;
     5) _revoke_client ;;
+    6) _update_ddns ;;
     *)
         echo "Invalid option: $MENU_OPTION"
         exit 0
