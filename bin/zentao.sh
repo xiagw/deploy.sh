@@ -95,8 +95,8 @@ main() {
     fi
     me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
-    me_log="$me_path/../../data/$me_name.log"
-    me_conf="$me_path/../../data/$me_name.env"
+    me_log="$me_path/../data/$me_name.log"
+    me_conf="$me_path/../data/$me_name.env"
     curl_opt='curl -fsSL'
 
     _get_token

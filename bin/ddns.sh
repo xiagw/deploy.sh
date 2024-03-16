@@ -64,7 +64,7 @@ _get_ip_current() {
 # ip6_current=$ip6_current/${netmask:-128}
 _compare_ip() {
     if [ "$ip6_last" = "$ip6_current" ] && [ "$ip4_last" = "$ip4_current" ]; then
-        echo "IPv4/IPv6 address unchanged"
+        echo "IPv4: $ip4_current / IPv6: $ip6_current address unchanged"
         if [ "$1" = force ]; then
             echo "force update"
             return 1

@@ -235,7 +235,7 @@ _update_ddns() {
 main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_name="$(basename "$0")"
-    me_data="${me_path}/../../data/wireguard"
+    me_data="${me_path}/../data/wireguard"
     # me_data="${me_path}/wireguard"
     me_log="${me_data}/${me_name}.log"
     [ -d "$me_data" ] || mkdir -p "$me_data"
