@@ -45,7 +45,7 @@ _set_peer2peer() {
         _msg green "### is new key..."
     ## 不是新建的client，需要选择已存在的client
     else
-        _msg green "### Please select <<<<<< CLIENT <<<<<< conf..."
+        _msg green "### Select exist conf..."
         select client_conf in $me_data/wg*.conf quit; do
             [[ "$client_conf" == 'quit' ]] && exit
             break
@@ -54,23 +54,25 @@ _set_peer2peer() {
         client_key_pre="$(awk '/PresharedKey/ {print $4}' "$client_conf" | head -n 1)"
         client_ip_public="$(awk '/^### public_ip:/ {print $3}' "$client_conf" | head -n 1)"
         client_ip_pri="$(awk '/^Address/ {print $3}' "$client_conf" | head -n 1)"
-        client_ip_pri="${client_ip_pri%/24}"
+        client_ip_pri="${client_ip_pri%/24*}"
+        client_ip6_pri="$(awk '/^Address/ {print $4}' "$client_conf" | head -n 1)"
+        client_ip6_pri="${client_ip6_pri%/64*}"
         client_ip_port="$(awk '/^ListenPort/ {print $3}' "$client_conf" | head -n 1)"
     fi
     ## select server
-    _msg red "### Please select >>>>>> SERVER >>>>>> side conf"
+    _msg red "### Select >>>>>> SERVER >>>>>> side conf"
     # select svr_conf in $me_data/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
     select svr_conf in $me_data/wg*.conf quit; do
         [[ "$svr_conf" == 'quit' ]] && break
         svr_key_pub="$(awk '/^### public_key:/ {print $3}' "$svr_conf" | head -n 1)"
         svr_ip_pub="$(awk '/^### public_ip:/ {print $3}' "$svr_conf" | head -n 1)"
         svr_ip_pri="$(awk '/^Address/ {print $3}' "$svr_conf" | head -n 1)"
-        svr_ip_pri=${svr_ip_pri%/24}
+        svr_ip_pri=${svr_ip_pri%/24*}
+        svr_ip6_pri="$(awk '/^Address/ {print $4}' "$svr_conf" | head -n 1)"
+        svr_ip6_pri=${svr_ip6_pri%/64*}
         svr_ip_port="$(awk '/^ListenPort/ {print $3}' "$svr_conf" | head -n 1)"
-        read -rp "Set route(client-to-server): [192.168.1.0/24,172.16.0.0/16] " read_ip_route
-        _msg red "From: >>>>>> $svr_conf >>>>>> "
-        _msg green "To: <<<<<< $client_conf <<<<<< "
-        _msg green "generate client conf... $client_conf"
+        read -rp "Set route(client-to-server): [192.168.1.0/24, 172.16.0.0/16] " read_ip_route
+        _msg red "From: $svr_conf to $client_conf "
         if ! grep -q "### ${svr_conf##*/} begin" "$client_conf"; then
             (
                 echo ""
@@ -80,16 +82,16 @@ _set_peer2peer() {
                 echo "# PresharedKey = $client_key_pre"
                 echo "endpoint = $svr_ip_pub:$svr_ip_port"
                 if [[ -z ${read_ip_route} ]]; then
-                    echo "AllowedIPs = ${svr_ip_pri}/32"
+                    echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128"
                 else
-                    echo "AllowedIPs = ${svr_ip_pri}/32, ${read_ip_route}"
+                    echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128, ${read_ip_route}"
                 fi
                 echo "PersistentKeepalive = 60"
                 echo "### ${svr_conf##*/} end"
                 echo ""
             ) >>"$client_conf"
         fi
-        echo "set from <<<<<< $client_conf to >>>>>> $svr_conf..."
+        _msg green "From $client_conf to $svr_conf"
         if ! grep -q "### ${client_conf##*/} begin" "$svr_conf"; then
             (
                 echo ""
@@ -97,7 +99,7 @@ _set_peer2peer() {
                 echo "[Peer]"
                 echo "PublicKey = $client_key_pub"
                 echo "# PresharedKey = $client_key_pre"
-                echo "AllowedIPs = ${client_ip_pri}/32"
+                echo "AllowedIPs = ${client_ip_pri}/32, ${svr_ip6_pri}/128"
                 echo "### ${client_conf##*/} end"
                 echo ""
             ) >>"$svr_conf"
@@ -109,6 +111,7 @@ _new_key() {
     # ip_prefix="10.10.10."
     # port_prefix="40000"
     ip_prefix="10.9.0."
+    ip6_prefix="fd00:9::"
     port_prefix="39000"
     client_num="${1:-20}"
     client_conf="$me_data/wg${client_num}.conf"
@@ -120,30 +123,34 @@ _new_key() {
         client_num=$((client_num + 1))
         client_conf="$me_data/wg${client_num}.conf"
     done
-    _msg green "client IP: $ip_prefix${client_num}, filename: $client_conf"
-    read -rp "Who use this file? (username or hostname): " -e -i "host${client_num}" client_comment
-    read -rp 'Input public IP (Empty for client behind NAT): ' -e -i "wg${client_num}.vpn.lan" client_ip_public
+    _msg green "Generate: $client_conf , client IP: $ip_prefix${client_num}, $ip6_prefix${client_num}"
+    read -rp "Comment? (Options: username or hostname): " -e -i "host${client_num}" client_comment
+    read -rp 'Public IP (Options: as wg server): ' -e -i "wg${client_num}.vpn.lan" client_ip_public
+
     client_ip_pri="$ip_prefix${client_num}"
+    client_ip6_pri="$ip6_prefix${client_num}"
     client_ip_port="$((client_num + port_prefix))"
     client_key_pri="$(wg genkey)"
     client_key_pub="$(echo "$client_key_pri" | wg pubkey)"
     client_key_pre="$(wg genpsk)"
+
     cat >"$client_conf" <<EOF
 
 ### ${client_conf##*/} $client_comment
 [Interface]
 PrivateKey = $client_key_pri
-Address = $client_ip_pri/24
+Address = $client_ip_pri/24, $client_ip6_pri/64
 ListenPort = $client_ip_port
 ### PresharedKey = $client_key_pre
 ### public_key: $client_key_pub
 ### public_ip: $client_ip_public
-## DNS = 192.168.1.1, 8.8.8.8, 8.8.4.4, 114.114.114.114
+## DNS = 192.168.1.1, 8.8.8.8, 8.8.4.4, 1.0.0.1, 1.1.1.1, 114.114.114.114
 ## MTU = 1420
 ## PostUp   = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 ## PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 
 EOF
+    ## set peer 2 peer
     new_key_flag=1
     _set_peer2peer
 }
@@ -167,13 +174,14 @@ _get_qrcode() {
 }
 
 _revoke_client() {
-    _msg green "Please select client conf (revoke it)."
+    _msg green "Select client conf (revoke it)."
     select conf in $me_data/wg*.conf quit; do
         [[ "$conf" == 'quit' ]] && break
-        _msg green "(Have selected $conf)"
+        _msg green "Selected: $conf"
+        _msg yellow "revoke ${conf##*/} from all conf."
         sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$me_data"/wg*.conf
+        _msg yellow "remove $conf."
         rm -f "$conf"
-        _msg yellow "revoke $conf done."
         _msg red "!!! DONT forget update conf to Server/Client and reload"
         break
     done
@@ -225,7 +233,13 @@ _update_ddns() {
     for wg_interface in $($use_sudo wg show interfaces); do
         while read -r line; do
             read -r -a array <<<"$line"
-            sudo wg set "$wg_interface" peer "${array[0]}" endpoint "${array[1]}"
+            wg_peer=${array[0]}
+            wg_endpoint=$(
+                $use_sudo wg-quick strip wg0 | grep -A5 "$wg_peer" |
+                    grep -v '^#' | awk '/[Ee]ndpoint/ {print $3}'
+            )
+            # wg_endpoint=${array[1]}
+            sudo wg set "$wg_interface" peer "${wg_peer}" endpoint "${wg_endpoint}"
         done < <($use_sudo wg show "$wg_interface" endpoints)
     done
     $use_sudo wg show all dump
@@ -240,6 +254,11 @@ main() {
     me_log="${me_data}/${me_name}.log"
     [ -d "$me_data" ] || mkdir -p "$me_data"
 
+    if [[ "$1" = u ]]; then
+        _update_ddns
+        return
+    fi
+
     echo "
 What do you want to do?
     1) New key (key for client/server)
@@ -248,7 +267,7 @@ What do you want to do?
     4) Convert conf to qrcode
     5) Revoke client/server conf
     6) Update DDNS
-    6) Quit
+    7) Quit
 "
     until [[ ${MENU_OPTION} =~ ^[1-6]$ ]]; do
         read -rp "Select an option [1-6]: " MENU_OPTION
