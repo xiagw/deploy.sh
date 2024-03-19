@@ -69,9 +69,11 @@ _get_aliyun_profile() {
         jq -c ".profiles[] | select (.name == \"$profile\")" "$HOME"/.aliyun/config.json |
             jq -r '.region_id'
     )
+
     [ -z "$aliyun_profile" ] && read -rp "Aliyun profile name: " aliyun_profile
     [ -z "$aliyun_region" ] && read -rp "Aliyun profile name: " aliyun_region
-    aliyun_cli="$cmd_a -p $aliyun_profile"
+
+    aliyun_cli="$cmd_aliyun -p $aliyun_profile"
 }
 
 _get_resource() {
@@ -133,12 +135,10 @@ _dns_record() {
 }
 
 _remove_nas() {
-    select profile in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
-        _msg "aliyun-cli profile is: $profile"
-        break
-    done
+    _get_aliyun_profile
+
     select filesys_id in $(
-        $cmd_a -p "$profile" nas DescribeFileSystems |
+        $aliyun_cli nas DescribeFileSystems |
             jq -r '.FileSystems.FileSystem[].FileSystemId'
     ); do
         _msg "file_system_id is: $filesys_id"
@@ -146,18 +146,18 @@ _remove_nas() {
     done
 
     select mount_id in $(
-        $cmd_a -p "$profile" nas DescribeFileSystems --FileSystemId "$filesys_id" |
+        $aliyun_cli nas DescribeFileSystems --FileSystemId "$filesys_id" |
             jq -r '.FileSystems.FileSystem[].MountTargets.MountTarget[].MountTargetDomain'
     ); do
         _msg "file system mount id is: $mount_id"
         break
     done
 
-    $cmd_a -p "$profile" nas DeleteMountTarget --FileSystemId "$filesys_id" --MountTargetDomain "$mount_id"
+    $aliyun_cli nas DeleteMountTarget --FileSystemId "$filesys_id" --MountTargetDomain "$mount_id"
 
     unset sleeps
     until [[ "${sleeps:-0}" -gt 300 ]]; do
-        if $cmd_a -p "$profile" nas DescribeFileSystems --FileSystemId "$filesys_id" |
+        if $aliyun_cli nas DescribeFileSystems --FileSystemId "$filesys_id" |
             jq -r '.FileSystems.FileSystem[].MountTargets.MountTarget[].MountTargetDomain' |
             grep "nas.aliyuncs.com"; then
             ((++sleeps))
@@ -167,7 +167,7 @@ _remove_nas() {
         fi
     done
 
-    $cmd_a -p "$profile" nas DeleteFileSystem --FileSystemId "$filesys_id"
+    $aliyun_cli nas DeleteFileSystem --FileSystemId "$filesys_id"
 }
 
 _add_rds_account() {
@@ -199,7 +199,7 @@ _add_rds_account() {
     # ALTER USER 'huxinye2'@'%' IDENTIFIED WITH mysql_native_password  BY 'xx';
     # revoke all on abc5.* from abc5; drop user abc5; drop database abc5;
     ## RDS IP 白名单
-    # aliyun rds ModifySecurityIps --region "$aliyun_region" --DBInstanceId 'rm-xx' --DBInstanceIPArrayName mycustomer --SecurityIps '10.23.1.1'
+    # $aliyun_cli rds ModifySecurityIps --region "$aliyun_region" --DBInstanceId 'rm-xx' --DBInstanceIPArrayName mycustomer --SecurityIps '10.23.1.1'
 }
 
 _get_node_pod_numbers() {
@@ -207,7 +207,7 @@ _get_node_pod_numbers() {
     ## 节点数量日常固定值
     node_fixed_num=5
     ## 获取节点信息和数量
-    readarray -t node_name < <($cmd_k get nodes -o name)
+    readarray -t node_name < <($kubectl_cli get nodes -o name)
     node_before_num="${#node_name[*]}"
     ## 实际节点数 = 所有节点数 - 虚拟节点 1 个 (virtual-kubelet-cn-hangzhou-k)
     pod_before_num=$((node_before_num - 1))
@@ -216,14 +216,15 @@ _get_node_pod_numbers() {
 
 _get_cluster_info() {
     ## cluster name "flyh6-com"
+
     cluster_id="$(
-        $cmd_a -p "${aliyun_profile6:?empty}" cs GET /api/v1/clusters --header "Content-Type=application/json;" --body "{}" |
+        $aliyun_cli cs GET /api/v1/clusters --header "Content-Type=application/json;" --body "{}" |
             jq -c '.clusters[] | select (.name | contains("flyh6-com"))' |
             jq -r '.cluster_id'
     )"
     ## node pool name "auto4"
     nodepool_id="$(
-        $cmd_a -p "${aliyun_profile6:?empty}" cs GET /clusters/"$cluster_id"/nodepools --header "Content-Type=application/json;" --body "{}" |
+        $aliyun_cli cs GET /clusters/"$cluster_id"/nodepools --header "Content-Type=application/json;" --body "{}" |
             jq -c '.nodepools[].nodepool_info | select (.name | contains("auto4"))' |
             jq -r '.nodepool_id'
     )"
@@ -244,13 +245,13 @@ _scale_up() {
     _get_cluster_info
     ## 扩容节点 x 个 ECS
     _msg log "nodes scale to number: $node_after_num"
-    $cmd_a -p "${aliyun_profile6:?empty}" cs POST /clusters/"$cluster_id"/nodepools/"$nodepool_id" \
+    $aliyun_cli cs POST /clusters/"$cluster_id"/nodepools/"$nodepool_id" \
         --header "Content-Type=application/json;" \
         --body "{\"count\": $node_scale_num}"
 
     ## 等待节点就绪 / node ready
     unset sleeps
-    until [[ "$($cmd_k get nodes | grep -cw Ready)" = "$node_after_num" ]]; do
+    until [[ "$($kubectl_cli get nodes | grep -cw Ready)" = "$node_after_num" ]]; do
         ((++sleeps))
         if [[ ${sleeps:-0} -ge 300 ]]; then
             _msg "FAIL to get node Ready, timeout exit"
@@ -258,7 +259,7 @@ _scale_up() {
         fi
         sleep 2
     done
-    $cmd_k get nodes -o name | tee -a "$me_log"
+    $kubectl_cli get nodes -o name | tee -a "$me_log"
     sleep 10
 
     ## 扩容 pod
@@ -266,7 +267,7 @@ _scale_up() {
         scale=$((pod_before_num + 1))
         while [[ $scale -le $pod_after_num ]]; do
             _msg log "$deployment scale to number: $scale"
-            $cmd_km scale --replicas="${scale}" deploy "$deployment"
+            $kubectl_clim scale --replicas="${scale}" deploy "$deployment"
             sleep 10
             scale=$((scale + 1))
         done
@@ -277,7 +278,7 @@ _scale_up() {
     ## 等待容器就绪 / pod ready
     sleeps=0
     for deployment in "${deployments[@]}"; do
-        until [[ $($cmd_km get pods | grep -cw "$deployment") = "$pod_after_num" ]]; do
+        until [[ $($kubectl_clim get pods | grep -cw "$deployment") = "$pod_after_num" ]]; do
             ((++sleeps))
             if [[ ${sleeps:-0} -ge 300 ]]; then
                 _msg "FAIL to get pod Ready, timeout exit"
@@ -294,11 +295,11 @@ _scale_up() {
     ## 禁止分配容器到新节点 / kubectl cordon new nodes
     _msg "kubectl cordon new nodes..."
     sleep 30
-    for new in $($cmd_k get nodes -o name); do
+    for new in $($kubectl_cli get nodes -o name); do
         if echo "${node_name[@]}" | grep "$new"; then
             _msg skip
         else
-            $cmd_k cordon "$new"
+            $kubectl_cli cordon "$new"
         fi
     done
     rm -f $lock_file
@@ -322,14 +323,14 @@ _scale_down() {
     ## 缩容 pod
     for deployment in "${deployments[@]}"; do
         _msg log "$deployment scale to number: $pod_after_num"
-        $cmd_km scale --replicas=$pod_after_num deploy "$deployment"
+        $kubectl_clim scale --replicas=$pod_after_num deploy "$deployment"
         sleep 5
     done
 
     _get_cluster_info
     ## 缩容节点 x 个 ECS
     _msg log "nodes scale to number: $node_after_num"
-    $cmd_a -p "${aliyun_profile6:?empty}" cs POST /clusters/"$cluster_id"/nodepools/"$nodepool_id" \
+    $aliyun_cli cs POST /clusters/"$cluster_id"/nodepools/"$nodepool_id" \
         --header "Content-Type=application/json;" \
         --body "{\"count\": -${node_scale_num:-2}}"
 
@@ -348,7 +349,7 @@ _check_php_load() {
     php_mem_normal=$((pod_before_num * 500))
     ## 对 php pod 的 cpu/mem 求和
     readarray -d " " -t cpu_mem < <(
-        $cmd_km top pod -l app.kubernetes.io/name=fly-php71 |
+        $kubectl_clim top pod -l app.kubernetes.io/name=fly-php71 |
             awk 'NR>1 {s+=int($2); ss+=int($3)} END {printf "%d %d", s, ss}'
     )
     ## 超载/扩容 业务超载
@@ -365,13 +366,13 @@ _check_php_load() {
 
     if ${need_scale_up:-false}; then
         _msg log "detected Overload, recommend scale up ${node_scale_num}"
-        $cmd_km top pod -l app.kubernetes.io/name=fly-php71 | tee -a "$me_log"
+        $kubectl_clim top pod -l app.kubernetes.io/name=fly-php71 | tee -a "$me_log"
         #_scale_up ${node_scale_num}
     fi
 
     if ${need_scale_down:-false}; then
         _msg log "detected Normal load, recommend scale down ${node_scale_num}"
-        $cmd_km top pod -l app.kubernetes.io/name=fly-php71 | tee -a "$me_log"
+        $kubectl_clim top pod -l app.kubernetes.io/name=fly-php71 | tee -a "$me_log"
         #_scale_down ${node_scale_num}
     fi
 }
@@ -382,7 +383,7 @@ _pay_cdn_bag() {
     aliyun_region=cn-hangzhou
     ## 在线查询CDN资源包剩余量
     cdn_amount=$(
-        $cmd_a -p "${aliyun_profile6:?empty}" bssopenapi QueryResourcePackageInstances --region "$aliyun_region" --ProductCode dcdn |
+        $aliyun_cli bssopenapi QueryResourcePackageInstances --region "$aliyun_region" --ProductCode dcdn |
             jq '.Data.Instances.Instance[]' |
             jq -r 'select(.RemainingAmount != "0" and .RemainingAmountUnit != "GB" and .RemainingAmountUnit != "次" ) | .RemainingAmount' |
             awk '{s+=$1} END {printf "%f", s}'
@@ -404,7 +405,7 @@ _pay_cdn_bag() {
     fi
 
     balance="$(
-        $cmd_a -p "${aliyun_profile6:?empty}" bssopenapi QueryAccountBalance |
+        $aliyun_cli bssopenapi QueryAccountBalance |
             jq -r '.Data.AvailableAmount' |
             awk '{gsub(/,/,""); print int($0)}'
     )"
@@ -426,13 +427,13 @@ _pay_cdn_bag() {
     done
 
     _msg log "[dcdn] remain: ${cdn_amount:-0}TB, pay bag $((spec / spec_unit))TB ..."
-    $cmd_a -p "${aliyun_profile6:?empty}" bssopenapi CreateResourcePackage --region "$aliyun_region" --ProductCode dcdn \
+    $aliyun_cli bssopenapi CreateResourcePackage --region "$aliyun_region" --ProductCode dcdn \
         --PackageType FPT_dcdnpaybag_deadlineAcc_1541405199 \
         --Duration 1 --PricingCycle Year --Specification "$spec"
 }
 
 _add_ram() {
-    set -e
+    # set -e
     if _get_yes_no "Add new Aliyun profile?"; then
         ## 配置阿里云账号
         read -rp "Aliyun region: " aliyun_region
@@ -453,15 +454,15 @@ _add_ram() {
         _get_random_password
         ## 创建帐号, 设置密/码
         acc_name=dev2app
-        aliyun -p "$aliyun_profile" ram CreateUser --DisplayName $acc_name --UserName $acc_name | tee -a "$me_log"
-        aliyun -p "$aliyun_profile" ram CreateLoginProfile --UserName $acc_name --Password "$password_rand" --PasswordResetRequired false | tee -a "$me_log"
+        $aliyun_cli ram CreateUser --DisplayName $acc_name --UserName $acc_name | tee -a "$me_log"
+        $aliyun_cli ram CreateLoginProfile --UserName $acc_name --Password "$password_rand" --PasswordResetRequired false | tee -a "$me_log"
         ## 为新帐号授权 oss
-        aliyun -p "$aliyun_profile" ram AttachPolicyToUser --PolicyName AliyunOSSFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
+        $aliyun_cli ram AttachPolicyToUser --PolicyName AliyunOSSFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
         ## 为新帐号授权 domain dns
-        aliyun -p "$aliyun_profile" ram AttachPolicyToUser --PolicyName AliyunDomainFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
-        aliyun -p "$aliyun_profile" ram AttachPolicyToUser --PolicyName AliyunDNSFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
+        $aliyun_cli ram AttachPolicyToUser --PolicyName AliyunDomainFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
+        $aliyun_cli ram AttachPolicyToUser --PolicyName AliyunDNSFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
         ## 为新帐号创建 key
-        aliyun -p "$aliyun_profile" ram CreateAccessKey --UserName $acc_name | tee -a "$me_log"
+        $aliyun_cli ram CreateAccessKey --UserName $acc_name | tee -a "$me_log"
     fi
 
     if _get_yes_no "Create aliyun OSS bucket? "; then
@@ -469,7 +470,7 @@ _add_ram() {
         # read -rp "OSS Region? [cn-hangzhou] " oss_region
         # oss_endpoint=oss-cn-hangzhou.aliyuncs.com
         # oss_acl=public-read
-        aliyun -p "$aliyun_profile" oss mb oss://"${oss_bucket:?empty}" --region "${aliyun_region:?empty}"
+        $aliyun_cli oss mb oss://"${oss_bucket:?empty}" --region "${aliyun_region:?empty}"
     fi
 
     if _get_yes_no "Create cdn.domain.com? "; then
@@ -477,7 +478,7 @@ _add_ram() {
         read -rp "Input cdn.domain.com name: " cdn_domain
         dns_alias=${cdn_domain:? empty cdn domain}.w.kunlunaq.com
 
-        aliyun -p "$aliyun_profile" cdn AddCdnDomain --region "$aliyun_region" --CdnType web --DomainName "${cdn_domain}" --Sources '[{
+        $aliyun_cli cdn AddCdnDomain --region "$aliyun_region" --CdnType web --DomainName "${cdn_domain}" --Sources '[{
     "Type": "oss",
     "Priority": "20",
     "Content": "'"${oss_bucket:?empty}"'.oss-'"$aliyun_region"'.aliyuncs.com",
@@ -487,17 +488,17 @@ _add_ram() {
 
         ## 新增 DNS 记录
         # read -rp "Please input the domain name: " cdn_domain
-        aliyun -p "$aliyun_profile" alidns AddDomainRecord --Type CNAME --DomainName "${cdn_domain}" --RR cdn --Value "$dns_alias"
+        $aliyun_cli alidns AddDomainRecord --Type CNAME --DomainName "${cdn_domain}" --RR cdn --Value "$dns_alias"
         ## 新增 CDN 域名
-        aliyun -p "$aliyun_profile" cdn AddCdnDomain \
+        $aliyun_cli cdn AddCdnDomain \
             --CdnType web \
             --DomainName "${cdn_domain}" \
             --Sources '[{"content":"'"${oss_bucket}"'.oss-'"$aliyun_region"'.aliyuncs.com","type":"oss","priority":"20","port":80,"weight":"15"}]'
         ## 查询 DNS 记录并删除
-        # aliyun -p "$aliyun_profile" alidns DescribeDomainRecords --DomainName "${cdn_domain}" \
+        # $aliyun_cli alidns DescribeDomainRecords --DomainName "${cdn_domain}" \
         #     --output text cols=RecordId,Status,RR,DomainName,Value,Type rows=DomainRecords.Record |
         #     awk "/cdn.*${cdn_domain}/ {print $1}" |
-        #     xargs -r -t aliyun -p "$aliyun_profile" alidns DeleteDomainRecord --RecordId
+        #     xargs -r -t $aliyun_cli alidns DeleteDomainRecord --RecordId
     fi
 }
 
@@ -510,14 +511,14 @@ _upload_cert() {
         upload_name="${domain//./-}-$(date +%m%d)"
         file_key="$(cat "$HOME/.acme.sh/dest/${domain}.key")"
         file_pem="$(cat "$HOME/.acme.sh/dest/${domain}.pem")"
-        upload_log="$me_path/upload.cert.${domain}.log"
+        upload_log="$me_path_data/${me_name}.upload.cert.${domain}.log"
         remove_cert_id=$(jq -r '.CertId' "$upload_log")
         ## 删除证书
-        $cmd_a -p "$aliyun_profile" cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}"
+        $aliyun_cli cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}"
         ## 上传证书
-        $cmd_a -p "$aliyun_profile" cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" >"$upload_log"
+        $aliyun_cli cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" >"$upload_log"
     done < <(
-        $cmd_a -p "$aliyun_profile" cdn DescribeUserDomains --region "$aliyun_region" |
+        $aliyun_cli cdn DescribeUserDomains --region "$aliyun_region" |
             jq -r '.Domains.PageData[].DomainName' |
             awk -F. '{$1=""; print $0}' | sort | uniq
     )
@@ -528,10 +529,10 @@ _upload_cert() {
         domain="${domain_cdn#*.}"
         upload_name="${domain//./-}-$(date +%m%d)"
 
-        $cmd_a -p "$aliyun_profile" cdn BatchSetCdnDomainServerCertificate --region cn-hangzhou --SSLProtocol on --CertType cas --DomainName "${domain_cdn}" --CertName "${upload_name}"
+        $aliyun_cli cdn BatchSetCdnDomainServerCertificate --region cn-hangzhou --SSLProtocol on --CertType cas --DomainName "${domain_cdn}" --CertName "${upload_name}"
 
     done < <(
-        $cmd_a -p "$aliyun_profile" cdn DescribeUserDomains --region "$aliyun_region" |
+        $aliyun_cli cdn DescribeUserDomains --region "$aliyun_region" |
             jq -r '.Domains.PageData[].DomainName'
     )
 }
@@ -545,19 +546,11 @@ main() {
     declare -a paths_to_append=(
         "/sbin"
         "/usr/local/sbin"
-        "/usr/local/opt/gnu-sed/libexec/gnubin"
-        "/usr/local/opt/grep/libexec/gnubin"
-        "/usr/local/opt/icu4c/bin"
-        "/usr/local/opt/icu4c/sbin"
-        "/usr/local/opt/curl/bin"
         "/usr/local/go/bin"
-        "/usr/local/cuda/bin"
         "$HOME/.local/bin"
         "$HOME/.local/node/bin"
         "$HOME/.cargo/env"
         "/home/linuxbrew/.linuxbrew/bin"
-        "/eda/cadence/installscape/iscape/bin"
-        "/eda/matlab/Polyspace/R2020a/bin"
     )
     for p in "${paths_to_append[@]}"; do
         if [[ -d "$p" && "$PATH" != *":$p:"* ]]; then
@@ -566,7 +559,6 @@ main() {
     done
 
     export PATH
-    # export PATH="$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:$HOME/.local/node/bin"
 
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
 
@@ -578,9 +570,10 @@ main() {
 
     source "$me_env"
 
-    cmd_k="$(command -v kubectl) --kubeconfig $HOME/.kube/config"
-    cmd_km="$(command -v kubectl) --kubeconfig $HOME/.kube/config -n main"
-    cmd_a="$(command -v aliyun) --config-path $HOME/.aliyun/config.json"
+    kubectl_cli="$(command -v kubectl) --kubeconfig $HOME/.kube/config"
+    kubectl_clim="$(command -v kubectl) --kubeconfig $HOME/.kube/config -n main"
+    cmd_aliyun="$(command -v aliyun) --config-path $HOME/.aliyun/config.json"
+    aliyun_cli="$cmd_aliyun -p ${aliyun_profile6:?empty}"
 
     # while [[ "$#" -gt 0 ]]; do
     case "$1" in
