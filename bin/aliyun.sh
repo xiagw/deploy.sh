@@ -626,6 +626,7 @@ main() {
         _upload_cert
         ;;
     wo)
+        shift
         python3 aliyun.workorder.py "$@"
         ;;
     *)
