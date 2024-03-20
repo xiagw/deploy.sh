@@ -601,6 +601,12 @@ main() {
     nas | --remove-nas)
         _remove_nas
         ;;
+    nas_snap)
+        shift
+        read -rp "Aliyun nas snap shot id: " nas_snap_id
+        export ALIYUN_NAS_SNAP_ID=${nas_snap_id:?empty}
+        python3 aliyun.nas.snapshot.py "$@"
+        ;;
     rds)
         _add_rds_account
         ;;
