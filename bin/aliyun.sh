@@ -10,7 +10,6 @@
 ## 创建ecs时查询等待结果
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.Instance[0].Status' to=Running
 
-
 _msg() {
     if [[ "$1" == log ]]; then
         shift
@@ -625,6 +624,9 @@ main() {
         ;;
     cas)
         _upload_cert
+        ;;
+    wo)
+        python3 aliyun.workorder.py "$@"
         ;;
     *)
         _usage
