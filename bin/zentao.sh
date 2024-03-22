@@ -42,14 +42,7 @@ _get_project() {
         project_id=$(echo "$line" | cut -d '-' -f 1)
         project_status=$(echo "$line" | cut -d ';' -f 2)
         ## 排除 id
-        unset skip_id
-        for id in "${zen_project_exclude[@]}"; do
-            if [[ "${project_id}" -eq "$id" ]]; then
-                skip_id=1
-                break
-            fi
-        done
-        if [[ "$skip_id" -eq 1 ]]; then
+        if echo "${zen_project_exclude[@]}" | grep -q -w "$project_id"; then
             continue
         fi
         ## 不足3位数前面补0

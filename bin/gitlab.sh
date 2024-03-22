@@ -51,9 +51,9 @@ main() {
     [[ $OSTYPE == darwin* ]] && bin_readlink=greadlink
     me_path="$(dirname "$($bin_readlink -f "$0")")"
     me_name="$(basename "$0")"
-    data_path="$me_path/../data"
-    file_save_pass="$data_path/${me_name}.txt"
-    file_deploy_env="$data_path/deploy.env"
+    me_data_path="$me_path/../data"
+    file_save_pass="$me_data_path/${me_name}.log"
+    file_deploy_env="$me_data_path/deploy.env"
     if [ -f "$file_deploy_env" ]; then
         source <(grep -E 'ENV_GITLAB_DOMAIN|ENV_WEIXIN_KEY' "$file_deploy_env")
     fi
