@@ -243,7 +243,7 @@ _update_ddns() {
         done < <($use_sudo wg show "$wg_interface" endpoints)
     done
     $use_sudo wg show all dump
-    $use_sudo wg show all latest-handshakes
+    # $use_sudo wg show all latest-handshakes
 }
 
 main() {

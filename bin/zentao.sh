@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 _get_token() {
-    zen_api='https://zen.flyh6.com/api.php/v1'
+    read -rp "请输入域名 [example.com]: " -e zen_domain
     if [ -f "$me_conf" ]; then
-        source "$me_conf"
+        source "$me_conf" ${zen_domain:?empty}
         token_time=$($bin_date +%s -d '3600 seconds ago')
         if ((token_time > ${zen_token_time_save:-0})); then
             unset zen_token
@@ -14,7 +14,7 @@ _get_token() {
             read -rp "请输入管理员root密码: " zen_root_password
         fi
         zen_token="$(
-            $curl_opt $zen_api/tokens -d '{"account": "'"${zen_account:-root}"'", "password": "'"$zen_root_password"'"}' |
+            $curl_opt "${zen_api:?empty}"/tokens -d '{"account": "'"${zen_account:-root}"'", "password": "'"$zen_root_password"'"}' |
                 jq -r '.token'
         )"
         sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($bin_date +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$me_conf"
@@ -24,9 +24,9 @@ _get_token() {
 _add_account() {
     read -rp "请输入用户姓名: " user_realname
     read -rp "请输入账号: " user_account
-    user_password=$(LC_CTYPE=C tr -dc A-Za-z0-9_ </dev/urandom | head -c 16)
+    user_password=$(LC_CTYPE=C tr -dc A-Za-z0-9_ </dev/urandom | head -c 12)
     echo "$user_realname / $user_account / $user_password" | tee -a "$me_log"
-    $curl_opt -H "token:${zen_token}" ${zen_api}/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${user_password:?}"'", "group": "1", "gender": "m"}'
+    $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${user_password:?}"'", "group": "1", "gender": "m"}'
 }
 
 _get_project() {
@@ -90,10 +90,11 @@ main() {
         bin_readlink="$(command -v readlink)"
         bin_date="$(command -v date)"
     fi
-    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
-    me_log="$me_path/../data/$me_name.log"
-    me_conf="$me_path/../data/$me_name.env"
+    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
+    me_path_data="$me_path/../data"
+    me_log="$me_path_data/$me_name.log"
+    me_conf="$me_path_data/$me_name.env"
     curl_opt='curl -fsSL'
 
     _get_token

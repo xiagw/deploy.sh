@@ -10,9 +10,10 @@ _msg() {
         shift
         echo "${time_now} $*" >>"$me_log"
     else
-        if [ "${msg_disable:-0}" -ne 1 ]; then
-            echo "${time_now} $*"
+        if [ "${msg_disable:-0}" -eq 1 ]; then
+            return
         fi
+        echo "${time_now} $*"
     fi
 }
 

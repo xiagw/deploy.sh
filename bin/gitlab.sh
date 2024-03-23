@@ -2,6 +2,11 @@
 # shellcheck disable=1090
 
 _add_account() {
+    # if grep -q "=$user_name/" "$file_save_pass"; then
+    if gitlab user list --search "$user_name" | grep "name: ${user_name}$"; then
+        echo "user $user_name exists, exit 1."
+        return 1
+    fi
     gitlab user create --name "$user_name" --username "$user_name" --password "$user_password" --email "${user_name}@${domain_name}" --skip-confirmation 1 --can-create-group 0
     # gitlab user update --id $user_id --username "$user_name" --name "$user_name" --email "$user_name@domain_name" --skip-reconfirmation 1
     ## save to password file
@@ -26,7 +31,7 @@ _add_group_member() {
 
 _send_msg() {
     ## message body
-    send_msg="https://git.$domain_name /  $msg_user_pass  /  https://docs.$domain_name"
+    send_msg="https://git.$domain_name /  $msg_user_pass"
     if [[ -z "$ENV_WEIXIN_KEY" ]]; then
         read -rp 'Enter weixin api key: ' read_weixin_api
         wechat_api_key=$read_weixin_api
@@ -54,29 +59,46 @@ main() {
     me_data_path="$me_path/../data"
     file_save_pass="$me_data_path/${me_name}.log"
     file_deploy_env="$me_data_path/deploy.env"
-    if [ -f "$file_deploy_env" ]; then
-        source <(grep -E 'ENV_GITLAB_DOMAIN|ENV_WEIXIN_KEY' "$file_deploy_env")
+
+    ## python-gitlab config
+    if [[ -f "$HOME/.python-gitlab.cfg" ]]; then
+        gitlab_python_config="$HOME/.python-gitlab.cfg"
+    elif [[ -f "$HOME/.config/python-gitlab.cfg" ]]; then
+        gitlab_python_config="$HOME/.config/python-gitlab.cfg"
     fi
+    select f in $(grep '^\[' "$gitlab_python_config" | grep -v 'global' | sed -e 's/\[//g' | sed -e 's/\]//g'); do
+        gitlab_profile=$f
+        break
+    done
+
+    if [ -f "$file_deploy_env" ]; then
+        # source <(grep -E '^ENV_GITLAB_DOMAIN|^ENV_WEIXIN_KEY' "$file_deploy_env")
+        source "$file_deploy_env" "$gitlab_profile"
+    fi
+    # read -rp 'Enter gitlab profile name: ' -e read_gitlab_profile
+    sed -i -e "s/^default.*/default = $gitlab_profile/" "$gitlab_python_config"
 
     ## user_name and domain_name
     if [[ -z "$1" ]]; then
-        read -rp 'Enter username: ' read_user_name
-        read -rp 'Enter domain name: ' -e -i"${ENV_GITLAB_DOMAIN:-example.com}" read_domain_name
+        read -rp 'Enter gitlab domain name: ' -e -i"${ENV_GITLAB_DOMAIN:-example.com}" read_domain_name
+        read -rp 'Enter gitlab username: ' read_user_name
         user_name=${read_user_name:? ERR: empty user name}
         domain_name=${read_domain_name:? ERR: empty domain name}
     else
         user_name=${1}
         domain_name=${2}
     fi
-    # if grep -q "=$user_name/" "$file_save_pass"; then
-    if gitlab user list --search "$user_name" | grep "name: ${user_name}$"; then
-        echo "user $user_name exists, exit 1."
-        return 1
-    fi
+
     ## user_password
-    command -v md5sum && bin_hash=md5sum
-    command -v sha256sum && bin_hash=sha256sum
-    command -v md5 && bin_hash=md5
+    if command -v md5sum; then
+        bin_hash=md5sum
+    elif command -v sha256sum; then
+        bin_hash=sha256sum
+    elif command -v md5; then
+        bin_hash=md5
+    else
+        echo "No hash command found, exit 1"
+    fi
     count=0
     while [ -z "$user_password" ]; do
         count=$((count + 1))
