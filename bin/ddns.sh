@@ -21,17 +21,17 @@ _get_config() {
     ## get config from file
     XDG_CONFIG_HOME="$HOME/.config"
     if [ -d "$XDG_CONFIG_HOME/ddns" ]; then
-        me_conf="$XDG_CONFIG_HOME/ddns/${me_name}.conf"
+        me_env="$XDG_CONFIG_HOME/ddns/${me_name}.env"
         me_log="$XDG_CONFIG_HOME/ddns/${me_name}.log"
     else
         [ -d "$me_path_data" ] || mkdir -p "$me_path_data"
-        me_conf="$me_path_data/${me_name}.conf"
+        me_env="$me_path_data/${me_name}.env"
         me_log="$me_path_data/${me_name}.log"
     fi
-    _msg "config file: $me_conf"
+    _msg "config file: $me_env"
     _msg "log file: $me_log"
 
-    . "$me_conf"
+    . "$me_env"
 
     ## get config from args
     if [ -z "$dynv6_host" ] || [ -z "$dynv6_token" ]; then
@@ -165,6 +165,9 @@ main() {
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_path_data="$me_path/../data"
+
+    # me_include=$me_path/include.sh
+    # source "$me_include"
 
     ## interface name in openwrt
     _set_args "$@"

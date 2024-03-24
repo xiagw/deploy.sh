@@ -2,16 +2,16 @@
 # shellcheck disable=1090
 
 _add_account() {
-    # if grep -q "=$user_name/" "$file_save_pass"; then
     if gitlab user list --search "$user_name" | grep "name: ${user_name}$"; then
         echo "user $user_name exists, exit 1."
         return 1
     fi
+
     gitlab user create --name "$user_name" --username "$user_name" --password "$user_password" --email "${user_name}@${domain_name}" --skip-confirmation 1 --can-create-group 0
     # gitlab user update --id $user_id --username "$user_name" --name "$user_name" --email "$user_name@domain_name" --skip-reconfirmation 1
     ## save to password file
     msg_user_pass="username=$user_name/password=$user_password"
-    echo "$msg_user_pass" | tee -a "$file_save_pass"
+    echo "$msg_user_pass" | tee -a "$me_log"
 }
 
 _add_group_member() {
@@ -32,11 +32,11 @@ _add_group_member() {
 _send_msg() {
     ## message body
     send_msg="https://git.$domain_name /  $msg_user_pass"
-    if [[ -z "$ENV_WEIXIN_KEY" ]]; then
+    if [[ -z "$gitlab_weixin_key" ]]; then
         read -rp 'Enter weixin api key: ' read_weixin_api
         wechat_api_key=$read_weixin_api
     else
-        wechat_api_key=$ENV_WEIXIN_KEY
+        wechat_api_key=$gitlab_weixin_key
     fi
     wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wechat_api_key}"
     curl -fsSL "$wechat_api" -H 'Content-Type: application/json' -d '{"msgtype": "text", "text": {"content": "'"$send_msg"'"},"at": {"isAtAll": true}}'
@@ -52,13 +52,17 @@ _new_element_user() {
 }
 
 main() {
+    set -e
     bin_readlink=readlink
     [[ $OSTYPE == darwin* ]] && bin_readlink=greadlink
     me_path="$(dirname "$($bin_readlink -f "$0")")"
     me_name="$(basename "$0")"
     me_data_path="$me_path/../data"
-    file_save_pass="$me_data_path/${me_name}.log"
-    file_deploy_env="$me_data_path/deploy.env"
+    me_log="$me_data_path/${me_name}.log"
+    me_env="$me_data_path/${me_name}.env"
+
+    me_include=$me_path/include.sh
+    source "$me_include"
 
     ## python-gitlab config
     if [[ -f "$HOME/.python-gitlab.cfg" ]]; then
@@ -66,24 +70,17 @@ main() {
     elif [[ -f "$HOME/.config/python-gitlab.cfg" ]]; then
         gitlab_python_config="$HOME/.config/python-gitlab.cfg"
     fi
-    select f in $(grep '^\[' "$gitlab_python_config" | grep -v 'global' | sed -e 's/\[//g' | sed -e 's/\]//g'); do
+    select f in $(grep '^\[' "$gitlab_python_config" | grep -v 'global' | sed -e 's/\[//g; s/\]//g'); do
         gitlab_profile=$f
         break
     done
-
-    if [ -f "$file_deploy_env" ]; then
-        # source <(grep -E '^ENV_GITLAB_DOMAIN|^ENV_WEIXIN_KEY' "$file_deploy_env")
-        source "$file_deploy_env" "$gitlab_profile"
-    fi
-    # read -rp 'Enter gitlab profile name: ' -e read_gitlab_profile
-    sed -i -e "s/^default.*/default = $gitlab_profile/" "$gitlab_python_config"
+    . "$me_env" "$gitlab_profile"
 
     ## user_name and domain_name
     if [[ -z "$1" ]]; then
-        read -rp 'Enter gitlab domain name: ' -e -i"${ENV_GITLAB_DOMAIN:-example.com}" read_domain_name
         read -rp 'Enter gitlab username: ' read_user_name
         user_name=${read_user_name:? ERR: empty user name}
-        domain_name=${read_domain_name:? ERR: empty domain name}
+        domain_name=${gitlab_domain:? ERR: empty domain name}
     else
         user_name=${1}
         domain_name=${2}
@@ -110,7 +107,7 @@ main() {
         *) echo "Failed to generate password, exit 1" && return 1 ;;
         esac
     done
-
+    sed -i -e "s/^default.*/default = $gitlab_profile/" "$gitlab_python_config"
     _add_account
     _add_group_member
     _send_msg

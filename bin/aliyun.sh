@@ -9,23 +9,8 @@
 # aliyun ecs RunCommand --RegionId "$aliyun_region" --Name 'lifseacli' --Username 'root' --Type 'RunShellScript' --CommandContent 'IyEvYmluL2Jhc2gKbGlmc2VhY2xpIGNvbnRhaW5lciBzdGFydA==' --Timeout '60' --RepeatMode 'Once' --ContentEncoding 'Base64' --InstanceId.1 'i-xxxx'
 ## 创建ecs时查询等待结果
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.Instance[0].Status' to=Running
+# aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.
 
-_msg() {
-    if [[ "$1" == log ]]; then
-        shift
-        echo "$(date +%Y%m%d-%u-%T.%3N) $*" | tee -a "$me_log"
-    else
-        echo "$(date +%Y%m%d-%u-%T.%3N) $*"
-    fi
-}
-
-_get_yes_no() {
-    read -rp "${1:-Confirm the action?} [y/N] " read_yes_no
-    case ${read_yes_no:-n} in
-    [Yy] | [Yy][Ee][Ss]) return 0 ;;
-    *) return 1 ;;
-    esac
-}
 
 _get_random_password() {
     # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
@@ -578,6 +563,9 @@ main() {
     me_path_data="${me_path}/../data"
     me_env="${me_path_data}/${me_name}.env"
     me_log="${me_path_data}/${me_name}.log"
+
+    me_include=$me_path/include.sh
+    source "$me_include"
 
     source "$me_env"
 

@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 
 _get_token() {
-    read -rp "请输入域名 [example.com]: " -e zen_domain
-    if [ -f "$me_conf" ]; then
-        source "$me_conf" ${zen_domain:?empty}
+    if [ -f "$me_env" ]; then
+        source "$me_env"
+        select z in "${zen_domains[@]}"; do
+            zen_domain="${z}"
+            break
+        done
+        source "$me_env" ${zen_domain:?empty}
         token_time=$($bin_date +%s -d '3600 seconds ago')
         if ((token_time > ${zen_token_time_save:-0})); then
             unset zen_token
         fi
+    else
+        echo "not found $me_env"
+        return 1
     fi
     if [ -z "$zen_token" ]; then
         if [ -z "$zen_root_password" ]; then
@@ -17,7 +24,7 @@ _get_token() {
             $curl_opt "${zen_api:?empty}"/tokens -d '{"account": "'"${zen_account:-root}"'", "password": "'"$zen_root_password"'"}' |
                 jq -r '.token'
         )"
-        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($bin_date +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$me_conf"
+        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($bin_date +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$me_env"
     fi
 }
 
@@ -94,7 +101,11 @@ main() {
     me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
     me_path_data="$me_path/../data"
     me_log="$me_path_data/$me_name.log"
-    me_conf="$me_path_data/$me_name.env"
+    me_env="$me_path_data/$me_name.env"
+
+    me_include=$me_path/include.sh
+    source "$me_include"
+
     curl_opt='curl -fsSL'
 
     _get_token

@@ -2,43 +2,6 @@
 # shellcheck disable=SC2029
 # set -xe
 
-_msg() {
-    local color_on
-    local color_off='\033[0m' # Text Reset
-    duration=$SECONDS
-    h_m_s="$((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
-    time_now="$(date +%Y%m%d-%u-%T.%3N)"
-
-    case "${1:-none}" in
-    red | error | erro) color_on='\033[0;31m' ;;       # Red
-    green | info) color_on='\033[0;32m' ;;             # Green
-    yellow | warning | warn) color_on='\033[0;33m' ;;  # Yellow
-    blue) color_on='\033[0;34m' ;;                     # Blue
-    purple | question | ques) color_on='\033[0;35m' ;; # Purple
-    cyan) color_on='\033[0;36m' ;;                     # Cyan
-    orange) color_on='\033[1;33m' ;;                   # Orange
-    step)
-        ((++STEP))
-        color_on="\033[0;36m[${STEP}] $time_now \033[0m"
-        color_off=" $h_m_s"
-        ;;
-    time)
-        color_on="[${STEP}] $time_now "
-        color_off=" $h_m_s"
-        ;;
-    log)
-        shift
-        echo "$time_now $*" >>"$me_log"
-        return
-        ;;
-    *)
-        unset color_on color_off
-        ;;
-    esac
-    [ "$#" -gt 1 ] && shift
-    echo -e "${color_on}$*${color_off}"
-}
-
 _set_peer2peer() {
     ## 新建的client，直接选择 服务器端
     if [[ "$new_key_flag" -eq 1 ]]; then
@@ -243,15 +206,17 @@ _update_ddns() {
         done < <($use_sudo wg show "$wg_interface" endpoints)
     done
     $use_sudo wg show all dump
-    # $use_sudo wg show all latest-handshakes
 }
 
 main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_name="$(basename "$0")"
     me_data="${me_path}/../data/wireguard"
-    # me_data="${me_path}/wireguard"
     me_log="${me_data}/${me_name}.log"
+
+    me_include=$me_path/include.sh
+    source "$me_include"
+
     [ -d "$me_data" ] || mkdir -p "$me_data"
 
     if [[ "$1" = u ]]; then
