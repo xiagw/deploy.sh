@@ -240,7 +240,7 @@ _scale_up() {
 
     _get_cluster_info
     ## 扩容节点 x 个 ECS
-    _msg log "nodes scale to number: $node_after_num"
+    _msg log "$me_log" "nodes scale to number: $node_after_num"
     $aliyun_cli_p cs POST /clusters/"$cluster_id"/nodepools/"$nodepool_id" \
         --header "Content-Type=application/json;" \
         --body "{\"count\": $node_scale_num}"
@@ -262,7 +262,7 @@ _scale_up() {
     for deployment in "${deployments[@]}"; do
         scale=$((pod_before_num + 1))
         while [[ $scale -le $pod_after_num ]]; do
-            _msg log "$deployment scale to number: $scale"
+            _msg log "$me_log" "$deployment scale to number: $scale"
             $kubectl_clim scale --replicas="${scale}" deploy "$deployment"
             sleep 10
             scale=$((scale + 1))
@@ -318,14 +318,14 @@ _scale_down() {
 
     ## 缩容 pod
     for deployment in "${deployments[@]}"; do
-        _msg log "$deployment scale to number: $pod_after_num"
+        _msg log "$me_log" "$deployment scale to number: $pod_after_num"
         $kubectl_clim scale --replicas=$pod_after_num deploy "$deployment"
         sleep 5
     done
 
     _get_cluster_info
     ## 缩容节点 x 个 ECS
-    _msg log "nodes scale to number: $node_after_num"
+    _msg log "$me_log" "nodes scale to number: $node_after_num"
     $aliyun_cli_p cs POST /clusters/"$cluster_id"/nodepools/"$nodepool_id" \
         --header "Content-Type=application/json;" \
         --body "{\"count\": -${node_scale_num:-2}}"
@@ -361,13 +361,13 @@ _check_php_load() {
     fi
 
     if ${need_scale_up:-false}; then
-        _msg log "detected Overload, recommend scale up ${node_scale_num}"
+        _msg log "$me_log" "detected Overload, recommend scale up ${node_scale_num}"
         $kubectl_clim top pod -l app.kubernetes.io/name=fly-php71 | tee -a "$me_log"
         #_scale_up ${node_scale_num}
     fi
 
     if ${need_scale_down:-false}; then
-        _msg log "detected Normal load, recommend scale down ${node_scale_num}"
+        _msg log "$me_log" "detected Normal load, recommend scale down ${node_scale_num}"
         $kubectl_clim top pod -l app.kubernetes.io/name=fly-php71 | tee -a "$me_log"
         #_scale_down ${node_scale_num}
     fi
@@ -407,7 +407,7 @@ _pay_cdn_bag() {
     )"
     ## 根据余额计算购买能力，200/50/10/5/1 TB
     if (("${balance:-0}" < $((balance_threshold + price_unit * 1)))); then
-        _msg log "[dcdn] balance ${balance:-0} too low, skip pay."
+        _msg log "$me_log" "[dcdn] balance ${balance:-0} too low, skip pay."
         return 1
     fi
     for i in 200 50 10 5 1; do
@@ -422,7 +422,7 @@ _pay_cdn_bag() {
         fi
     done
 
-    _msg log "[dcdn] remain: ${cdn_amount:-0}TB, pay bag $((spec / spec_unit))TB ..."
+    _msg log "$me_log" "[dcdn] remain: ${cdn_amount:-0}TB, pay bag $((spec / spec_unit))TB ..."
     $aliyun_cli_p bssopenapi CreateResourcePackage --region "$aliyun_region" --ProductCode dcdn \
         --PackageType FPT_dcdnpaybag_deadlineAcc_1541405199 \
         --Duration 1 --PricingCycle Year --Specification "$spec"

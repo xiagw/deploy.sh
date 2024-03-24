@@ -7,10 +7,11 @@ _msg() {
         time_now="$(date +%Y%m%d-%u-%T.%3N)"
     fi
     if [ "${1:-none}" = log ]; then
-        shift
-        echo "${time_now} $*" >>"$me_log"
+        log_file="$2"
+        shift 2
+        echo "${time_now} $*" >>"$log_file"
     else
-        if [ "${msg_disable:-0}" -eq 1 ]; then
+        if [ "${silent_mode:-0}" -eq 1 ]; then
             return
         fi
         echo "${time_now} $*"
@@ -107,7 +108,7 @@ _update_dynv6() {
         $cmd "http://ipv4.dynv6.com/api/update?ipv4=auto&zone=${dynv6_host}&token=${dynv6_token}"
         # $cmd "http://ipv4.dynv6.com/api/update?ipv4=${ip4_current}&zone=${dynv6_host}&token=${dynv6_token}"
         echo
-        _msg log "IPV4:  ${ip4_current:-none}  IPV6:  ${ip6_current:-none}"
+        _msg log "$me_log" "IPV4:  ${ip4_current:-none}  IPV6:  ${ip6_current:-none}"
     fi
     if [ -z "$ip6_current" ]; then
         _msg "Not found IPv6 address"
@@ -115,7 +116,7 @@ _update_dynv6() {
         # $cmd "http://ipv6.dynv6.com/api/update?ipv6=auto&zone=${dynv6_host}&token=${dynv6_token}"
         $cmd "http://ipv6.dynv6.com/api/update?ipv6=${ip6_current}&zone=${dynv6_host}&token=${dynv6_token}"
         echo
-        _msg log "IPV4:  ${ip4_current:-none}  IPV6:  ${ip6_current:-none}"
+        _msg log "$me_log" "IPV4:  ${ip4_current:-none}  IPV6:  ${ip6_current:-none}"
     fi
 }
 
@@ -153,7 +154,7 @@ _set_args() {
         shitf 2
         ;;
     --auto)
-        msg_disable=1
+        silent_mode=1
         ;;
     # *)
     #     _msg "Usage: $me_name [force] <config>"

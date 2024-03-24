@@ -1,5 +1,5 @@
 _msg() {
-    local color_on
+    local color_on=''
     local color_off='\033[0m' # Text Reset
     duration=$SECONDS
     h_m_s="$((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
@@ -29,11 +29,15 @@ _msg() {
         return
         ;;
     *)
+        # [ "$#" -gt 1 ] && shift
         unset color_on color_off
+        if [ "${silent_mode:-0}" -eq 1 ]; then
+            :
+        else
+            echo -e "${color_on}$*${color_off}"
+        fi
         ;;
     esac
-    [ "$#" -gt 1 ] && shift
-    echo -e "${color_on}$*${color_off}"
 }
 
 _get_root() {
