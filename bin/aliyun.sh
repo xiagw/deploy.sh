@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
 
-# curl -LO https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
-# x aliyun-cli-linux-latest-amd64.tgz
-# cp aliyun-cli-linux-latest/aliyun ~/.local/bin/
-
 # 1. 如何进入 lifseaOS 的shell
 # aliyun ecs RunCommand --region "$aliyun_region" --RegionId 'cn-hangzhou' --Name lifseacli --Type RunShellScript --CommandContent 'lifseacli container start' --InstanceId.1 'i-xxxx'
 # aliyun ecs RunCommand --RegionId "$aliyun_region" --Name 'lifseacli' --Username 'root' --Type 'RunShellScript' --CommandContent 'IyEvYmluL2Jhc2gKbGlmc2VhY2xpIGNvbnRhaW5lciBzdGFydA==' --Timeout '60' --RepeatMode 'Once' --ContentEncoding 'Base64' --InstanceId.1 'i-xxxx'
 ## 创建ecs时查询等待结果
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.Instance[0].Status' to=Running
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.
-
 
 _get_random_password() {
     # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
@@ -533,8 +528,30 @@ _upload_cert() {
     )
 }
 
+_upgrade_aliyun_cli() {
+    curl -fL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz |
+        tar -zx -C "$HOME"/.local/bin/aliyun
+}
+
 _usage() {
-    _msg help...
+    cat <<EOF
+Usage: $me_name [res|dns|ecs|nas|nas_snap|rds|up|dn|load|cdn|ram|cas|wo|upgrade-cli]
+    res        - get resource list
+    dns        - update dns record
+    ecs        - get ecs list
+    nas        - remove nas filesystem-id
+    nas_snap   - recovery from nas snapshot
+    rds        - add rds account database
+    up         - k8s scale up
+    dn         - k8s scale down
+    load       - check overload for PHP
+    cdn        - pay cdn bag
+    ram        - add ram user
+    cas        - upload cert to cas
+    wo         - add workorder
+    upgrade-cli - upgrade aliyun cli
+
+EOF
 }
 
 main() {
@@ -573,6 +590,7 @@ main() {
     kubectl_clim="$(command -v kubectl) --kubeconfig $HOME/.kube/config -n main"
     aliyun_cli="$(command -v aliyun) --config-path $HOME/.aliyun/config.json"
     aliyun_cli_p="$aliyun_cli -p ${aliyun_profile6:?empty}"
+    $aliyun_cli --help | grep -m1 Version
 
     # while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -622,6 +640,9 @@ main() {
     wo)
         shift
         python3 aliyun.workorder.py "$@"
+        ;;
+    upgrade-cli)
+        _upgrade_aliyun_cli
         ;;
     *)
         _usage
