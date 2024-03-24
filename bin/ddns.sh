@@ -153,7 +153,7 @@ _set_args() {
         wan_device=$2
         shitf 2
         ;;
-    --auto)
+    -s | --auto | --silent)
         silent_mode=1
         ;;
     # *)

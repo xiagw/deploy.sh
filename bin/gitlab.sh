@@ -11,17 +11,17 @@ _add_account() {
     # gitlab user update --id $user_id --username "$user_name" --name "$user_name" --email "$user_name@domain_name" --skip-reconfirmation 1
     ## save to password file
     msg_user_pass="username=$user_name/password=$user_password"
-    echo "$msg_user_pass" | tee -a "$me_log"
+    # echo "$msg_user_pass" | tee -a "$me_log"
+    _msg log "$me_log" "$msg_user_pass"
 }
 
 _add_group_member() {
-    echo "add to default group \"pms\"."
+    _msg "add to default group \"pms\"."
     default_group_id=$(gitlab group list --search pms | grep -B1 'name: pms$' | awk '/^id:/ {print $2}')
     # read -rp "Enter group id: " group_id
     user_id="$(gitlab user list --search "$user_name" | grep -B1 "$user_name" | awk '/^id:/ {print $2}')"
     gitlab group-member create --access-level 30 --group-id "$default_group_id" --user-id "$user_id"
     gitlab group list
-    echo -e "\n################\n"
     select group_id in $(gitlab group list | awk '/^id:/ {print $2}') quit; do
         [ "${group_id:-quit}" == quit ] && break
         gitlab group-member create --access-level 30 --group-id "$group_id" --user-id "$user_id"
@@ -75,6 +75,7 @@ main() {
         break
     done
     . "$me_env" "$gitlab_profile"
+    _msg "gitlab profile is: $gitlab_profile"
 
     ## user_name and domain_name
     if [[ -z "$1" ]]; then
