@@ -7,12 +7,9 @@ _add_account() {
         return 1
     fi
 
-    gitlab user create --name "$user_name" --username "$user_name" --password "$user_password" --email "${user_name}@${domain_name}" --skip-confirmation 1 --can-create-group 0
+    gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand:? empty password}" --email "${user_name}@${domain_name}" --skip-confirmation 1 --can-create-group 0
     # gitlab user update --id $user_id --username "$user_name" --name "$user_name" --email "$user_name@domain_name" --skip-reconfirmation 1
-    ## save to password file
-    msg_user_pass="username=$user_name/password=$user_password"
-    # echo "$msg_user_pass" | tee -a "$me_log"
-    _msg log "$me_log" "$msg_user_pass"
+    _msg log "$me_log" "username=$user_name/password=$password_rand"
 }
 
 _add_group_member() {
@@ -31,7 +28,7 @@ _add_group_member() {
 
 _send_msg() {
     ## message body
-    send_msg="https://git.$domain_name /  $msg_user_pass"
+    send_msg="https://git.$domain_name /  username=$user_name / password=$password_rand"
     if [[ -z "$gitlab_weixin_key" ]]; then
         read -rp 'Enter weixin api key: ' read_weixin_api
         wechat_api_key=$read_weixin_api
@@ -44,18 +41,17 @@ _send_msg() {
 
 _new_element_user() {
     cd ~/src/matrix-docker-ansible-deploy || exit 1
-    file_secret=inventory/host_vars/matrix.example.com/user_pass.txt
-    echo "username=${user_name}/password=${user_password}" | tee -a $file_secret
+    # file_secret=inventory/host_vars/matrix.example.com/user_pass.txt
+    _msg log "$me_log" "username=${user_name} / password=${password_rand}"
     sed -i -e 's/^matrix.example1.com/#matrix.example2.com/' inventory/hosts
-    ansible-playbook -i inventory/hosts setup.yml --extra-vars="username=$user_name password=$user_password admin=no" --tags=register-user
+    ansible-playbook -i inventory/hosts setup.yml --extra-vars="username=$user_name password=$password_rand admin=no" --tags=register-user
     # ansible-playbook -i inventory/hosts setup.yml --extra-vars='username=fangzheng password=Eefaiyau6de1' --tags=update-user-password
 }
 
 main() {
     set -e
-    bin_readlink=readlink
-    [[ $OSTYPE == darwin* ]] && bin_readlink=greadlink
-    me_path="$(dirname "$($bin_readlink -f "$0")")"
+    bin_readlink="$(command -v greadlink)"
+    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
     me_data_path="$me_path/../data"
     me_log="$me_data_path/${me_name}.log"
@@ -87,28 +83,8 @@ main() {
         domain_name=${2}
     fi
 
-    ## user_password
-    if command -v md5sum; then
-        bin_hash=md5sum
-    elif command -v sha256sum; then
-        bin_hash=sha256sum
-    elif command -v md5; then
-        bin_hash=md5
-    else
-        echo "No hash command found, exit 1"
-    fi
-    count=0
-    while [ -z "$user_password" ]; do
-        count=$((count + 1))
-        case $count in
-        1) user_password="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c10)" ;;
-        2) user_password=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c10) ;;
-        3) user_password="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)" ;;
-        4) user_password="$(echo "$RANDOM$(date)$RANDOM" | $bin_hash | base64 | head -c10)" ;;
-        *) echo "Failed to generate password, exit 1" && return 1 ;;
-        esac
-    done
     sed -i -e "s/^default.*/default = $gitlab_profile/" "$gitlab_python_config"
+    _get_random_password
     _add_account
     _add_group_member
     _send_msg

@@ -7,32 +7,6 @@
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.Instance[0].Status' to=Running
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.
 
-_get_random_password() {
-    # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
-    if command -v md5sum; then
-        bin_hash=md5sum
-    elif command -v sha256sum; then
-        bin_hash=sha256sum
-    elif command -v md5; then
-        bin_hash=md5
-    fi
-    password_bits=${1:-12}
-    count=0
-    while [ -z "$password_rand" ]; do
-        ((++count))
-        case $count in
-        1) password_rand="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c"$password_bits")" ;;
-        2) password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c"$password_bits") ;;
-        3) password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c"$password_bits")" ;;
-        4) password_rand="$(echo "$RANDOM$(date)$RANDOM" | $bin_hash | base64 | head -c"$password_bits")" ;;
-        *)
-            echo "${password_rand:?Failed to generate password}"
-            return 1
-            ;;
-        esac
-    done
-}
-
 _notify_weixin_work() {
     wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wechat_key"
     curl -fsL -X POST -H 'Content-Type: application/json' \
@@ -180,7 +154,7 @@ _add_rds_account() {
     ## 创建 db
     $aliyun_cli_p rds CreateDatabase --region "$aliyun_region" --CharacterSetName utf8mb4 --DBInstanceId "$rds_id" --DBName "$rds_account"
     ## 创建 account
-    $aliyun_cli_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "$password_rand"
+    $aliyun_cli_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }"
     ## 授权
     $aliyun_cli_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
 
@@ -574,8 +548,8 @@ main() {
     export PATH
 
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
-
-    me_path="$(dirname "$(readlink -f "$0")")"
+    bin_readlink="$(command -v greadlink)"
+    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
     me_path_data="${me_path}/../data"
     me_env="${me_path_data}/${me_name}.env"

@@ -7,8 +7,8 @@ _get_token() {
             zen_domain="${z}"
             break
         done
-        source "$me_env" ${zen_domain:?empty}
-        token_time=$($bin_date +%s -d '3600 seconds ago')
+        source "$me_env" "${zen_domain:?empty}"
+        token_time=$(${bin_date:?empty date cmd} +%s -d '3600 seconds ago')
         if ((token_time > ${zen_token_time_save:-0})); then
             unset zen_token
         fi
@@ -31,9 +31,9 @@ _get_token() {
 _add_account() {
     read -rp "请输入用户姓名: " user_realname
     read -rp "请输入账号: " user_account
-    user_password=$(LC_CTYPE=C tr -dc A-Za-z0-9_ </dev/urandom | head -c 12)
-    echo "$user_realname / $user_account / $user_password" | tee -a "$me_log"
-    $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${user_password:?}"'", "group": "1", "gender": "m"}'
+    _get_random_password
+    echo "$user_realname / $user_account / ${password_rand:? }" | tee -a "$me_log"
+    $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${password_rand:? ERR: empty password }"'", "group": "1", "gender": "m"}'
 }
 
 _get_project() {
@@ -90,15 +90,9 @@ _get_project() {
 main() {
     # set -xe
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
-    if [[ $OSTYPE == darwin* ]]; then
-        bin_readlink="$(command -v greadlink)"
-        bin_date="$(command -v gdate)"
-    else
-        bin_readlink="$(command -v readlink)"
-        bin_date="$(command -v date)"
-    fi
-    me_name="$(basename "$0")"
+    bin_readlink="$(command -v greadlink)"
     me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
+    me_name="$(basename "$0")"
     me_path_data="$me_path/../data"
     me_log="$me_path_data/$me_name.log"
     me_env="$me_path_data/$me_name.env"

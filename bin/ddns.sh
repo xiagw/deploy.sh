@@ -1,23 +1,5 @@
 #!/bin/sh
 
-_msg() {
-    if command -v gdate >/dev/null; then
-        time_now="$(gdate +%Y%m%d-%u-%T.%3N)"
-    else
-        time_now="$(date +%Y%m%d-%u-%T.%3N)"
-    fi
-    if [ "${1:-none}" = log ]; then
-        log_file="$2"
-        shift 2
-        echo "${time_now} $*" >>"$log_file"
-    else
-        if [ "${silent_mode:-0}" -eq 1 ]; then
-            return
-        fi
-        echo "${time_now} $*"
-    fi
-}
-
 _get_config() {
     ## get config from file
     XDG_CONFIG_HOME="$HOME/.config"
@@ -135,6 +117,7 @@ _set_args() {
         echo "opkg update && opkg install curl"
         exit 1
     fi
+
     wan_device=pppoe-wan
     case "$1" in
     -f | --force)
@@ -163,12 +146,13 @@ _set_args() {
 }
 
 main() {
+    bin_readlink="$(command -v greadlink)"
+    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
-    me_path="$(dirname "$(readlink -f "$0")")"
     me_path_data="$me_path/../data"
 
-    # me_include=$me_path/include.sh
-    # source "$me_include"
+    me_include=$me_path/include.sh
+    . "$me_include"
 
     ## interface name in openwrt
     _set_args "$@"

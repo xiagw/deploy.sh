@@ -3,7 +3,9 @@ _msg() {
     local color_off='\033[0m' # Text Reset
     duration=$SECONDS
     h_m_s="$((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
-    time_now="$(date +%Y%m%d-%u-%T.%3N)"
+    bin_date="$(command -v gdate)"
+    bin_date="${bin_date:-$(command -v date)}"
+    time_now="$($bin_date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
@@ -32,10 +34,9 @@ _msg() {
         # [ "$#" -gt 1 ] && shift
         unset color_on color_off
         if [ "${silent_mode:-0}" -eq 1 ]; then
-            :
-        else
-            echo -e "${color_on}$*${color_off}"
+            return
         fi
+        printf "$time_now ${color_on}$*${color_off}\n"
         ;;
     esac
 }
@@ -56,4 +57,23 @@ _get_yes_no() {
     [Yy] | [Yy][Ee][Ss]) return 0 ;;
     *) return 1 ;;
     esac
+}
+
+_get_random_password() {
+    # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
+    bin_hash=$(command -v md5sum)
+    bin_hash="${bin_hash:-$(command -v sha256sum)}"
+    bin_hash="${bin_hash:-$(command -v md5)}"
+    password_bits=${1:-12}
+    count=0
+    while [ -z "$password_rand" ]; do
+        ((++count))
+        case $count in
+        1) password_rand="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c"$password_bits")" ;;
+        2) password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c"$password_bits") ;;
+        3) password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c"$password_bits")" ;;
+        4) password_rand="$(echo "$RANDOM$($bin_date)$RANDOM" | $bin_hash | base64 | head -c"$password_bits")" ;;
+        *) echo "${password_rand:?Failed to generate password}" && return 1 ;;
+        esac
+    done
 }

@@ -209,13 +209,16 @@ _update_ddns() {
 }
 
 main() {
-    me_path="$(dirname "$(readlink -f "$0")")"
+    bin_readlink="$(command -v greadlink)"
+    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
     me_data="${me_path}/../data/wireguard"
     me_log="${me_data}/${me_name}.log"
 
     me_include=$me_path/include.sh
     source "$me_include"
+
+    _msg "log file: $me_log"
 
     [ -d "$me_data" ] || mkdir -p "$me_data"
 
