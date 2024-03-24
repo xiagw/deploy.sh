@@ -31,14 +31,14 @@ _msg() {
         return
         ;;
     *)
-        # [ "$#" -gt 1 ] && shift
         unset color_on color_off
-        if [ "${silent_mode:-0}" -eq 1 ]; then
-            return
-        fi
-        printf "$time_now ${color_on}$*${color_off}\n"
         ;;
     esac
+    [ "$#" -gt 1 ] && shift
+    if [ "${silent_mode:-0}" -eq 1 ]; then
+        return
+    fi
+    printf "$time_now ${color_on}$*${color_off}\n"
 }
 
 _get_root() {
