@@ -5,10 +5,10 @@
 _set_peer2peer() {
     ## 新建的client，直接选择 服务器端
     if [[ "$new_key_flag" -eq 1 ]]; then
-        _msg green "### is new key..."
+        _msg green "is new key..."
     ## 不是新建的client，需要选择已存在的client
     else
-        _msg green "### Select exist conf..."
+        _msg green "select exist conf..."
         select client_conf in $me_data/wg*.conf quit; do
             [[ "$client_conf" == 'quit' ]] && exit
             break
@@ -23,7 +23,7 @@ _set_peer2peer() {
         client_ip_port="$(awk '/^ListenPort/ {print $3}' "$client_conf" | head -n 1)"
     fi
     ## select server
-    _msg red "### Select >>>>>> SERVER >>>>>> side conf"
+    _msg red "### select peer conf"
     # select svr_conf in $me_data/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
     select svr_conf in $me_data/wg*.conf quit; do
         [[ "$svr_conf" == 'quit' ]] && break
