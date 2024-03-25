@@ -116,3 +116,37 @@ _get_ip_current() {
     _msg "ip4_current: $ip4_current"
     _msg "ip6_current: $ip6_current"
 }
+
+_get_distribution() {
+    if [ -r /etc/os-release ]; then
+        lsb_dist="$(. /etc/os-release && echo "$ID")"
+        lsb_dist="${lsb_dist,,}"
+    fi
+    lsb_dist="${lsb_dist:-unknown}"
+    _msg time "Your distribution is $lsb_dist"
+}
+
+_check_sudo() {
+    ${already_check_sudo:-false} && return 0
+    if ! _get_root; then
+        if $use_sudo -l -U "$USER"; then
+            _msg time "User $USER has permission to execute this script!"
+        else
+            _msg time "User $USER has no permission to execute this script!"
+            _msg time "Please run visudo with root, and set sudo to $USER"
+            return 1
+        fi
+    fi
+    if _check_cmd apt; then
+        cmd_pkg="$use_sudo apt-get"
+        apt_update=1
+    elif _check_cmd yum; then
+        cmd_pkg="$use_sudo yum"
+    elif _check_cmd dnf; then
+        cmd_pkg="$use_sudo dnf"
+    else
+        _msg time "not found apt/yum/dnf, exit 1"
+        return 1
+    fi
+    already_check_sudo=true
+}
