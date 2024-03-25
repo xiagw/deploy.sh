@@ -8,7 +8,7 @@ _get_token() {
             break
         done
         source "$me_env" "${zen_domain:?empty}"
-        token_time=$(${bin_date:?empty date cmd} +%s -d '3600 seconds ago')
+        token_time=$(${cmd_date:?empty date cmd} +%s -d '3600 seconds ago')
         if ((token_time > ${zen_token_time_save:-0})); then
             unset zen_token
         fi
@@ -24,7 +24,7 @@ _get_token() {
             $curl_opt "${zen_api:?empty}"/tokens -d '{"account": "'"${zen_account:-root}"'", "password": "'"$zen_root_password"'"}' |
                 jq -r '.token'
         )"
-        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($bin_date +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$me_env"
+        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($cmd_date +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$me_env"
     fi
 }
 
@@ -90,15 +90,14 @@ _get_project() {
 main() {
     # set -xe
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
-    bin_readlink="$(command -v greadlink)"
-    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
+    cmd_readlink="$(command -v greadlink)"
+    me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
     me_path_data="$me_path/../data"
     me_log="$me_path_data/$me_name.log"
     me_env="$me_path_data/$me_name.env"
 
-    me_include=$me_path/include.sh
-    source "$me_include"
+    source "$me_path"/include.sh
 
     curl_opt='curl -fsSL'
 

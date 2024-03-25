@@ -36,37 +36,6 @@ _get_ip_last() {
     _msg "ip6_last: $ip6_last"
 }
 
-## curl or wget
-_get_ip_current() {
-    ## get current ip from Internet or Interface
-    # if [ -n "$wan_device" ]; then
-    #   wan_device="dev $wan_device"
-    # fi
-    if [ "$(uname -o)" = Darwin ]; then
-        # ip4_current=$($cmd cip.cc | awk '/^IP.*:/ {print $3}')
-        ip4_current=$($cmd 4.ipw.cn)
-        ip6_current=$(ifconfig en0 | awk '/inet6.*temporary/ {print $2}' | head -n 1)
-    # ip6_current=$($cmd 6.ipw.cn | tail -n 1)
-    # elif grep -q 'ID="openwrt"' /etc/os-release; then
-    #     . /lib/functions/network.sh
-    #     network_flush_cache
-    #     IPV=4
-    #     eval network_find_wan${IPV%4} NET_IF
-    #     eval network_get_ipaddr${IPV%4} NET_ADDR "${NET_IF}"
-    #     ip4_current="${NET_ADDR}"
-    #     IPV=6
-    #     eval network_find_wan${IPV%4} NET_IF
-    #     eval network_get_ipaddr${IPV%4} NET_ADDR "${NET_IF}"
-    #     ip6_current="${NET_ADDR}"
-    else
-        ip4_current=$(ip -4 addr list scope global "$wan_device" | awk '/inet/ {print $2}' | head -n 1)
-        ip6_current=$(ip -6 addr list scope global "$wan_device" | awk '/inet6/ {print $2}' | head -n 1)
-        # ip6_current=${ip6_current%%/*}
-    fi
-    _msg "ip4_current: $ip4_current"
-    _msg "ip6_current: $ip6_current"
-}
-
 # address with netmask
 # ip6_current=$ip6_current/${netmask:-128}
 _compare_ip() {
@@ -146,13 +115,12 @@ _set_args() {
 }
 
 main() {
-    bin_readlink="$(command -v greadlink)"
-    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
-    me_name="$(basename "$0")"
+    cmd_readlink="$(command -v greadlink)"
+    me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
     me_path_data="$me_path/../data"
+    me_name="$(basename "$0")"
 
-    me_include=$me_path/include.sh
-    . "$me_include"
+    . "$me_path"/include.sh
 
     ## interface name in openwrt
     _set_args "$@"

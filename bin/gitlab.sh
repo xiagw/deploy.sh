@@ -50,15 +50,14 @@ _new_element_user() {
 
 main() {
     set -e
-    bin_readlink="$(command -v greadlink)"
-    me_path="$(dirname "$(${bin_readlink:-readlink} -f "$0")")"
-    me_name="$(basename "$0")"
+    cmd_readlink="$(command -v greadlink)"
+    me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
     me_data_path="$me_path/../data"
+    me_name="$(basename "$0")"
     me_log="$me_data_path/${me_name}.log"
     me_env="$me_data_path/${me_name}.env"
 
-    me_include=$me_path/include.sh
-    source "$me_include"
+    source "$me_path"/include.sh
 
     ## python-gitlab config
     if [[ -f "$HOME/.python-gitlab.cfg" ]]; then

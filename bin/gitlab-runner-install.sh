@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
-_get_yes_no() {
-    read -rp "${1:-Confirm the action?} [y/N] " read_yes_no
-    case ${read_yes_no:-n} in
-    [yY] | [yY][eE][sS]) return 0 ;;
-    *) return 1 ;;
-    esac
-}
+cmd_readlink="$(command -v greadlink)"
+me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
+me_path_data="${me_path}/../data"
+me_name="$(basename "$0")"
+me_env="${me_path_data}/${me_name}.env"
+me_log="${me_path_data}/${me_name}.log"
+
+me_include=$me_path/include.sh
+source "$me_include"
 
 bin_runner=/usr/local/bin/gitlab-runner
 if _get_yes_no "[+] Do you want install the latest version of gitlab-runner?"; then
