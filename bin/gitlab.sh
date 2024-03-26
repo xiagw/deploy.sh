@@ -2,36 +2,38 @@
 # shellcheck disable=1090
 
 _add_account() {
-    if gitlab user list --search "$user_name" | grep "name: ${user_name}$"; then
+    if _get_yes_no "update $user_name password?"; then
+        user_id=$(gitlab user list --username "$user_name" | awk '/^id:/ {print $2}')
+        gitlab user update --id "$user_id" --username "$user_name" --name "$user_name" --email "$user_name@${domain_name}" --skip-reconfirmation 1
+        return
+    fi
+
+    if gitlab user list --username "$user_name" | grep "name: ${user_name}$"; then
         echo "user $user_name exists, exit 1."
         return 1
     fi
 
     gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand:? empty password}" --email "${user_name}@${domain_name}" --skip-confirmation 1 --can-create-group 0
-    # gitlab user update --id $user_id --username "$user_name" --name "$user_name" --email "$user_name@domain_name" --skip-reconfirmation 1
-    _msg log "$me_log" "username=$user_name/password=$password_rand"
-}
+    _msg log "$me_log" "username=$user_name / password=$password_rand"
 
-_add_group_member() {
     _msg "add to default group \"pms\"."
-    default_group_id=$(gitlab group list --search pms | grep -B1 'name: pms$' | awk '/^id:/ {print $2}')
-    # read -rp "Enter group id: " group_id
-    user_id="$(gitlab user list --search "$user_name" | grep -B1 "$user_name" | awk '/^id:/ {print $2}')"
-    gitlab group-member create --access-level 30 --group-id "$default_group_id" --user-id "$user_id"
-    gitlab group list
-    select group_id in $(gitlab group list | awk '/^id:/ {print $2}') quit; do
+    pms_group_id=$(gitlab group list --search pms | grep -B1 'name: pms$' | awk '/^id:/ {print $2}')
+    user_id="$(gitlab user list --username "$user_name" | awk '/^id:/ {print $2}')"
+    gitlab group-member create --access-level 30 --group-id "$pms_group_id" --user-id "$user_id"
+
+    gitlab group list --skip-groups 2,"$pms_group_id"
+    select group_id in $(gitlab group list --skip-groups 2,"$pms_group_id" | awk '/^id:/ {print $2}') quit; do
         [ "${group_id:-quit}" == quit ] && break
         gitlab group-member create --access-level 30 --group-id "$group_id" --user-id "$user_id"
     done
-
 }
 
 _send_msg() {
     ## message body
     send_msg="https://git.$domain_name /  username=$user_name / password=$password_rand"
     if [[ -z "$gitlab_weixin_key" ]]; then
-        read -rp 'Enter weixin api key: ' read_weixin_api
-        wechat_api_key=$read_weixin_api
+        read -rp 'Enter weixin api key: ' read_weixin_key
+        wechat_api_key=$read_weixin_key
     else
         wechat_api_key=$gitlab_weixin_key
     fi
@@ -82,10 +84,9 @@ main() {
         domain_name=${2}
     fi
 
-    sed -i -e "s/^default.*/default = $gitlab_profile/" "$gitlab_python_config"
     _get_random_password
+    sed -i -e "s/^default.*/default = $gitlab_profile/" "$gitlab_python_config"
     _add_account
-    _add_group_member
     _send_msg
     # _new_element_user
 }
