@@ -120,6 +120,7 @@ main() {
     me_path_data="$me_path/../data"
     me_name="$(basename "$0")"
 
+    # source <(curl -fsSL https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh)
     [ -f "$me_path"/include.sh ] || curl -fLo "$me_path"/include.sh https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh
     . "$me_path"/include.sh
 

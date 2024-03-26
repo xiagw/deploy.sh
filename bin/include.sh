@@ -29,7 +29,7 @@ _msg() {
     log)
         log_file="$2"
         shift 2
-        echo "$time_now $*" >>"$log_file"
+        echo "$time_now $*" | tee -a "$log_file"
         return
         ;;
     *)
