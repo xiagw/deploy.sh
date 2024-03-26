@@ -502,9 +502,40 @@ _upload_cert() {
     )
 }
 
+# if python3 -m pip list | grep alibabacloud-workorder; then
+#     python3 -m pip install alibabacloud_workorder20210610==1.0.0
+# fi
+# jq -r '.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' ../data/ListProducts.json | grep -E '11864|18700|18422|9457|7160|18474|10293|25352|78102|18528|18771'
+_add_workorder() {
+    id_string="
+    11864 云解析DNS
+    18700 负载均衡
+    18422 内容分发网络CDN
+    9457 对象存储OSS
+    7160 云服务器ECS
+    18474 容器服务Kubernetes版
+    10293 财务
+    25352 备案
+    78102 云控制API
+    18528 函数计算
+    18771 弹性容器实例
+    "
+    select id in $(echo "$id_string" | awk '{print $1}'); do
+        wo_id=$(echo "$id_string" | awk "/$id/"'{print $1}')
+        wo_title=$(echo "$id_string" | awk "/$id/"'{print $2}')
+        python3 aliyun.workorder.py "${wo_id}" "${wo_title}"
+        # echo "python3 aliyun.workorder.py ${wo_id} ${wo_title}"
+        break
+    done
+}
+
 _upgrade_aliyun() {
-    curl -fL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz |
-        tar -zx -C "$HOME"/.local/bin/aliyun
+    if hostname -s | grep gitlab; then
+        curl -fL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz |
+            tar -zx -C "$HOME"/.local/bin/aliyun
+    else
+        brew install aliyun-cli
+    fi
 }
 
 _usage() {
@@ -611,8 +642,7 @@ main() {
         _upload_cert
         ;;
     wo)
-        shift
-        python3 aliyun.workorder.py "$@"
+        _add_workorder
         ;;
     upgrade-aliyun)
         _upgrade_aliyun

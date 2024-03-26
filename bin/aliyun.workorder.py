@@ -14,7 +14,7 @@ from alibabacloud_tea_util.client import Client as UtilClient
 
 ## get aliyun profile
 aliyun_config = os.getenv('HOME') + "/.aliyun/config.json"
-with open(aliyun_config,'r',encoding='utf8')as fp:
+with open(aliyun_config, 'r', encoding='utf8')as fp:
     data = json.load(fp)
     for i in data['profiles']:
         if i['name'] == 'flyh6':
@@ -83,6 +83,7 @@ class Sample:
     ) -> None:
         if len(args) != 2:
             Sample.display_info()
+            # Sample.get_product_list(sys.argv[1:])
             return
         # 请确保代码运行环境设置了环境变量 ALIBABA_CLOUD_ACCESS_KEY_ID 和 ALIBABA_CLOUD_ACCESS_KEY_SECRET。
         # 工程代码泄露可能会导致 AccessKey 泄露，并威胁账号下所有资源的安全性。以下代码示例使用环境变量获取 AccessKey 的方式进行调用，仅供参考，建议使用更安全的 STS 方式，更多鉴权访问方式请参见：https://help.aliyun.com/document_detail/378659.html
