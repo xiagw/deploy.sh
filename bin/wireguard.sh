@@ -85,6 +85,7 @@ _new_key() {
         client_conf="$me_data/wg${client_num}.conf"
     done
     while [ -f "$client_conf" ]; do
+        _msg warn "File exists: $client_conf"
         client_num=$((client_num + 1))
         client_conf="$me_data/wg${client_num}.conf"
     done
