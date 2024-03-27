@@ -15,17 +15,15 @@ _notify_weixin_work() {
 }
 
 _get_aliyun_profile() {
-    select profile in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json) quit; do
-        [ "${profile:-quit}" = "quit" ] && exit 1
-        _msg "aliyun-cli profile is: $profile"
-        aliyun_profile="$profile"
-        break
-    done
-
-    aliyun_region=$(
-        jq -c ".profiles[] | select (.name == \"$profile\")" "$HOME"/.aliyun/config.json |
-            jq -r '.region_id'
-    )
+    if [ -z "$aliyun_profile" ]; then
+        select profile in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json) quit; do
+            [ "${profile:-quit}" = "quit" ] && exit 1
+            _msg "aliyun-cli profile is: $profile"
+            aliyun_profile="$profile"
+            break
+        done
+    fi
+    aliyun_region=$(jq -r ".profiles[] | select (.name == \"$profile\") | .region_id" "$HOME"/.aliyun/config.json)
 
     [ -z "$aliyun_profile" ] && read -rp "Aliyun profile name: " aliyun_profile
     [ -z "$aliyun_region" ] && read -rp "Aliyun profile name: " aliyun_region
@@ -34,7 +32,7 @@ _get_aliyun_profile() {
 }
 
 _get_resource() {
-    resource_export_log="${me_path_data}/${me_name}.$(date +%F).$(date +%s).log"
+    resource_export_log="${me_path_data}/${me_name}.$(${cmd_date:? ERR: empty cmd date} +%F).$($cmd_date +%s).log"
     _get_aliyun_profile
 
     (
@@ -85,7 +83,7 @@ _dns_record() {
             $cmd_aliyun_p alidns DeleteDomainRecord --RecordId "$id"
         done < <(
             $cmd_aliyun_p alidns DescribeDomainRecords --DomainName "$domain" --PageNumber 1 --PageSize 100 |
-                jq -r '.DomainRecords.Record[] | .RR + "    " +  .Value + "    " + .RecordId' |
+                jq -r '.DomainRecords.Record[] | .RR + "\t" +  .Value + "\t" + .RecordId' |
                 awk '/w8dcrxzelflbo0smw3/ {print $3}'
         )
 
@@ -104,10 +102,7 @@ _dns_record() {
 _remove_nas() {
     _get_aliyun_profile
 
-    select filesys_id in $(
-        $cmd_aliyun_p nas DescribeFileSystems |
-            jq -r '.FileSystems.FileSystem[].FileSystemId'
-    ); do
+    select filesys_id in $($cmd_aliyun_p nas DescribeFileSystems | jq -r '.FileSystems.FileSystem[].FileSystemId'); do
         _msg "file_system_id is: $filesys_id"
         break
     done
@@ -126,7 +121,7 @@ _remove_nas() {
     until [[ "${sleeps:-0}" -gt 300 ]]; do
         if $cmd_aliyun_p nas DescribeFileSystems --FileSystemId "$filesys_id" |
             jq -r '.FileSystems.FileSystem[].MountTargets.MountTarget[].MountTargetDomain' |
-            grep "nas.aliyuncs.com"; then
+            grep "$mount_id"; then
             ((++sleeps))
             sleep 1
         else
@@ -182,17 +177,15 @@ _get_node_pod_numbers() {
 }
 
 _get_cluster_info() {
-    ## cluster name "flyh6-com"
+    ## get cluster name from env
     cluster_id="$(
         $cmd_aliyun_p cs GET /api/v1/clusters --header "Content-Type=application/json;" --body "{}" |
-            jq -c ".clusters[] | select (.name == \"flyh6-com\")" |
-            jq -r '.cluster_id'
+            jq -r ".clusters[] | select (.name == \"${aliyun_cluster_name:? ERR: empty cluster name}\") | .cluster_id"
     )"
-    ## node pool name "auto4"
+    ## get cluster node pool name from env
     nodepool_id="$(
         $cmd_aliyun_p cs GET /clusters/"$cluster_id"/nodepools --header "Content-Type=application/json;" --body "{}" |
-            jq -c ".nodepools[].nodepool_info | select (.name == \"auto4\")" |
-            jq -r '.nodepool_id'
+            jq -r ".nodepools[].nodepool_info | select (.name == \"${aliyun_cluster_node_pool:? ERR: empty node pool}\") | .nodepool_id"
     )"
 }
 
@@ -350,8 +343,7 @@ _pay_cdn_bag() {
     ## 在线查询CDN资源包剩余量
     cdn_amount=$(
         $cmd_aliyun_p bssopenapi QueryResourcePackageInstances --region "$aliyun_region" --ProductCode dcdn |
-            jq '.Data.Instances.Instance[]' |
-            jq -r 'select(.RemainingAmount != "0" and .RemainingAmountUnit != "GB" and .RemainingAmountUnit != "次" ) | .RemainingAmount' |
+            jq -r '.Data.Instances.Instance[] | select ( .RemainingAmount != "0" and .RemainingAmountUnit != "GB" and .RemainingAmountUnit != "次" ) | .RemainingAmount' |
             awk '{s+=$1} END {printf "%f", s}'
     )
     ## CDN 资源包 1TB(spec=1024) 单价 126¥
@@ -452,7 +444,7 @@ _add_ram() {
 
         ## 查询域名归属校验内容
         dns_verify=()
-        for i in $($cmd_aliyun_p cdn DescribeDomainVerifyData --region cn-hangzhou --DomainName "$cdn_domain" | jq -r '.Content | .verifyKey + "  " + .verifiCode'); do
+        for i in $($cmd_aliyun_p cdn DescribeDomainVerifyData --region cn-hangzhou --DomainName "$cdn_domain" | jq -r '.Content | .verifyKey + "\t" + .verifiCode'); do
             dns_verify+=("$i")
         done
         ## 增加 dns 校验记录
@@ -479,7 +471,7 @@ _upload_cert() {
     aliyun_region=cn-hangzhou
     while read -r line; do
         domain="${line// /.}"
-        upload_name="${domain//./-}-$(date +%m%d)"
+        upload_name="${domain//./-}-$($cmd_date +%m%d)"
         file_key="$(cat "$HOME/.acme.sh/dest/${domain}.key")"
         file_pem="$(cat "$HOME/.acme.sh/dest/${domain}.pem")"
         upload_log="$me_path_data/${me_name}.upload.cert.${domain}.log"
@@ -498,7 +490,7 @@ _upload_cert() {
     while read -r line; do
         domain_cdn="${line}"
         domain="${domain_cdn#*.}"
-        upload_name="${domain//./-}-$(date +%m%d)"
+        upload_name="${domain//./-}-$($cmd_date +%m%d)"
 
         $cmd_aliyun_p cdn BatchSetCdnDomainServerCertificate --region cn-hangzhou --SSLProtocol on --CertType cas --DomainName "${domain_cdn}" --CertName "${upload_name}"
 
@@ -599,7 +591,7 @@ main() {
     kubectl_cli="$(command -v kubectl) --kubeconfig $HOME/.kube/config"
     kubectl_clim="$(command -v kubectl) --kubeconfig $HOME/.kube/config -n main"
     cmd_aliyun="$(command -v aliyun) --config-path $HOME/.aliyun/config.json"
-    cmd_aliyun_p="$cmd_aliyun -p ${aliyun_profile6:?empty}"
+    cmd_aliyun_p="$cmd_aliyun -p ${aliyun_profile:? ERR: empty aliyun profile}"
     $cmd_aliyun --help | grep -m1 Version
 
     # while [[ "$#" -gt 0 ]]; do
