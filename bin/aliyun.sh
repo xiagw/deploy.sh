@@ -479,11 +479,20 @@ _upload_cert() {
         file_key="$(cat "$HOME/.acme.sh/dest/${domain}.key")"
         file_pem="$(cat "$HOME/.acme.sh/dest/${domain}.pem")"
         upload_log="$me_path_data/${me_name}.upload.cert.${domain}.log"
-        remove_cert_id=$(jq -r '.CertId' "$upload_log")
-        ## 删除证书
-        $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}"
+        _msg "domain: ${domain}"
+        _msg "upload_name: ${upload_name}"
+        _msg "key: $HOME/.acme.sh/dest/${domain}.key"
+        _msg "pem: $HOME/.acme.sh/dest/${domain}.pem"
+        if [ -f "$upload_log" ]; then
+            _msg "file: ${upload_log}"
+            remove_cert_id=$(jq -r '.CertId' "$upload_log")
+            ## 删除证书
+            $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}"
+        else
+            _msg "not found ${upload_log}"
+        fi
         ## 上传证书
-        $cmd_aliyun_p cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" >"$upload_log"
+        $cmd_aliyun_p cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" | tee "$upload_log"
     done < <(
         $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
             jq -r '.Domains.PageData[].DomainName' |
@@ -495,6 +504,8 @@ _upload_cert() {
         domain_cdn="${line}"
         domain="${domain_cdn#*.}"
         upload_name="${domain//./-}-$($cmd_date +%m%d)"
+        _msg "domain: ${domain_cdn}"
+        _msg "upload_name: ${upload_name}"
 
         $cmd_aliyun_p cdn BatchSetCdnDomainServerCertificate --region cn-hangzhou --SSLProtocol on --CertType cas --DomainName "${domain_cdn}" --CertName "${upload_name}"
 
