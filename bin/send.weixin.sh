@@ -42,7 +42,7 @@ _send_message() {
     #消息json体
     message=$(
         cat <<EOF
-    {
+{
     "touser":"$openid",
     "template_id":"$tpl_id",
     "url":"$url",
@@ -64,7 +64,7 @@ _send_message() {
                     "color":"#FF0000"
             }
     }
-     }
+}
 EOF
     )
     echo "send message : $message"
