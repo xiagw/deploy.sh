@@ -66,8 +66,8 @@ _get_project() {
         dir_exist="$(find "$doing_path" -maxdepth 1 -iname "${project_id}-*" | head -n1)"
         if [[ "$project_status" == 'closed' ]]; then
             ## 已关闭项目，移动到已关闭目录
-            if [ -z "$(ls -A "$doing_path/${project_id}-"*)" ]; then
-                rmdir "$doing_path/${project_id}-"*
+            if [ -z "$(ls -A "$doing_path/${project_id}-"* 2>/dev/null)" ]; then
+                rmdir "$doing_path/${project_id}-"* 2>/dev/null
             else
                 mv "$doing_path/${project_id}-"* "$closed_path/" 2>/dev/null
             fi
