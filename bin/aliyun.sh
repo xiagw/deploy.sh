@@ -15,7 +15,8 @@ _notify_weixin_work() {
 }
 
 _get_aliyun_profile() {
-    select profile in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json); do
+    select profile in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json) quit; do
+        [ "${profile:-quit}" = "quit" ] && exit 1
         _msg "aliyun-cli profile is: $profile"
         aliyun_profile="$profile"
         break
@@ -401,7 +402,8 @@ _add_ram() {
     # set -e
     if _get_yes_no "Add new Aliyun profile?"; then
         ## 配置阿里云账号
-        read -rp "Aliyun region: " aliyun_region
+        read -rp "Aliyun profile: " aliyun_profile
+        read -rp "Aliyun region [cn-hangzhou]: " aliyun_region
         read -rp "Aliyun Key: " aliyun_key
         read -rp "Aliyun Secret: " aliyun_secret
 
@@ -421,11 +423,12 @@ _add_ram() {
         acc_name=dev2app
         $cmd_aliyun_p ram CreateUser --DisplayName $acc_name --UserName $acc_name | tee -a "$me_log"
         $cmd_aliyun_p ram CreateLoginProfile --UserName $acc_name --Password "$password_rand" --PasswordResetRequired false | tee -a "$me_log"
+        _msg log "$me_log" "aliyun profile: ${aliyun_profile}, account: $acc_name, password: $password_rand"
         ## 为新帐号授权 oss
-        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunOSSFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
+        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunOSSFullAccess --PolicyType System --UserName $acc_name
         ## 为新帐号授权 domain dns
-        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunDomainFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
-        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunDNSFullAccess --PolicyType System --UserName $acc_name | tee -a "$me_log"
+        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunDomainFullAccess --PolicyType System --UserName $acc_name
+        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunDNSFullAccess --PolicyType System --UserName $acc_name
         ## 为新帐号创建 key
         $cmd_aliyun_p ram CreateAccessKey --UserName $acc_name | tee -a "$me_log"
     fi
@@ -438,27 +441,30 @@ _add_ram() {
         $cmd_aliyun_p oss mb oss://"${oss_bucket:?empty}" --region "${aliyun_region:?empty}"
     fi
 
-    if _get_yes_no "Create cdn.domain.com?"; then
+    if _get_yes_no "Create CDN domain?"; then
+        set -e
         ## 创建 CDN 加速域名
+        [ -z "$oss_bucket" ] && read -rp "OSS Bucket name? " oss_bucket
         read -rp "Input cdn.domain.com name: " cdn_domain
-        dns_alias=${cdn_domain:? empty cdn domain}.w.kunlunaq.com
+        dns_cname=${cdn_domain:? empty cdn domain}.w.kunlunaq.com
+        dns_oss="${oss_bucket}.oss-$aliyun_region.aliyuncs.com"
+        domain_name="${cdn_domain#*.}"
 
-        $cmd_aliyun_p cdn AddCdnDomain --region "$aliyun_region" --CdnType web --DomainName "${cdn_domain}" --Sources '[{
-    "Type": "oss",
-    "Priority": "20",
-    "Content": "'"${oss_bucket:?empty}"'.oss-'"$aliyun_region"'.aliyuncs.com",
-    "Port": 80,
-    "Weight": "10"
-}]'
+        ## 查询域名归属校验内容
+        dns_verify=()
+        for i in $($cmd_aliyun_p cdn DescribeDomainVerifyData --region cn-hangzhou --DomainName "$cdn_domain" | jq -r '.Content | .verifyKey + "  " + .verifiCode'); do
+            dns_verify+=("$i")
+        done
+        ## 增加 dns 校验记录
+        $cmd_aliyun_p alidns AddDomainRecord --region cn-hangzhou --DomainName "${domain_name}" --Type TXT --RR "${dns_verify[0]}" --Value "${dns_verify[1]}"
 
+        $cmd_aliyun_p cdn VerifyDomainOwner --region "$aliyun_region" --DomainName "$cdn_domain" --VerifyType dnsCheck
+
+        ## 创建 CDN 加速域名
+        $cmd_aliyun_p cdn AddCdnDomain --region "$aliyun_region" --CdnType web --DomainName "${cdn_domain}" \
+            --Sources '[{"content":"'"${dns_oss}"'","type":"oss","priority":"20","port":80,"weight":"10"}]'
         ## 新增 DNS 记录
-        # read -rp "Please input the domain name: " cdn_domain
-        $cmd_aliyun_p alidns AddDomainRecord --Type CNAME --DomainName "${cdn_domain}" --RR cdn --Value "$dns_alias"
-        ## 新增 CDN 域名
-        $cmd_aliyun_p cdn AddCdnDomain \
-            --CdnType web \
-            --DomainName "${cdn_domain}" \
-            --Sources '[{"content":"'"${oss_bucket}"'.oss-'"$aliyun_region"'.aliyuncs.com","type":"oss","priority":"20","port":80,"weight":"15"}]'
+        $cmd_aliyun_p alidns AddDomainRecord --Type CNAME --DomainName "${domain_name}" --RR cdn --Value "$dns_cname"
         ## 查询 DNS 记录并删除
         # $cmd_aliyun_p alidns DescribeDomainRecords --DomainName "${cdn_domain}" \
         #     --output text cols=RecordId,Status,RR,DomainName,Value,Type rows=DomainRecords.Record |

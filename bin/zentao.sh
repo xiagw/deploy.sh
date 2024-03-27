@@ -2,11 +2,13 @@
 
 _get_token() {
     if [ -f "$me_env" ]; then
-        source "$me_env"
-        select z in "${zen_domains[@]}"; do
-            zen_domain="${z}"
-            break
-        done
+        source "$me_env" "$@"
+        if [ -z "$zen_domain" ]; then
+            select z in "${zen_domains[@]}"; do
+                zen_domain="${z}"
+                break
+            done
+        fi
         source "$me_env" "${zen_domain:?empty}"
         token_time=$(${cmd_date:?empty date cmd} +%s -d '3600 seconds ago')
         if ((token_time > ${zen_token_time_save:-0})); then
@@ -101,7 +103,7 @@ main() {
 
     curl_opt='curl -fsSL'
 
-    _get_token
+    _get_token "$@"
 
     case "$1" in
     add)
