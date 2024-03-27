@@ -62,6 +62,29 @@ _delete_host() {
     [ -f "$ansible_conf" ] && sed -i "/^${read_ssh_name}$/d" "$ansible_conf"
 }
 
+_port_forward() {
+    if command -v nc &>/dev/null; then
+        echo >&2 "I require nc but it's not installed.  Aborting."
+        return 1
+    fi
+    ssh_opt='ssh -qfg -o ExitOnForwardFailure=yes'
+    ssh_host='ip.host.mysql.server'
+    ssh_forward_port="${1:-3306}"
+    ## create ssh tunnel
+    $ssh_opt -L "$ssh_forward_port":localhost:3306 $ssh_host "sleep 300" || true
+    ## kill ssh tunnel timeout
+    while nc -vz localhost "$ssh_forward_port"; do
+        # echo "ssh forward port $ssh_forward_port exist."
+        count=$((count + 1))
+        if [ $count -gt 30 ]; then
+            echo "ssh forward port $ssh_forward_port exist too long, break."
+            pkill -f "$ssh_opt -L $ssh_forward_port:localhost:3306" || true
+            break
+        fi
+        sleep 10
+    done &
+}
+
 main() {
     # set -xe
     # LANG="en_US.UTF-8"
@@ -72,48 +95,61 @@ main() {
     # LC_NUMERIC="en_US.UTF-8"
     # LC_TIME="en_US.UTF-8"
 
+    if [ "$1" = port ]; then
+        shift
+        _port_forward "$@"
+        return
+    fi
+
     conf_files=("$HOME"/.ssh/config*)
     conf_nums=${#conf_files[@]}
     ansible_host_files=("$HOME"/src/*devops*/ansible/hosts)
     ansible_host_nums=${#ansible_host_files[@]}
 
-    select host in add update delete $(awk '/^Host/ {print $2}' "${conf_files[@]}" | grep -v '\*') quit; do
-        case "${host:-quit}" in
-        'quit')
+    if command -v fzf >/dev/null; then
+        host=$(echo -e "add\nupdate\ndelete\n$(awk '/^Host/ {print $2}' "${conf_files[@]}" | grep -v '\*')" | fzf)
+    else
+        select h in add update delete $(awk '/^Host/ {print $2}' "${conf_files[@]}" | grep -v '\*'); do
+            host=$h
             break
-            ;;
-        'add')
-            _get_input
-            _add_host
-            ;;
-        'update')
-            _get_input
-            _delete_host
-            _add_host
-            ;;
-        'delete')
-            delete_flag=1
-            _get_input
-            _delete_host
-            ;;
-        *)
-            if grep -B2 "${host}" "${conf_files[@]}" | grep -q 'byobu'; then
-                exec_byobu='byobu'
-            fi
-            ## get username from $1
-            if [ -n "${1}" ]; then
-                host="${1}@${host}"
-            fi
-            # shellcheck disable=2086
-            if command -v tssh; then
-                tssh -A -t "${host}" $exec_byobu
-            else
-                ssh -A -t "${host}" $exec_byobu
-            fi
-            ;;
-        esac
-        break
-    done
+        done
+    fi
+
+    case "${host:-quit}" in
+    'quit')
+        return
+        ;;
+    'add')
+        _get_input
+        _add_host
+        ;;
+    'update')
+        _get_input
+        _delete_host
+        _add_host
+        ;;
+    'delete')
+        delete_flag=1
+        _get_input
+        _delete_host
+        ;;
+    *)
+        if grep -B2 "${host}" "${conf_files[@]}" | grep -q 'byobu'; then
+            exec_byobu='byobu'
+        fi
+        ## get username from $1
+        if [ -n "${1}" ]; then
+            host="${1}@${host}"
+        fi
+        # shellcheck disable=2086
+        if command -v tssh; then
+            tssh -A -t "${host}" $exec_byobu
+        else
+            ssh -A -t "${host}" $exec_byobu
+        fi
+        ;;
+    esac
+
 }
 
 main "$@"
