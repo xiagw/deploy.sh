@@ -39,9 +39,13 @@ _add_account() {
 }
 
 _get_project() {
-    doing_path="${zen_project_path:-/cifs/nas/fly/projects/02-进行中}"
+    doing_path="${zen_project_path:? ERR: empty path}"
     closed_path="${doing_path}/已关闭"
     file_tmp=$(mktemp)
+    if [[ ! -d "$doing_path" ]]; then
+        echo "not found path: $doing_path"
+        return 1
+    fi
     ## 获取项目列表
     $curl_opt -H "token:${zen_token}" "${zen_api}/projects?limit=1000" >"$file_tmp"
     # echo "Total projects: $(jq -r '.total' "$file_tmp")"
