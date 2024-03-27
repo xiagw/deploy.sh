@@ -12,18 +12,17 @@
 _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
-    duration=$SECONDS
-    h_m_s="$((duration / 3600))h$(((duration / 60) % 60))m$((duration % 60))s"
+    h_m_s="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
     time_now="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
-    red | error | erro) color_on='\033[0;31m' ;;       # Red
-    green | info) color_on='\033[0;32m' ;;             # Green
-    yellow | warning | warn) color_on='\033[0;33m' ;;  # Yellow
-    blue) color_on='\033[0;34m' ;;                     # Blue
-    purple | question | ques) color_on='\033[0;35m' ;; # Purple
-    cyan) color_on='\033[0;36m' ;;                     # Cyan
-    orange) color_on='\033[1;33m' ;;                   # Orange
+    red | error | erro) color_on='\033[0;31m' ;;
+    green | info) color_on='\033[0;32m' ;;
+    yellow | warning | warn) color_on='\033[0;33m' ;;
+    blue) color_on='\033[0;34m' ;;
+    purple | question | ques) color_on='\033[0;35m' ;;
+    cyan) color_on='\033[0;36m' ;;
+    orange) color_on='\033[1;33m' ;;
     step)
         ((++STEP))
         color_on="\033[0;36m[${STEP}] $time_now \033[0m"
@@ -43,6 +42,7 @@ _msg() {
         ;;
     esac
     [ "$#" -gt 1 ] && shift
+
     echo -e "${color_on}$*${color_off}"
 }
 
