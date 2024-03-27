@@ -420,6 +420,10 @@ EOF
     fi
     sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
     #                initialDelaySeconds: 50
+    sed -i \
+        -e '/livenessProbe/a \            initialDelaySeconds: 30' \
+        -e '/readinessProbe/a \            initialDelaySeconds: 30' \
+        "$file_deploy"
 }
 
 _deploy_k8s() {

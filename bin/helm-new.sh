@@ -2,10 +2,10 @@
 
 me_name="$(basename "$0")"
 me_path="$(dirname "$(readlink -f "$0")")"
-path_data_helm=$me_path/../data/helm
-me_log="${path_data_helm}/${me_name}.log"
+me_path_data=$me_path/../data/helm
+me_log="${me_path_data}/${me_name}.log"
 
-[ -d "$path_data_helm" ] || mkdir -p "$path_data_helm"
+[ -d "$me_path_data" ] || mkdir -p "$me_path_data"
 
 ## 获取 release 名称/端口/协议等信息
 if [[ -z "$1" ]]; then
@@ -21,7 +21,7 @@ else
 fi
 
 ## 创建 helm chart
-path_release="$path_data_helm/${release_name}"
+path_release="$me_path_data/${release_name}"
 helm create "$path_release"
 echo "$(date), helm create $path_release" >>"$me_log"
 ## 需要修改的配置文件
@@ -62,6 +62,7 @@ sed -i -e '57 a \          {{- if .Values.cnfs }}' "$deploy_file"
 sed -i -e '58 a \            - name: volume-cnfs' "$deploy_file"
 sed -i -e '59 a \              mountPath: "/app"' "$deploy_file"
 sed -i -e '60 a \          {{- end }}' "$deploy_file"
+
 cat >>"$deploy_file" <<EOF
       {{- if or .Values.cnfs .Values.nas .Values.nfs }}
       volumes:
@@ -72,6 +73,7 @@ cat >>"$deploy_file" <<EOF
             claimName: {{ .Values.cnfs }}
       {{- end }}
 EOF
+
 ## set port
 if [[ "${protocol:-tcp}" == 'tcp' ]]; then
     sed -i \
@@ -88,3 +90,8 @@ else
 fi
 sed -i -e "/serviceAccountName/s/^/#/" "$deploy_file"
 #                initialDelaySeconds: 50
+
+sed -i \
+    -e '/livenessProbe/a \            initialDelaySeconds: 30' \
+    -e '/readinessProbe/a \            initialDelaySeconds: 30' \
+    "$deploy_file"
