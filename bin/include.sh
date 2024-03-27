@@ -42,7 +42,7 @@ _msg() {
         return
     fi
 
-    printf "%s\n" "$time_now ${color_on}$*${color_off}"
+    printf "$time_now ${color_on}$*${color_off}\n"
 }
 
 _get_root() {

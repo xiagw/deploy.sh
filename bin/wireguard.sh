@@ -9,7 +9,8 @@ _set_peer2peer() {
     ## 不是新建的client，需要选择已存在的client
     else
         _msg green "select exist conf..."
-        select client_conf in $me_data/wg*.conf quit; do
+        cd "$me_data" || exit 1
+        select client_conf in wg*.conf quit; do
             [[ "$client_conf" == 'quit' ]] && exit
             break
         done
@@ -23,9 +24,10 @@ _set_peer2peer() {
         client_ip_port="$(awk '/^ListenPort/ {print $3}' "$client_conf" | head -n 1)"
     fi
     ## select server
-    _msg red "### select peer conf"
+    _msg red "select peer conf..."
+    cd "$me_data" || exit 1
     # select svr_conf in $me_data/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
-    select svr_conf in $me_data/wg*.conf quit; do
+    select svr_conf in wg*.conf quit; do
         [[ "$svr_conf" == 'quit' ]] && break
         svr_key_pub="$(awk '/^### public_key:/ {print $3}' "$svr_conf" | head -n 1)"
         svr_ip_pub="$(awk '/^### public_ip:/ {print $3}' "$svr_conf" | head -n 1)"
@@ -35,7 +37,7 @@ _set_peer2peer() {
         svr_ip6_pri=${svr_ip6_pri%/64*}
         svr_ip_port="$(awk '/^ListenPort/ {print $3}' "$svr_conf" | head -n 1)"
         read -rp "Set route(client-to-server): [192.168.1.0/24, 172.16.0.0/16] " read_ip_route
-        _msg red "From: $svr_conf to $client_conf "
+        _msg red "From: $svr_conf to ${client_conf##*/}"
         if ! grep -q "### ${svr_conf##*/} begin" "$client_conf"; then
             (
                 echo ""
@@ -54,7 +56,7 @@ _set_peer2peer() {
                 echo ""
             ) >>"$client_conf"
         fi
-        _msg green "From $client_conf to $svr_conf"
+        _msg green "From ${client_conf##*/} to $svr_conf"
         if ! grep -q "### ${client_conf##*/} begin" "$svr_conf"; then
             (
                 echo ""
@@ -129,7 +131,8 @@ _get_qrcode() {
         fi
     fi
     local conf
-    select conf in $me_data/wg*.conf quit; do
+    cd "$me_data" || exit 1
+    select conf in wg*.conf quit; do
         [[ "${conf}" == 'quit' || ! -f "${conf}" ]] && break
         _msg green "${conf}.png"
         qrencode -o "${conf}.png" -t PNG <"$conf"
@@ -137,15 +140,17 @@ _get_qrcode() {
 }
 
 _revoke_client() {
-    _msg green "Select client conf (revoke it)."
-    select conf in $me_data/wg*.conf quit; do
+    _msg green "Select conf to revoke..."
+    cd "$me_data" || exit 1
+    select conf in wg*.conf quit; do
         [[ "$conf" == 'quit' ]] && break
         _msg green "Selected: $conf"
         _msg yellow "revoke ${conf##*/} from all conf."
+        grep --color "^### ${conf##*/} begin" "$me_data"/wg*.conf
         sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$me_data"/wg*.conf
         _msg yellow "remove $conf."
         rm -f "$conf"
-        _msg red "!!! DONT forget update conf to Server/Client and reload"
+        _msg red "!!! DONT forget update conf to Server/Client and restart wireguard !!!"
         break
     done
 }
@@ -165,10 +170,11 @@ _restart_host() {
 }
 
 _reload_conf() {
-    _msg red "Please select wg conf."
-    select conf in $me_data/wg*.conf quit; do
+    _msg red "Please select conf."
+    cd "$me_data" || exit 1
+    select conf in wg*.conf quit; do
         [[ "${conf}" == 'quit' ]] && break
-        _msg red "(Have selected $conf)"
+        _msg red "selected $conf"
         if [ -f "$HOME/.ssh/config" ]; then
             select host in $(awk 'NR>1' "$HOME/.ssh/config"* | awk '/^Host/ {print $2}') quit; do
                 [[ "${host}" == 'quit' ]] && break
