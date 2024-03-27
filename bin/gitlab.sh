@@ -3,28 +3,28 @@
 
 _add_account() {
     if _get_yes_no "update $user_name password?"; then
-        user_id=$(gitlab user list --username "$user_name" | awk '/^id:/ {print $2}')
-        gitlab user update --id "$user_id" --username "$user_name" --name "$user_name" --email "$user_name@${domain_name}" --skip-reconfirmation 1
+        user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
+        $cmd_gitlab user update --id "${user_id}" --username "$user_name" --name "$user_name" --email "$user_name@${domain_name}" --skip-reconfirmation 1
         return
     fi
 
-    if gitlab user list --username "$user_name" | grep "name: ${user_name}$"; then
+    if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -m "$user_name"; then
         echo "user $user_name exists, exit 1."
         return 1
     fi
 
-    gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand:? empty password}" --email "${user_name}@${domain_name}" --skip-confirmation 1 --can-create-group 0
+    $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand:? empty password}" --email "${user_name}@${domain_name}" --skip-confirmation 1 --can-create-group 0
     _msg log "$me_log" "username=$user_name / password=$password_rand"
 
     _msg "add to default group \"pms\"."
-    pms_group_id=$(gitlab group list --search pms | grep -B1 'name: pms$' | awk '/^id:/ {print $2}')
-    user_id="$(gitlab user list --username "$user_name" | awk '/^id:/ {print $2}')"
-    gitlab group-member create --access-level 30 --group-id "$pms_group_id" --user-id "$user_id"
+    pms_group_id=$($cmd_gitlab group list --search pms | jq -r '.[] | select (.name == "pms") | .id')
+    user_id="$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')"
+    $cmd_gitlab group-member create --access-level 30 --group-id "$pms_group_id" --user-id "$user_id"
 
-    gitlab group list --skip-groups 2,"$pms_group_id"
-    select group_id in $(gitlab group list --skip-groups 2,"$pms_group_id" | awk '/^id:/ {print $2}') quit; do
+    $cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[] | (.id | tostring) + "\t" + .name'
+    select group_id in $($cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[].id') quit; do
         [ "${group_id:-quit}" == quit ] && break
-        gitlab group-member create --access-level 30 --group-id "$group_id" --user-id "$user_id"
+        $cmd_gitlab group-member create --access-level 30 --group-id "$group_id" --user-id "$user_id"
     done
 }
 
@@ -52,6 +52,7 @@ _new_element_user() {
 
 main() {
     set -e
+    unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
     cmd_readlink="$(command -v greadlink)"
     me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
     me_data_path="$me_path/../data"
@@ -73,6 +74,7 @@ main() {
     done
     . "$me_env" "$gitlab_profile"
     _msg "gitlab profile is: $gitlab_profile"
+    cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
 
     ## user_name and domain_name
     if [[ -z "$1" ]]; then
@@ -85,7 +87,6 @@ main() {
     fi
 
     _get_random_password
-    sed -i -e "s/^default.*/default = $gitlab_profile/" "$gitlab_python_config"
     _add_account
     _send_msg
     # _new_element_user
