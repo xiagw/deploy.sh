@@ -15,19 +15,20 @@ _notify_weixin_work() {
 }
 
 _get_aliyun_profile() {
-    if [ -z "$aliyun_profile" ]; then
-        select profile in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json) quit; do
-            [ "${profile:-quit}" = "quit" ] && exit 1
-            _msg "aliyun-cli profile is: $profile"
-            aliyun_profile="$profile"
-            break
-        done
-    fi
-    aliyun_region=$(jq -r ".profiles[] | select (.name == \"$profile\") | .region_id" "$HOME"/.aliyun/config.json)
+    # if [ -z "$aliyun_profile" ]; then
+    select profile in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json) quit; do
+        [ "${profile:-quit}" = "quit" ] && exit 1
+        _msg "aliyun-cli profile is: $profile"
+        aliyun_profile="$profile"
+        break
+    done
+    # fi
+    aliyun_region=$(jq -r ".profiles[] | select (.name == \"$aliyun_profile\") | .region_id" "$HOME"/.aliyun/config.json)
 
     [ -z "$aliyun_profile" ] && read -rp "Aliyun profile name: " aliyun_profile
-    [ -z "$aliyun_region" ] && read -rp "Aliyun profile name: " aliyun_region
+    [ -z "$aliyun_region" ] && read -rp "Aliyun region name: " aliyun_region
 
+    $cmd_aliyun configure set -p "$aliyun_profile"
     cmd_aliyun_p="$cmd_aliyun -p $aliyun_profile"
 }
 
@@ -392,6 +393,7 @@ _pay_cdn_bag() {
 
 _add_ram() {
     # set -e
+    $cmd_aliyun configure list
     if _get_yes_no "Add new Aliyun profile?"; then
         ## 配置阿里云账号
         read -rp "Aliyun profile: " aliyun_profile
@@ -408,7 +410,7 @@ _add_ram() {
     fi
 
     _get_aliyun_profile
-
+    $cmd_aliyun_p ram ListUsers | jq '.Users.User[]'
     if _get_yes_no "Create aliyun RAM user?"; then
         _get_random_password
         ## 创建帐号, 设置密/码
@@ -425,6 +427,7 @@ _add_ram() {
         $cmd_aliyun_p ram CreateAccessKey --UserName $acc_name | tee -a "$me_log"
     fi
 
+    $cmd_aliyun_p oss ls
     if _get_yes_no "Create aliyun OSS bucket? "; then
         read -rp "OSS Bucket name? " oss_bucket
         # read -rp "OSS Region? [cn-hangzhou] " oss_region
@@ -433,6 +436,7 @@ _add_ram() {
         $cmd_aliyun_p oss mb oss://"${oss_bucket:?empty}" --region "${aliyun_region:?empty}"
     fi
 
+    $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" | jq '.Domains.PageData[]'
     if _get_yes_no "Create CDN domain?"; then
         set -e
         ## 创建 CDN 加速域名
