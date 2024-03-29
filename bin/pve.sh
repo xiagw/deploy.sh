@@ -151,3 +151,6 @@ fi
 # systemctl start pve-cluster corosync
 
 # reboot
+
+# zfs snapshot -r tank@nas_backup
+# zfs send -Rv tank@nas_backup | zfs receive -Fv sonne

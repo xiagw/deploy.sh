@@ -194,11 +194,7 @@ _reload_conf() {
 # wg genkey | tee privatekey | wg pubkey > publickey; cat privatekey publickey; rm privatekey publickey
 
 _update_ddns() {
-    if [ "$(id -u)" -eq 0 ]; then
-        unset use_sudo
-    else
-        use_sudo=sudo
-    fi
+    _get_root
 
     for wg_interface in $($use_sudo wg show interfaces); do
         while read -r line; do
@@ -212,7 +208,8 @@ _update_ddns() {
             sudo wg set "$wg_interface" peer "${wg_peer}" endpoint "${wg_endpoint}"
         done < <($use_sudo wg show "$wg_interface" endpoints)
     done
-    $use_sudo wg show all dump
+    $cmd_date +%s
+    $use_sudo wg show all dump | awk 'NR>1 {print $4"\t"$5"\t"$6}'
 }
 
 main() {
