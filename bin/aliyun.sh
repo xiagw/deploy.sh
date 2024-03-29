@@ -522,24 +522,32 @@ _upload_cert() {
 _add_workorder() {
     id_string="
     11864 云解析DNS
-    18700 负载均衡
+    18700 负载均衡NLB-CLB
     18422 内容分发网络CDN
     9457 对象存储OSS
     7160 云服务器ECS
-    18474 容器服务Kubernetes版
-    10293 财务
-    25352 备案
+    18474 容器服务Kubernetes版k8s
+    10293 财务finance
+    25352 备案beian
     78102 云控制API
-    18528 函数计算
-    18771 弹性容器实例
+    18528 函数计算function
+    18771 弹性容器实例ECI
     "
-    select id in $(echo "$id_string" | awk '{print $1}'); do
-        wo_id=$(echo "$id_string" | awk "/$id/"'{print $1}')
-        wo_title=$(echo "$id_string" | awk "/$id/"'{print $2}')
-        python3 aliyun.workorder.py "${wo_id}" "${wo_title}"
-        # echo "python3 aliyun.workorder.py ${wo_id} ${wo_title}"
-        break
-    done
+    if command -v fzf; then
+        id_title=$(echo "$id_string" | fzf)
+        wo_id=$(echo "$id_title" | awk '{print $1}')
+        wo_title=$(echo "$id_title" | awk '{print $2}')
+    else
+        echo "$id_string"
+        select id in $(echo "$id_string" | awk '{print $1}'); do
+            wo_id=$(echo "$id_string" | awk "/$id/"'{print $1}')
+            wo_title=$(echo "$id_string" | awk "/$id/"'{print $2}')
+            break
+        done
+    fi
+
+    python3 aliyun.workorder.py "${wo_id}" "${wo_title}"
+    # echo "python3 aliyun.workorder.py ${wo_id} ${wo_title}"
 }
 
 _upgrade_aliyun() {
