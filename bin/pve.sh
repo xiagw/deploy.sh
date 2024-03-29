@@ -12,7 +12,7 @@ sed -i 's|^deb http://security.debian.org|deb https://mirrors.ustc.edu.cn/debian
 
 ## 修改 Proxmox 的源文件，可以使用如下命令：
 source /etc/os-release
-echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pve $VERSION_CODENAME pve-no-subscription" >/etc/apt/sources.list.d/pve-no-subscription.list
+echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pve $VERSION_CODENAME pve-no-subscription" | tee /etc/apt/sources.list.d/pve-no-subscription.list
 ## 对于 Proxmox Backup Server 和 Proxmox Mail Gateway，请将以上命令中的 pve 分别替换为 pbs 和 pmg。
 # echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pbs $VERSION_CODENAME pbs-no-subscription" >/etc/apt/sources.list.d/pbs-no-subscription.list
 # echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pmg $VERSION_CODENAME pmg-no-subscription" >/etc/apt/sources.list.d/pmg-no-subscription.list
@@ -47,18 +47,25 @@ apt upgrade -y
 if ! grep -q cen8UtnI13y "$HOME"/.ssh/authorized_keys; then
     curl -fsSL 'https://github.com/xiagw.keys' >>"$HOME"/.ssh/authorized_keys
 fi
+
+# export http_proxy=http://192.168.41.252:1080
 # https://forum.proxmox.com/threads/installing-ceph-in-pve8-nosub-repo.131348/
 ## install ceph 17
 # yes | pveceph install --repository no-subscription
-## install ceph 18  export http_proxy=http://192.168.41.252:1080
-yes | pveceph install --repository no-subscription --version reef
-
+## install ceph 18
+if dpkg -l | grep -q ceph; then
+    echo "Ceph already install"
+else
+    yes | pveceph install --repository no-subscription --version reef
+fi
 ## ssl cert
-# scp ~/Downloads/test.com.key /etc/pve/nodes/pve1/pveproxy-ssl.key
-# scp ~/Downloads/test.com.pem /etc/pve/nodes/pve1/pveproxy-ssl.pem
-# pvecm updatecerts -f
-# systemctl restart pvedaemon.service pveproxy.service
-# journalctl -b -u pveproxy.service
+if [ -f $HOME/ssl.key ]; then
+    cp -vf $HOME/ssl.key /etc/pve/nodes/pve1/pve-ssl.key
+    cp -vf $HOME/ssl.pem /etc/pve/nodes/pve1/pve-ssl.pem
+    pvecm updatecerts -f
+    systemctl restart pvedaemon.service pveproxy.service
+    journalctl -b -u pveproxy.service
+fi
 
 ## iso dir
 # /var/lib/pve/local-btrfs/template/iso/
@@ -102,6 +109,10 @@ yes | pveceph install --repository no-subscription --version reef
 
 # qemu-img resize --shrink /var/lib/pve/local-btrfs/images/209/vm-209-disk-0/disk.raw -100G && echo ok
 
+# a=2G; for i in {1..3}; do truncate -s $a /vdisk/$a.$i; done
+# zpool create tank /vdisk/2G.1
+# zpool attach tank /vdisk/2G.1 /vdisk/2G.2  # mirror
+
 # sysctl -w vm.swappiness=10
 # /etc/sysctl.conf
 # vm.swappiness = 10
@@ -122,6 +133,7 @@ yes | pveceph install --repository no-subscription --version reef
 # zfs get compression,dedup,atime,casesensitivity
 # zfs create -o compression=lz4 -o dedup=on -o atime=off -o casesensitivity=insensitive -o normalization=none
 # zfs create -o compression=lz4 -o dedup=on -o atime=off -o casesensitivity=insensitive tank/share
+# zfs create -o compression=on -o atime=off -o casesensitivity=insensitive zfs03/share
 # net usershare add fly /zfs01/share /zfs01/share Everyone:F
 # zfs set sharenfs='rw' tank/home
 
