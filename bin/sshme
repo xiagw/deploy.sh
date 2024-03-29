@@ -134,7 +134,7 @@ main() {
         _delete_host
         ;;
     *)
-        if grep -B2 "${host}" "${conf_files[@]}" | grep -q 'byobu'; then
+        if grep -B2 -E "Host\s+${host}$" "${conf_files[@]}" | grep -q 'byobu'; then
             exec_byobu='byobu'
         fi
         ## get username from $1
