@@ -51,19 +51,20 @@ _get_project() {
     # echo "Total projects: $(jq -r '.total' "$file_tmp")"
 
     while read -r line; do
-        dir_name="${line%;*}"
-        project_id=$(echo "$line" | cut -d '-' -f 1)
-        project_status=$(echo "$line" | cut -d ';' -f 2)
+        project_id="$(echo "$line" | awk -F';' '{print $1}')"
+        project_name="$(echo "$line" | awk -F';' '{print $2}')"
+        project_status="$(echo "$line" | awk -F';' '{print $3}')"
+        project_dir="${project_id}-${project_name}"
         ## 排除 id
         if echo "${zen_project_exclude[@]}" | grep -q -w "$project_id"; then
             continue
         fi
         ## 不足3位数前面补0
         if [[ "${#project_id}" -eq 1 ]]; then
-            dir_name="00$dir_name"
+            project_dir="00$project_dir"
             project_id="00$project_id"
         elif [[ "${#project_id}" -eq 2 ]]; then
-            dir_name="0$dir_name"
+            project_dir="0$project_dir"
             project_id="0$project_id"
         fi
         ## 是否已经存在目录
@@ -78,16 +79,16 @@ _get_project() {
         else
             if [[ -d "$dir_exist" ]]; then
                 ## 存在同id目录，修改为标准目录名
-                if [[ "$dir_exist" != "${doing_path}/${dir_name}" ]]; then
-                    mv "$dir_exist" "${doing_path}/${dir_name}"
+                if [[ "$dir_exist" != "${doing_path}/${project_dir}" ]]; then
+                    mv "$dir_exist" "${doing_path}/${project_dir}"
                 fi
             else
                 ## 不存在目录，创建标准目录
-                mkdir "${doing_path}/${dir_name}"
+                mkdir "${doing_path}/${project_dir}"
             fi
         fi
         # sleep 5
-    done < <(jq -r '.projects[] | (.id|tostring) + "-" + .name + ";" + .status' "$file_tmp")
+    done < <(jq -r '.projects[] | (.id|tostring) + ";" + .name + ";" + .status' "$file_tmp")
     # jq -c '.projects[] | select (.status | contains("doing","closed"))' "$file_tmp" |
     #         jq -r '(.id|tostring) + "-" + .name + ";" + .status'
     rm -f "$file_tmp"
