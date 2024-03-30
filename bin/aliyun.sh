@@ -545,7 +545,9 @@ _add_workorder() {
             break
         done
     fi
-
+    if [ "$(uname -o)" = Darwin ]; then
+        source "$HOME/Library/Application Support/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
+    fi
     python3 aliyun.workorder.py "${wo_id}" "${wo_title}"
     # echo "python3 aliyun.workorder.py ${wo_id} ${wo_title}"
 }
