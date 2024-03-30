@@ -73,12 +73,16 @@ _set_peer2peer() {
 }
 
 _new_key() {
-    # ip_prefix="10.10.10."
-    # port_prefix="40000"
-    ip_prefix="10.9.0."
-    ip6_prefix="fd00:9::"
-    port_prefix="39000"
-    client_num="${1:-20}"
+    if [ "${wireguard_network:-1}" -eq 1 ]; then
+        ip_prefix="10.9.0."
+        ip6_prefix="fd00:9::"
+        port_prefix="39000"
+    else
+        ip_prefix="10.10.10."
+        ip6_prefix="fd00:10::"
+        port_prefix="40000"
+    fi
+    client_num="${1:-21}"
     client_conf="$me_data/wg${client_num}.conf"
     until [[ "${client_num}" -lt 254 ]]; do
         read -rp "Error! enter ip again [1-254]: " client_num
@@ -243,6 +247,13 @@ What do you want to do?
     until [[ ${MENU_OPTION} =~ ^[1-6]$ ]]; do
         read -rp "Select an option [1-6]: " MENU_OPTION
     done
+
+    read -rp "Select wireguard network (git|jump): [1|2]: " -e -i1 wireguard_network
+    if [ "${wireguard_network:-1}" -eq 2 ]; then
+        me_data="${me_path}/../data/wireguard2"
+        [ -d "$me_data" ] || mkdir -p "$me_data"
+    fi
+
     case "${MENU_OPTION}" in
     1) _new_key "$@" ;;
     2) _set_peer2peer ;;
