@@ -25,24 +25,24 @@ _get_config() {
         echo "Usage: $0 <your-name>.dynv6.net <token> [device]"
         return 1
     fi
-    _msg "dynv6_host: $dynv6_host"
+    _msg "ddns dynv6 host: $dynv6_host"
 }
 
 ## get last ip from log
 _get_ip_last() {
     ip4_last=$(awk 'END {print $3}' "$me_log")
-    _msg "ip4_last: $ip4_last"
     ip6_last=$(awk 'END {print $5}' "$me_log")
-    _msg "ip6_last: $ip6_last"
+    _msg "get old IPv4 from log file: $ip4_last"
+    _msg "get old IPv6 from log file: $ip6_last"
 }
 
 # address with netmask
 # ip6_current=$ip6_current/${netmask:-128}
 _compare_ip() {
     if [ "$ip6_last" = "$ip6_current" ] && [ "$ip4_last" = "$ip4_current" ]; then
-        _msg "not changed"
+        _msg "IP not changed, skip update"
         if [ "${force_update:-0}" -eq 1 ]; then
-            _msg "force update"
+            _msg "force update ddns"
             return 1
         else
             return 0
@@ -128,7 +128,7 @@ main() {
     _set_args "$@"
     _get_config || return
     _get_ip_last
-    _get_ip_current
+    _get_ip_current  ## include.sh
     _compare_ip && return
     _update_dynv6
     # _update_aliyun

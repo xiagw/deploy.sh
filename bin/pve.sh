@@ -59,12 +59,13 @@ else
     yes | pveceph install --repository no-subscription --version reef
 fi
 ## ssl cert
-if [ -f $HOME/ssl.key ]; then
-    cp -vf $HOME/ssl.key /etc/pve/nodes/pve1/pve-ssl.key
-    cp -vf $HOME/ssl.pem /etc/pve/nodes/pve1/pve-ssl.pem
-    pvecm updatecerts -f
+if [ -f $HOME/ssl.key ] && [ -f $HOME/ssl.pem ]; then
+    echo "Found $HOME/ssl.key and $HOME/ssl.pem ..."
+    cp -vf $HOME/ssl.key /etc/pve/nodes/*/pve-ssl.key
+    cp -vf $HOME/ssl.pem /etc/pve/nodes/*/pve-ssl.pem
+    # pvecm updatecerts -f
     systemctl restart pvedaemon.service pveproxy.service
-    journalctl -b -u pveproxy.service
+    # journalctl -b -u pveproxy.service
 fi
 
 ## iso dir

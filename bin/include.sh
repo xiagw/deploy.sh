@@ -93,9 +93,9 @@ _get_ip_current() {
         # ip4_current=$($cmd cip.cc | awk '/^IP.*:/ {print $3}')
         ip4_current=$(curl -x '' -fsSL 4.ipw.cn)
         ip6_current=$(curl -x '' -fsSL 6.ipw.cn | tail -n 1)
-        _msg "ip6_current [6.ipw.cn ]: $ip6_current"
+        _msg "get current IPv6 from [6.ipw.cn ]: $ip6_current"
         ip6_current=$(ifconfig en0 | awk '/inet6.*temporary/ {print $2}' | head -n 1)
-        _msg "ip6_current [Interface]: $ip6_current"
+        _msg "get current IPv6 from [Interface]: $ip6_current"
     elif grep -i -q 'ID="openwrt2"' /etc/os-release; then
         ## get current ip from Interface
         . /lib/functions/network.sh
@@ -113,8 +113,8 @@ _get_ip_current() {
         ip6_current=$(ip -6 addr list scope global "${wan_device:-pppoe-wan}" | awk '/inet6/ {print $2}' | head -n 1)
         # ip6_current=${ip6_current%%/*}
     fi
-    _msg "ip4_current: $ip4_current"
-    _msg "ip6_current: $ip6_current"
+    _msg green "get IPv4: $ip4_current"
+    _msg green "get IPv6: $ip6_current"
 }
 
 _get_distribution() {
