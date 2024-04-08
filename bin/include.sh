@@ -91,11 +91,13 @@ _get_ip_current() {
     ## get current ip from Internet API
     if [ "$(uname -o)" = Darwin ]; then
         # ip4_current=$($cmd cip.cc | awk '/^IP.*:/ {print $3}')
-        ip4_current=$(curl -x '' -fsSL 4.ipw.cn)
-        ip6_current=$(curl -x '' -fsSL 6.ipw.cn | tail -n 1)
+        ip4_current=$(curl -x '' -4 --connect-timeout 5 -fsSL 4.ipw.cn)
+        ip6_current=$(curl -x '' -6 --connect-timeout 5 -fsSL 6.ipw.cn | tail -n 1)
         _msg "get current IPv6 from [6.ipw.cn ]: $ip6_current"
-        ip6_current=$(ifconfig en0 | awk '/inet6.*temporary/ {print $2}' | head -n 1)
-        _msg "get current IPv6 from [Interface]: $ip6_current"
+        if [ -z "$ip6_current" ]; then
+            ip6_current=$(ifconfig en0 | awk '/inet6.*temporary/ {print $2}' | head -n 1)
+            _msg "get current IPv6 from [Interface]: $ip6_current"
+        fi
     elif grep -i -q 'ID="openwrt2"' /etc/os-release; then
         ## get current ip from Interface
         . /lib/functions/network.sh
@@ -118,6 +120,16 @@ _get_ip_current() {
 }
 
 _get_distribution() {
+    # case "$OSTYPE" in
+    # solaris*) os_type="SOLARIS" ;;
+    # darwin*) os_type="OSX" ;;
+    # linux*) os_type="LINUX" ;;
+    # bsd*) os_type="BSD" ;;
+    # msys*) os_type="WINDOWS" ;;
+    # cygwin*) os_type="ALSOWINDOWS" ;;
+    # *) os_type="unknown" ;;
+    # esac
+
     if [ -r /etc/os-release ]; then
         lsb_dist="$(. /etc/os-release && echo "$ID")"
         lsb_dist="${lsb_dist,,}"

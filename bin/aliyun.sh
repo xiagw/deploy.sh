@@ -532,6 +532,7 @@ _add_workorder() {
     78102 云控制API
     18528 函数计算function
     18771 弹性容器实例ECI
+    25446 云存储网关SGW
     "
     if command -v fzf; then
         id_title=$(echo "$id_string" | fzf)
@@ -545,6 +546,7 @@ _add_workorder() {
             break
         done
     fi
+    echo "wo_id: ${wo_id:? ERR: empty id} , wo_title: ${wo_title:? ERR: 未设置标题}"
     if [ "$(uname -o)" = Darwin ]; then
         source "$HOME/Library/Application Support/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
     fi

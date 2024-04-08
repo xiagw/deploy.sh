@@ -45,7 +45,7 @@ apt upgrade -y
 
 # ssh-key
 if ! grep -q cen8UtnI13y "$HOME"/.ssh/authorized_keys; then
-    curl -fsSL 'https://github.com/xiagw.keys' >>"$HOME"/.ssh/authorized_keys
+    curl -fsSL 'https://oss.flyh6.com/docker/xiagw.keys' >>"$HOME"/.ssh/authorized_keys
 fi
 
 # export http_proxy=http://192.168.41.252:1080
@@ -56,7 +56,7 @@ fi
 if dpkg -l | grep -q ceph; then
     echo "Ceph already install"
 else
-    yes | pveceph install --repository no-subscription --version reef
+    echo 'yes | pveceph install --repository no-subscription --version reef'
 fi
 ## ssl cert
 if [ -f $HOME/ssl.key ] && [ -f $HOME/ssl.pem ]; then
@@ -131,6 +131,7 @@ fi
 # zfs set dedup=on atime=off compression=lz4 zfs01
 # apt install nfs-kernel-server
 
+# zpool create -o ashift=12 -o autoexpand=on tank /vdisk/2G.1 /vdisk/2G.2
 # zfs get compression,dedup,atime,casesensitivity
 # zfs create -o compression=lz4 -o dedup=on -o atime=off -o casesensitivity=insensitive -o normalization=none
 # zfs create -o compression=lz4 -o dedup=on -o atime=off -o casesensitivity=insensitive tank/share
@@ -155,3 +156,13 @@ fi
 
 # zfs snapshot -r tank@nas_backup
 # zfs send -Rv tank@nas_backup | zfs receive -Fv sonne
+
+## zfs 2.3
+# sudo apt install build-essential autoconf automake libtool gawk alien fakeroot dkms libblkid-dev uuid-dev libudev-dev libssl-dev zlib1g-dev libaio-dev libattr1-dev libelf-dev linux-headers-generic python3 python3-dev python3-setuptools python3-cffi libffi-dev python3-packaging debhelper-compat dh-python po-debconf python3-all-dev python3-sphinx libpam0g-dev
+
+# sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+# sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+# sudo sysctl -w net.ipv6.conf.lo.disable_ipv6=1
+
+# watch -d -n 3 "zpool status; lsblk -S; cd /dev/disk/by-id/ && ls -l ata* | grep -v 'part.'"
+# sgdisk --zap-all --clear --mbrtogpt /dev/sdb

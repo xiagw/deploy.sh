@@ -131,7 +131,6 @@ main() {
     _get_ip_current  ## include.sh
     _compare_ip && return
     _update_dynv6
-    # _update_aliyun
 }
 
 main "$@"

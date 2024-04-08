@@ -248,11 +248,14 @@ What do you want to do?
         read -rp "Select an option [1-6]: " MENU_OPTION
     done
 
-    read -rp "Select wireguard network (git|jump): [1|2]: " -e -i1 wireguard_network
-    if [ "${wireguard_network:-1}" -eq 2 ]; then
-        me_data="${me_path}/../data/wireguard2"
+    until [[ ${wireguard_network} =~ ^[1-3]$ ]]; do
+        read -rp "Select wireguard network (gitlab|jump|demo): [1-3]: " wireguard_network
+    done
+    if [ "${wireguard_network:-1}" -gt 1 ]; then
+        me_data="${me_path}/../data/wireguard${wireguard_network}"
         [ -d "$me_data" ] || mkdir -p "$me_data"
     fi
+    _msg green "wireguard data path: $me_data"
 
     case "${MENU_OPTION}" in
     1) _new_key "$@" ;;
