@@ -36,7 +36,8 @@ _set_peer2peer() {
         svr_ip6_pri="$(awk '/^Address/ {print $4}' "$svr_conf" | head -n 1)"
         svr_ip6_pri=${svr_ip6_pri%/64*}
         svr_ip_port="$(awk '/^ListenPort/ {print $3}' "$svr_conf" | head -n 1)"
-        read -rp "Set route(client-to-server): [192.168.1.0/24, 172.16.0.0/16] " read_ip_route
+        svr_lan_cidr="$(awk '/^### site2site_lan_cidr:/ {print $3}' "$svr_conf" | head -n 1)"
+        # read -rp "Set route(client-to-server): [192.168.1.0/24, 172.16.0.0/16] " read_ip_route
         _msg red "From: $svr_conf to ${client_conf##*/}"
         if ! grep -q "### ${svr_conf##*/} begin" "$client_conf"; then
             (
@@ -46,10 +47,10 @@ _set_peer2peer() {
                 echo "PublicKey = $svr_key_pub"
                 echo "# PresharedKey = $client_key_pre"
                 echo "endpoint = $svr_ip_pub:$svr_ip_port"
-                if [[ -z ${read_ip_route} ]]; then
+                if [[ -z "${svr_lan_cidr}" ]]; then
                     echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128"
                 else
-                    echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128, ${read_ip_route}"
+                    echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128, ${svr_lan_cidr}"
                 fi
                 echo "PersistentKeepalive = 60"
                 echo "### ${svr_conf##*/} end"
@@ -64,7 +65,7 @@ _set_peer2peer() {
                 echo "[Peer]"
                 echo "PublicKey = $client_key_pub"
                 echo "# PresharedKey = $client_key_pre"
-                echo "AllowedIPs = ${client_ip_pri}/32, ${svr_ip6_pri}/128"
+                echo "AllowedIPs = ${client_ip_pri}/32, ${client_ip6_pri}/128"
                 echo "### ${client_conf##*/} end"
                 echo ""
             ) >>"$svr_conf"
@@ -249,7 +250,7 @@ What do you want to do?
     done
 
     until [[ ${wireguard_network} =~ ^[1-3]$ ]]; do
-        read -rp "Select wireguard network (gitlab|jump|demo): [1-3]: " wireguard_network
+        read -rp "Select wireguard network (gitlab|jump|demo): [1-3]: " -e -i1 wireguard_network
     done
     if [ "${wireguard_network:-1}" -gt 1 ]; then
         me_data="${me_path}/../data/wireguard${wireguard_network}"

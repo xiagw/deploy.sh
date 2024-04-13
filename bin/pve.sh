@@ -110,9 +110,12 @@ fi
 
 # qemu-img resize --shrink /var/lib/pve/local-btrfs/images/209/vm-209-disk-0/disk.raw -100G && echo ok
 
-# a=2G; for i in {1..3}; do truncate -s $a /vdisk/$a.$i; done
-# zpool create tank /vdisk/2G.1
-# zpool attach tank /vdisk/2G.1 /vdisk/2G.2  # mirror
+# mkdir /vdisk;
+# a=2G; for i in {1..5}; do truncate -s $a /vdisk/$a.$i; done
+# a=5G; for i in {1..5}; do truncate -s $a /vdisk/$a.$i; done
+# zpool create tank /vdisk/2G.1 /vdisk/2G.2
+# zpool create tank mirror /vdisk/2G.1 /vdisk/2G.2
+# zpool attach tank raidz /vdisk/2G.1 /vdisk/2G.2 /vdisk/2G.3
 
 # sysctl -w vm.swappiness=10
 # /etc/sysctl.conf
