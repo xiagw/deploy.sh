@@ -2,8 +2,8 @@
 # Get-ExecutionPolicy -List
 ## 设置执行策略为要求远程脚本签名，范围为当前用户
 # Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-## in-china # irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/bin/win.ssh.ps1 | iex
-## not-china # irm https://github.com/xiagw/deploy.sh/raw/main/docs/bin/win.ssh.ps1 | iex
+## in-china # irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex
+## not-china # irm https://github.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex
 
 ## https://github.com/massgravel/Microsoft-Activation-Scripts
 # irm https://massgrave.dev/get | iex
