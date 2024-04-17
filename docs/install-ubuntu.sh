@@ -7,7 +7,7 @@ sudo dd if=/dev/zero of=/swapfile bs=1G count=8
 sudo mkswap /swapfile
 sudo swapon /swapfile
 ## 或增加到 /etc/fstab
-echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab
+grep '/swapfile' /etc/fstab || echo '/swapfile none swap defaults 0 0' | sudo tee -a /etc/fstab
 
 # sudo sed -i -e \
 # 's/archive.ubuntu/mirrors.aliyun/' \
@@ -85,20 +85,6 @@ sudo systemctl start docker
 
 ## 截屏软件
 sudo apt install -y flameshot
-
-setup_php() {
-    # 本机安装 php 及 php-ext
-    sudo apt install php7.2 php7.2-xml php7.2-gd
-
-    ## 本机安装 phpcodeSniffer
-    # Download using curl
-    curl -OL https://squizlabs.github.io/PHP_CodeSniffer/phpcs.phar
-    curl -OL https://squizlabs.github.io/PHP_CodeSniffer/phpcbf.phar
-    mv phpcs.phar phpcs
-    mv phpcbf.phar phpcbf
-    chmod +x phpcs phpcbf
-    sudo mv phpcs /usr/local/bin/phpcs /usr/local/bin/phpcbf
-}
 
 ## install vscode
 # Download Visual Studio Code - Mac, Linux, Windows
@@ -233,4 +219,31 @@ EOF
 
     # xfconf-query -c xfwm4 -p /general/use_compositing -s false
     # xfconf-query -c xfwm4 -p /general/vblank_mode -s off
+
+    # 将主文件夹的文件夹中文名称改为英文
+    # LANG=en_US xdg-user-dirs-gtk-update
+    # LANG=zh_CN.UTF-8 xdg-user-dirs-gtk-update
+
+    grep 'GRUB_RECORDFAIL_TIMEOUT' /etc/default/grub || echo 'GRUB_RECORDFAIL_TIMEOUT=3' | sudo tee -a /etc/default/grub
+    sudo update-grub && grep -B3 "set timeout=" /boot/grub/grub.cfg
+
+    sudo apt install x11vnc
+    # xset dpms force on  ## 降低屏幕延迟
+    cat <<EOF | sudo tee /etc/systemd/system/x11vnc.service
+[Unit]
+Description=Start x11vnc at startup.
+After=multi-user.target display-manager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/x11vnc -auth guess -forever -noxdamage -repeat -rfbauth /home/ops/.vnc/passwd -rfbport 5900 -display :0 -shared
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    ## macos mount nfs
+    # mount -o resvport 10.0.0.55:/nfsdata ttt
 }
