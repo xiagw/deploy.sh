@@ -221,13 +221,24 @@ EOF
     # xfconf-query -c xfwm4 -p /general/vblank_mode -s off
 
     # 将主文件夹的文件夹中文名称改为英文
-    # LANG=en_US xdg-user-dirs-gtk-update
-    # LANG=zh_CN.UTF-8 xdg-user-dirs-gtk-update
+    # LANG=en_US xdg-user-dirs-gtk-update ## 点是
+    # LANG=zh_CN.UTF-8 xdg-user-dirs-gtk-update  ## 点保留
+
+    ## set mirror
+    if [ -f /etc/apt/sources.list.d/official-package-repositories.list ]; then
+        sudo sed -i 's#packages.linuxmint.com#mirrors.aliyun.com/linuxmint-packages#' /etc/apt/sources.list.d/official-package-repositories.list
+        sudo sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/' /etc/apt/sources.list
+        sudo sed -i 's/security.ubuntu.com/mirrors.aliyun.com/' /etc/apt/sources.list
+        sudo apt update
+        sudo apt upgrade
+    fi
+
+    sudo visudo -f /etc/sudoers.d/xia
 
     grep 'GRUB_RECORDFAIL_TIMEOUT' /etc/default/grub || echo 'GRUB_RECORDFAIL_TIMEOUT=3' | sudo tee -a /etc/default/grub
     sudo update-grub && grep -B3 "set timeout=" /boot/grub/grub.cfg
 
-    sudo apt install x11vnc
+    sudo apt install -y x11vnc
     # xset dpms force on  ## 降低屏幕延迟
     cat <<EOF | sudo tee /etc/systemd/system/x11vnc.service
 [Unit]
@@ -244,6 +255,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
+    sudo systemctl enable x11vnc.service
     ## macos mount nfs
     # mount -o resvport 10.0.0.55:/nfsdata ttt
 }

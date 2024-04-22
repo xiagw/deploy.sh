@@ -16,7 +16,7 @@ _msg() {
     time_now="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
-    red | error | erro) color_on='\033[0;31m' ;;
+    red | error | err) color_on='\033[0;31m' ;;
     green | info) color_on='\033[0;32m' ;;
     yellow | warning | warn) color_on='\033[0;33m' ;;
     blue) color_on='\033[0;34m' ;;
@@ -1290,7 +1290,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    _msg step "[inject] inject files (config/env/Dockerfile...)"
+    _msg step "[inject] inject files from ${me_path_data}/inject/ (config/env/Dockerfile...)"
     ## backend (PHP/Java/Python) inject files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     local inject_dir="${me_path_data}/inject/${gitlab_project_name}/${env_namespace}"
