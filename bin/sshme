@@ -135,7 +135,7 @@ main() {
         ;;
     *)
         if grep -B2 -E "Host\s+${host}$" "${conf_files[@]}" | grep -q 'byobu'; then
-            if uname -a | grep -q 'iphone.*ish'; then
+            if uname -a | grep -i -q 'iphone.*ish'; then
                 unset use_byobu
             else
                 use_byobu='byobu'
