@@ -135,7 +135,11 @@ main() {
         ;;
     *)
         if grep -B2 -E "Host\s+${host}$" "${conf_files[@]}" | grep -q 'byobu'; then
-            exec_byobu='byobu'
+            if uname -a | grep -q 'iphone.*ish'; then
+                unset use_byobu
+            else
+                use_byobu='byobu'
+            fi
         fi
         ## get username from $1
         if [ -n "${1}" ]; then
@@ -143,13 +147,12 @@ main() {
         fi
         # shellcheck disable=2086
         if command -v tssh; then
-            tssh -A -t "${host}" $exec_byobu
+            tssh -A -t "${host}" $use_byobu
         else
-            ssh -A -t "${host}" $exec_byobu
+            ssh -A -t "${host}" $use_byobu
         fi
         ;;
     esac
-
 }
 
 main "$@"
