@@ -526,19 +526,18 @@ _deploy_rsync_ssh() {
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     local tmp_file
     tmp_file=$(mktemp)
-    grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $tmp_file || true
+    # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $tmp_file || true
+    jq -r ".projects[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | tee -a $tmp_file || true
     while read -r line; do
-        read -r -a array <<<"$line"
-        # git_branch=${array[1]}
-        ssh_host=${array[2]}
-        ssh_port=${array[3]}
-        rsync_src_from_conf=${array[4]}
-        rsync_dest=${array[5]} ## 从配置文件读取目标路径
-        # db_user=${array[6]}
-        # db_host=${array[7]}
-        # db_name=${array[8]}
+        ssh_host=$(jq -r ". | select (.ssh_host == \"$line\") | .ssh_host" $tmp_file)
+        ssh_port=$(jq -r ". | select (.ssh_host == \"$line\") | .ssh_port" $tmp_file)
+        rsync_src_from_conf=$(jq -r ". | select (.ssh_host == \"$line\") | .rsync_src" $tmp_file)
+        rsync_dest=$(jq -r ". | select (.ssh_host == \"$line\") | .rsync_dest" $tmp_file)
+        # db_host=$(jq -r '.db_host' $tmp_file)
+        # db_user=$(jq -r '.db_user' $tmp_file)
+        # db_name=$(jq -r '.db_name' $tmp_file)
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo "ssh host: ${ssh_host:?if stop here, check $me_conf}, port: ${ssh_port:-22}"
+        echo "ssh host: ${ssh_host:?when stop here, please check $me_conf}, port: ${ssh_port:-22}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
         ## node/java use rsync --delete / node/java 使用 rsync --delete
@@ -548,20 +547,16 @@ _deploy_rsync_ssh() {
         ## rsync source folder / rsync 源目录
         ## define rsync_relative_path in bin/build.*.sh / 在 bin/build.*.sh 中定义 rsync_relative_path
         ## default: rsync_relative_path=''
-        rsync_src="${gitlab_project_dir}/"
         if [[ "$project_lang" == java ]]; then
-            rsync_relative_path=jars
+            rsync_relative_path=jars/
         elif [[ "$project_lang" == node ]]; then
-            rsync_relative_path=dist
+            rsync_relative_path=dist/
         fi
         if [[ -z "${rsync_src_from_conf}" ]]; then
-            rsync_src="${gitlab_project_dir}/"
-        elif [[ "${rsync_src_from_conf}" != 'none' ]]; then
-            rsync_src="${gitlab_project_dir}/${rsync_src_from_conf}/"
-        elif [ -n "$rsync_relative_path" ]; then
-            rsync_src="${gitlab_project_dir}/$rsync_relative_path/"
+            rsync_src="${gitlab_project_dir}/${rsync_relative_path-}"
+        else
+            rsync_src="${rsync_src_from_conf}/"
         fi
-
         ## rsycn dest folder / rsync 目标目录
         if [[ "$rsync_dest" == 'none' || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${env_namespace}.${gitlab_project_name}/"
@@ -574,20 +569,22 @@ _deploy_rsync_ssh() {
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
             return
         fi
-        $ssh_opt -n "${ssh_host}" "[[ -d $rsync_dest ]] || mkdir -p $rsync_dest"
         echo "destination: ${ssh_host}:${rsync_dest}"
+        $ssh_opt -n "${ssh_host}" "[[ -d $rsync_dest ]] || mkdir -p $rsync_dest"
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
+
         if [ -f "$me_path_data_bin/deploy.custom.sh" ]; then
             _msg time "custom deploy..."
             bash "$me_path_data_bin/deploy.custom.sh" ${ssh_host} ${rsync_dest}
             _msg time "custom deploy."
         fi
+
         if ${exec_deploy_docker_compose:-false}; then
             _msg step "deploy to server with docker-compose"
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $gitlab_project_name"
         fi
-    done <$tmp_file
+    done < <(jq -r '.ssh_host' $tmp_file)
     rm -f $tmp_file
     _msg time "[deploy] deploy files with rsync+ssh"
 }
@@ -1785,14 +1782,14 @@ main() {
     me_log="${me_path_data}/${me_name}.log"
     me_path_data_bin="${me_path}/data/bin"
     me_path_builds="${me_path}/builds"
-    me_conf="${me_path_data}/deploy.conf"           ## deploy to app server 发布到目标服务器的配置信息
+    me_conf="${me_path_data}/deploy.json"           ## deploy to app server 发布到目标服务器的配置信息
     me_env="${me_path_data}/deploy.env"             ## deploy.sh ENV 发布配置信息(密)
     me_dockerfile="${me_path_conf}/dockerfile"      ## deploy.sh dependent dockerfile
     me_data_dockerfile="${me_path_data}/dockerfile" ## deploy.sh dependent dockerfile
     ## create deploy.sh/data dir  /  创建 data 目录
     [[ -d $me_path_data ]] || mkdir -p $me_path_data
     ## 准备配置文件
-    [[ -f "$me_conf" ]] || cp -v "${me_path_conf}/example-deploy.conf" "$me_conf"
+    [[ -f "$me_conf" ]] || cp -v "${me_path_conf}/example-deploy.json" "$me_conf"
     [[ -f "$me_env" ]] || cp -v "${me_path_conf}/example-deploy.env" "$me_env"
     ## 设定 PATH
     declare -a paths_to_append=(
