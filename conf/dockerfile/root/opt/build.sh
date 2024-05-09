@@ -24,7 +24,7 @@ _set_mirror() {
         return
     fi
 
-    url_fly_cdn="http://cdn.flyh6.com/docker"
+    url_fly_cdn="http://oss.flyh6.com/docker"
 
     if command -v apt-get; then
         cmd_pkg=apt-get

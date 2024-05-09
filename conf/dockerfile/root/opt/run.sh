@@ -145,7 +145,7 @@ _schedule_upgrade() {
         return 0
     fi
 
-    upgrade_url=http://cdn.flyh6.com/docker
+    upgrade_url=http://oss.flyh6.com/docker
     upgrade_file=upgrade_check.txt
     upgrade_file_tmp=/tmp/$upgrade_file
     touch $upgrade_file_tmp
