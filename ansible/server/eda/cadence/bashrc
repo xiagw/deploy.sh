@@ -46,13 +46,18 @@ fi
 #
 # Master IC CAD flow including schematic capture, simulation, layout, and verification.
 ##############################################################
-if [[ -d /home/eda ]]; then
-    export EDA_HOME=/home/eda
-else
+if [[ -d /eda ]]; then
     export EDA_HOME=/eda
+elif [[ -d /home/eda ]]; then
+    export EDA_HOME=/home/eda
+elif [[ -d /home/eda ]]; then
+    export EDA_HOME=/opt/eda
+else
+    echo "Not found dir eda in / or /opt or /home, exit 1."
+    exit 1
 fi
 export CDS_HOME=$EDA_HOME/cadence
-# export CADHOME=$CDS_HOME
+export CADHOME=$EDA_HOME/cadence
 
 # Requied for Cadence on Linux
 export LANG=C
@@ -141,6 +146,7 @@ export CDS_ENABLE_VMS=1
 
 ## SPECTRE
 export SPECTREHOME=$CDS_HOME/SPECTRE181
+# export SPECTREHOME=$CDS_HOME/SPECTRE191
 # export SPECTREHOME=$CDS_HOME/SPECTRE211
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
