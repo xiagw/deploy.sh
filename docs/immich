@@ -1,0 +1,420 @@
+#!/usr/bin/env bash
+
+_cleanup() {
+    trap - SIGINT SIGTERM ERR EXIT
+    # script cleanup here
+    # rm -rf "${param:-empty-var-for-path}"
+    rm -f "$tmp_file"
+}
+
+_loading_rotate() {
+    sleep "${1:-10}" &
+    pid=$!
+    frames='/ - \ |'
+    while kill -0 $pid >/dev/null 2>&1; do
+        for frame in $frames; do
+            printf "\r%s Loading..." "$frame"
+            sleep 0.5
+        done
+    done
+    printf "\n"
+}
+
+_loading_second() {
+    s="${1:-10}"
+    for i in $(seq 1 "$s"); do
+        printf "\rLoading... %s/$s" "$i"
+        sleep 1
+    done
+    printf "\n"
+}
+
+_loading_left_right() {
+    while true; do
+        # Frame #1
+        printf "\r< Loading..."
+        sleep 0.5
+        # Frame #2
+        printf "\r> Loading..."
+        sleep 0.5
+    done
+}
+
+_msg_color() {
+    bold=$(tput bold)
+    underline=$(tput smul)
+    italic=$(tput sitm)
+    info=$(tput setaf 2)
+    error=$(tput setaf 160)
+    warn=$(tput setaf 214)
+    reset=$(tput sgr0)
+    echo "${info}INFO${reset}: This is an ${bold}info${reset} message"
+    echo "${error}ERROR${reset}: This is an ${underline}error${reset} message"
+    echo "${warn}WARN${reset}: This is a ${italic}warning${reset} message"
+}
+
+_color() {
+    if [[ -t 2 ]] && [[ -z "${no_color-}" ]] && [[ "${TERM-}" != "dumb" ]]; then
+        COLOROFF='\033[0m'
+        RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m' BLUE='\033[0;34m' PURPLE='\033[0;35m' CYAN='\033[0;36m' YELLOW='\033[1;33m'
+    else
+        unset COLOROFF RED GREEN ORANGE BLUE PURPLE CYAN YELLOW
+    fi
+}
+
+_msg() {
+    echo >&2 -e "${1-}"
+}
+
+_log() {
+    echo "[$(date +%Y%m%d-%T)], $*" >>"$me_log"
+}
+
+_die() {
+    local msg=$1
+    local code=${2-1} # default exit status 1
+    _msg "$msg"
+    exit "$code"
+}
+
+_get_confirm() {
+    read -rp "${1:-Do you want to proceed?} [y/N] " confirm_choice
+    if [[ ${confirm_choice:-n} =~ ^(y|Y|yes|YES)$ ]]; then
+        return 0 # true
+    else
+        return 1 # false
+    fi
+}
+
+_usage() {
+    cat <<EOF
+Usage: $me_name [options] [Parameter]
+
+Script description here.
+
+Available options:
+
+    -h, --help      Print this help and exit
+    -v, --verbose   Print script debug info
+    -f, --flag      Some flag description
+    -p, --param     Some param description
+
+Examples:
+    $0 -f -p param arg1 arg2
+EOF
+    exit
+}
+
+_parse_params() {
+    # default values of variables set from params
+    # flag=0
+    param=''
+    while :; do
+        case "${1-}" in
+        --no-color) no_color=1 ;;
+        -h | --help) _usage ;;
+        -a | --album) flag_album=1 ;;
+        -b | --backup) flag_backup=1 ;;
+        -f | --fix-time) flag_fixtime=1 ;;
+        -n | --dry-run) flag_dryrun=1 ;;
+        -u | --upload) flag_upload=1 ;;
+        -p | --path)
+            param="${2-}"
+            shift
+            ;;
+        -A | --album-name)
+            param_album="${2-}"
+            shift
+            ;;
+        -U | --account)
+            param_account="${2-}"
+            shift
+            ;;
+        -v | --verbose)
+            set -x
+            enable_log=1
+            ;;
+        -?*) _die "Unknown option: $1" ;;
+        *) break ;;
+        esac
+        args=("$@")
+        shift
+    done
+    # check required params and arguments
+    [[ ${#args[@]} -eq 0 ]] && _die "Missing script arguments"
+    # [[ -z "${param-}" ]] && _die "Missing required parameter: param"
+    return 0
+}
+
+_rename_file() {
+    # Specify the directory where the files are located
+    directory="/path/to/your/directory"
+
+    # Check if the directory exists
+    if [ ! -d "$directory" ]; then
+        echo "Directory does not exist."
+        exit 1
+    fi
+
+    # Move to the directory
+    cd "$directory" || exit
+
+    # Loop through each file in the directory
+    for file in *; do
+        # Check if it's a regular file
+        if [ -f "$file" ]; then
+            # Remove special characters from the file name
+            new_name=$(echo "$file" | tr -cd '[:alnum:]\n\r._-')
+
+            # Rename the file if the new name is different
+            if [ "$file" != "$new_name" ]; then
+                mv "$file" "$new_name"
+                echo "Renamed '$file' to '$new_name'"
+            fi
+        fi
+    done
+}
+
+_backup_with_borg() {
+    # Paths
+    UPLOAD_LOCATION="$HOME/docker/immich-app/library"
+    BACKUP_PATH="$HOME/docker/immich-app/backup"
+    DATABASE_BACKUP_PATH="$UPLOAD_LOCATION/db_dumps"
+    REMOTE_HOST="${ENV_REMOTE_HOST}"
+    REMOTE_BACKUP_PATH="${ENV_REMOTE_BACKUP_PATH}"
+    ## Local setup
+    [ -d "$DATABASE_BACKUP_PATH" ] || mkdir -p "$DATABASE_BACKUP_PATH"
+    # [ -d "$BACKUP_PATH" ] || mkdir -p "$BACKUP_PATH"
+    # [ -d "$BACKUP_PATH/immich-borg" ] || borg init --encryption=none "$BACKUP_PATH/immich-borg"
+    ## Remote set up
+    if ssh "$REMOTE_HOST" true; then
+        if ! ssh "$REMOTE_HOST" "test -d \"$REMOTE_BACKUP_PATH\"/immich-borg"; then
+            borg init --encryption=none "$REMOTE_HOST:$REMOTE_BACKUP_PATH/immich-borg"
+        fi
+    else
+        echo "ssh remote host fail. exit 1"
+        return 1
+    fi
+
+    ### Local
+    # Backup Immich database
+    # docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres >"$DATABASE_BACKUP_PATH"/immich-database.sql
+    # For deduplicating backup programs such as Borg or Restic, compressing the content can increase backup size by making it harder to deduplicate. If you are using a different program or still prefer to compress, you can use the following command instead:
+    # docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres | /usr/bin/gzip --rsyncable > "$DATABASE_BACKUP_PATH"/immich-database.sql.gz
+
+    ### Append to local Borg repository
+    # borg create "$BACKUP_PATH/immich-borg::{now}" "$UPLOAD_LOCATION" --exclude "$UPLOAD_LOCATION"/thumbs/ --exclude "$UPLOAD_LOCATION"/encoded-video/
+    # borg prune --keep-weekly=4 --keep-monthly=3 "$BACKUP_PATH"/immich-borg
+    # borg compact "$BACKUP_PATH"/immich-borg
+
+    ### Append to remote Borg repository
+    borg create "$REMOTE_HOST:$REMOTE_BACKUP_PATH/immich-borg::{now}" "$UPLOAD_LOCATION" --exclude "$UPLOAD_LOCATION"/thumbs/ --exclude "$UPLOAD_LOCATION"/encoded-video/
+    borg prune --keep-weekly=4 --keep-monthly=3 "$REMOTE_HOST:$REMOTE_BACKUP_PATH"/immich-borg
+    borg compact "$REMOTE_HOST:$REMOTE_BACKUP_PATH"/immich-borg
+}
+
+_deduplication() {
+    input_path="$1"
+    # Associative array to store file hashes
+    declare -A file_hashes
+    # Traverse the directory and calculate hashes
+    size_thread=$((1024 * 1024))
+    tmp_file=$(mktemp)
+    while read -r file; do
+        file_size="$(stat -c %s "$file")"
+        if [ "${file_size}" -gt $size_thread ]; then
+            (
+                head -n50 "$file"
+                tail -n50 "$file"
+            ) >"$tmp_file"
+            hash=$(sha256sum "$tmp_file" | cut -d ' ' -f 1)
+            rm -f "$tmp_file"
+        else
+            hash=$(sha256sum "$file" | cut -d ' ' -f 1)
+        fi
+
+        if [[ -n "${file_hashes[$hash]-}" ]]; then
+            echo "Duplicate: ${file_hashes[$hash]}"
+            echo "Duplicate: $file"
+        else
+            file_hashes[$hash]="$file"
+        fi
+    done < <(find "$input_path" -type f)
+}
+
+_file_time_or_hand_time() {
+    case "${1-}" in
+    hand)
+        read -rp "Enter YYYY MM DD : [ 2010 10 10 ] " YYYY MM DD
+        echo "Input date is: ${YYYY} ${MM} ${DD}"
+        datef_comm="${YYYY}:${MM}:${DD}"
+        datef_dash="${YYYY}-${MM}-${DD}"
+        timef_comm="${MM}:${DD}:$DD"
+        timef_hhmm="${MM}${DD}"
+        ;;
+    *)
+        echo "Choose from_file (get date_time from file)..."
+        select from_file in *; do
+            break
+        done
+        echo "Get timestamp from file: $from_file"
+        datef_comm="$(exiv2 "$from_file" 2>/dev/null | awk '/Image timestamp/ {print $(NF-1)}' || true)"
+        datef_dash="${datef_comm//:/-}"
+        timef_comm="$(exiv2 "$from_file" 2>/dev/null | awk '/Image timestamp/ {print $NF}' || true)"
+        timef_hhmm="${timef_comm//:/}"
+        timef_hhmm="${timef_hhmm:0:4}"
+        ;;
+    esac
+}
+
+_set_file_time() {
+    input_path="$1"
+    cd "$input_path"/ || return 1
+
+    command -v exiv2 || sudo apt install -y exiv2
+    ## query EXIF timestamp of file
+    timestamp_exist=0
+    timestamp_empty=0
+    for line in *; do
+        timestamp_info="$(exiv2 "$line" 2>/dev/null | grep 'Image timestamp' || true)"
+        if echo "${timestamp_info}" | grep 'Image timestamp.*20..:..:..'; then
+            ((timestamp_exist++)) || true
+        else
+            ((timestamp_empty++)) || true
+        fi
+    done
+    ## get duplication files
+    _deduplication "$input_path"
+
+    if [ "$timestamp_empty" -gt 0 ]; then
+        echo "Found some file with empty timestamp."
+    else
+        return
+    fi
+
+    select m in one-by-one batch quit; do
+        case "${m}" in
+        one-by-one) set_method=onebyone ;;
+        batch) set_method="batch" ;;
+        quit) exit 1 ;;
+        esac
+        break
+    done
+
+    # if _get_confirm "set change time of file..."; then
+    set_change_time=1
+    # fi
+
+    for line in *; do
+        file="$line"
+        ## exif date
+        if exiv2 "$file" 2>/dev/null | grep 'Image timestamp.*20..:..:..'; then
+            continue
+        fi
+
+        echo -e "\nFound empty timestamp file: $file \n"
+
+        case "${set_method:-onebyone}" in
+        onebyone)
+            _file_time_or_hand_time
+            ;;
+        batch)
+            [ "${only_once-}" = 1 ] || _file_time_or_hand_time
+            ;;
+        esac
+        if [ -z "${datef_comm-}" ] || [ "${datef_comm-}" = timestamp ]; then
+            _file_time_or_hand_time hand
+        fi
+
+        [ "${only_once-}" = 1 ] || only_once=1
+
+        ## EXIF Timestamp of file
+        exiv2 -M"set Exif.Photo.DateTimeOriginal ${datef_comm} ${timef_comm}" "$file" || true
+
+        ## change time of file
+        if [ "${set_change_time-}" = 1 ]; then
+            touch -c -amt "${datef_comm//:/}${timef_hhmm}" "$file"
+            NOW=$(LANG=c date)
+            sudo date -s "${datef_dash} ${timef_comm}"
+            sudo touch "$file"
+            sudo date -s "$NOW"
+        fi
+    done
+
+    if _get_confirm "set EXIF GPS info of file? "; then
+        read -rp "Enter GPS info: [ 28 14 59 ] " GPSLatitudeDD GPSLatitudeMM GPSLatitudeSS
+        read -rp "Enter GPS info: [ 112 55 46 ] " GPSLongitudeDD GPSLongitudeMM GPSLongitudeSS
+
+        for i in *; do
+            ## exif GPS
+            if [ -z "${GPSLatitudeDD-}" ] || [ -z "${GPSLatitudeMM-}" ] || [ -z "${GPSLatitudeSS-}" ] || [ -z "${GPSLongitudeDD-}" ] || [ -z "${GPSLongitudeMM-}" ] || [ -z "${GPSLongitudeSS-}" ]; then
+                continue
+            fi
+            exiv2 \
+                -M"set Exif.GPSInfo.GPSLatitudeRef N" \
+                -M"set Exif.GPSInfo.GPSLatitude ${GPSLatitudeDD-}/1 ${GPSLatitudeMM-}/1 ${GPSLatitudeSS-}/1" \
+                -M"set Exif.GPSInfo.GPSLongitudeRef E" \
+                -M"set Exif.GPSInfo.GPSLongitude ${GPSLongitudeDD-}/1 ${GPSLongitudeMM-}/1 ${GPSLongitudeSS-}/1" \
+                "$i"
+        done
+    fi
+}
+
+_immich_upload() {
+    input_path="$1"
+    if [ -d "$input_path" ]; then
+        echo "found $input_path, go on..."
+    else
+        echo "not found $input_path, exit 1."
+        return 1
+    fi
+
+    args=(-r)
+
+    [ "${flag_album-}" = 1 ] && args+=("--album")
+    [ "${flag_dryrun-}" = 1 ] && args+=("--dry-run")
+
+    if [ -n "${param_album-}" ]; then
+        args+=("--album-name" "$param_album")
+    fi
+
+    import_path="${input_path##*/}"
+    docker run -it --rm -v "$input_path":/"$import_path":ro \
+        -e IMMICH_INSTANCE_URL="${ENV_API_URL}" \
+        -e IMMICH_API_KEY="${ENV_API_KEY}" \
+        ghcr.io/immich-app/immich-cli:latest upload /"$import_path" "${args[@]}"
+}
+
+main() {
+    _color
+    _parse_params "$@"
+    set -Eeuo pipefail
+    trap _cleanup SIGINT SIGTERM ERR EXIT
+
+    ## script logic here
+    me_name="$(basename "${BASH_SOURCE[0]}")"
+    me_path="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+    if [ -d "${me_path}/../data" ]; then
+        me_log="${me_path}/../data/${me_name}.log"
+        me_env="${me_path}/../data/${me_name}.env"
+    else
+        me_log="${me_path}/${me_name}.log"
+        me_env="${me_path}/${me_name}.env"
+    fi
+    [ -f "$me_env" ] && source "$me_env" "${param_account-}"
+    [ -w "$me_path" ] || me_log="/tmp/${me_name}.log"
+    [[ "$enable_log" -eq 1 ]] && echo "Log file is \"$me_log\""
+
+    if [ -z "$param" ]; then
+        param="$(readlink -f .)"
+    fi
+    echo "picture path is: $param"
+    find . -type d -exec chmod 755 {} \;
+    find . -type f -exec chmod 664 {} \;
+
+    [ "${flag_backup-}" = 1 ] && _backup_with_borg
+    [ "${flag_fixtime-}" = 1 ] && _set_file_time "$param"
+    [ "${flag_upload-}" = 1 ] && _immich_upload "$param"
+}
+
+main "$@"
