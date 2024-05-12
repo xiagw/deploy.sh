@@ -1399,7 +1399,9 @@ _inject_files() {
             if [ -d "${gitlab_project_dir}/root/opt" ]; then
                 echo "found exist ${gitlab_project_dir}/root/opt"
             else
-                cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
+                if [ -f "${project_dockerfile}" ]; then
+                    cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
+                fi
             fi
         fi
         if [[ "${project_lang}" == java ]]; then
