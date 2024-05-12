@@ -1222,7 +1222,6 @@ _set_mirror() {
 
 _detect_os() {
     _is_root || use_sudo=sudo
-    _set_mirror os
     if [[ -e /etc/os-release ]]; then
         source /etc/os-release
         os_type="${ID}"
@@ -1251,6 +1250,7 @@ _detect_os() {
         # command -v shc >/dev/null || $use_sudo apt-get install -qq -y shc
 
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
+            _set_mirror os
             $use_sudo apt-get update -qq
             $use_sudo apt-get install -yqq apt-utils >/dev/null
             $use_sudo apt-get install -yqq "${pkgs[@]}" >/dev/null
@@ -1272,6 +1272,7 @@ _detect_os() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
+            _set_mirror os
             $use_sudo yum install -y "${pkgs[@]}" >/dev/null
         fi
         ;;
@@ -1283,6 +1284,7 @@ _detect_os() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
+            _set_mirror os
             $use_sudo apk add --no-cache "${pkgs[@]}" >/dev/null
         fi
         ;;
@@ -1294,6 +1296,7 @@ _detect_os() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         if (("${#pkgs[*]}")); then
+            _set_mirror os
             brew install "${pkgs[@]}"
         fi
         ;;
@@ -1383,11 +1386,6 @@ _inject_files() {
         ;;
     overwrite)
         ## inject files for build container image
-        if [ -d "${gitlab_project_dir}/root/opt" ]; then
-            echo "found exist ${gitlab_project_dir}/root/opt"
-        else
-            cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
-        fi
         if [[ "${project_lang}" == node && -f "${project_dockerfile}" ]]; then
             echo "skip cp Dockerfile."
         else
@@ -1397,6 +1395,11 @@ _inject_files() {
             ## Dockerfile 其次查找 conf/ 目录
             elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
                 cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
+            fi
+            if [ -d "${gitlab_project_dir}/root/opt" ]; then
+                echo "found exist ${gitlab_project_dir}/root/opt"
+            else
+                cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
             fi
         fi
         if [[ "${project_lang}" == java ]]; then
