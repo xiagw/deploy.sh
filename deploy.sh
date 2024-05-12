@@ -527,15 +527,15 @@ _deploy_rsync_ssh() {
     local tmp_file
     tmp_file=$(mktemp)
     # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $tmp_file || true
-    jq -r ".projects[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | tee -a $tmp_file || true
+    jq -c ".projects[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | tee -a $tmp_file || true
     while read -r line; do
-        ssh_host=$(jq -r ". | select (.ssh_host == \"$line\") | .ssh_host" $tmp_file)
-        ssh_port=$(jq -r ". | select (.ssh_host == \"$line\") | .ssh_port" $tmp_file)
-        rsync_src_from_conf=$(jq -r ". | select (.ssh_host == \"$line\") | .rsync_src" $tmp_file)
-        rsync_dest=$(jq -r ". | select (.ssh_host == \"$line\") | .rsync_dest" $tmp_file)
-        # db_host=$(jq -r '.db_host' $tmp_file)
-        # db_user=$(jq -r '.db_user' $tmp_file)
-        # db_name=$(jq -r '.db_name' $tmp_file)
+        ssh_host=$(echo "$line" | jq -r ".ssh_host")
+        ssh_port=$(echo "$line" | jq -r ".ssh_port")
+        rsync_src_from_conf=$(echo "$line" | jq -r ".rsync_src")
+        rsync_dest=$(echo "$line" | jq -r ".rsync_dest")
+        # db_host=$(echo "$line" | jq -r '.db_host')
+        # db_user=$(echo "$line" | jq -r '.db_user')
+        # db_name=$(echo "$line" | jq -r '.db_name')
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
         echo "ssh host: ${ssh_host:?when stop here, please check $me_conf}, port: ${ssh_port:-22}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
@@ -584,7 +584,7 @@ _deploy_rsync_ssh() {
             _msg step "deploy to server with docker-compose"
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $gitlab_project_name"
         fi
-    done < <(jq -r '.ssh_host' $tmp_file)
+    done <"$tmp_file"
     rm -f $tmp_file
     _msg time "[deploy] deploy files with rsync+ssh"
 }
