@@ -343,6 +343,34 @@ _push_image() {
     _msg time "[image] push container image"
 }
 
+_format_release_name() {
+    if ${ENV_REMOVE_PROJ_PREFIX:-false}; then
+        echo "remove project name prefix-"
+        release_name=${gitlab_project_name#*-}
+    else
+        release_name=${gitlab_project_name}
+    fi
+    ## Convert to lower case / 转换为小写
+    release_name="${release_name,,}"
+    ## remove space / 去除空格
+    release_name="${release_name// /}"
+    ## replace special characters / 替换特殊字符
+    release_name="${release_name//[@#$%^&*_.\/]/-}"
+    ## start with numbers / 开头是数字
+    if [[ "$release_name" == [0-9]* ]]; then
+        release_name="a${release_name}"
+    fi
+    ## characters greate than 15 / 字符大于 15
+    # if [[ ${#release_name} -gt 15 ]]; then
+    #     ## replace - with '' / 替换 - 为 ''
+    #     release_name="${release_name//-/}"
+    # fi
+    # if [[ ${#release_name} -gt 15 ]]; then
+    #     ## cut 15 characters / 截取 15 个字符
+    #     release_name="${release_name:0:15}"
+    # fi
+}
+
 _helm_new() {
     ## 获取 release 名称/端口/协议等信息
     release_name_path="$1"
@@ -426,42 +454,72 @@ EOF
         "$file_deploy"
 }
 
+_deploy_functions_aliyun() {
+    _format_release_name
+    ## create FC
+    tmp_file="$(mktemp)"
+    cat >"$tmp_file" <<EOF
+{
+    "functionName": "$release_name",
+    "runtime": "custom-container",
+    "internetAccess": false,
+    "cpu": 0.3,
+    "memorySize": 512,
+    "diskSize": 512,
+    "handler": "index.handler",
+    "customContainerConfig": {
+        "image": "${ENV_DOCKER_REGISTRY}:${image_tag}",
+        "port": 8080,
+        "healthCheckConfig": {
+            "initialDelaySeconds": 5
+        }
+    }
+}
+EOF
+
+    aliyun fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$tmp_file")"
+    rm -f "$tmp_file"
+
+    #     tmp_file="$(mktemp)"
+    #     cat >"$tmp_file" <<EOF
+    # {
+    #     "triggerType": "http",
+    #     "triggerName": "defaultTrigger",
+    #     "triggerConfig": {
+    #         "methods": [
+    #             "GET",
+    #             "POST",
+    #             "PUT",
+    #             "DELETE",
+    #             "OPTIONS"
+    #         ],
+    #         "authType": "anonymous",
+    #         "disableURLInternet": false
+    #     }
+    # }
+    # EOF
+
+    ## create trigger
+    aliyun fc POST /2023-03-30/functions/$release_name/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
+    #     rm -f "$tmp_file"
+
+    ## provision-config
+    # aliyun fc PUT /2023-03-30/functions/$release_name/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
+}
+
 _deploy_k8s() {
     _msg step "[deploy] deploy k8s with helm"
     _is_demo_mode "deploy-helm" && return 0
-    if ${ENV_REMOVE_PROJ_PREFIX:-false}; then
-        echo "remove project name prefix-"
-        helm_release=${gitlab_project_name#*-}
-    else
-        helm_release=${gitlab_project_name}
-    fi
-    ## Convert to lower case / 转换为小写
-    helm_release="${helm_release,,}"
-    ## remove space / 去除空格
-    helm_release="${helm_release// /}"
-    ## replace special characters / 替换特殊字符
-    helm_release="${helm_release//[@#$%^&*_.\/]/-}"
-    ## start with numbers / 开头是数字
-    if [[ "$helm_release" == [0-9]* ]]; then
-        helm_release="a${helm_release}"
-    fi
-    ## characters greate than 15 / 字符大于 15
-    # if [[ ${#helm_release} -gt 15 ]]; then
-    #     ## replace - with '' / 替换 - 为 ''
-    #     helm_release="${helm_release//-/}"
-    # fi
-    # if [[ ${#helm_release} -gt 15 ]]; then
-    #     ## cut 15 characters / 截取 15 个字符
-    #     helm_release="${helm_release:0:15}"
-    # fi
+    _format_release_name
+
     ## finding helm files folder / 查找 helm 文件目录
     helm_dirs=(
-        "$gitlab_project_dir/helm/${helm_release}"
-        "$gitlab_project_dir/docs/helm/${helm_release}"
-        "$gitlab_project_dir/doc/helm/${helm_release}"
-        "${me_path_data}/helm/${gitlab_project_path_slug}/${env_namespace}/${helm_release}"
-        "${me_path_data}/helm/${gitlab_project_path_slug}/${helm_release}"
-        "${me_path_data}/helm/${helm_release}"
+        "$gitlab_project_dir/helm/${release_name}"
+        "$gitlab_project_dir/docs/helm/${release_name}"
+        "$gitlab_project_dir/doc/helm/${release_name}"
+        "${me_path_data}/helm/${gitlab_project_path_slug}/${env_namespace}/${release_name}"
+        "${me_path_data}/helm/${gitlab_project_path_slug}/${release_name}"
+        "${me_path_data}/helm/${release_name}"
     )
     for i in "${helm_dirs[@]}"; do
         if [ -d "$i" ]; then
@@ -473,17 +531,17 @@ _deploy_k8s() {
     if [ -z "$helm_dir" ]; then
         _msg purple "Not found helm files"
         echo "Try to generate helm files"
-        helm_dir="${me_path_data}/helm/${gitlab_project_path_slug}/${helm_release}"
+        helm_dir="${me_path_data}/helm/${gitlab_project_path_slug}/${release_name}"
         [ -d "$helm_dir" ] || mkdir -p "$helm_dir"
         _helm_new "${helm_dir}"
     fi
 
-    echo "$helm_opt upgrade --install --history-max 1 ${helm_release} $helm_dir/ --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
+    echo "$helm_opt upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s"
     ${github_action:-false} && return 0
 
     ## helm install / helm 安装  --atomic
     $helm_opt upgrade --install --history-max 1 \
-        "${helm_release}" "$helm_dir/" \
+        "${release_name}" "$helm_dir/" \
         --namespace "${env_namespace}" --create-namespace \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${image_tag}" \
@@ -494,7 +552,7 @@ _deploy_k8s() {
     $kubectl_opt -n "${env_namespace}" get pod | awk '/Evicted/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
     # sleep 3
     ## 检测 helm upgrade 状态
-    $kubectl_opt -n "${env_namespace}" rollout status deployment "${helm_release}" --timeout 120s >/dev/null || deploy_result=1
+    $kubectl_opt -n "${env_namespace}" rollout status deployment "${release_name}" --timeout 120s >/dev/null || deploy_result=1
     if [[ "$deploy_result" -eq 1 ]]; then
         echo "此处探测应用是否正常超时120秒，不能百分之百以此作为依据，如遇错误，需要去k8s内检查容器是否正常，或者通过日志去判断"
     fi
@@ -528,6 +586,9 @@ _deploy_rsync_ssh() {
     tmp_file=$(mktemp)
     # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $tmp_file || true
     jq -c ".projects[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | tee -a $tmp_file || true
+    if [ "$(stat -c %s $tmp_file)" -eq 0 ]; then
+        _msg time "[deploy] not config $me_conf"
+    fi
     while read -r line; do
         ssh_host=$(echo "$line" | jq -r ".ssh_host")
         ssh_port=$(echo "$line" | jq -r ".ssh_port")
@@ -1538,6 +1599,7 @@ _probe_deploy_method() {
             # if ! ${ENV_DISABLE_DOCKER:-false}; then
             exec_push_image=true
             exec_deploy_k8s=true
+            exec_deploy_functions=true
             # fi
             exec_build_langs=false
             exec_deploy_rsync_ssh=false
@@ -1718,6 +1780,10 @@ _set_args() {
             ;;
         --push-image)
             arg_push_image=true
+            exec_single_job=true
+            ;;
+        --deploy-functions)
+            arg_deploy_functions=true
             exec_single_job=true
             ;;
         --deploy-k8s)
@@ -1919,6 +1985,7 @@ main() {
         fi
         ${arg_build_image:-false} && _build_image
         ${arg_push_image:-false} && _push_image
+        ${arg_deploy_functions:-false} && _deploy_functions_aliyun
         ${arg_deploy_k8s:-false} && _deploy_k8s
         ${arg_deploy_rsync_ssh:-false} && _deploy_rsync_ssh
         ${arg_deploy_rsync:-false} && _deploy_rsync
@@ -1992,6 +2059,8 @@ main() {
     ## push image
     ${exec_push_image:-false} && _push_image
 
+    ## deploy functions aliyun
+    ${exec_deploy_functions:-false} && _deploy_functions_aliyun
     ## deploy k8s
     ${exec_deploy_k8s:-false} && _deploy_k8s
     ## deploy rsync server

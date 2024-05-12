@@ -379,7 +379,8 @@ _immich_upload() {
     fi
 
     import_path="${input_path##*/}"
-    docker run -it --rm -v "$input_path":/"$import_path":ro \
+    docker run -it --rm \
+        -v "$input_path":/"$import_path":ro \
         -e IMMICH_INSTANCE_URL="${ENV_API_URL}" \
         -e IMMICH_API_KEY="${ENV_API_KEY}" \
         ghcr.io/immich-app/immich-cli:latest upload /"$import_path" "${args[@]}"
