@@ -587,7 +587,8 @@ _deploy_rsync_ssh() {
     # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $tmp_file || true
     jq -c ".projects[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | tee -a $tmp_file || true
     if [ "$(stat -c %s $tmp_file)" -eq 0 ]; then
-        _msg time "[deploy] not config $me_conf"
+        _msg warn "[deploy] not config $me_conf"
+        return
     fi
     while read -r line; do
         ssh_host=$(echo "$line" | jq -r ".ssh_host")
