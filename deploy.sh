@@ -1874,7 +1874,7 @@ main() {
     run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
     run_cmd_root="$build_cmd run $ENV_ADD_HOST --interactive --rm"
     if ${debug_on:-false}; then
-        build_cmd_opt+=(--progress plain "$ENV_ADD_HOST" "$quiet_flag")
+        build_cmd_opt+=(--progress plain $ENV_ADD_HOST $quiet_flag)
     else
         build_cmd_opt+=("$ENV_ADD_HOST" "$quiet_flag")
     fi
