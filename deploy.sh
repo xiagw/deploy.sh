@@ -1606,7 +1606,7 @@ _probe_deploy_method() {
             exec_push_image=true
             exec_deploy_k8s=true
             if [[ "$project_lang" = java || "$project_lang" = node ]]; then
-                exec_deploy_functions=true
+                exec_deploy_functions=${ENV_DEPLOY_FUNCTIONS:-false}
             fi
             # fi
             exec_build_langs=false
