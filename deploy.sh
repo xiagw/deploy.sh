@@ -197,7 +197,7 @@ _deploy_flyway_helm_job() {
     _msg step "[database] deploy SQL with flyway (helm job)"
     echo "$image_tag_flyway"
     ${github_action:-false} && return 0
-    $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+    $build_cmd build "${build_cmd_opt[@]}" --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     $run_cmd_root "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
         _msg green "flyway migrate result = OK"
@@ -305,7 +305,7 @@ _build_image() {
             bash "${gitlab_project_dir}/build.base.sh"
         else
             echo "$registry_base:${gitlab_project_name}-${gitlab_project_branch}"
-            $build_cmd build $build_cmd_opt --tag $registry_base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
+            $build_cmd build "${build_cmd_opt[@]}" --tag $registry_base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
             $build_cmd push $quiet_flag $registry_base:${gitlab_project_name}-${gitlab_project_branch}
         fi
         _msg time "[image] build base image"
@@ -313,7 +313,7 @@ _build_image() {
         return
     fi
     ## build container image
-    $build_cmd build $build_cmd_opt --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
+    $build_cmd build "${build_cmd_opt[@]}" --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     ## push image to ttl.sh
     if [[ "${MAN_TTL:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         image_uuid="ttl.sh/$(uuidgen):1h"
@@ -479,36 +479,18 @@ EOF
 
     if aliyun fc GET /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" |
         jq -r '.functionName' | grep -qw "$release_name"; then
-        aliyun fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
+        ## already exists, just update image
+        aliyun --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
     else
+        ## create function
         aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$tmp_file")"
         ## create trigger
-        aliyun --quiet fc POST /2023-03-30/functions/$release_name/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
+        aliyun --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     fi
     rm -f "$tmp_file"
 
     ## provision-config
-    # aliyun --quiet fc PUT /2023-03-30/functions/$release_name/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
-
-    #     tmp_file="$(mktemp)"
-    #     cat >"$tmp_file" <<EOF
-    # {
-    #     "triggerType": "http",
-    #     "triggerName": "defaultTrigger",
-    #     "triggerConfig": {
-    #         "methods": [
-    #             "GET",
-    #             "POST",
-    #             "PUT",
-    #             "DELETE",
-    #             "OPTIONS"
-    #         ],
-    #         "authType": "anonymous",
-    #         "disableURLInternet": false
-    #     }
-    # }
-    # EOF
-    #     rm -f "$tmp_file"
+    # aliyun --quiet fc PUT /2023-03-30/functions/"$release_name"/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
 }
 
 _deploy_k8s() {
@@ -1789,7 +1771,7 @@ _set_args() {
             arg_build_image=true
             exec_single_job=true
             build_cmd=podman
-            build_cmd_opt='--force-rm --format=docker'
+            build_cmd_opt=(--force-rm --format=docker)
             ;;
         --push-image)
             arg_push_image=true
@@ -1871,7 +1853,7 @@ main() {
     [[ -f "$me_conf" ]] || cp -v "${me_path_conf}/example-deploy.json" "$me_conf"
     [[ -f "$me_env" ]] || cp -v "${me_path_conf}/example-deploy.env" "$me_env"
     ## 设定 PATH
-    declare -a paths_to_append=(
+    declare -a paths_append=(
         "/usr/local/sbin"
         "/snap/bin"
         "$me_path_bin"
@@ -1881,7 +1863,7 @@ main() {
         "$me_path_data/.acme.sh"
         "$HOME/.config/composer/vendor/bin"
     )
-    for p in "${paths_to_append[@]}"; do
+    for p in "${paths_append[@]}"; do
         if [[ -d "$p" && "$PATH" != *":$p:"* ]]; then
             PATH="${PATH:+"$PATH:"}$p"
         fi
@@ -1892,9 +1874,9 @@ main() {
     run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
     run_cmd_root="$build_cmd run $ENV_ADD_HOST --interactive --rm"
     if ${debug_on:-false}; then
-        build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}--progress plain $ENV_ADD_HOST $quiet_flag"
+        build_cmd_opt+=(--progress plain "$ENV_ADD_HOST" "$quiet_flag")
     else
-        build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}$ENV_ADD_HOST $quiet_flag"
+        build_cmd_opt+=("$ENV_ADD_HOST" "$quiet_flag")
     fi
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _detect_os
@@ -1978,24 +1960,16 @@ main() {
     if ${exec_single_job:-false}; then
         _msg green "exec single jobs..."
         ${arg_code_quality:-false} && _check_quality_sonar
-        if ${arg_code_style:-false}; then
-            if [[ -f "$code_style_sh" ]]; then
-                source "$code_style_sh"
-            else
-                _msg time "not found $code_style_sh"
-            fi
-        fi
+        ${arg_code_style:-false} && {
+            [[ -f "$code_style_sh" ]] && source "$code_style_sh"
+        }
         ${arg_test_unit:-false} && _test_unit
         ${arg_deploy_flyway:-false} && _deploy_flyway_docker
         # ${exec_deploy_flyway:-false} && _deploy_flyway_helm_job
         ${exec_deploy_flyway:-false} && _deploy_flyway_docker
-        if ${arg_build_langs:-false}; then
-            if [[ -f "$build_langs_sh" ]]; then
-                source "$build_langs_sh"
-            else
-                _msg time "not found $build_langs_sh"
-            fi
-        fi
+        ${arg_build_langs:-false} && {
+            [[ -f "$build_langs_sh" ]] && source "$build_langs_sh"
+        }
         ${arg_build_image:-false} && _build_image
         ${arg_push_image:-false} && _push_image
         ${arg_deploy_functions:-false} && _deploy_functions_aliyun

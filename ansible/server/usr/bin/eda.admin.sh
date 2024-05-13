@@ -255,19 +255,20 @@ main() {
             return
             ;;
         *)
-            _usage
-            exit 1
+            echo "$0 --backup-push, run on server, push file to nas"
+            echo "$0 --backup-pull, run on nas, pull file from server"
+            return 1
             ;;
         esac
-        shift
     done
-
-    _get_random_password
 
     select choice in create_user change_password disable_user remove_user backup quit; do
         _msg "choice: ${choice:empty}"
         break
     done
+
+    _get_random_password
+
     case $choice in
     create_user)
         _create_user
