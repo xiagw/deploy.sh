@@ -477,7 +477,12 @@ _deploy_functions_aliyun() {
 }
 EOF
 
-    aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$tmp_file")"
+    if aliyun --quiet fc GET /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" |
+        jq -r '.functionName' | grep -qw "$release_name"; then
+        aliyun fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
+    else
+        aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$tmp_file")"
+    fi
     rm -f "$tmp_file"
 
     #     tmp_file="$(mktemp)"
@@ -1606,7 +1611,8 @@ _probe_deploy_method() {
             exec_push_image=true
             exec_deploy_k8s=true
             if [[ "$project_lang" = java || "$project_lang" = node ]]; then
-                exec_deploy_functions=${ENV_DEPLOY_FUNCTIONS:-false}
+                # exec_deploy_functions=${ENV_DEPLOY_FUNCTIONS:-false}
+                exec_deploy_functions=${ENV_DEPLOY_FUNCTIONS:-true}
             fi
             # fi
             exec_build_langs=false
@@ -2067,10 +2073,10 @@ main() {
     ## push image
     ${exec_push_image:-false} && _push_image
 
-    ## deploy functions aliyun
-    ${exec_deploy_functions:-false} && _deploy_functions_aliyun
     ## deploy k8s
     ${exec_deploy_k8s:-false} && _deploy_k8s
+    ## deploy functions aliyun
+    ${exec_deploy_functions:-false} && _deploy_functions_aliyun
     ## deploy rsync server
     ${exec_deploy_rsync:-false} && _deploy_rsync
     ## deploy ftp server
