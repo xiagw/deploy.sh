@@ -463,7 +463,7 @@ _deploy_functions_aliyun() {
     "functionName": "$release_name",
     "runtime": "custom-container",
     "internetAccess": false,
-    "cpu": 0.3,
+    "cpu": 0.5,
     "memorySize": 512,
     "diskSize": 512,
     "handler": "index.handler",
@@ -477,7 +477,7 @@ _deploy_functions_aliyun() {
 }
 EOF
 
-    aliyun fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$tmp_file")"
+    aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$tmp_file")"
     rm -f "$tmp_file"
 
     #     tmp_file="$(mktemp)"
@@ -500,11 +500,11 @@ EOF
     # EOF
 
     ## create trigger
-    aliyun fc POST /2023-03-30/functions/$release_name/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
+    aliyun --quiet fc POST /2023-03-30/functions/$release_name/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     #     rm -f "$tmp_file"
 
     ## provision-config
-    # aliyun fc PUT /2023-03-30/functions/$release_name/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
+    # aliyun --quiet fc PUT /2023-03-30/functions/$release_name/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
 }
 
 _deploy_k8s() {
