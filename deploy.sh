@@ -1605,7 +1605,9 @@ _probe_deploy_method() {
             # if ! ${ENV_DISABLE_DOCKER:-false}; then
             exec_push_image=true
             exec_deploy_k8s=true
-            exec_deploy_functions=true
+            if [[ "$project_lang" = java || "$project_lang" = node ]]; then
+                exec_deploy_functions=true
+            fi
             # fi
             exec_build_langs=false
             exec_deploy_rsync_ssh=false
