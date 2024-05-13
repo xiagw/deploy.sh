@@ -482,8 +482,13 @@ EOF
         aliyun fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
     else
         aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$tmp_file")"
+        ## create trigger
+        aliyun --quiet fc POST /2023-03-30/functions/$release_name/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     fi
     rm -f "$tmp_file"
+
+    ## provision-config
+    # aliyun --quiet fc PUT /2023-03-30/functions/$release_name/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
 
     #     tmp_file="$(mktemp)"
     #     cat >"$tmp_file" <<EOF
@@ -503,13 +508,7 @@ EOF
     #     }
     # }
     # EOF
-
-    ## create trigger
-    aliyun --quiet fc POST /2023-03-30/functions/$release_name/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     #     rm -f "$tmp_file"
-
-    ## provision-config
-    # aliyun --quiet fc PUT /2023-03-30/functions/$release_name/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
 }
 
 _deploy_k8s() {
