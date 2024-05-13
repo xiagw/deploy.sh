@@ -477,7 +477,7 @@ _deploy_functions_aliyun() {
 }
 EOF
 
-    if aliyun --quiet fc GET /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" |
+    if aliyun fc GET /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" |
         jq -r '.functionName' | grep -qw "$release_name"; then
         aliyun fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
     else
