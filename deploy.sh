@@ -197,7 +197,7 @@ _deploy_flyway_helm_job() {
     _msg step "[database] deploy SQL with flyway (helm job)"
     echo "$image_tag_flyway"
     ${github_action:-false} && return 0
-    $build_cmd build "${build_cmd_opt[@]}" --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
+    $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
     $run_cmd_root "$image_tag_flyway" || deploy_result=1
     if [ ${deploy_result:-0} = 0 ]; then
         _msg green "flyway migrate result = OK"
@@ -305,7 +305,7 @@ _build_image() {
             bash "${gitlab_project_dir}/build.base.sh"
         else
             echo "$registry_base:${gitlab_project_name}-${gitlab_project_branch}"
-            $build_cmd build "${build_cmd_opt[@]}" --tag $registry_base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
+            $build_cmd build $build_cmd_opt --tag $registry_base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
             $build_cmd push $quiet_flag $registry_base:${gitlab_project_name}-${gitlab_project_branch}
         fi
         _msg time "[image] build base image"
@@ -313,7 +313,7 @@ _build_image() {
         return
     fi
     ## build container image
-    $build_cmd build "${build_cmd_opt[@]}" --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
+    $build_cmd build $build_cmd_opt --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     ## push image to ttl.sh
     if [[ "${MAN_TTL:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         image_uuid="ttl.sh/$(uuidgen):1h"
@@ -1771,7 +1771,7 @@ _set_args() {
             arg_build_image=true
             exec_single_job=true
             build_cmd=podman
-            build_cmd_opt=(--force-rm --format=docker)
+            build_cmd_opt='--force-rm --format=docker'
             ;;
         --push-image)
             arg_push_image=true
@@ -1874,9 +1874,9 @@ main() {
     run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
     run_cmd_root="$build_cmd run $ENV_ADD_HOST --interactive --rm"
     if ${debug_on:-false}; then
-        build_cmd_opt+=(--progress plain $ENV_ADD_HOST $quiet_flag)
+        build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}--progress plain $ENV_ADD_HOST $quiet_flag"
     else
-        build_cmd_opt+=("$ENV_ADD_HOST" "$quiet_flag")
+        build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}$ENV_ADD_HOST $quiet_flag"
     fi
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _detect_os
