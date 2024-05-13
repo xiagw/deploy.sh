@@ -74,7 +74,7 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. 准备 Gitlab 服务器和 Gitlab-runner 服务器
 1. [安装 Gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), 按照文档注册 Gitlab-runner 到 Gitlab 服务器，并启动 Gitlab-runner
 1. cd $HOME/runner
-1. cp conf/example-deploy.conf data/deploy.conf      ## ！！！修改为你的自定义配置！！！
+1. cp conf/example-deploy.json data/deploy.json      ## ！！！修改为你的自定义配置！！！
 1. cp conf/example-deploy.env data/deploy.env        ## ！！！修改为你的自定义配置！！！
 1. 参考本项目的配置文件 conf/.gitlab-ci.yaml， 设置你的应用 git 仓库当中的文件 \<your_project.git\>.gitlab-ci.yaml
 
@@ -104,11 +104,11 @@ ssh 登录进入 Gitlab-runner 服务器，并执行以下命令用来安装 dep
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
-### Step 5: 更新配置文件 data/deploy.conf， data/deploy.env
-参考 conf/example-deploy.conf, conf/example-deploy.env, 修改为你的自定义配置
+### Step 5: 更新配置文件 data/deploy.json， data/deploy.env
+参考 conf/example-deploy.json, conf/example-deploy.env, 修改为你的自定义配置
 ```
 cd $HOME/runner
-cp conf/example-deploy.conf data/deploy.conf      ## 修改为你的自定义配置
+cp conf/example-deploy.json data/deploy.json      ## 修改为你的自定义配置
 cp conf/example-deploy.env data/deploy.env        ## 修改为你的自定义配置
 ```
 

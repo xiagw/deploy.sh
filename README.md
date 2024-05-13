@@ -74,7 +74,7 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. Prepare a gitlab-server and gitlab-runner-server
 1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
 1. cd $HOME/runner
-1. cp conf/example-deploy.conf data/deploy.conf      ## !!!change to yours!!!
+1. cp conf/example-deploy.json data/deploy.json      ## !!!change to yours!!!
 1. cp conf/example-deploy.env data/deploy.env        ## !!!change to yours!!!
 1. Refer to conf/.gitlab-ci.yaml of this project, setup \<your_project.git\>/.gitlab-ci.yaml
 
@@ -104,11 +104,11 @@ SSH login to the gitlab-runner server
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
-### Step 5: Update $HOME/runner/data/deploy.conf, $HOME/runner/data/deploy.env
-Refer to the conf/example-deploy.conf, conf/example-deploy.env, change to yours configure
+### Step 5: Update $HOME/runner/data/deploy.json, $HOME/runner/data/deploy.env
+Refer to the conf/example-deploy.json, conf/example-deploy.env, change to yours configure
 ```
 cd $HOME/runner
-cp conf/example-deploy.conf data/deploy.conf      ## change to yours
+cp conf/example-deploy.json data/deploy.json      ## change to yours
 cp conf/example-deploy.env data/deploy.env        ## change to yours
 ```
 
