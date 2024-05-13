@@ -45,7 +45,7 @@ apt upgrade -y
 
 # ssh-key
 if ! grep -q cen8UtnI13y "$HOME"/.ssh/authorized_keys; then
-    curl -fsSL 'https://oss.flyh6.com/docker/xiagw.keys' >>"$HOME"/.ssh/authorized_keys
+    curl -fsSL 'https://oss.flyh6.com/d/xiagw.keys' >>"$HOME"/.ssh/authorized_keys
 fi
 
 # export http_proxy=http://192.168.41.252:1080
