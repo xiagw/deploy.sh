@@ -457,6 +457,7 @@ EOF
 _deploy_functions_aliyun() {
     _format_release_name
     ## create FC
+    _msg step "[deploy] create/update functions"
     tmp_file="$(mktemp)"
     cat >"$tmp_file" <<EOF
 {
@@ -491,6 +492,7 @@ EOF
 
     ## provision-config
     # aliyun --quiet fc PUT /2023-03-30/functions/"$release_name"/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
+    _msg time "[deploy] create/update functions end"
 }
 
 _deploy_k8s() {
