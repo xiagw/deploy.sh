@@ -147,7 +147,7 @@ _backup() {
         -az
         --backup
         --suffix=".$(date +%Y%m%d-%u-%H%M%S.%3N)"
-        --exclude={'.swp','*.log','CDS.log*','*panic.log*','matlab_crash_dump.*','.recycle'}
+        --exclude={'Trash','.swp','*.log','CDS.log*','libManager.log.*','simulation','*panic.log*','matlab_crash_dump.*','.recycle'}
     )
 
     rsync_exclude=$me_path/rsync.exclude.conf
@@ -166,7 +166,7 @@ _backup() {
 
     case "$1" in
     pull)
-        ## pull files from SERVERS, run on NAS
+        ## run on NAS, pull files from SERVERS
         for svr in "${pull_servers[@]}"; do
             for dir in "${src_dirs[@]}"; do
                 $ssh_opt "$svr" "test -d $dir" || continue
@@ -177,7 +177,7 @@ _backup() {
         done
         ;;
     push)
-        ## push to NAS, run on SERVERS
+        ## run on SERVERS, push files to NAS
         rsync_opt+=(--rsync-path=/bin/rsync)
         for dir in "${src_dirs[@]}"; do
             test -d "$dir" || continue
@@ -187,11 +187,45 @@ _backup() {
         done
         ;;
     *)
-        echo "$0  pull      pull files from SERVERS, run on NAS"
-        echo "$0  push      push files to NAS, run on SERVERS"
+        echo "$0  pull      run on NAS, pull files from SERVERS"
+        echo "$0  push      run on SERVERS, push files to NAS"
         ;;
     esac
     _msg log "end backup."
+}
+
+_backup_borg() {
+    remote_host="root@nas" ## synology nas
+    remote_path=/volume1/disk1/backup-borg
+    if ! ssh $remote_host "test -d $remote_path"; then
+        borg init --encryption=none "$remote_host:$remote_path"
+    fi
+    borg_opt=(borg create)
+    if [ "${1-}" = debug ]; then
+        borg_opt+=(
+            --verbose
+            --filter AME
+            --list
+            --stats
+            --show-rc
+            --compression lz4
+            --exclude-caches
+            --remote-path /usr/local/bin/borg
+        )
+    fi
+    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "/eda/"
+    borg_opt+=(
+        --exclude '*/.local/share/Trash/'
+        --exclude '*/simulation/'
+        --exclude '*/.swp'
+        --exclude '*/*.log'
+        --exclude '*/CDS.log.*'
+        --exclude '*/libManager.log.*'
+        --exclude '*/*panic.log*'
+        --exclude '*/matlab_crash_dump.*'
+        --exclude '*/.recycle'
+    )
+    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "/home2/"
 }
 
 _get_random_password() {
@@ -254,9 +288,15 @@ main() {
             _backup pull
             return
             ;;
+        --backup-borg | -bb)
+            _backup_borg "${2-}"
+            shift
+            return
+            ;;
         *)
             echo "$0 --backup-push, run on server, push file to nas"
             echo "$0 --backup-pull, run on nas, pull file from server"
+            echo "$0 --backup-borg, run on server, push file to nas"
             return 1
             ;;
         esac
