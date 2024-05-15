@@ -25,7 +25,7 @@ _msg() {
         ;;
     logpass)
         shift
-        echo "$(date +%Y%m%d-%u-%H%M%S.%3N) $*" | tee -a "$me_log_secret"
+        echo "$(date +%Y%m%d-%u-%H%M%S.%3N) $*" | tee -a "$me_log"
         return
         ;;
     *)
@@ -156,8 +156,8 @@ _backup() {
     [ -f "$rsync_include" ] && rsync_opt+=(--files-from="$rsync_include")
 
     src_dirs=(
-        /eda
-        /home2
+        "$path_eda"
+        "$path_home"
     )
     dest_dir='/volume1/disk1/backup'
 
@@ -195,13 +195,13 @@ _backup() {
 }
 
 _backup_borg() {
-    remote_host="root@nas" ## synology nas
-    remote_path=/volume1/disk1/backup-borg
-    if ! ssh $remote_host "test -d $remote_path"; then
-        borg init --encryption=none "$remote_host:$remote_path"
-    fi
+    local_path="${1:? ERR: local_path empty}"
+    remote_host="${2:? ERR: remote_host empty}" ## synology nas
+    remote_path="${3:? ERR: remote_path empty}"
+    shift 3
+    opts="$*"
     borg_opt=(borg create)
-    if [ "${1-}" = debug ]; then
+    if echo "${opts:-empty}" | grep -qw debug; then
         borg_opt+=(
             --verbose
             --filter AME
@@ -213,19 +213,27 @@ _backup_borg() {
             --remote-path /usr/local/bin/borg
         )
     fi
-    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "/eda/"
-    borg_opt+=(
-        --exclude '*/.local/share/Trash/'
-        --exclude '*/simulation/'
-        --exclude '*/.swp'
-        --exclude '*/*.log'
-        --exclude '*/CDS.log.*'
-        --exclude '*/libManager.log.*'
-        --exclude '*/*panic.log*'
-        --exclude '*/matlab_crash_dump.*'
-        --exclude '*/.recycle'
-    )
-    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "/home2/"
+    if echo "${opts:-empty}" | grep -qw exclude; then
+        borg_opt+=(
+            --exclude '*/simulation/'
+            --exclude '*/.cache/*'
+            --exclude '*/.nfs*'
+            --exclude '*/.local/share/Trash/'
+            --exclude '*/.swp'
+            --exclude '*/*.log'
+            --exclude '*/CDS.log.*'
+            --exclude '*/libManager.log.*'
+            --exclude '*/*panic.log*'
+            --exclude '*/matlab_crash_dump.*'
+            --exclude '*/.recycle'
+        )
+    fi
+    if ssh "$remote_host" "test -d $remote_path"; then
+        :
+    else
+        borg init --encryption=none "$remote_host:$remote_path"
+    fi
+    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "$local_path/"
 }
 
 _get_random_password() {
@@ -271,45 +279,24 @@ main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_path_bin="$me_path/bin"
     me_path_conf="$me_path/conf"
-    me_log="${me_path}/${me_name}.log"
-    me_log_secret="${me_path}/.password.log"
+    me_log="${HOME}/.${me_name}.log"
 
     echo "$me_path_bin , $me_path_conf" >/dev/null
+    path_eda="/eda"
     path_home="/home2"
     user_shell=/bin/bash
 
-    while [[ "$#" -gt 0 ]]; do
-        case "$1" in
-        --backup-push | -b)
-            _backup push
-            return
-            ;;
-        --backup-pull | -bp)
-            _backup pull
-            return
-            ;;
-        --backup-borg | -bb)
-            _backup_borg "${2-}"
-            shift
-            return
-            ;;
-        *)
-            echo "$0 --backup-push, run on server, push file to nas"
-            echo "$0 --backup-pull, run on nas, pull file from server"
-            echo "$0 --backup-borg, run on server, push file to nas"
-            return 1
-            ;;
-        esac
-    done
-
-    select choice in create_user change_password disable_user remove_user backup quit; do
-        _msg "choice: ${choice:empty}"
-        break
-    done
-
+    if [[ "$#" -gt 0 ]]; then
+        choice="$*"
+    else
+        select choice in create_user change_password disable_user remove_user backup_push backup_pull backup_borg quit; do
+            _msg "choice: ${choice:empty}"
+            break
+        done
+    fi
     _get_random_password
 
-    case $choice in
+    case "$choice" in
     create_user)
         _create_user
         ;;
@@ -322,8 +309,25 @@ main() {
     remove_user)
         _remove_user
         ;;
+    backup_push | b)
+        _backup push
+        return
+        ;;
+    backup_pull | bp)
+        _backup pull
+        return
+        ;;
+    backup_borg* | bb)
+        shift
+        _backup_borg "$path_eda" "nas" "/volume1/disk1/backup-borg"
+        _backup_borg "$path_home" "nas" "/volume1/disk1/backup-borg" exclude "$*"
+        shift
+        return
+        ;;
     *)
-        _msg warn "unknown action: ${choice:empty}"
+        echo "$0 backup_push, run on server, push file to nas"
+        echo "$0 backup_pull, run on nas, pull file from server"
+        echo "$0 backup_borg, run on server, push file to nas"
         return 1
         ;;
     esac
