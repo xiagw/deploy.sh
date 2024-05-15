@@ -279,7 +279,7 @@ main() {
     me_path="$(dirname "$(readlink -f "$0")")"
     me_path_bin="$me_path/bin"
     me_path_conf="$me_path/conf"
-    me_log="${HOME}/.${me_name}.log"
+    me_log="${me_path}/.${me_name}.log"
 
     echo "$me_path_bin , $me_path_conf" >/dev/null
     path_eda="/eda"
