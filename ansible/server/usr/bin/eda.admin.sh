@@ -233,7 +233,9 @@ _backup_borg() {
     else
         borg init --encryption=none "$remote_host:$remote_path"
     fi
+    _msg log "borg backup start..."
     "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "$local_path/"
+    _msg log "borg backup end."
 }
 
 _get_random_password() {
