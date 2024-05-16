@@ -458,8 +458,13 @@ _deploy_functions_aliyun() {
     _format_release_name
     ## create FC
     _msg step "[deploy] create/update functions"
-    tmp_file="$(mktemp)"
-    cat >"$tmp_file" <<EOF
+    functions_conf_tmpl="$me_path_data"/aliyun.functions.template.json
+    functions_conf="$me_path_data"/aliyun.functions.json
+    if [ -f "$functions_conf_tmpl" ]; then
+        TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_TAG=${image_tag} envsubst <$functions_conf_tmpl >$functions_conf
+    else
+        functions_conf="$(mktemp)"
+        cat >"$functions_conf" <<EOF
 {
     "functionName": "$release_name",
     "runtime": "custom-container",
@@ -477,6 +482,7 @@ _deploy_functions_aliyun() {
     }
 }
 EOF
+    fi
 
     if aliyun fc GET /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" |
         jq -r '.functionName' | grep -qw "$release_name"; then
@@ -484,11 +490,11 @@ EOF
         aliyun --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
     else
         ## create function
-        aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$tmp_file")"
+        aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"
         ## create trigger
         aliyun --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     fi
-    rm -f "$tmp_file"
+    rm -f "$functions_conf"
 
     ## provision-config
     # aliyun --quiet fc PUT /2023-03-30/functions/"$release_name"/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
@@ -570,11 +576,11 @@ _deploy_rsync_ssh() {
         rsync_exclude="${me_path_conf}/rsync.exclude"
     fi
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
-    local tmp_file
-    tmp_file=$(mktemp)
-    # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $tmp_file || true
-    jq -c ".projects[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | tee -a $tmp_file || true
-    if [ "$(stat -c %s $tmp_file)" -eq 0 ]; then
+    local conf_temp
+    conf_temp=$(mktemp)
+    # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $conf_temp || true
+    jq -c ".projects[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | tee -a $conf_temp || true
+    if [ "$(stat -c %s $conf_temp)" -eq 0 ]; then
         _msg warn "[deploy] not config $me_conf"
         return
     fi
@@ -634,8 +640,8 @@ _deploy_rsync_ssh() {
             _msg step "deploy to server with docker-compose"
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $gitlab_project_name"
         fi
-    done <"$tmp_file"
-    rm -f $tmp_file
+    done <"$conf_temp"
+    rm -f $conf_temp
     _msg time "[deploy] deploy files with rsync+ssh"
 }
 
@@ -1112,15 +1118,15 @@ _install_jmeter() {
 _install_docker() {
     command -v docker &>/dev/null && return
     _msg info "installing docker"
-    local tmp_file
-    tmp_file=$(mktemp)
-    curl -fsSLo $tmp_file https://get.docker.com
+    local bash_temp
+    bash_temp=$(mktemp)
+    curl -fsSLo $bash_temp https://get.docker.com
     if _is_china; then
-        $use_sudo bash $tmp_file --mirror Aliyun
+        $use_sudo bash $bash_temp --mirror Aliyun
     else
-        $use_sudo bash $tmp_file
+        $use_sudo bash $bash_temp
     fi
-    rm -f $tmp_file
+    rm -f $bash_temp
 }
 
 _install_podman() {
