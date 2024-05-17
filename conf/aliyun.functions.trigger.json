@@ -1,0 +1,5 @@
+{
+    "triggerType": "http",
+    "triggerName": "defaultTrigger",
+    "triggerConfig": "{\"methods\": [\"GET\",\"POST\"],\"authType\": \"anonymous\",\"disableURLInternet\": false}"
+}

@@ -1,0 +1,29 @@
+{
+    "functionName": "$TEMPLATE_NAME",
+    "runtime": "custom-container",
+    "internetAccess": false,
+    "cpu": 0.5,
+    "memorySize": 512,
+    "diskSize": 512,
+    "handler": "index.handler",
+    "customContainerConfig": {
+        "image": "$TEMPLATE_REGISTRY:$TEMPLATE_TAG",
+        "port": 8080
+    },
+    "nasConfig": {
+        "mountPoints": [
+            {
+                "serverAddr": "xxxxxxxxxx-xxxx.cn-hangzhou.nas.aliyuncs.com:/www",
+                "mountDir": "/www"
+            }
+        ]
+    },
+    "vpcConfig": {
+        "vpcId": "vpc-xxxxxxxxxxxxxxxxxxxxx",
+        "vSwitchIds": [
+            "vsw-xxxxxxxxxxxxxxxxxxxxx",
+            "vsw-xxxxxxxxxxxxxxxxxxxxy"
+        ],
+        "securityGroupId": "sg-xxxxxxxxxxxxxxxxxxxx"
+    }
+}
