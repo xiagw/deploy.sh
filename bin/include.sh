@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2034
 
 cmd_date="$(command -v gdate)"
 cmd_date="${cmd_date:-$(command -v date)}"
@@ -42,7 +43,7 @@ _msg() {
         return
     fi
 
-    printf "$time_now ${color_on}$*${color_off}\n"
+    printf "${time_now} ${color_on}%s${color_off}\n" "$*"
 }
 
 _get_root() {
