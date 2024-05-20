@@ -575,3 +575,6 @@ alias icfb=virtuoso
 # the current terminal.
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # virtuoso &
+
+# Cadence environment and setup files [INFN Torino Wiki]
+# https://wiki.to.infn.it/vlsi/workbook/analog/cdsenv

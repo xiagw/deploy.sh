@@ -1,10 +1,10 @@
 # shellcheck disable=2148
 ########################### Synopsys ###############################
-if [[ -d /home/eda ]]; then
-    EDA_HOME=/home/eda
-else
-    EDA_HOME=/eda
-fi
+for d in /eda /home/eda /opt/eda; do
+    [ -d "$d" ] && EDA_HOME="$d" && break
+done
+[ -z "$EDA_HOME" ] && echo "Not found EDA directory" && exit 1
+
 export SYNOPSYS_HOME=$EDA_HOME/synopsys
 ## SCL
 # export SCL_HOME=$SYNOPSYS_HOME/scl/2018.06
@@ -25,14 +25,13 @@ export LICENCE_LOG
 
 ## VCS
 export VCS_HOME=$SYNOPSYS_HOME/vcs/Q-2020.03-SP2-7
+
 ## Verdi
 # export Verdi_HOME=$SYNOPSYS_HOME/verdi/Verdi_O-2018.09-SP2
 # export Verdi_HOME=$SYNOPSYS_HOME/verdi/P-2019.06-SP1-1
 export Verdi_HOME=$SYNOPSYS_HOME/verdi/R-2020.12-SP1
-
-## 的波形文件的时候,需要 NOVAS_HOME 变量指向 Verdi 的安装路径
+## 波形文件的时候,需要 NOVAS_HOME 变量指向 Verdi 的安装路径
 export NOVAS_HOME=$Verdi_HOME
-
 ## Syn
 export Syn_HOME=$SYNOPSYS_HOME/syn/R-2020.09-SP4
 ## PrimeTime
@@ -47,7 +46,7 @@ export LC_HOME=$SYNOPSYS_HOME/lc/R-2020.09-SP3
 ## ICC
 export ICC_HOME=$SYNOPSYS_HOME/icc2/R-2020.09-SP1
 ## WV
-# WV_HOME=$SYNOPSYS_HOME/wv/O-2018.09-SP2
+# export WV_HOME=$SYNOPSYS_HOME/wv/O-2018.09-SP2
 export WV_HOME=$SYNOPSYS_HOME/wv/S-2021.09
 ## Hspice
 export Hspice_HOME=$SYNOPSYS_HOME/hspice/S-2021.09/hspice

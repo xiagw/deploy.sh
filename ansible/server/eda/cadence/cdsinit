@@ -65,3 +65,6 @@ let( (contextFile layoutIntegDir)
  )
 )
 ;# END INTEGRATION: ANSYS Translators for ECAD Geometry
+
+envSetVal("asimenv.startup" "projectDir" 'string "/home/$USER/simulation")
+envSetVal("asimenv" "saveDir" 'string "/home/$USER/simulation")
