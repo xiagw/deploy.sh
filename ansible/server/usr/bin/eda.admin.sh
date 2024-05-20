@@ -235,6 +235,7 @@ _backup_borg() {
 
     remote_host=nas
     remote_path=/volume1/disk1/backup-borg
+    # shellcheck disable=SC2029
     if ssh $remote_host "test -d $remote_path"; then
         :
     else

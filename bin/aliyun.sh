@@ -8,7 +8,7 @@
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.
 
 _notify_weixin_work() {
-    wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wechat_key"
+    wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wechat_key:-from-env}"
     curl -fsL -X POST -H 'Content-Type: application/json' \
         -d '{"msgtype": "text", "text": {"content": "'"$msg_body"'"}}' "$wechat_api"
     echo
@@ -90,7 +90,7 @@ _dns_record() {
 
         # sleep 5
         _msg "add new record ... lb.flyh6.com"
-        $cmd_aliyun_p alidns AddDomainRecord --Type CNAME --DomainName "$domain" --RR '*' --Value "$aliyun_lb_cname"
+        $cmd_aliyun_p alidns AddDomainRecord --Type CNAME --DomainName "$domain" --RR '*' --Value "${aliyun_lb_cname:-from-env}"
         $cmd_aliyun_p alidns AddDomainRecord --Type CNAME --DomainName "$domain" --RR '@' --Value "$aliyun_lb_cname"
 
     done < <(
