@@ -15,14 +15,7 @@ _notify_weixin_work() {
 }
 
 _get_aliyun_profile() {
-    # if [ -z "$aliyun_profile" ]; then
-    select profile in $(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json) quit; do
-        [ "${profile:-quit}" = "quit" ] && exit 1
-        _msg "aliyun-cli profile is: $profile"
-        aliyun_profile="$profile"
-        break
-    done
-    # fi
+    aliyun_profile=$(jq -r '.profiles[].name' "$HOME"/.aliyun/config.json | fzf)
     aliyun_region=$(jq -r ".profiles[] | select (.name == \"$aliyun_profile\") | .region_id" "$HOME"/.aliyun/config.json)
 
     [ -z "$aliyun_profile" ] && read -rp "Aliyun profile name: " aliyun_profile
@@ -471,7 +464,7 @@ _add_ram() {
 
 _upload_cert() {
     _get_aliyun_profile
-
+    set -e
     aliyun_region=cn-hangzhou
     while read -r line; do
         domain="${line// /.}"
@@ -484,14 +477,16 @@ _upload_cert() {
         _msg "key: $HOME/.acme.sh/dest/${domain}.key"
         _msg "pem: $HOME/.acme.sh/dest/${domain}.pem"
         if [ -f "$upload_log" ]; then
-            _msg "file: ${upload_log}"
+            _msg "cert id log file: ${upload_log}"
             remove_cert_id=$(jq -r '.CertId' "$upload_log")
             ## 删除证书
-            $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}"
+            _msg "remove cert id: $remove_cert_id"
+            $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}" || true
         else
             _msg "not found ${upload_log}"
         fi
         ## 上传证书
+        _msg "upload cert_name: ${upload_name}"
         $cmd_aliyun_p cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" | tee "$upload_log"
     done < <(
         $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
@@ -504,11 +499,10 @@ _upload_cert() {
         domain_cdn="${line}"
         domain="${domain_cdn#*.}"
         upload_name="${domain//./-}-$($cmd_date +%m%d)"
-        _msg "domain: ${domain_cdn}"
-        _msg "upload_name: ${upload_name}"
+        _msg "found domain: ${domain_cdn}"
+        _msg "set domain to cert_name: ${upload_name}"
 
         $cmd_aliyun_p cdn BatchSetCdnDomainServerCertificate --region cn-hangzhou --SSLProtocol on --CertType cas --DomainName "${domain_cdn}" --CertName "${upload_name}"
-
     done < <(
         $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
             jq -r '.Domains.PageData[].DomainName'
