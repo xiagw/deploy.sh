@@ -1,114 +1,112 @@
-{
-    "projects": [
-        {
-            "project": "root/deploy.sh",
-            "branchs": [
-                {
-                    "branch": "develop",
-                    "hosts": [
-                        {
-                            "ssh_host": "dev@192.168.100.102",
-                            "ssh_port": "22",
-                            "rsync_src": "",
-                            "rsync_dest": "",
-                            "db_host": "",
-                            "db_user": "",
-                            "db_name": "",
-                            "helm_dir": ""
-                        },
-                        {
-                            "ssh_host": "dev@192.168.100.103",
-                            "ssh_port": "22",
-                            "rsync_src": "",
-                            "rsync_dest": "",
-                            "db_host": "",
-                            "db_user": "",
-                            "db_name": "",
-                            "helm_dir": ""
-                        }
-                    ]
-                },
-                {
-                    "branch": "main",
-                    "hosts": [
-                        {
-                            "ssh_host": "prod@192.168.100.104",
-                            "ssh_port": "2222",
-                            "rsync_src": "/www/main/src",
-                            "rsync_dest": "/www/main/dest",
-                            "db_host": "",
-                            "db_user": "",
-                            "db_name": "",
-                            "helm_dir": ""
-                        },
-                        {
-                            "ssh_host": "prod@192.168.100.105",
-                            "ssh_port": "2222",
-                            "rsync_src": "/www/main/src",
-                            "rsync_dest": "/www/main/dest",
-                            "db_host": "",
-                            "db_user": "",
-                            "db_name": "",
-                            "helm_dir": ""
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "project": "root/project0",
-            "branchs": [
-                {
-                    "branch": "develop",
-                    "hosts": [
-                        {
-                            "ssh_host": "dev@192.168.100.102",
-                            "ssh_port": "22",
-                            "rsync_src": "/www/develop/src",
-                            "rsync_dest": "/www/develop/dest",
-                            "db_host": "",
-                            "db_user": "",
-                            "db_name": "",
-                            "helm_dir": ""
-                        },
-                        {
-                            "ssh_host": "dev@192.168.100.103",
-                            "ssh_port": "22",
-                            "rsync_src": "/www/develop/src",
-                            "rsync_dest": "/www/develop/dest",
-                            "db_host": "",
-                            "db_user": "",
-                            "db_name": "",
-                            "helm_dir": ""
-                        }
-                    ]
-                },
-                {
-                    "branch": "main",
-                    "hosts": [
-                        {
-                            "ssh_host": "prod@192.168.100.104",
-                            "ssh_port": "2222",
-                            "rsync_src": "/www/main/src",
-                            "rsync_dest": "/www/main/dest",
-                            "db_host": "",
-                            "db_user": "",
-                            "db_name": "",
-                            "helm_dir": ""
-                        },
-                        {
-                            "ssh_host": "prod@192.168.100.105",
-                            "ssh_port": "2222",
-                            "rsync_src": "/www/main/src",
-                            "rsync_dest": "/www/main/dest",
-                            "db_host": "",
-                            "db_user": "",
-                            "db_name": "",
-                            "helm_dir": ""
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
-}
+[
+    {
+        "project": "root/deploy.sh",
+        "branchs": [
+            {
+                "branch": "develop",
+                "hosts": [
+                    {
+                        "ssh_host": "dev@192.168.100.102",
+                        "ssh_port": "22",
+                        "rsync_src": "",
+                        "rsync_dest": "",
+                        "db_host": "",
+                        "db_user": "",
+                        "db_name": "",
+                        "helm_dir": ""
+                    },
+                    {
+                        "ssh_host": "dev@192.168.100.103",
+                        "ssh_port": "22",
+                        "rsync_src": "",
+                        "rsync_dest": "",
+                        "db_host": "",
+                        "db_user": "",
+                        "db_name": "",
+                        "helm_dir": ""
+                    }
+                ]
+            },
+            {
+                "branch": "main",
+                "hosts": [
+                    {
+                        "ssh_host": "prod@192.168.100.104",
+                        "ssh_port": "2222",
+                        "rsync_src": "/www/main/src",
+                        "rsync_dest": "/www/main/dest",
+                        "db_host": "",
+                        "db_user": "",
+                        "db_name": "",
+                        "helm_dir": ""
+                    },
+                    {
+                        "ssh_host": "prod@192.168.100.105",
+                        "ssh_port": "2222",
+                        "rsync_src": "/www/main/src",
+                        "rsync_dest": "/www/main/dest",
+                        "db_host": "",
+                        "db_user": "",
+                        "db_name": "",
+                        "helm_dir": ""
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "project": "root/project0",
+        "branchs": [
+            {
+                "branch": "develop",
+                "hosts": [
+                    {
+                        "ssh_host": "dev@192.168.100.102",
+                        "ssh_port": "22",
+                        "rsync_src": "/www/develop/src",
+                        "rsync_dest": "/www/develop/dest",
+                        "db_host": "",
+                        "db_user": "",
+                        "db_name": "",
+                        "helm_dir": ""
+                    },
+                    {
+                        "ssh_host": "dev@192.168.100.103",
+                        "ssh_port": "22",
+                        "rsync_src": "/www/develop/src",
+                        "rsync_dest": "/www/develop/dest",
+                        "db_host": "",
+                        "db_user": "",
+                        "db_name": "",
+                        "helm_dir": ""
+                    }
+                ]
+            },
+            {
+                "branch": "main",
+                "hosts": [
+                    {
+                        "ssh_host": "prod@192.168.100.104",
+                        "ssh_port": "2222",
+                        "rsync_src": "/www/main/src",
+                        "rsync_dest": "/www/main/dest",
+                        "db_host": "",
+                        "db_user": "",
+                        "db_name": "",
+                        "helm_dir": ""
+                    },
+                    {
+                        "ssh_host": "prod@192.168.100.105",
+                        "ssh_port": "2222",
+                        "rsync_src": "/www/main/src",
+                        "rsync_dest": "/www/main/dest",
+                        "db_host": "",
+                        "db_user": "",
+                        "db_name": "",
+                        "helm_dir": ""
+                    }
+                ]
+            }
+        ]
+    }
+]

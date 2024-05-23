@@ -576,19 +576,17 @@ _deploy_rsync_ssh() {
         rsync_exclude="${me_path_conf}/rsync.exclude"
     fi
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
-    local conf_temp
-    conf_temp=$(mktemp)
     # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $conf_temp || true
-    jq -c ".projects[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | tee -a $conf_temp || true
-    if [ "$(stat -c %s $conf_temp)" -eq 0 ]; then
+    conf_line="$(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | wc -l)"
+    if [ "$conf_line" -eq 0 ]; then
         _msg warn "[deploy] not config $me_conf"
         return
     fi
     while read -r line; do
-        ssh_host=$(echo "$line" | jq -r ".ssh_host")
-        ssh_port=$(echo "$line" | jq -r ".ssh_port")
-        rsync_src_from_conf=$(echo "$line" | jq -r ".rsync_src")
-        rsync_dest=$(echo "$line" | jq -r ".rsync_dest")
+        ssh_host=$(echo "$line" | jq -r '.ssh_host')
+        ssh_port=$(echo "$line" | jq -r '.ssh_port')
+        rsync_src_from_conf=$(echo "$line" | jq -r '.rsync_src')
+        rsync_dest=$(echo "$line" | jq -r '.rsync_dest')
         # db_host=$(echo "$line" | jq -r '.db_host')
         # db_user=$(echo "$line" | jq -r '.db_user')
         # db_name=$(echo "$line" | jq -r '.db_name')
@@ -640,8 +638,7 @@ _deploy_rsync_ssh() {
             _msg step "deploy to server with docker-compose"
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $gitlab_project_name"
         fi
-    done <"$conf_temp"
-    rm -f $conf_temp
+    done < <(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf")
     _msg time "[deploy] deploy files with rsync+ssh"
 }
 
