@@ -197,7 +197,8 @@ _backup() {
 }
 
 _backup_borg() {
-    borg_opt=(borg create)
+    set -e
+    borg_opt=(borg create --remote-path /usr/bin/borg)
     if [ "${backup_borg_debug:-0}" -eq 1 ]; then
         borg_opt+=(
             --verbose
@@ -207,7 +208,6 @@ _backup_borg() {
             --show-rc
             --compression lz4
             --exclude-caches
-            --remote-path /usr/local/bin/borg
         )
     fi
     borg_exclude="$me_path/borg_exclude"
@@ -233,16 +233,18 @@ _backup_borg() {
         --exclude '*/.cdslck'
     )
 
-    remote_host=nas
-    remote_path=/volume1/disk1/backup-borg
+    local_path="${1:-/zfs01}"
+    remote_host=${2:-nas}
+    remote_path=${3:-/volume1/backup-borg}
+
     # shellcheck disable=SC2029
-    if ssh $remote_host "test -d $remote_path"; then
+    if ssh "$remote_host" "test -d $remote_path"; then
         :
     else
         borg init --encryption=none "$remote_host:$remote_path"
     fi
     _msg log "borg backup start..."
-    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" /eda /home2
+    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "$local_path"
     # borg prune --keep-weekly=4 --keep-monthly=3 "$remote_host:$remote_path"
     # borg compact "$remote_host:$remote_path"
     _msg log "borg backup end."
@@ -287,9 +289,9 @@ _get_random_password() {
 
 _usage() {
     echo "Usage: "
-    echo "  $0 backup_push, run on server, push file to nas"
-    echo "  $0 backup_pull, run on nas, pull file from server"
-    echo "  $0 backup_borg, run on server, push file to nas"
+    echo "  $0 --backup-push, run on server, push file to nas"
+    echo "  $0 --backup-pull, run on nas, pull file from server"
+    echo "  $0 --backup-borg <local_path> <remote_host> <remote_path>, run on server, push file to nas"
     exit 1
 }
 
@@ -307,7 +309,7 @@ main() {
     user_shell=/bin/bash
 
     if [[ "$#" -eq 0 ]]; then
-        select choice in create_user change_password disable_user remove_user backup_push backup_pull backup_borg quit; do
+        select choice in create_user change_password disable_user remove_user quit; do
             _msg "choice: ${choice:? ERR: choice empty}"
             break
         done
@@ -316,22 +318,27 @@ main() {
         change_password) change_password=1 ;;
         disable_user) disable_user=1 ;;
         remove_user) remove_user=1 ;;
-        backup_push | b) backup_push=1 ;;
-        backup_pull | bp) backup_pull=1 ;;
-        backup_borg | bb) backup_borg=1 ;;
         quit) show_help=1 ;;
         esac
     fi
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
-        create_user) create_user=1 ;;
-        change_password) change_password=1 ;;
-        disable_user) disable_user=1 ;;
-        remove_user) remove_user=1 ;;
-        backup_push | b) backup_push=1 ;;
-        backup_pull | bp) backup_pull=1 ;;
-        backup_borg | bb) backup_borg=1 ;;
-        debug) backup_borg_debug=1 ;;
+        -s | --backup-push) backup_push=1 ;;
+        -l | --backup-pull) backup_pull=1 ;;
+        -b | --backup-borg) backup_borg=1 ;;
+        --debug) backup_borg_debug=1 ;;
+        --local-path)
+            borg_local_path="$2"
+            shift
+            ;;
+        --remote-host)
+            borg_host="$2"
+            shift
+            ;;
+        --remote-path)
+            borg_remote_path="$2"
+            shift
+            ;;
         -h | --help | help) show_help=1 ;;
         esac
         shift
@@ -345,7 +352,7 @@ main() {
     [ "$remove_user" = 1 ] && _remove_user
     [ "$backup_push" = 1 ] && _backup push
     [ "$backup_pull" = 1 ] && _backup pull
-    [ "$backup_borg" = 1 ] && _backup_borg
+    [ "$backup_borg" = 1 ] && _backup_borg "$borg_local_path" "$borg_host" "$borg_remote_path"
 
 }
 
