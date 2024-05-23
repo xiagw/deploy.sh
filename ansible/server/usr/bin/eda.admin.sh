@@ -198,7 +198,12 @@ _backup() {
 
 _backup_borg() {
     set -e
-    borg_opt=(borg create --remote-path /usr/bin/borg)
+    _msg log "borg backup start..."
+    borg_opt=(
+        borg
+        create
+        --remote-path /usr/bin/borg
+    )
     if [ "${backup_borg_debug:-0}" -eq 1 ]; then
         borg_opt+=(
             --verbose
@@ -233,18 +238,16 @@ _backup_borg() {
         --exclude '*/.cdslck'
     )
 
-    local_path="${1:-/zfs01}"
-    remote_host=${2:-nas}
-    remote_path=${3:-/volume1/backup-borg}
+    remote_host="${1:-nas}"
+    remote_path="${2:-/volume1/backup-borg}"
+    local_path="${3:-/zfs01}"
 
     # shellcheck disable=SC2029
-    if ssh "$remote_host" "test -d $remote_path"; then
-        :
-    else
+    if ! ssh "$remote_host" "test -d $remote_path"; then
         borg init --encryption=none "$remote_host:$remote_path"
     fi
-    _msg log "borg backup start..."
-    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "$local_path"
+
+    "${borg_opt[@]}" "ssh://$remote_host$remote_path::{now}" "$local_path"
     # borg prune --keep-weekly=4 --keep-monthly=3 "$remote_host:$remote_path"
     # borg compact "$remote_host:$remote_path"
     _msg log "borg backup end."
@@ -352,7 +355,7 @@ main() {
     [ "$remove_user" = 1 ] && _remove_user
     [ "$backup_push" = 1 ] && _backup push
     [ "$backup_pull" = 1 ] && _backup pull
-    [ "$backup_borg" = 1 ] && _backup_borg "$borg_local_path" "$borg_host" "$borg_remote_path"
+    [ "$backup_borg" = 1 ] && _backup_borg "$borg_host" "$borg_remote_path" "$borg_local_path"
 
 }
 
