@@ -4,7 +4,7 @@ _cleanup() {
     trap - SIGINT SIGTERM ERR EXIT
     # script cleanup here
     # rm -rf "${param:-empty-var-for-path}"
-    rm -f "$tmp_file"
+    rm -f "${tmp_file-}"
 }
 
 _loading_rotate() {
@@ -176,43 +176,39 @@ _rename_file() {
 }
 
 _backup_with_borg() {
-    # Paths
-    UPLOAD_LOCATION="$HOME/docker/immich-app/library"
-    # shellcheck disable=SC2034
-    BACKUP_PATH="$HOME/docker/immich-app/backup"
-    DATABASE_BACKUP_PATH="$UPLOAD_LOCATION/db_dumps"
-    REMOTE_HOST="${ENV_REMOTE_HOST}"
-    REMOTE_BACKUP_PATH="${ENV_REMOTE_BACKUP_PATH}"
+    set -e
+    immich_path="$HOME/docker/immich-app/library"
+    immich_dbdump_path="$immich_path/db_dumps"
+    borg_path="$HOME/docker/immich-app/backup-borg"
+    remote_host="${ENV_REMOTE_HOST}"
+    remote_path="${ENV_REMOTE_BACKUP_PATH}"
     ## Local setup
-    [ -d "$DATABASE_BACKUP_PATH" ] || mkdir -p "$DATABASE_BACKUP_PATH"
-    # [ -d "$BACKUP_PATH" ] || mkdir -p "$BACKUP_PATH"
-    # [ -d "$BACKUP_PATH/immich-borg" ] || borg init --encryption=none "$BACKUP_PATH/immich-borg"
-    ## Remote set up
-    if ssh "$REMOTE_HOST" true; then
-        # shellcheck disable=SC2029
-        if ! ssh "$REMOTE_HOST" "test -d \"$REMOTE_BACKUP_PATH\"/immich-borg"; then
-            borg init --encryption=none "$REMOTE_HOST:$REMOTE_BACKUP_PATH/immich-borg"
-        fi
-    else
-        echo "ssh remote host fail. exit 1"
-        return 1
+    [ -d "$immich_dbdump_path" ] || mkdir -p "$immich_dbdump_path"
+    [ -d "$borg_path" ] || mkdir -p "$borg_path"
+    [ -d "$borg_path" ] || borg init --encryption=none "$borg_path"
+    ## Remote setup
+    # shellcheck disable=SC2029
+    if ! ssh "$remote_host" "test -d \"$remote_path\""; then
+        borg init --encryption=none "$remote_host:$remote_path"
     fi
 
     ### Local
     # Backup Immich database
-    # docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres >"$DATABASE_BACKUP_PATH"/immich-database.sql
+    docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres >"$immich_dbdump_path"/immich-database.sql
     # For deduplicating backup programs such as Borg or Restic, compressing the content can increase backup size by making it harder to deduplicate. If you are using a different program or still prefer to compress, you can use the following command instead:
-    # docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres | /usr/bin/gzip --rsyncable > "$DATABASE_BACKUP_PATH"/immich-database.sql.gz
+    # docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres | /usr/bin/gzip --rsyncable > "$immich_dbdump_path"/immich-database.sql.gz
+
+    borg_opt=(borg create --exclude "$immich_path"/thumbs/ --exclude "$immich_path"/encoded-video/)
 
     ### Append to local Borg repository
-    # borg create "$BACKUP_PATH/immich-borg::{now}" "$UPLOAD_LOCATION" --exclude "$UPLOAD_LOCATION"/thumbs/ --exclude "$UPLOAD_LOCATION"/encoded-video/
-    # borg prune --keep-weekly=4 --keep-monthly=3 "$BACKUP_PATH"/immich-borg
-    # borg compact "$BACKUP_PATH"/immich-borg
+    # "${borg_opt[@]}" "$borg_path::{now}" "$immich_path"
+    # borg prune --keep-weekly=4 --keep-monthly=3 "$borg_path"
+    # borg compact "$borg_path"
 
     ### Append to remote Borg repository
-    borg create "$REMOTE_HOST:$REMOTE_BACKUP_PATH/immich-borg::{now}" "$UPLOAD_LOCATION" --exclude "$UPLOAD_LOCATION"/thumbs/ --exclude "$UPLOAD_LOCATION"/encoded-video/
-    borg prune --keep-weekly=4 --keep-monthly=3 "$REMOTE_HOST:$REMOTE_BACKUP_PATH"/immich-borg
-    borg compact "$REMOTE_HOST:$REMOTE_BACKUP_PATH"/immich-borg
+    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "$immich_path"
+    # borg prune --keep-weekly=4 --keep-monthly=3 "$remote_host:$remote_path"
+    # borg compact "$remote_host:$remote_path"
 }
 
 _deduplication() {
@@ -272,6 +268,9 @@ _file_time_or_hand_time() {
 _set_file_time() {
     input_path="$1"
     cd "$input_path"/ || return 1
+
+    find . -type d -exec chmod 755 {} \;
+    find . -type f -exec chmod 664 {} \;
 
     command -v exiv2 || sudo apt install -y exiv2
     ## query EXIF timestamp of file
@@ -406,14 +405,11 @@ main() {
     fi
     [ -f "$me_env" ] && source "$me_env" "${param_account-}"
     [ -w "$me_path" ] || me_log="/tmp/${me_name}.log"
-    [[ "$enable_log" -eq 1 ]] && echo "Log file is \"$me_log\""
+    [[ "${enable_log-}" -eq 1 ]] && echo "Log file is \"$me_log\""
 
     if [ -z "$param" ]; then
         param="$(readlink -f .)"
     fi
-    echo "picture path is: $param"
-    find . -type d -exec chmod 755 {} \;
-    find . -type f -exec chmod 664 {} \;
 
     [ "${flag_backup-}" = 1 ] && _backup_with_borg
     [ "${flag_fixtime-}" = 1 ] && _set_file_time "$param"
