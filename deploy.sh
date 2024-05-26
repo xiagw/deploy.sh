@@ -499,6 +499,11 @@ EOF
     ## provision-config
     # aliyun --quiet fc PUT /2023-03-30/functions/"$release_name"/provision-config --qualifier LATEST --header "Content-Type=application/json;" --body "{\"target\":1}"
     _msg time "[deploy] create/update functions end"
+
+    # aliyun fc GET /2023-03-30/functions --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -vE '^php|^serverless' | while read line; do
+    # aliyun fc DELETE /2023-03-30/functions/$line/triggers/defaultTrigger --header "Content-Type=application/json;" --body "{}"
+    # aliyun fc DELETE /2023-03-30/functions/$line --header "Content-Type=application/json;" --body "{}"
+    # done
 }
 
 _deploy_k8s() {

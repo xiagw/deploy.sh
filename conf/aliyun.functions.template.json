@@ -2,10 +2,11 @@
     "functionName": "$TEMPLATE_NAME",
     "runtime": "custom-container",
     "internetAccess": false,
-    "cpu": 0.5,
+    "cpu": 0.3,
     "memorySize": 512,
     "diskSize": 512,
     "handler": "index.handler",
+    "instanceConcurrency": "200",
     "customContainerConfig": {
         "image": "$TEMPLATE_REGISTRY:$TEMPLATE_TAG",
         "port": 8080
