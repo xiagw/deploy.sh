@@ -484,12 +484,11 @@ _deploy_functions_aliyun() {
 EOF
     fi
 
-    if aliyun fc GET /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" |
-        jq -r '.functionName' | grep -qw "$release_name"; then
-        ## already exists, just update image
+    if aliyun fc GET /2023-03-30/functions --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "$release_name"; then
+        _msg time "update function $release_name"
         aliyun --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
     else
-        ## create function
+        _msg time "create function $release_name, and trigger."
         aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"
         ## create trigger
         aliyun --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
