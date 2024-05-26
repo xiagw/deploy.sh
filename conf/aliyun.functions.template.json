@@ -6,7 +6,7 @@
     "memorySize": 512,
     "diskSize": 512,
     "handler": "index.handler",
-    "instanceConcurrency": "200",
+    "instanceConcurrency": 200,
     "customContainerConfig": {
         "image": "$TEMPLATE_REGISTRY:$TEMPLATE_TAG",
         "port": 8080
