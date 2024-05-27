@@ -469,10 +469,11 @@ _deploy_functions_aliyun() {
     "functionName": "$release_name",
     "runtime": "custom-container",
     "internetAccess": false,
-    "cpu": 0.5,
+    "cpu": 0.3,
     "memorySize": 512,
     "diskSize": 512,
     "handler": "index.handler",
+    "instanceConcurrency": 200,
     "customContainerConfig": {
         "image": "${ENV_DOCKER_REGISTRY}:${image_tag}",
         "port": 8080,
@@ -488,9 +489,9 @@ EOF
         _msg time "update function $release_name"
         aliyun --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
     else
-        _msg time "create function $release_name, and trigger."
+        _msg time "create function $release_name"
         aliyun --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"
-        ## create trigger
+        _msg time "create trigger for function $release_name"
         aliyun --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     fi
     rm -f "$functions_conf"
