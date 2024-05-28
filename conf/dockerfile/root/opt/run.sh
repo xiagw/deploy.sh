@@ -283,3 +283,6 @@ main() {
 }
 
 main "$@"
+
+
+# curl -vsL mysql03.flyh6.com:3306 2>&1 | awk '/Trying/ {print $3}' | awk -F: '{print $1}'

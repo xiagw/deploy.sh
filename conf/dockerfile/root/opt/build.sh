@@ -224,6 +224,10 @@ _build_php() {
         -e '/disable_functions/s/$/phpinfo,/' \
         -e '/max_execution_time/s/30/60/' \
         /etc/php/"${PHP_VERSION}"/fpm/php.ini
+    sed -i \
+        -e '/^;slowlog.*log\//s//slowlog = \/var\/log\/php/' \
+        -e '/^;request_slowlog_timeout.*/s//request_slowlog_timeout = 2/' \
+        /etc/php/"${PHP_VERSION}"/fpm/pool.d/www.conf
 }
 
 _onbuild_php() {
