@@ -458,7 +458,7 @@ _deploy_functions_aliyun() {
     _format_release_name
     ## create FC
     _msg step "[deploy] create/update functions"
-    functions_conf_tmpl="$me_path_data"/aliyun.functions.template.json
+    functions_conf_tmpl="$me_path_data"/aliyun.functions.${project_lang}.json
     functions_conf="$me_path_data"/aliyun.functions.json
     if [ -f "$functions_conf_tmpl" ]; then
         TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_TAG=${image_tag} envsubst <$functions_conf_tmpl >$functions_conf
