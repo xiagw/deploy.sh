@@ -345,8 +345,6 @@ _build_jdk_runtime() {
     command -v useradd || yum install -y shadow-utils
     useradd -u 1000 -m spring
     chown -R 1000:1000 /app
-    chnod 664 /etc/hosts
-    chown 0:1000 /etc/hosts
     for file in /app/*.{yml,yaml}; do
         if [ -f "$file" ]; then
             break
