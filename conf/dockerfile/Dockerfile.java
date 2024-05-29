@@ -16,7 +16,7 @@ ARG IMAGE_JDK=openjdk:8
 FROM ${IMAGE_MVN} AS builder
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
-ARG MVN_DEBUG=-q
+ARG MVN_DEBUG=off
 ARG MVN_COPY_YAML=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 WORKDIR /src

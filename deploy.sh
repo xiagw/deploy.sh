@@ -1566,7 +1566,7 @@ _probe_langs() {
             project_lang=java
             build_arg="${build_arg:+"$build_arg "}--build-arg MVN_PROFILE=${gitlab_project_branch}"
             if ${debug_on:-false}; then
-                build_arg="${build_arg:+"$build_arg "}--build-arg MVN_DEBUG="
+                build_arg="${build_arg:+"$build_arg "}--build-arg MVN_DEBUG=on"
             fi
             break
             ;;
@@ -1598,14 +1598,8 @@ _probe_deploy_method() {
             ;;
         Dockerfile*)
             exec_build_image=true
-            # if ! ${ENV_DISABLE_DOCKER:-false}; then
             exec_push_image=true
             exec_deploy_k8s=true
-            if [[ "$project_lang" = java || "$project_lang" = node ]]; then
-                # exec_deploy_functions=${ENV_DEPLOY_FUNCTIONS:-false}
-                exec_deploy_functions=${ENV_DEPLOY_FUNCTIONS:-true}
-            fi
-            # fi
             exec_build_langs=false
             exec_deploy_rsync_ssh=false
             deploy_method=helm
@@ -2059,7 +2053,7 @@ main() {
     ## deploy k8s
     ${exec_deploy_k8s:-false} && _deploy_k8s
     ## deploy functions aliyun
-    ${exec_deploy_functions:-false} && _deploy_functions_aliyun
+    ${exec_deploy_functions:-true} && _deploy_functions_aliyun
     ## deploy rsync server
     ${exec_deploy_rsync:-false} && _deploy_rsync
     ## deploy ftp server
