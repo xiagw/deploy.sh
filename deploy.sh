@@ -1392,14 +1392,12 @@ _inject_files() {
             elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
                 cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
             fi
-            if [ -d "${gitlab_project_dir}/root/opt" ]; then
-                echo "found exist ${gitlab_project_dir}/root/opt"
+            if [ -f "${gitlab_project_dir}/root/opt/build.sh" ]; then
+                echo "found exist ${gitlab_project_dir}/root/opt/build.sh"
             else
-                if [ -f "${project_dockerfile}" ]; then
-                    cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
-                    if [ -f "${me_path_data}"/init.sh ]; then
-                        cp -avf "${me_path_data}"/init.sh "$gitlab_project_dir/root/opt/"
-                    fi
+                cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
+                if [ -f "${me_data_dockerfile}"/init.sh ]; then
+                    cp -avf "${me_data_dockerfile}"/init.sh "$gitlab_project_dir/root/opt/"
                 fi
             fi
         fi
