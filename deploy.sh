@@ -1397,6 +1397,9 @@ _inject_files() {
             else
                 if [ -f "${project_dockerfile}" ]; then
                     cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
+                    if [ -f "${me_path_data}"/init.sh ]; then
+                        cp -avf "${me_path_data}"/init.sh "$gitlab_project_dir/root/opt/"
+                    fi
                 fi
             fi
         fi

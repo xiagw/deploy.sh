@@ -47,7 +47,7 @@ COPY ./root/ /
 RUN set -xe; \
     if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; else :; fi; \
     if [ -f /opt/build.sh ]; then bash /opt/build.sh; else :; fi
-USER 1000
+#USER 1000
 EXPOSE 8080 8081 8082
 # volume /data
-CMD ["bash", "/opt/run.sh"]
+CMD ["bash", "/opt/run0.sh"]

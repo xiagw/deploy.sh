@@ -348,7 +348,7 @@ _build_jdk_runtime() {
 
     _check_run_sh
     command -v useradd || yum install -y shadow-utils
-    useradd -u 1000 -m spring
+    useradd -u 1000 -s /bin/bash -m spring
     chown -R 1000:1000 /app
     for file in /app/*.{yml,yaml}; do
         if [ -f "$file" ]; then

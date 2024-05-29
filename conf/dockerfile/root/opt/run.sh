@@ -10,9 +10,11 @@ _msg() {
 }
 
 _start_java() {
+    for i in /usr/local/openjdk-8/bin /usr/java/openjdk-17/bin; do
+        [ -d "$i" ] && export PATH="$i:$PATH"
+    done
     command -v java || return
     ## 修改内存占用值，
-    # shellcheck disable=1091
     if [ -f $app_path/.java_opts ]; then
         source $app_path/.java_opts
     elif [ -z "$JAVA_OPTS" ]; then
@@ -33,34 +35,22 @@ _start_java() {
         _msg "Found $profile_name ..."
         break
     done
-    unset cj
-    for jar in "$app_path"/*.jar; do
-        [[ -f "$jar" ]] || continue
-        ((++cj))
-        ## 启动方式二，配置文件 yml 在 jar 包外，非内置
-        ## !!!! 注意 !!!!,
-        ## 自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
-        unset cy
-        config_yml=
-        for yml in "$app_path"/*.yml "$app_path"/*.yaml; do
-            [[ -f "$yml" ]] || continue
-            ((++cy))
-            if [[ "$cj" -eq "$cy" ]]; then
-                config_yml="-Dspring.config.location=${yml}"
-                break
-            fi
-        done
 
-        _msg "${cj}. found $jar $config_yml ..."
+    jars=("$app_path"/*.jar)
+    ymls=("$app_path"/*.yml "$app_path"/*.yaml)
+    echo "${jars[@]}"
+    echo "${ymls[@]}"
+    i=0
+    for jar in "${jars[@]}"; do
+        [[ -f "${jar}" ]] || continue
+        ((++i))
         if [ "$profile_name" ]; then
-            ## 启动方式一， jar 内置配置(profile)文件 yml，
-            $JAVA_OPTS -jar "$jar" "$profile_name" >>"$me_log" 2>&1 &
-        elif [ "$config_yml" ]; then
-            ## 启动方式二，配置文件 yml 在 jar 包外，非内置
-            $JAVA_OPTS "$config_yml" -jar "$jar" >>"$me_log" 2>&1 &
+            $JAVA_OPTS -jar "${jar}" "$profile_name" >>"$me_log" 2>&1 &
+        elif [ -f "${ymls[$i]}" ]; then
+            ## 配置文件 yml 在 jar 包外，非内置.自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
+            $JAVA_OPTS -Dspring.config.location="${ymls[$i]}" -jar "${jar}" >>"$me_log" 2>&1 &
         else
-            _msg "Not found jar files, tail log files..."
-            $JAVA_OPTS -jar "$jar" >>"$me_log" 2>&1 &
+            $JAVA_OPTS -jar "${jar}" >>"$me_log" 2>&1 &
         fi
         pids+=("$!")
     done
@@ -238,9 +228,6 @@ main() {
 
     _set_jemalloc
 
-    ## 初始化程序
-    [ -f /opt/init.sh ] && bash /opt/init.sh
-    [ -f /app/init.sh ] && bash /app/init.sh
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.nohup ]]; then
         start_nohup=1
@@ -284,5 +271,3 @@ main() {
 
 main "$@"
 
-
-# curl -vsL mysql03.flyh6.com:3306 2>&1 | awk '/Trying/ {print $3}' | awk -F: '{print $1}'
