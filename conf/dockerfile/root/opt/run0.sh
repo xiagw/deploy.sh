@@ -4,4 +4,4 @@
 [ -f /opt/init.sh ] && bash /opt/init.sh
 [ -f /app/init.sh ] && bash /app/init.sh
 
-su -l spring -c "bash /opt/run.sh"
+su -l spring -c "export LANG=C.UTF-8; bash /opt/run.sh"
