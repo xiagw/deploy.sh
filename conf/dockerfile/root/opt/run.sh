@@ -204,6 +204,7 @@ _kill() {
 }
 
 main() {
+    export LANG=C.UTF-8
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"
