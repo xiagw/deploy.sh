@@ -251,28 +251,21 @@ _onbuild_php() {
 
 _build_node() {
     echo "build node ..."
-    if _is_root; then
-        $cmd_pkg update -yqq
-        # $cmd_pkg_opt less vim curl ca-certificates
-        [ -d /.cache ] || mkdir /.cache
-        [ -d /app ] || mkdir /app
-        chown -R node:node /.cache /app
-        npm install -g npm
-        if _is_china; then
-            npm install -g cnpm
-        fi
+
+    $cmd_pkg update -yqq
+    $cmd_pkg_opt less vim curl ca-certificates
+    [ -d /.cache ] || mkdir /.cache
+    [ -d /app ] || mkdir /app
+    chown -R node:node /.cache /app
+    npm install -g npm
+    _is_china && npm install -g cnpm
+
+    if _is_china; then
+        su -l node -c "cnpm install"
     else
-        if _is_china; then
-            cnpm install
-        else
-            npm install
-        fi
-        if [ -d root ]; then
-            rm -rf root || :
-        else
-            :
-        fi
+        su -l node -c "npm install"
     fi
+    rm -rf root/ || :
 }
 
 _build_maven() {

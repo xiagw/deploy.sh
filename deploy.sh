@@ -1376,34 +1376,31 @@ _inject_files() {
         echo '<skip>'
         ;;
     overwrite)
-        ## inject files for build container image
-        if [[ "${project_lang}" == node && -f "${project_dockerfile}" ]]; then
-            echo "skip cp Dockerfile."
-        else
-            ## Dockerfile 优先查找 data/ 目录
-            if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
-            ## Dockerfile 其次查找 conf/ 目录
-            elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
+        case "${project_lang}" in
+        node)
+            if [[ -f "${project_dockerfile}" ]]; then
+                echo "skip cp Dockerfile."
+            else
+                ## Dockerfile 优先查找 data/ 目录
+                if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
+                    cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
+                ## Dockerfile 其次查找 conf/ 目录
+                elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
+                    cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
+                fi
             fi
             if [ -d "${gitlab_project_dir}/root/opt" ]; then
                 echo "found exist ${gitlab_project_dir}/root/opt"
             else
-                if [ -f "${project_dockerfile}" ]; then
-                    cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
-                    if [ -f "${me_path_data}"/init.sh ]; then
-                        cp -avf "${me_path_data}"/init.sh "$gitlab_project_dir/root/opt/"
-                    fi
-                fi
+                cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
             fi
-        fi
-        if [[ "${project_lang}" == java ]]; then
+            ;;
+        java)
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
-                \cp -avf "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
+                cp -avf "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
             elif _is_china; then
-                \cp -avf "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/"
+                cp -avf "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/"
             fi
             ## find jdk version
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
@@ -1437,6 +1434,11 @@ _inject_files() {
                 esac
                 break
             done
+            ;;
+        esac
+        ## inject files for build container image
+        if [[ -f "${me_data_dockerfile}"/init.sh && -d "$gitlab_project_dir/root/opt/" ]]; then
+            cp -avf "${me_data_dockerfile}"/init.sh "$gitlab_project_dir/root/opt/"
         fi
         ;;
     remove)

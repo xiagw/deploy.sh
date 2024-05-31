@@ -120,7 +120,8 @@ _start_php() {
 
 _start_node() {
     command -v npm || return
-    npm run start
+    npm run start &
+    pids+=("$!")
 }
 
 _schedule_upgrade() {
@@ -271,4 +272,3 @@ main() {
 }
 
 main "$@"
-
