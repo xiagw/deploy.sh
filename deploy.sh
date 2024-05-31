@@ -1376,25 +1376,31 @@ _inject_files() {
         echo '<skip>'
         ;;
     overwrite)
+        if [[ -f "${project_dockerfile}" ]]; then
+            echo "skip cp Dockerfile."
+        else
+            ## Dockerfile 优先查找 data/ 目录
+            if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
+                cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
+            ## Dockerfile 其次查找 conf/ 目录
+            elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
+                cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
+            fi
+        fi
+
+        if [ -d "${gitlab_project_dir}/root/opt" ]; then
+            echo "found exist ${gitlab_project_dir}/root/opt"
+        else
+            cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
+        fi
+
+        ## inject files for build container image
+        if [[ -f "${me_data_dockerfile}"/init.sh && -d "$gitlab_project_dir/root/opt/" ]]; then
+            cp -avf "${me_data_dockerfile}"/init.sh "$gitlab_project_dir/root/opt/"
+        fi
+
         case "${project_lang}" in
-        node)
-            if [[ -f "${project_dockerfile}" ]]; then
-                echo "skip cp Dockerfile."
-            else
-                ## Dockerfile 优先查找 data/ 目录
-                if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                    cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
-                ## Dockerfile 其次查找 conf/ 目录
-                elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                    cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
-                fi
-            fi
-            if [ -d "${gitlab_project_dir}/root/opt" ]; then
-                echo "found exist ${gitlab_project_dir}/root/opt"
-            else
-                cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
-            fi
-            ;;
+        node) : ;;
         java)
             ## java settings.xml 优先查找 data/ 目录
             if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
@@ -1436,10 +1442,6 @@ _inject_files() {
             done
             ;;
         esac
-        ## inject files for build container image
-        if [[ -f "${me_data_dockerfile}"/init.sh && -d "$gitlab_project_dir/root/opt/" ]]; then
-            cp -avf "${me_data_dockerfile}"/init.sh "$gitlab_project_dir/root/opt/"
-        fi
         ;;
     remove)
         echo 'Removing Dockerfile (disable docker build)'
