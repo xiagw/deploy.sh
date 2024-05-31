@@ -1,10 +1,10 @@
 ## arch: x86_64
-ARG IMAGE_NAME=ubuntu
+ARG IMAGE_NAME=ubuntu:22.04
 
 ## arch: arm64
 # ARG IMAGE_NAME=arm64v8/ubuntu
 
-FROM ${IMAGE_NAME}:22.04
+FROM ${IMAGE_NAME}
 
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
@@ -13,7 +13,7 @@ ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/op
 
 ENV PHP_VERSION=${PHP_VERSION}
 
-EXPOSE 80 9000
+EXPOSE 80 8080 9000
 # WORKDIR /var/www/html
 WORKDIR /app
 CMD ["bash", "/opt/run.sh"]
