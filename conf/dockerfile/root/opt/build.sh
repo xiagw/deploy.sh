@@ -268,7 +268,7 @@ _build_node() {
             npm install
         fi
         if [ -d root ]; then
-            rm -rf root
+            rm -rf root || :
         else
             :
         fi

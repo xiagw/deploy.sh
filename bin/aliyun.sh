@@ -557,6 +557,18 @@ _upgrade_aliyun() {
     fi
 }
 
+_functions_update() {
+    _get_aliyun_profile
+    # read -rp "Enter functions name ? " fc_name
+    select line in $(
+        $cmd_aliyun_p fc GET /2023-03-30/functions --limit=50 --header "Content-Type=application/json;" |
+            jq -r '.functions[].functionName'
+    ); do
+        $cmd_aliyun_p fc DELETE /2023-03-30/functions/"$line"/triggers/defaultTrigger --header "Content-Type=application/json;" --body "{}"
+        $cmd_aliyun_p fc DELETE /2023-03-30/functions/"$line" --header "Content-Type=application/json;" --body "{}"
+    done
+}
+
 _usage() {
     cat <<EOF
 Usage: $me_name [res|dns|ecs|nas|nas_snap|rds|up|dn|load|cdn|ram|cas|wo|upgrade-cli]
@@ -662,6 +674,9 @@ main() {
         ;;
     wo)
         _add_workorder
+        ;;
+    fc)
+        _functions_update
         ;;
     upgrade-aliyun)
         _upgrade_aliyun
