@@ -6,6 +6,7 @@
 
 me_name="$(basename "$0")"
 me_path="$(cd "$(dirname "$0")" && pwd)"
+me_conf="$me_path/${me_name}.conf"
 
 if command -v yt-dlp; then
     yt_opt='yt-dlp'
@@ -21,8 +22,8 @@ fi
 
 if [ -f url.conf ]; then
     url_file=url.conf
-elif [ -f "$me_path"/url.conf ]; then
-    url_file=$me_path/url.conf
+elif [ -f "$me_conf" ]; then
+    url_file=$me_conf
 else
     echo "not found $url_file"
 fi
@@ -52,7 +53,7 @@ while [ $# -ge 0 ]; do
     *)
         urls=("$@")
         if [ -f "$url_file" ] && [ "${#urls[@]}" -eq 0 ]; then
-            # IFS=" " read -r -a urls <<<"$(grep -v '^#' "$url_file")"
+            # shellcheck disable=SC2207
             urls=($(grep -v '^#' "$url_file"))
         fi
         break
