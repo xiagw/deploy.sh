@@ -120,7 +120,7 @@ _start_php() {
 
 _start_node() {
     command -v npm || return
-    npm run start &
+    cd /app && npm run start &
     pids+=("$!")
 }
 

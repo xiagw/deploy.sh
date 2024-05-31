@@ -261,9 +261,9 @@ _build_node() {
     _is_china && npm install -g cnpm
 
     if _is_china; then
-        su -l node -c "cnpm install"
+        su -l node -c "cd /app && cnpm install"
     else
-        su -l node -c "npm install"
+        su -l node -c "cd /app && npm install"
     fi
     rm -rf root/ || :
 }
