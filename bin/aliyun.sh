@@ -551,7 +551,7 @@ _add_workorder() {
 _upgrade_aliyun() {
     if hostname -s | grep gitlab; then
         curl -fL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz |
-            tar -zx -C "$HOME"/.local/bin/aliyun
+            tar -zx -C "$HOME"/.local/bin/
     else
         brew install aliyun-cli
     fi
