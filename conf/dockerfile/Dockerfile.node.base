@@ -1,21 +1,23 @@
 ## arch: x86_64
 ARG IMAGE_NAME=node:18-slim
+# ARG IMAGE_NAME=node:20-slim
+# ARG IMAGE_NAME=node:21-slim
 ## arch: arm64
-# ARG IMAGE_NAME=arm64v8/ubuntu
+# ARG IMAGE_NAME=arm64v8/openjdk:8
 
 FROM ${IMAGE_NAME}
 
-ARG IN_CHINA=false
+ARG IN_CHINA=true
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
-EXPOSE 80 8080 9000
+EXPOSE 80 8080 8081 9000
 WORKDIR /app
 CMD ["bash", "/opt/run0.sh"]
 COPY ./root/ /
 RUN set -xe; \
     if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
-    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
+    bash /opt/build.sh
 
-ONBUILD COPY --chown=1000:1000 . .
+ONBUILD COPY --chown=1000:1000 . /app/
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi
 
 # podman build --force-rm --format=docker -t deploy/base:node-v18t01 -f Dockerfile.node.base .

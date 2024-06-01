@@ -10,10 +10,8 @@ _msg() {
 }
 
 _start_java() {
-    for i in /usr/local/openjdk-8/bin /usr/java/openjdk-17/bin; do
-        [ -d "$i" ] && export PATH="$i:$PATH"
-    done
     command -v java || return
+    command -v redis-server && redis-server --daemonize yes
     ## 修改内存占用值，
     if [ -f $app_path/.java_opts ]; then
         source $app_path/.java_opts
@@ -205,7 +203,6 @@ _kill() {
 }
 
 main() {
-    export LANG=C.UTF-8
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_log="${me_path}/${me_name}.log"

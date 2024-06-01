@@ -309,37 +309,37 @@ _build_jdk_runtime() {
         fi
     fi
     if ${INSTALL_FFMPEG:-false}; then
-        if ${update_cache:-false}; then
-            $cmd_pkg update -yqq
-        fi
+        ${update_cache:-false} && $cmd_pkg update -yqq
         $cmd_pkg_opt ffmpeg
     fi
     if ${INSTALL_LIBREOFFICE:-false}; then
-        if ${update_cache:-false}; then
-            $cmd_pkg update -yqq
-        fi
+        ${update_cache:-false} && $cmd_pkg update -yqq
         $cmd_pkg_opt libreoffice
     fi
+    if ${INSTALL_REDIS:-false}; then
+        ${update_cache:-false} && $cmd_pkg update -yqq
+        $cmd_pkg_opt redis-server
+    fi
     if ${INSTALL_FONTS:-false}; then
-        if ${update_cache:-false}; then
-            $cmd_pkg update -yqq
-        fi
+        ${update_cache:-false} && $cmd_pkg update -yqq
         $cmd_pkg_opt fontconfig
         curl --referer "$url_fly_cdn" -Lo /tmp/fonts.zip "$url_fly_cdn"/fonts.zip
         cd /usr/share/fonts && unzip -o /tmp/fonts.zip
         fc-cache -fv
     fi
     ## set ssl
-    s1=/usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security
-    s2=/usr/lib/jvm/java-1.8.0-amazon-corretto/jre/lib/security/java.security
-    s3=/usr/local/openjdk-8/jre/lib/security/java.security
-    for f in $s1 $s2 $s3; do
-        if [[ -f $f ]]; then
-            sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' "$f"
+    file1=/usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security
+    file2=/usr/lib/jvm/java-1.8.0-amazon-corretto/jre/lib/security/java.security
+    file3=/usr/local/openjdk-8/jre/lib/security/java.security
+    for file in $file1 $file2 $file3; do
+        if [[ -f $file ]]; then
+            sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' "$file"
         fi
     done
 
     _check_run_sh
+    [ -d /app ] || mkdir /app
+    command -v su || $cmd_pkg install -y util-linux
     command -v useradd || yum install -y shadow-utils
     useradd -u 1000 -s /bin/bash -m spring
     chown -R 1000:1000 /app
