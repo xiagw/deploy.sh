@@ -6,13 +6,13 @@ _add_account() {
     if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -m "$user_name"; then
         if _get_yes_no "user $user_name exists, update $user_name password?"; then
             user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
-            $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand:? empty password}" --name "$user_name" --email "$user_name@${domain_name}" --skip-reconfirmation 1
+            $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand:? empty password}" --name "$user_name" --email "$user_name@${gitlab_domain}" --skip-reconfirmation 1
             return
         fi
         return 1
     fi
 
-    $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand:? empty password}" --email "${user_name}@${domain_name}" --skip-confirmation 1 --can-create-group 0
+    $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand:? empty password}" --email "${user_name}@${gitlab_domain}" --skip-confirmation 1 --can-create-group 0
     _msg log "$me_log" "username=$user_name / password=$password_rand"
 
     _msg "add to default group \"pms\"."
@@ -29,7 +29,7 @@ _add_account() {
 
 _send_msg() {
     ## message body
-    send_msg="https://git.$domain_name /  username=$user_name / password=$password_rand"
+    send_msg="https://git.$gitlab_domain /  username=$user_name / password=$password_rand"
     if [[ -z "$gitlab_weixin_key" ]]; then
         read -rp 'Enter weixin api key: ' read_weixin_key
         wechat_api_key=$read_weixin_key
@@ -163,9 +163,9 @@ main() {
         return
         ;;
     *)
-        ## user_name and domain_name
+        ## user_name and gitlab_domain
         user_name=${1}
-        domain_name=${2}
+        gitlab_domain=${2}
         ;;
     esac
 
@@ -183,11 +183,13 @@ main() {
     . "$me_env" "$gitlab_profile"
     _msg "gitlab profile is: $gitlab_profile"
     cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
-    if [[ -z "$user_name" || -z "$domain_name" ]]; then
+    if [[ -z "$user_name" ]]; then
         read -rp 'Enter gitlab username: ' read_user_name
-        read -rp 'Enter gitlab domain: ' gitlab_domain
         user_name=${read_user_name:? ERR: empty user name}
-        domain_name=${gitlab_domain:? ERR: empty domain name}
+    fi
+    if [[ -z "$gitlab_domain" ]]; then
+        read -rp 'Enter gitlab domain: ' gitlab_domain
+        gitlab_domain=${gitlab_domain:? ERR: empty domain name}
     fi
 
     _get_random_password
