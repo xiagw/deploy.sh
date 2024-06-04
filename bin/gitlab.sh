@@ -2,14 +2,13 @@
 # shellcheck disable=1090
 
 _add_account() {
-    if _get_yes_no "update $user_name password?"; then
-        user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
-        $cmd_gitlab user update --id "${user_id}" --username "$user_name" --name "$user_name" --email "$user_name@${domain_name}" --skip-reconfirmation 1
-        return
-    fi
 
     if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -m "$user_name"; then
-        echo "user $user_name exists, exit 1."
+        if _get_yes_no "user $user_name exists, update $user_name password?"; then
+            user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
+            $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand:? empty password}" --name "$user_name" --email "$user_name@${domain_name}" --skip-reconfirmation 1
+            return
+        fi
         return 1
     fi
 
@@ -158,13 +157,26 @@ main() {
     me_log="$me_data_path/${me_name}.log"
     me_env="$me_data_path/${me_name}.env"
 
-    source "$me_path"/include.sh
-
-    if [ "$1" = install ]; then
+    case "$1" in
+    install)
         _install_gitlab_runner
         return
+        ;;
+    *)
+        ## user_name and domain_name
+        user_name=${1}
+        domain_name=${2}
+        ;;
+    esac
+
+    if [[ -z "$user_name" || -z "$domain_name" ]]; then
+        read -rp 'Enter gitlab username: ' read_user_name
+        read -rp 'Enter gitlab domain: ' gitlab_domain
+        user_name=${read_user_name:? ERR: empty user name}
+        domain_name=${gitlab_domain:? ERR: empty domain name}
     fi
 
+    source "$me_path"/include.sh
     ## python-gitlab config
     if [[ -f "$HOME/.python-gitlab.cfg" ]]; then
         gitlab_python_config="$HOME/.python-gitlab.cfg"
@@ -178,16 +190,6 @@ main() {
     . "$me_env" "$gitlab_profile"
     _msg "gitlab profile is: $gitlab_profile"
     cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
-
-    ## user_name and domain_name
-    if [[ -z "$1" ]]; then
-        read -rp 'Enter gitlab username: ' read_user_name
-        user_name=${read_user_name:? ERR: empty user name}
-        domain_name=${gitlab_domain:? ERR: empty domain name}
-    else
-        user_name=${1}
-        domain_name=${2}
-    fi
 
     _get_random_password
     _add_account
