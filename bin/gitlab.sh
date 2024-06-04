@@ -169,13 +169,6 @@ main() {
         ;;
     esac
 
-    if [[ -z "$user_name" || -z "$domain_name" ]]; then
-        read -rp 'Enter gitlab username: ' read_user_name
-        read -rp 'Enter gitlab domain: ' gitlab_domain
-        user_name=${read_user_name:? ERR: empty user name}
-        domain_name=${gitlab_domain:? ERR: empty domain name}
-    fi
-
     source "$me_path"/include.sh
     ## python-gitlab config
     if [[ -f "$HOME/.python-gitlab.cfg" ]]; then
@@ -190,6 +183,12 @@ main() {
     . "$me_env" "$gitlab_profile"
     _msg "gitlab profile is: $gitlab_profile"
     cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
+    if [[ -z "$user_name" || -z "$domain_name" ]]; then
+        read -rp 'Enter gitlab username: ' read_user_name
+        read -rp 'Enter gitlab domain: ' gitlab_domain
+        user_name=${read_user_name:? ERR: empty user name}
+        domain_name=${gitlab_domain:? ERR: empty domain name}
+    fi
 
     _get_random_password
     _add_account

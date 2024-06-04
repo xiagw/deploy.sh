@@ -1,8 +1,7 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034
 
-cmd_date="$(command -v gdate)"
-cmd_date="${cmd_date:-$(command -v date)}"
+cmd_date="$(command -v gdate || command -v date)"
 
 _msg() {
     local color_on=''
