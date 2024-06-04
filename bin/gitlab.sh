@@ -150,7 +150,7 @@ EOF
 main() {
     set -e
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
-    cmd_readlink="$(command -v greadlink)"
+    cmd_readlink="$(command -v greadlink || command -v readlink)"
     me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
     me_data_path="$me_path/../data"
     me_name="$(basename "$0")"
