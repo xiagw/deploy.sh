@@ -567,6 +567,8 @@ _functions_update() {
         $cmd_aliyun_p fc DELETE /2023-03-30/functions/"$line"/triggers/defaultTrigger --header "Content-Type=application/json;" --body "{}"
         $cmd_aliyun_p fc DELETE /2023-03-30/functions/"$line" --header "Content-Type=application/json;" --body "{}"
     done
+
+    # aliyun fc PUT /2023-03-30/custom-domains/fc.vrupup.com --header "Content-Type=application/json;" --body "$(cat al.json)"
 }
 
 _usage() {
@@ -625,7 +627,7 @@ main() {
     kubectl_clim="$(command -v kubectl) --kubeconfig $HOME/.kube/config -n main"
     cmd_aliyun="$(command -v aliyun) --config-path $HOME/.aliyun/config.json"
     cmd_aliyun_p="$cmd_aliyun -p ${aliyun_profile:? ERR: empty aliyun profile}"
-    $cmd_aliyun --help | grep -m1 Version
+    # $cmd_aliyun --help | grep -m1 Version
 
     # while [[ "$#" -gt 0 ]]; do
     case "$1" in
