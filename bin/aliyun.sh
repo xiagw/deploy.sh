@@ -563,7 +563,9 @@ _functions_update() {
     select line in $(
         $cmd_aliyun_p fc GET /2023-03-30/functions --limit=50 --header "Content-Type=application/json;" |
             jq -r '.functions[].functionName'
-    ); do
+    ) quit; do
+
+        [ "$line" = quit ] && break
         $cmd_aliyun_p fc DELETE /2023-03-30/functions/"$line"/triggers/defaultTrigger --header "Content-Type=application/json;" --body "{}"
         $cmd_aliyun_p fc DELETE /2023-03-30/functions/"$line" --header "Content-Type=application/json;" --body "{}"
     done
