@@ -561,7 +561,7 @@ _functions_update() {
     _get_aliyun_profile
     # read -rp "Enter functions name ? " fc_name
     select line in $(
-        $cmd_aliyun_p fc GET /2023-03-30/functions --limit=50 --header "Content-Type=application/json;" |
+        $cmd_aliyun_p fc GET /2023-03-30/functions --limit=100 --header "Content-Type=application/json;" |
             jq -r '.functions[].functionName'
     ) quit; do
 
