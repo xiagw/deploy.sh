@@ -485,7 +485,7 @@ _deploy_functions_aliyun() {
 EOF
     fi
 
-    if aliyun fc GET /2023-03-30/functions --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "$release_name"; then
+    if aliyun fc GET /2023-03-30/functions --prefix "${release_name:0:3}" --limit 100 --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "$release_name"; then
         _msg time "update function $release_name"
         aliyun --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
     else
