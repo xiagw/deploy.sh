@@ -271,12 +271,21 @@ _build_node() {
 _build_maven() {
     # --settings=settings.xml --activate-profiles=main
     # mvn -T 1C install -pl $moduleName -am --offline
-    if [ "$MVN_DEBUG" = on ]; then
-        mvn_opt="mvn"
-    else
-        mvn_opt="mvn --quiet"
+    mvn_opt+=(
+        mvn
+        --threads 1C
+        --update-snapshots
+        -DskipTests
+        -Dmaven.compile.fork=true
+        -Duser.home=/var/maven
+    )
+    if [ "$MVN_DEBUG" = off ]; then
+        mvn_opt+=(--quiet)
     fi
-    $mvn_opt --threads 1C --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package
+    if [ -f /root/.m2/settings.xml ]; then
+        mvn_opt+=(--settings=/root/.m2/settings.xml)
+    fi
+    "${mvn_opt[@]}" clean package
 
     mkdir /jars
     while read -r jar; do

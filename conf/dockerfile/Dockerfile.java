@@ -1,8 +1,6 @@
 ##############################
 #    docker build stage 1    #
 ##############################
-# https://blog.frankel.ch/faster-maven-builds/2/
-# RUN --mount=type=cache,target=/root/.m2 bash -xe /opt/build.sh
 ## arch: x86_64
 # ARG IMAGE_MVN=maven:3.8-openjdk-17
 ARG IMAGE_MVN=maven:3.8-jdk-8
@@ -20,12 +18,7 @@ ARG MVN_DEBUG=off
 ARG MVN_COPY_YAML=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 WORKDIR /src
-COPY . .
-COPY ./root/ /
-RUN set -xe; \
-    if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
-    ## 若此处出现错误表明 maven build 失败，请检查 pom.xml 配置和代码依赖关系是否正常
-    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
+RUN --mount=type=cache,target=/var/maven/.m2 --mount=type=bind,target=.,rw if [ ! -f root/opt/build.sh ]; then curl -fLo root/opt/build.sh $BUILD_URL; fi; bash root/opt/build.sh
 
 
 ##############################
@@ -33,7 +26,6 @@ RUN set -xe; \
 ##############################
 FROM ${IMAGE_JDK}
 ARG IN_CHINA=false
-## set startup profile
 ARG MVN_PROFILE=main
 ARG TZ=Asia/Shanghai
 ARG INSTALL_FONTS=false
