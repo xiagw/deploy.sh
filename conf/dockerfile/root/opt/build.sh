@@ -275,9 +275,9 @@ _build_maven() {
         mvn
         --threads 1C
         --update-snapshots
-        -DskipTests
-        -Dmaven.compile.fork=true
-        -Duser.home=/var/maven
+        --define skipTests
+        --define maven.compile.fork=true
+        --define user.home=/var/maven
     )
     if [ "$MVN_DEBUG" = off ]; then
         mvn_opt+=(--quiet)
