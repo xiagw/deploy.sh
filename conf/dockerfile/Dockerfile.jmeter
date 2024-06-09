@@ -1,25 +1,15 @@
 FROM openjdk:8-jre-slim
-
 ARG IN_CHINA=false
 ARG JMETER_VERSION=5.6
-
 ENV JMETER_HOME /opt/apache-jmeter-$JMETER_VERSION
 ENV PATH $JMETER_HOME/bin:$PATH
-
-COPY ./root/ /
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN set -xe; \
-   if [ "$CHANGE_SOURCE" = true ] || [ "$IN_CHINA" = true ]; then \
-   sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
-   fi; \
-   apt-get update; \
-   apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip; \
-   curl -fLo /tmp/jmeter.tgz https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz; \
-   tar -C /opt/ -xzf /tmp/jmeter.tgz; \
-   apt-get clean all; \
-   rm -rf /tmp/* /var/lib/apt/lists/*
-
 WORKDIR $JMETER_HOME
+# SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN --mount=type=cache,target=/var/maven/.m2 \
+    --mount=type=bind,target=/src,rw \
+    if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
+    elif [ -f build.sh ]; then bash build.sh; \
+    else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
 
 #从当前文件夹拷贝一份jmeter.properties文件，注意开启：server.rmi.ssl.disable=true
 # COPY jmeter.properties .

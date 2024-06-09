@@ -1,7 +1,5 @@
 FROM php:7.2-alpine
-
 ARG IN_CHINA=false
-
 RUN set -xe; \
     if [ "${IN_CHINA}" = true ] && [ -f /etc/apk/repositories ]; then \
     sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories; \
@@ -10,12 +8,7 @@ RUN set -xe; \
     curl -Lo /usr/local/bin/phpcbf https://squizlabs.github.io/PHP_CodeSniffer/phpcbf.phar; \
     chmod +x /usr/local/bin/phpcs /usr/local/bin/phpcbf; \
     rm -rf /var/cache/apk/* /var/tmp/* /tmp/*
-
 VOLUME ["/project"]
 WORKDIR /project
 # ENTRYPOINT ["phpcs"]
 CMD ["phpcs","--version"]
-
-# docker build --build-arg IN_CHINA=true --build-arg PHPCS_VERSION=3.5.4 -t deploy/phpcs .
-# docker run --rm -ti -v $PWD:/project deploy/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcsReport:-full}" /project
-# docker run --rm -ti -v $PWD:/project deploy/phpcs phpcbf --standard=PSR12 /project

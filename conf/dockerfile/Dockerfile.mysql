@@ -1,31 +1,21 @@
 ## arch: x86_64
 # ARG IMAGE_NAME=mysql:8
 ARG IMAGE_NAME=mysql:5.7
-
 ## arch: arm64
 # ARG IMAGE_NAME=arm64v8/mysql:8
 # ARG IMAGE_NAME=biarms/mysql:5.7
-
 FROM ${IMAGE_NAME}
-
-#####################################
-# Set Timezone
-#####################################
 ARG IN_CHINA=false
 ARG TZ=UTC
 ARG MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 ARG MYSQL_SLAVE=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
-
 ENV TZ ${TZ}
 # ENV MYSQL_RANDOM_ROOT_PASSWORD=true
-
-# CMD ["mysqld"]
-
 EXPOSE 3306
-
-COPY ./root/ /
-
-RUN set -xe; \
-    if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
-    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt \
+    --mount=type=bind,target=/src,rw \
+    if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
+    elif [ -f build.sh ]; then bash build.sh; \
+    else curl -fLo build.sh $BUILD_URL; bash build.sh; fi

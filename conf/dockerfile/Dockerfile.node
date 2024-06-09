@@ -1,1 +1,1 @@
-FROM deploy/base:node-v18t01
+FROM registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:node-18-base

@@ -95,6 +95,7 @@ _start_php() {
 
     ## start php-fpm*
     for fpm in /usr/sbin/php-fpm*; do
+        ## php-fpm -F, 前台启动
         [ -x "$fpm" ] && $fpm -F &
         pids+=("$!")
         if pgrep -a -i -n php-fpm; then
@@ -102,8 +103,6 @@ _start_php() {
         else
             _msg "start php-fpm FAIL."
         fi
-        ## php-fpm -F, 前台启动
-        pids+=("$!")
     done
     if command -v nginx && nginx -t; then
         nginx -g "daemon off;" &
@@ -225,7 +224,7 @@ main() {
 
     pids=()
 
-    _set_jemalloc
+    # _set_jemalloc
 
     ## 适用于 nohup 独立启动
     if [[ "$1" == nohup || -f "$app_path"/.nohup ]]; then
@@ -247,7 +246,7 @@ main() {
     done &
     pids+=("$!")
 
-    _check_jemalloc &
+    # _check_jemalloc &
 
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT PIPE QUIT TERM

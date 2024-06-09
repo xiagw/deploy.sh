@@ -5,21 +5,17 @@ ARG IMAGE_NAME=openjdk:8
 # ARG IMAGE_NAME=amazoncorretto:17
 ## arch: arm64
 # ARG IMAGE_NAME=arm64v8/openjdk:8
-
 FROM ${IMAGE_NAME}
-
 ARG IN_CHINA=true
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 EXPOSE 80 8080 8081 9000
 WORKDIR /app
 CMD ["bash", "/opt/run0.sh"]
-COPY ./root/ /
-RUN set -xe; \
-    if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
-    bash /opt/build.sh
+RUN --mount=type=cache,target=/var/maven/.m2 \
+    --mount=type=bind,target=/src,rw \
+    if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
+    elif [ -f build.sh ]; then bash build.sh; \
+    else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
 
 # ONBUILD COPY --chown=1000:1000 ./jars/ /app/
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi
-
-# podman build --force-rm --format=docker -t deploy/base:node-v18t01 -f Dockerfile.node.base .
-# docker build --force-rm -t deploy/base:node-v18t01 -f Dockerfile.node.base .

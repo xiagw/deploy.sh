@@ -101,13 +101,20 @@ _set_mirror() {
 }
 
 _check_run_sh() {
-    if [ -f "$run_sh" ]; then
-        echo "Found $run_sh, skip download."
-    else
-        echo "Not found $run_sh, download..."
-        curl -fLo $run_sh "$url_deploy_raw"/conf/dockerfile/root$run_sh
+    for i in /opt/run.sh /opt/run0.sh; do
+        if [ -f "$i" ]; then
+            echo "Found $i, skip download."
+        elif [ -f "/src/root$i" ]; then
+            cp -avf "/src/root$i" "$i"
+        else
+            echo "Not found $i, download..."
+            curl -fLo "$i" "$url_deploy_raw/conf/dockerfile/root$i"
+        fi
+        chmod +x "$i"
+    done
+    if [ -f "/src/root/opt/init.sh" ]; then
+        cp -avf "/src/root/opt/init.sh" "/opt/init.sh"
     fi
-    chmod +x $run_sh
 }
 
 _build_nginx() {
@@ -286,12 +293,14 @@ _build_maven() {
         mvn_opt+=(--settings=/root/.m2/settings.xml)
     fi
     "${mvn_opt[@]}" clean package
-
-    mkdir /jars
+    jars_dir=/jars
+    mkdir $jars_dir
     while read -r jar; do
         [ -f "$jar" ] || continue
-        echo "$jar" | grep -E 'framework.*|gdp-module.*|sdk.*\.jar|.*-commom-.*\.jar|.*-dao-.*\.jar|lop-opensdk.*\.jar|core-.*\.jar' ||
-            cp -vf "$jar" /jars/
+        case "$jar" in
+        framework* | gdp-module* | sdk*.jar | *-commom-*.jar | *-dao-*.jar | lop-opensdk*.jar | core-*.jar) : ;;
+        *) cp -vf "$jar" $jars_dir/ ;;
+        esac
     done < <(
         find ./target/*.jar ./*/target/*.jar ./*/*/target/*.jar 2>/dev/null
     )
@@ -300,11 +309,21 @@ _build_maven() {
         while read -r yml; do
             [ -f "$yml" ] || continue
             ((++c))
-            cp -vf "$yml" /jars/"${c}.${yml##*/}"
+            cp -vf "$yml" $jars_dir/"${c}.${yml##*/}"
         done < <(
             find ./*/*/*/*"${MVN_PROFILE:-main}".yml ./*/*/*/*"${MVN_PROFILE:-main}".yaml 2>/dev/null
         )
     fi
+}
+
+_build_jmeter() {
+    if [ "$CHANGE_SOURCE" = true ] || [ "$IN_CHINA" = true ]; then
+        sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+    fi
+    apt-get update
+    apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip
+    curl -fL https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz | tar -C /opt/ -xz
+    rm -rf /tmp/*
 }
 
 _build_jdk_runtime() {
@@ -430,7 +449,6 @@ main() {
         me_log="/tmp/${me_name}.log"
     fi
 
-    run_sh=/opt/run.sh
     echo "build log file: $me_log"
 
     _set_mirror
@@ -450,6 +468,8 @@ main() {
         _build_php
     elif command -v mvn; then
         _build_maven
+    elif command -v jmeter; then
+        _build_jmeter
     elif command -v java; then
         _build_jdk_runtime
     elif command -v node; then
@@ -460,13 +480,10 @@ main() {
         _build_mysql
     fi
 
+    ## copy run.sh run0.sh
+
     ## clean
     if _is_root; then
-        if ${update_cache:-false}; then
-            $cmd_pkg autoremove -y
-            $cmd_pkg clean all
-            rm -rf /var/lib/apt/lists/*
-        fi
         if [ -d /var/cache/yum ]; then
             rm -rf /var/cache/yum
         fi

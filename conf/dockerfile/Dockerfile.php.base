@@ -1,31 +1,23 @@
 ## arch: x86_64
 ARG IMAGE_NAME=ubuntu:22.04
-
 ## arch: arm64
 # ARG IMAGE_NAME=arm64v8/ubuntu
-
 FROM ${IMAGE_NAME}
-
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
 ARG PHP_VERSION=8.1
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
-
 ENV PHP_VERSION=${PHP_VERSION}
-
 EXPOSE 80 8080 9000
-# WORKDIR /var/www/html
 WORKDIR /app
-CMD ["bash", "/opt/run.sh"]
-
+CMD ["bash", "/opt/run0.sh"]
 # SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-COPY ./root/ /
-RUN set -xe; \
-    if [ -f /opt/build.sh ]; then echo "found /opt/build.sh"; else curl -fLo /opt/build.sh $BUILD_URL; fi; \
-    if [ -f /opt/build.sh ]; then bash /opt/build.sh; fi
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt \
+    --mount=type=bind,target=/src,rw \
+    if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
+    elif [ -f build.sh ]; then bash build.sh; \
+    else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi
-
-# podman build --force-rm --format=docker -t deploy/base:php-81 -f Dockerfile.php.base .
-# docker build --force-rm -t deploy/base:php-81 -f Dockerfile.php.base .

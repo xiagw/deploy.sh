@@ -1,20 +1,16 @@
 ## arch: x86_64
-ARG IMAGE_NAME=nginx
-
+ARG IMAGE_NAME=nginx:alpine
 ## arch: arm64
 # ARG IMAGE_NAME=arm64v8/nginx
 
-FROM ${IMAGE_NAME}:alpine
-
+FROM ${IMAGE_NAME}
 # If you're in China, set IN_CHINA to true.
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
 ARG INSTALL_NGINX=true
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
-
 EXPOSE 80 81 443
 WORKDIR /app
-
 COPY ./root/ /
 RUN set -xe; \
     if [ ! -f /opt/build.sh ]; then curl -fLo /opt/build.sh $BUILD_URL; fi; \
