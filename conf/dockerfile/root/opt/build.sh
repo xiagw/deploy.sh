@@ -235,6 +235,8 @@ _build_php() {
         -e '/^;slowlog.*log\//s//slowlog = \/var\/log\/php/' \
         -e '/^;request_slowlog_timeout.*/s//request_slowlog_timeout = 2/' \
         /etc/php/"${PHP_VERSION}"/fpm/pool.d/www.conf
+
+    _check_run_sh
 }
 
 _onbuild_php() {
