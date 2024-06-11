@@ -1,8 +1,8 @@
 #    docker build stage 1    #
 ## arch: x86_64
 # ARG IMAGE_MVN=maven:3.8-openjdk-17
-ARG IMAGE_MVN=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:maven-3.8-jdk-8
-ARG IMAGE_JDK=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:openjdk-8
+ARG IMAGE_MVN=maven:3.8-jdk-8
+ARG IMAGE_JDK=openjdk:8
 # ARG IMAGE_JDK=amazoncorretto:8
 # ARG IMAGE_JDK=amazoncorretto:11
 # ARG IMAGE_JDK=amazoncorretto:17
