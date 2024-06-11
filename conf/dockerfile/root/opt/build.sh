@@ -262,7 +262,6 @@ _onbuild_php() {
 
 _build_node() {
     echo "build node ..."
-
     $cmd_pkg update -yqq
     $cmd_pkg_opt less vim curl ca-certificates
     [ -d /.cache ] || mkdir /.cache
@@ -270,13 +269,20 @@ _build_node() {
     chown -R node:node /.cache /app
     npm install -g npm
     _is_china && npm install -g cnpm
-
-    if _is_china; then
-        su node -c "cd /app && cnpm install"
-    else
-        su node -c "cd /app && npm install"
+    _check_run_sh
+    if [ -f /src/package.json ]; then
+        cp -avf /src/package.json /app/
     fi
-    rm -rf root/ || :
+    if [ -f /app/package.json ]; then
+        if _is_china; then
+            su node -c "cd /app && cnpm install"
+        else
+            su node -c "cd /app && npm install"
+        fi
+    else
+        echo "Not found /app.package.json"
+        return 1
+    fi
 }
 
 _build_maven() {
