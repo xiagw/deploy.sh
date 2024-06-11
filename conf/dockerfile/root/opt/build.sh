@@ -30,6 +30,8 @@ _set_mirror() {
         cmd_pkg=apt-get
         cmd_pkg_opt="$cmd_pkg install -yqq --no-install-recommends"
         update_cache=true
+    elif command -v microdnf; then
+        cmd_pkg=microdnf
     elif command -v yum; then
         cmd_pkg=yum
         cmd_pkg_opt="$cmd_pkg install -y --setopt=tsflags=nodocs"
@@ -270,9 +272,9 @@ _build_node() {
     _is_china && npm install -g cnpm
 
     if _is_china; then
-        su -l node -c "cd /app && cnpm install"
+        su node -c "cd /app && cnpm install"
     else
-        su -l node -c "cd /app && npm install"
+        su node -c "cd /app && npm install"
     fi
     rm -rf root/ || :
 }

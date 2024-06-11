@@ -1,17 +1,23 @@
 ## arch: x86_64
-ARG IMAGE_NAME=openjdk:8
-# ARG IMAGE_NAME=amazoncorretto:8
-# ARG IMAGE_NAME=amazoncorretto:11
-# ARG IMAGE_NAME=amazoncorretto:17
+# ARG IMAGE_JDK=openjdk:8
+# ARG IMAGE_JDK=amazoncorretto:8
+# ARG IMAGE_JDK=amazoncorretto:11
+ARG IMAGE_JDK=amazoncorretto:17
 ## arch: arm64
-# ARG IMAGE_NAME=arm64v8/openjdk:8
-FROM ${IMAGE_NAME}
-ARG IN_CHINA=true
+# ARG IMAGE_JDK=arm64v8/openjdk:8
+FROM ${IMAGE_JDK}
+ARG IN_CHINA=false
+ARG MVN_PROFILE=main
+ARG TZ=Asia/Shanghai
+ARG INSTALL_FONTS=false
+ARG INSTALL_FFMPEG=false
+ARG INSTALL_LIBREOFFICE=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
-EXPOSE 80 8080 8081 9000
+ENV TZ=$TZ
+EXPOSE 8080 8081 8082
 WORKDIR /app
 CMD ["bash", "/opt/run0.sh"]
-RUN --mount=type=cache,target=/var/maven/.m2 \
+RUN --mount=type=cache,target=/var/cache/yum \
     --mount=type=bind,target=/src,rw \
     if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
     elif [ -f build.sh ]; then bash build.sh; \
