@@ -335,7 +335,14 @@ _build_jdk_runtime() {
     fi
     if ${INSTALL_FFMPEG:-false}; then
         ${update_cache:-false} && $cmd_pkg update -yqq
-        $cmd_pkg_opt ffmpeg
+        if command -v apt-get; then
+            $cmd_pkg_opt ffmpeg
+        elif command -v yum; then
+            yum install -y tar xz
+            mkdir /ffmpeg-release-amd64-static
+            curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | tar -xJ --strip-components=1 -C /ffmpeg-release-amd64-static
+            ln -sf /ffmpeg-release-amd64-static/ffmpeg /usr/local/bin/ffmpeg
+        fi
     fi
     if ${INSTALL_LIBREOFFICE:-false}; then
         ${update_cache:-false} && $cmd_pkg update -yqq
