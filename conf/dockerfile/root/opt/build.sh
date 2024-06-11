@@ -488,9 +488,6 @@ main() {
 
     ## clean
     if _is_root; then
-        if [ -d /var/cache/yum ]; then
-            rm -rf /var/cache/yum
-        fi
         rm -rf /tmp/* /opt/*.{cnf,xml,log}
     else
         :
