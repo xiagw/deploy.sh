@@ -317,6 +317,7 @@ _build_maven() {
             find ./*/*/*/*"${MVN_PROFILE:-main}".yml ./*/*/*/*"${MVN_PROFILE:-main}".yaml 2>/dev/null
         )
     fi
+    [ -f /src/.java_opts ] && cp -avf /src/.java_opts /jars/
 }
 
 _build_jdk_runtime() {
