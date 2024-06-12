@@ -319,16 +319,6 @@ _build_maven() {
     fi
 }
 
-_build_jmeter() {
-    if [ "$CHANGE_SOURCE" = true ] || [ "$IN_CHINA" = true ]; then
-        sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-    fi
-    apt-get update
-    apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip
-    curl -fL https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz | tar -C /opt/ -xz
-    rm -rf /tmp/*
-}
-
 _build_jdk_runtime() {
     if ${INSTALL_JEMALLOC:-false}; then
         if ${update_cache:-false}; then
@@ -377,6 +367,7 @@ _build_jdk_runtime() {
 
     _check_run_sh
     [ -d /app ] || mkdir /app
+    [ -f /src/.java_opts ] && cp -avf /src/.java_opts /app/
     command -v su || $cmd_pkg install -y util-linux
     command -v useradd || yum install -y shadow-utils
     useradd -u 1000 -s /bin/bash -m spring
@@ -388,6 +379,16 @@ _build_jdk_runtime() {
             touch "/app/profile.${MVN_PROFILE:-main}"
         fi
     done
+}
+
+_build_jmeter() {
+    if [ "$CHANGE_SOURCE" = true ] || [ "$IN_CHINA" = true ]; then
+        sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+    fi
+    apt-get update
+    apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip
+    curl -fL https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz | tar -C /opt/ -xz
+    rm -rf /tmp/*
 }
 
 _build_python() {
