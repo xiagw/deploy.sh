@@ -307,6 +307,9 @@ _build_maven() {
     done < <(
         find ./target/*.jar ./*/target/*.jar ./*/*/target/*.jar 2>/dev/null
     )
+    if [ -f /src/.java_opts ]; then
+        cp -avf /src/.java_opts /jars/
+    fi
     if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
         unset c
         while read -r yml; do
@@ -316,11 +319,6 @@ _build_maven() {
         done < <(
             find ./*/*/*/*"${MVN_PROFILE:-main}".yml ./*/*/*/*"${MVN_PROFILE:-main}".yaml 2>/dev/null
         )
-    fi
-    if [ -f /src/.java_opts ]; then
-        cp -avf /src/.java_opts /jars/
-    else
-        :
     fi
 }
 
