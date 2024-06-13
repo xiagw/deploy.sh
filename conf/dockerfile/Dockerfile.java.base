@@ -23,5 +23,5 @@ RUN --mount=type=cache,target=/var/cache/yum \
     elif [ -f build.sh ]; then bash build.sh; \
     else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
 
-# ONBUILD COPY --chown=1000:1000 ./jars/ /app/
+ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi

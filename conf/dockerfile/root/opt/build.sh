@@ -116,6 +116,8 @@ _check_run_sh() {
     done
     if [ -f "/src/root/opt/init.sh" ]; then
         cp -avf "/src/root/opt/init.sh" "/opt/init.sh"
+    else
+        return 0
     fi
 }
 
