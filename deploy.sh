@@ -503,12 +503,12 @@ EOF
 }
 
 _deploy_k8s() {
-    _msg step "[deploy] deploy k8s with helm"
-    _is_demo_mode "deploy-helm" && return 0
     if [ "${ENV_DISABLE_K8S-}" -eq 1 ]; then
         _msg time "!!! disable k8s, deploy functions only !!!"
         return
     fi
+    _msg step "[deploy] deploy k8s with helm"
+    _is_demo_mode "deploy-helm" && return 0
     _format_release_name
 
     ## finding helm files folder / 查找 helm 文件目录
