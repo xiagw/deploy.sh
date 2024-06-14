@@ -503,7 +503,7 @@ EOF
 }
 
 _deploy_k8s() {
-    if [ "${ENV_DISABLE_K8S-}" -eq 1 ]; then
+    if [ "${ENV_DISABLE_K8S:-0}" -eq 1 ]; then
         _msg time "!!! disable k8s, deploy functions only !!!"
         return
     fi
