@@ -50,7 +50,7 @@ _new_element_user() {
 }
 
 _install_gitlab_runner() {
-    bin_runner=/usr/local/bin/gitlab-runner
+    bin_runner=$(command -v gitlab-runner)
     if _get_yes_no "[+] Do you want install the latest version of gitlab-runner?"; then
         if pgrep gitlab-runner; then
             sudo $bin_runner stop
