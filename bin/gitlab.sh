@@ -156,6 +156,7 @@ main() {
     me_name="$(basename "$0")"
     me_log="$me_data_path/${me_name}.log"
     me_env="$me_data_path/${me_name}.env"
+    source "$me_path"/include.sh
 
     case "$1" in
     install)
@@ -169,7 +170,6 @@ main() {
         ;;
     esac
 
-    source "$me_path"/include.sh
     ## python-gitlab config
     if [[ -f "$HOME/.python-gitlab.cfg" ]]; then
         gitlab_python_config="$HOME/.python-gitlab.cfg"

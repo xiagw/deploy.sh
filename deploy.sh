@@ -256,9 +256,11 @@ _get_docker_context() {
     ## create context when not found remote / 没有 remote 时则根据环境变量创建
     for dk_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
         ((++c))
-        if ! echo "${docker_endpoints[@]}" | grep -q "$dk_host"; then
-            docker context create remote$c --docker "host=${dk_host}" || err=1
-            [[ -z ${err} ]] || _msg error "Failed to create docker context remote$c: ${dk_host}"
+        if echo "${docker_endpoints[@]}" | grep -q "$dk_host"; then
+            : ## found docker endpoint
+        else
+            ## not found docker endpoint, create it
+            docker context create remote$c --docker "host=${dk_host}" || _msg error "Failed to create docker context remote$c: ${dk_host}"
         fi
     done
 
