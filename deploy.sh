@@ -992,7 +992,7 @@ _install_flarectl() {
     if curl -fsSLo /tmp/flarectl.tar.xz $url; then
         #  | tar xJf - -C "/tmp/" flarectl
         tar -C /tmp -xJf /tmp/flarectl.tar.xz flarectl
-        $use_sudo install -m 0755 /tmp/flarectl /usr/local/bin/
+        $use_sudo install -m 0755 /tmp/flarectl "${me_path_data_bin}/flarectl"
         _msg success "flarectl installed successfully"
     else
         _msg error "failed to download and install flarectl"
@@ -1005,7 +1005,7 @@ _install_aliyun_cli() {
     _msg info "install aliyun cli..."
     curl -fsSLo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
     tar -C /tmp -zxf /tmp/aliyun.tgz
-    $use_sudo install -m 0755 /tmp/aliyun /usr/local/bin/aliyun
+    $use_sudo install -m 0755 /tmp/aliyun "${me_path_data_bin}/aliyun"
 }
 
 _install_tencent_cli() {
@@ -1071,7 +1071,7 @@ _install_kubectl() {
     curl -fsSLO "https://dl.k8s.io/release/${kver}/bin/linux/amd64/kubectl"
     curl -fsSLO "https://dl.k8s.io/${kver}/bin/linux/amd64/kubectl.sha256"
     if echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check; then
-        $use_sudo install -m 0755 kubectl /usr/local/bin/kubectl
+        $use_sudo install -m 0755 kubectl "${me_path_data_bin}"/kubectl
         rm -f kubectl kubectl.sha256
     else
         _msg error "failed to install kubectl"
@@ -1082,7 +1082,10 @@ _install_kubectl() {
 _install_helm() {
     command -v helm >/dev/null && return
     _msg info "installing helm..."
-    curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | $use_sudo bash
+    curl -fsSLo get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+    export HELM_INSTALL_DIR="${me_path_data_bin}"
+    bash get_helm.sh
+    rm -f get_helm.sh
 }
 
 _install_jmeter() {
@@ -1860,8 +1863,8 @@ main() {
     me_env="${me_path_data}/deploy.env"             ## deploy.sh ENV 发布配置信息(密)
     me_dockerfile="${me_path_conf}/dockerfile"      ## deploy.sh dependent dockerfile
     me_data_dockerfile="${me_path_data}/dockerfile" ## deploy.sh dependent dockerfile
-    ## create deploy.sh/data dir  /  创建 data 目录
-    [[ -d $me_path_data ]] || mkdir -p $me_path_data
+    ## create path data/bin  /  创建目录 data/bin
+    [ -d "${me_path_data_bin}" ] || mkdir -p "${me_path_data_bin}"
     ## 准备配置文件
     [[ -f "$me_conf" ]] || cp -v "${me_path_conf}/example-deploy.json" "$me_conf"
     [[ -f "$me_env" ]] || cp -v "${me_path_conf}/example-deploy.env" "$me_env"
