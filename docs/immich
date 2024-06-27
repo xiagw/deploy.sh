@@ -184,8 +184,7 @@ _backup_with_borg() {
     remote_path="${ENV_REMOTE_BACKUP_PATH}"
     ## Local setup
     [ -d "$immich_dbdump_path" ] || mkdir -p "$immich_dbdump_path"
-    [ -d "$borg_path" ] || mkdir -p "$borg_path"
-    [ -d "$borg_path" ] || borg init --encryption=none "$borg_path"
+    [ -d "$borg_path" ] || { mkdir -p "$borg_path"; borg init --encryption=none "$borg_path"; }
     ## Remote setup
     # shellcheck disable=SC2029
     if ! ssh "$remote_host" "test -d \"$remote_path\""; then
