@@ -137,14 +137,16 @@ _add_rds_account() {
         break
     done
 
-    read -rp "Input RDS new user name: " read_rds_account
-    rds_account="${read_rds_account:? ERR: empty user name }"
+    read -rp "Input RDS new account: " read_rds_account
+    rds_account="${read_rds_account:? ERR: empty account name }"
+    read -rp "Input account description (chinese name): " read_rds_account_desc
+    rds_account_desc="$(date +%F)-${read_rds_account_desc-}"
     _get_random_password 14
 
     ## 创建 db
     $cmd_aliyun_p rds CreateDatabase --region "$aliyun_region" --CharacterSetName utf8mb4 --DBInstanceId "$rds_id" --DBName "$rds_account"
-    ## 创建 account
-    $cmd_aliyun_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }"
+    ## 创建 account , Normal / Super
+    $cmd_aliyun_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }" --AccountType Normal --AccountDescription "$rds_account_desc"
     ## 授权
     $cmd_aliyun_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
 
