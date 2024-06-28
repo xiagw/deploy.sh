@@ -459,6 +459,9 @@ EOF
 _deploy_functions_aliyun() {
     _format_release_name
     ${github_action:-false} && return 0
+    if [ "${env_namespace}" != main ]; then
+        release_name="${release_name}-${env_namespace}"
+    fi
     ## create FC
     _msg step "[deploy] create/update functions"
     functions_conf_tmpl="$me_path_data"/aliyun.functions.${project_lang}.json
