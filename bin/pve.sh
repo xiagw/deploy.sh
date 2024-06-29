@@ -132,7 +132,7 @@ fi
 # Workload Tuning — OpenZFS documentation
 # https://openzfs.github.io/openzfs-docs/Performance%20and%20Tuning/Workload%20Tuning.html#basic-concepts
 
-# zfs set dedup=on atime=off compression=lz4 zfs01
+# zfs set dedup=on atime=off compression=on zfs01
 # apt install nfs-kernel-server
 
 # zpool create -o ashift=12 -o autoexpand=on tank /vdisk/2G.1 /vdisk/2G.2
