@@ -53,7 +53,7 @@ _install_gitlab_runner() {
     bin_runner=$(command -v gitlab-runner)
     if _get_yes_no "[+] Do you want install the latest version of gitlab-runner?"; then
         if pgrep gitlab-runner; then
-            sudo $bin_runner stop
+            sudo "$bin_runner" stop
         fi
         echo "[+] Downloading gitlab-runner..."
         curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | sudo bash
@@ -62,9 +62,9 @@ _install_gitlab_runner() {
 
     ## Install and run as service
     if _get_yes_no "[+] Do you want create CI user for gitlab-runner?"; then
-        sudo useradd --comment 'GitLab Runner' --create-home gitlab-runner --shell /bin/bash
-        user_name=gitlab-runner
-        user_home=/home/gitlab-runner
+        user_name=ops
+        user_home=/home/ops
+        sudo useradd --comment 'GitLab Runner' --shell /bin/bash --create-home $user_name
     else
         echo "current user: $USER"
         user_name=$USER
@@ -72,8 +72,8 @@ _install_gitlab_runner() {
     fi
 
     if _get_yes_no "[+] Do you want install as service?"; then
-        sudo $bin_runner install --user "$user_name" --working-directory "$user_home"/runner
-        sudo $bin_runner start
+        sudo "$bin_runner" install --user "$user_name" --working-directory "$user_home"/runner
+        sudo "$bin_runner" start
     fi
 
     if _get_yes_no "[+] Do you want git clone deploy.sh? "; then
@@ -93,7 +93,7 @@ _install_gitlab_runner() {
     if _get_yes_no "[+] Do you want register gitlab-runner? "; then
         read -rp "[+] Enter your gitlab-runner token: " read_token
         reg_token="${read_token:? ERR read_token}"
-        sudo $bin_runner register \
+        sudo "$bin_runner" register \
             --non-interactive \
             --url "${url_git:?empty url}" \
             --registration-token "${reg_token:?empty token}" \
