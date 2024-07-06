@@ -459,6 +459,7 @@ EOF
 _deploy_functions_aliyun() {
     _format_release_name
     ${github_action:-false} && return 0
+    ${ENV_ENABLE_FUNC_ALIYUN:-false} || return 0
     if [ "${env_namespace}" != main ]; then
         release_name="${release_name}-${env_namespace}"
     fi
@@ -509,8 +510,8 @@ EOF
 }
 
 _deploy_k8s() {
-    if [ "${ENV_DISABLE_K8S:-0}" -eq 1 ]; then
-        _msg time "!!! disable k8s, deploy functions only !!!"
+    if "${ENV_DISABLE_K8S:-false}"; then
+        _msg time "!!! disable deploy to k8s !!!"
         return
     fi
     _msg step "[deploy] deploy k8s with helm"
