@@ -2113,7 +2113,7 @@ main() {
     echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
     ${github_action:-false} && deploy_result=0
     ((${deploy_result:-0})) && exec_deploy_notify=true
-    ${ENV_DISABLE_MSG:-false} && exec_deploy_notify=false
+    ${ENV_ENABLE_MSG:-false} || exec_deploy_notify=false
     [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $gitlab_project_branch ]] && exec_deploy_notify=false
     ${MAN_NOTIFY:-false} && exec_deploy_notify=true
     if ${exec_deploy_notify:-true}; then
