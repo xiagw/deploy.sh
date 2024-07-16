@@ -1850,7 +1850,7 @@ _set_args() {
 
 main() {
     set -e ## 出现错误自动退出
-    # set -u ## 变量未定义报错
+    # set -u ## 变量未定义报错 # set -Eeuo pipefail
     SECONDS=0
     _msg step "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
@@ -1861,9 +1861,9 @@ main() {
     me_path_conf="${me_path}/conf"
     me_path_bin="${me_path}/bin"
     me_path_data="${me_path}/data" ## deploy.sh data folder
-    me_log="${me_path_data}/${me_name}.log"
     me_path_data_bin="${me_path}/data/bin"
     me_path_builds="${me_path}/builds"
+    me_log="${me_path_data}/${me_name}.log"
     me_conf="${me_path_data}/deploy.json"           ## deploy to app server 发布到目标服务器的配置信息
     me_env="${me_path_data}/deploy.env"             ## deploy.sh ENV 发布配置信息(密)
     me_dockerfile="${me_path_conf}/dockerfile"      ## deploy.sh dependent dockerfile
