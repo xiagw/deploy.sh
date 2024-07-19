@@ -7,6 +7,14 @@
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.Instance[0].Status' to=Running
 # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.
 
+_get_yes_no() {
+    read -rp "${1:-Confirm the action?} [y/N] " read_yes_no
+    case ${read_yes_no:-n} in
+    [Yy] | [Yy][Ee][Ss]) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
 _notify_weixin_work() {
     wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wechat_key:-from-env}"
     curl -fsL -X POST -H 'Content-Type: application/json' \
@@ -137,20 +145,26 @@ _add_rds_account() {
         break
     done
 
-    read -rp "Input RDS new account: " read_rds_account
+    read -rp "Input RDS account NAME: " read_rds_account
     rds_account="${read_rds_account:? ERR: empty account name }"
     read -rp "Input account description (chinese name): " read_rds_account_desc
     rds_account_desc="$(date +%F)-${read_rds_account_desc-}"
     _get_random_password 14
 
-    ## 创建 db
-    $cmd_aliyun_p rds CreateDatabase --region "$aliyun_region" --CharacterSetName utf8mb4 --DBInstanceId "$rds_id" --DBName "$rds_account"
-    ## 创建 account , Normal / Super
-    $cmd_aliyun_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }" --AccountType Normal --AccountDescription "$rds_account_desc"
-    ## 授权
-    $cmd_aliyun_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
-
-    _msg "$rds_id / Account/Password: $rds_account  /  $password_rand"
+    ## aliyun rds ResetAccountPassword
+    if _get_yes_no "[+] Do you want ResetAccountPassword? "; then
+        $cmd_aliyun_p rds ResetAccountPassword --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }"
+    fi
+    ## aliyun rds CreateAccount
+    if _get_yes_no "[+] Do you want create RDS account? "; then
+        ## 创建 db
+        $cmd_aliyun_p rds CreateDatabase --region "$aliyun_region" --CharacterSetName utf8mb4 --DBInstanceId "$rds_id" --DBName "$rds_account"
+        ## 创建 account , Normal / Super
+        $cmd_aliyun_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }" --AccountType Normal --AccountDescription "$rds_account_desc"
+        ## 授权
+        $cmd_aliyun_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
+        _msg "$rds_id / Account/Password: $rds_account  /  $password_rand"
+    fi
 
     # SET PASSWORD FOR 'huxinye2'@'%' = PASSWORD('xx');
     # ALTER USER 'huxinye2'@'%' IDENTIFIED BY 'xx';
