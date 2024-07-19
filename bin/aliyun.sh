@@ -137,10 +137,7 @@ _remove_nas() {
 _add_rds_account() {
     _get_aliyun_profile
 
-    select rds_id in $(
-        $cmd_aliyun_p rds DescribeDBInstances |
-            jq -r '.Items.DBInstance[].DBInstanceId'
-    ); do
+    select rds_id in $($cmd_aliyun_p rds DescribeDBInstances | jq -r '.Items.DBInstance[].DBInstanceId'); do
         echo "choose rds id: $rds_id"
         break
     done
@@ -163,8 +160,8 @@ _add_rds_account() {
         $cmd_aliyun_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }" --AccountType Normal --AccountDescription "$rds_account_desc"
         ## 授权
         $cmd_aliyun_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
-        _msg "$rds_id / Account/Password: $rds_account  /  $password_rand"
     fi
+    _msg "$rds_id / Account/Password: $rds_account  /  $password_rand"
 
     # SET PASSWORD FOR 'huxinye2'@'%' = PASSWORD('xx');
     # ALTER USER 'huxinye2'@'%' IDENTIFIED BY 'xx';
