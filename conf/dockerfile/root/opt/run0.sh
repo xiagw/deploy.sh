@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 
 ## 需要root权限的初始化程序
-if [ -f /opt/init.sh ]; then
-    echo "Found /opt/init.sh..."
-    bash /opt/init.sh
-fi
-if [ -f /app/init.sh ]; then
-    echo "Found /app/init.sh..."
-    bash /app/init.sh
-fi
+for i in /opt/init.sh /app/init.sh; do
+    if [ -f $i ]; then
+        echo "Found $i ..."
+        bash $i
+    fi
+done
 
 ## 非 root 账号启动的程序
-if id spring 2>/dev/null; then
-    echo "Found normal user [spring]..."
-    su spring -c "bash /opt/run.sh"
-elif id node 2>/dev/null; then
-    echo "Found normal user [node]..."
-    su node -c "bash /opt/run.sh"
-else
+for u in spring node; do
+    if id $u 2>/dev/null; then
+        echo "Found normal user [$u]..."
+        su $u -c "bash /opt/run.sh"
+        run_once=true
+    fi
+done
+
+if [ "${run_once:-false}" = false ]; then
     bash /opt/run.sh
 fi
