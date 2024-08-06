@@ -951,7 +951,7 @@ _get_balance_aliyun() {
         )
         _msg red "yesterday daily cash amount: $daily_cash_amount"
         if [[ $(echo "$daily_cash_amount > ${ENV_ALARM_ALIYUN_DAILY:-115}" | bc) -eq 1 ]]; then
-            msg_body="Aliyun account: $p, 昨日消费金额: $daily_cash_amount 偏离日常平均值${ENV_ALARM_ALIYUN_DAILY:-115}"
+            msg_body="Aliyun account: $p, 昨日消费金额: $daily_cash_amount 偏离告警金额：${ENV_ALARM_ALIYUN_DAILY:-115}"
             _notify_wechat_work $ENV_ALARM_WECHAT_KEY
         fi
     done
