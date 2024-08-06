@@ -525,7 +525,7 @@ _upload_cert() {
 # if python3 -m pip list | grep alibabacloud-workorder; then
 #     python3 -m pip install alibabacloud_workorder20210610==1.0.0
 # fi
-# jq -r '.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' ../data/ListProducts.json | grep -E '11864|18700|18422|9457|7160|18474|10293|25352|78102|18528|18771'
+# jq -r '.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' ../data/aliyun.product.json | fzf
 _add_workorder() {
     id_string="
     11864 云解析DNS
@@ -555,10 +555,11 @@ _add_workorder() {
     fi
     echo "wo_id: ${wo_id:? ERR: empty id} , wo_title: ${wo_title:? ERR: 未设置标题}"
     if [ "$(uname -o)" = Darwin ]; then
-        source "$HOME/Library/Application Support/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
+        source "$HOME/.local/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
     fi
-    python3 aliyun.workorder.py "${wo_id}" "${wo_title}"
-    # echo "python3 aliyun.workorder.py ${wo_id} ${wo_title}"
+    echo "python3 $me_path/aliyun.workorder.py ${wo_id} ${wo_title}"
+    python3 "$me_path/aliyun.workorder.py" "${wo_id}" "${wo_title}"
+    deactivate
 }
 
 _upgrade_aliyun() {
