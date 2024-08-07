@@ -459,7 +459,7 @@ EOF
 _deploy_functions_aliyun() {
     _format_release_name
     ${github_action:-false} && return 0
-    ${ENV_ENABLE_FUNC_ALIYUN:-false} || return 0
+    ${ENV_ENABLE_FUNC:-false} || return 0
     if [ "${env_namespace}" != main ]; then
         release_name="${release_name}-${env_namespace}"
     fi
