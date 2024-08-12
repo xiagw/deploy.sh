@@ -545,17 +545,16 @@ _deploy_k8s() {
         _helm_new "${helm_dir}"
     fi
 
-    echo "$helm_opt upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${env_namespace} --create-namespace --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag} --set image.pullPolicy=Always --timeout 120s" | sed "s#$HOME#\$HOME#g"
+    echo "$helm_opt upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${env_namespace} --create-namespace --set image.pullPolicy=Always --timeout 120s --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag}" | sed "s#$HOME#\$HOME#g"
     ${github_action:-false} && return 0
 
     ## helm install / helm 安装  --atomic
     $helm_opt upgrade --install --history-max 1 \
         "${release_name}" "$helm_dir/" \
         --namespace "${env_namespace}" --create-namespace \
+        --timeout 120s --set image.pullPolicy='Always' \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
-        --set image.tag="${image_tag}" \
-        --set image.pullPolicy='Always' \
-        --timeout 120s >/dev/null
+        --set image.tag="${image_tag}" >/dev/null
     ## Clean up rs 0 0 / 清理 rs 0 0
     $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
     $kubectl_opt -n "${env_namespace}" get pod | awk '/Evicted/ {print $1}' | xargs $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
