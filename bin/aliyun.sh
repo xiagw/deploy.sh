@@ -525,9 +525,11 @@ _upload_cert() {
 # if python3 -m pip list | grep alibabacloud-workorder; then
 #     python3 -m pip install alibabacloud_workorder20210610==1.0.0
 # fi
-# jq -r '.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' ../data/aliyun.product.json | fzf
 _add_workorder() {
-    id_string="
+    if [ -f ../data/aliyun.product.json ]; then
+        id_string="$(jq -r '.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' ../data/aliyun.product.json | fzf)"
+    else
+        id_string="
     11864 云解析DNS
     18700 负载均衡NLB-CLB
     18422 内容分发网络CDN
@@ -541,6 +543,7 @@ _add_workorder() {
     18771 弹性容器实例ECI
     25446 云存储网关SGW
     "
+    fi
     if command -v fzf; then
         id_title=$(echo "$id_string" | fzf)
         wo_id=$(echo "$id_title" | awk '{print $1}')
@@ -559,7 +562,7 @@ _add_workorder() {
     fi
     echo "python3 $me_path/aliyun.workorder.py ${wo_id} ${wo_title}"
     python3 "$me_path/aliyun.workorder.py" "${wo_id}" "${wo_title}"
-    deactivate
+    # deactivate
 }
 
 _upgrade_aliyun() {
