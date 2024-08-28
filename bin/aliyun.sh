@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
 
-# 1. 如何进入 lifseaOS 的shell
-# aliyun ecs RunCommand --region "$aliyun_region" --RegionId 'cn-hangzhou' --Name lifseacli --Type RunShellScript --CommandContent 'lifseacli container start' --InstanceId.1 'i-xxxx'
-# aliyun ecs RunCommand --RegionId "$aliyun_region" --Name 'lifseacli' --Username 'root' --Type 'RunShellScript' --CommandContent 'IyEvYmluL2Jhc2gKbGlmc2VhY2xpIGNvbnRhaW5lciBzdGFydA==' --Timeout '60' --RepeatMode 'Once' --ContentEncoding 'Base64' --InstanceId.1 'i-xxxx'
-## 创建ecs时查询等待结果
-# aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.Instance[0].Status' to=Running
-# aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.
-
 _get_yes_no() {
     read -rp "${1:-Confirm the action?} [y/N] " read_yes_no
     case ${read_yes_no:-n} in
@@ -71,6 +64,22 @@ _get_resource() {
     ) >>"$resource_export_log"
 
     echo "Log file: $resource_export_log"
+}
+
+_get_ecs_list() {
+    _get_aliyun_profile
+    # 1. 如何进入 lifseaOS 的shell
+    # aliyun ecs RunCommand --region "$aliyun_region" --RegionId 'cn-hangzhou' --Name lifseacli --Type RunShellScript --CommandContent 'lifseacli container start' --InstanceId.1 'i-xxxx'
+    # aliyun ecs RunCommand --RegionId "$aliyun_region" --Name 'lifseacli' --Username 'root' --Type 'RunShellScript' --CommandContent 'IyEvYmluL2Jhc2gKbGlmc2VhY2xpIGNvbnRhaW5lciBzdGFydA==' --Timeout '60' --RepeatMode 'Once' --ContentEncoding 'Base64' --InstanceId.1 'i-xxxx'
+    ## 创建ecs时查询等待结果
+    # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.Instance[0].Status' to=Running
+    # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.
+    for rid in $(
+        $cmd_aliyun_p ecs DescribeRegions | jq -r '.Regions.Region[].RegionId' |
+            grep '^cn'
+    ); do
+        $cmd_aliyun_p ecs DescribeInstances --pager PagerSize=100 --RegionId "$rid"
+    done
 }
 
 _dns_record() {
