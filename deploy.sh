@@ -1363,8 +1363,12 @@ _inject_files() {
     _msg step "[inject] inject files from ${me_path_data}/inject/ (config/env/Dockerfile...)"
     ## backend (PHP/Java/Python) inject files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
-    local inject_dir="${me_path_data}/inject/${gitlab_project_name}/${env_namespace}"
-    if [ -d "$inject_dir" ]; then
+    local inject_dir="${me_path_data}/inject/${gitlab_project_name}"
+    local inject_dir_env="${me_path_data}/inject/${gitlab_project_name}/${env_namespace}"
+    if [ -d "$inject_dir_env" ]; then
+        _msg warning "found $inject_dir_env, sync to ${gitlab_project_dir}/"
+        rsync -av "$inject_dir_env"/ "${gitlab_project_dir}"/
+    elif [ -d "$inject_dir" ]; then
         _msg warning "found $inject_dir, sync to ${gitlab_project_dir}/"
         rsync -av "$inject_dir"/ "${gitlab_project_dir}"/
     fi
@@ -1388,6 +1392,7 @@ _inject_files() {
     echo ENV_INJECT: ${ENV_INJECT:-keep}
     build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
     project_dockerfile="${gitlab_project_dir}/Dockerfile"
+    local repository_cn=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
     case ${ENV_INJECT:-keep} in
     keep)
         echo '<skip>'
@@ -1430,16 +1435,16 @@ _inject_files() {
                 [ -f "$f" ] || continue
                 case "$(grep -i 'jdk_version=' "${f}")" in
                 *=1.7 | *=7)
-                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.6-jdk-7/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=openjdk:7/g" "${project_dockerfile}"
+                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=${repository_cn}:maven-3.6-jdk-7/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=${repository_cn}:openjdk-7/g" "${project_dockerfile}"
                     ;;
                 *=1.8 | *=8)
-                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.8-jdk-8/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=openjdk:8/g" "${project_dockerfile}"
+                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=${repository_cn}:maven-3.8-jdk-8/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=${repository_cn}:openjdk-8/g" "${project_dockerfile}"
                     ;;
                 *=11)
-                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.8-openjdk-11/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=amazoncorretto:11/g" "${project_dockerfile}"
+                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=${repository_cn}:maven-3.8-openjdk-11/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=${repository_cn}:amazoncorretto-11/g" "${project_dockerfile}"
                     ;;
                 *=17)
-                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=maven:3.8-openjdk-17/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=amazoncorretto:17/g" "${project_dockerfile}"
+                    sed -i -e "s/IMAGE_MVN=.*/IMAGE_MVN=${repository_cn}:maven-3.8-openjdk-17/g" -e "s/IMAGE_JDK=.*/IMAGE_JDK=${repository_cn}:amazoncorretto-17/g" "${project_dockerfile}"
                     ;;
                 *) : ;;
                 esac
