@@ -1444,7 +1444,7 @@ _inject_files() {
                     sed -i -e "s@IMAGE_MVN=.*@IMAGE_MVN=${repository_cn}:maven-3.8-jdk-11@g" -e "s@IMAGE_JDK=.*@IMAGE_JDK=${repository_cn}:amazoncorretto-11@g" "${project_dockerfile}"
                     ;;
                 *=17)
-                    sed -i -e "s@IMAGE_MVN=.*@IMAGE_MVN=${repository_cn}:maven-3.8-dk-17@g" -e "s@IMAGE_JDK=.*@IMAGE_JDK=${repository_cn}:amazoncorretto-17@g" "${project_dockerfile}"
+                    sed -i -e "s@IMAGE_MVN=.*@IMAGE_MVN=${repository_cn}:maven-3.8-jdk-17@g" -e "s@IMAGE_JDK=.*@IMAGE_JDK=${repository_cn}:amazoncorretto-17@g" "${project_dockerfile}"
                     ;;
                 *) : ;;
                 esac
