@@ -20,4 +20,4 @@ RUN --mount=type=cache,target=/var/lib/apt/lists \
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi
-# registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:php-8.1-base
+## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:php-8.1-base -f Dockerfile.php.base --progress=plain --build-arg IN_CHINA="true" .

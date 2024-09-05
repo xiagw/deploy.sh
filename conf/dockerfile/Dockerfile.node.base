@@ -19,3 +19,4 @@ RUN --mount=type=cache,target=/var/lib/apt/lists \
 
 ONBUILD COPY --chown=1000:1000 . /app/
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi
+## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:node-18-base -f Dockerfile.node.base --progress=plain --build-arg IN_CHINA="true" .

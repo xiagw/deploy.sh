@@ -1,5 +1,5 @@
 ## arch: x86_64
-ARG IMAGE_NAME=nginx:alpine
+ARG IMAGE_NAME=nginx:stable-alpine
 ## arch: arm64
 # ARG IMAGE_NAME=arm64v8/nginx
 FROM ${IMAGE_NAME}
@@ -17,4 +17,4 @@ RUN --mount=type=cache,target=/var/cache/apk \
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then sh /opt/onbuild.sh; else :; fi
-# registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:nginx-alpine-base
+## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:nginx-alpine-base -f Dockerfile.nginx --progress=plain --build-arg IN_CHINA="true" .
