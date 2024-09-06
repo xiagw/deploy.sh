@@ -242,14 +242,16 @@ _login_registry() {
 }
 
 _get_docker_context() {
-    ## use local or remote context / 使用本地或远程 context
+    ## use local context / 使用本地 context
     if [[ ${ENV_DOCKER_CONTEXT:-local} == local ]]; then
         return
     fi
+    ## use remote context (exclude local) / 使用远程 context
     if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
         read -ra docker_contexts <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .Name' | tr '\n' ' ')"
         read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .DockerEndpoint' | tr '\n' ' ')"
     else
+        ## use local and remote context / 使用本地和远程 context
         read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
         read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
     fi
@@ -263,7 +265,15 @@ _get_docker_context() {
             docker context create remote$c --docker "host=${dk_host}" || _msg error "Failed to create docker context remote$c: ${dk_host}"
         fi
     done
-
+    ## use remote context (exclude local) / 使用远程 context
+    if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
+        read -ra docker_contexts <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .Name' | tr '\n' ' ')"
+        read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .DockerEndpoint' | tr '\n' ' ')"
+    else
+        ## use local and remote context / 使用本地和远程 context
+        read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
+        read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
+    fi
     case ${ENV_DOCKER_CONTEXT_ALGO:-rr} in
     rand)
         ## random algorithum
