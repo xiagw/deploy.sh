@@ -21,6 +21,7 @@ RUN --mount=type=cache,target=/var/maven/.m2 \
     if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
     elif [ -f build.sh ]; then bash build.sh; \
     else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
+    ## 假如此处中断，表明 maven build 失败，请检查代码
 
 
 #    docker build stage 2    #
