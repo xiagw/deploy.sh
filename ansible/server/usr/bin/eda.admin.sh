@@ -149,7 +149,7 @@ _backup() {
         -az
         --backup
         --suffix=".$(date +%Y%m%d-%u-%H%M%S.%3N)"
-        --exclude={'Trash','.swp','*.log','CDS.log*','libManager.log.*','simulation','*panic.log*','matlab_crash_dump.*','.recycle'}
+        --exclude={'Trash','.swp','*.log','CDS.log*','libManager.log.*','simulation','*panic.log*','matlab_crash_dump.*','.recycle','.DS_Store'}
     )
 
     rsync_exclude=$me_path/rsync.exclude.conf
@@ -161,7 +161,7 @@ _backup() {
         "$path_eda"
         "$path_home"
     )
-    dest_dir='/volume1/disk1/backup'
+    dest_dir='/volume1/backup'
 
     pull_servers=(node11)
     push_server=nas
@@ -198,12 +198,7 @@ _backup() {
 
 _backup_borg() {
     set -e
-    _msg log "borg backup start..."
-    borg_opt=(
-        borg
-        create
-        --remote-path /usr/bin/borg
-    )
+    borg_opt=(borg create --remote-path /usr/bin/borg)
     if [ "${backup_borg_debug:-0}" -eq 1 ]; then
         borg_opt+=(
             --verbose
@@ -215,10 +210,7 @@ _backup_borg() {
             --exclude-caches
         )
     fi
-    borg_exclude="$me_path/borg_exclude"
-    if [ -f "$borg_exclude" ]; then
-        borg_opt+=(--exclude-from "$borg_exclude")
-    fi
+    [ -f "$me_path/borg_exclude" ] && borg_opt+=(--exclude-from "$me_path/borg_exclude")
     borg_opt+=(
         --exclude '/home/*/simulation/'
         --exclude '/home/*/.cache/*'
@@ -236,18 +228,28 @@ _backup_borg() {
         --exclude '*/matlab_crash_dump.*'
         --exclude '*/.recycle'
         --exclude '*/.cdslck'
+        --exclude '*/.DS_Store'
     )
 
     remote_host="${1:-nas}"
     remote_path="${2:-/volume1/backup-borg}"
-    local_path="${3:-/zfs01}"
+    shift 2
+    IFS=" " read -r -a local_path <<<"${*}"
 
     # shellcheck disable=SC2029
-    if ! ssh "$remote_host" "test -d $remote_path"; then
-        borg init --encryption=none "$remote_host:$remote_path"
+    if ssh "$remote_host" true; then
+        if ssh "$remote_host" "test -f $remote_path/config"; then
+            :
+        else
+            borg init --encryption=none "ssh://$remote_host$remote_path"
+        fi
+    else
+        echo "fail ssh to nas"
+        return 1
     fi
-
-    "${borg_opt[@]}" "ssh://$remote_host$remote_path::{now}" "$local_path"
+    _msg log "borg backup start..."
+    _msg log "ssh://$remote_host$remote_path::{now} ${local_path[*]}"
+    "${borg_opt[@]}" "ssh://$remote_host$remote_path::{now}" "${local_path[@]}"
     # borg prune --keep-weekly=4 --keep-monthly=3 "$remote_host:$remote_path"
     # borg compact "$remote_host:$remote_path"
     _msg log "borg backup end."
@@ -290,6 +292,29 @@ _get_random_password() {
     done
 }
 
+_set_vncserver() {
+    local id="$1"
+    local account="$2"
+    local vnc_users=/etc/sysconfig/vncusers
+    if grep -q ":${id}=${account}=" $vnc_users; then
+        echo "found :${id}=${account}= in $vnc_users"
+    else
+        _msg log "not found :${id}=${account}= in $vnc_users, insert it..."
+        echo ":${id}=${account}=" >>$vnc_users
+    fi
+    _msg log "enable vncserver :$id for $account on $(hostname)..."
+    systemctl enable --now "vncserver@:${id}.service"
+}
+
+_get_help() {
+    NOFORMAT='\033[0m'
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    echo -e "${RED}Connecting to stunnel server...${NOFORMAT}"
+    sleep 0.5
+    echo -e "${GREEN}OK.${NOFORMAT}"
+}
+
 _usage() {
     echo "Usage: "
     echo "  $0 --backup-push, run on server, push file to nas"
@@ -324,6 +349,7 @@ main() {
         quit) show_help=1 ;;
         esac
     fi
+    borg_local_path=()
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
         -s | --backup-push) backup_push=1 ;;
@@ -331,7 +357,7 @@ main() {
         -b | --backup-borg) backup_borg=1 ;;
         --debug) backup_borg_debug=1 ;;
         --local-path)
-            borg_local_path="$2"
+            borg_local_path+=("$2")
             shift
             ;;
         --remote-host)
@@ -342,6 +368,12 @@ main() {
             borg_remote_path="$2"
             shift
             ;;
+        --set-vnc)
+            set_vnc=1
+            shift
+            IFS=" " read -r -a set_vnc_args <<<"$*"
+            ;;
+        --get-help) get_help=1 ;;
         -h | --help | help) show_help=1 ;;
         esac
         shift
@@ -355,8 +387,9 @@ main() {
     [ "$remove_user" = 1 ] && _remove_user
     [ "$backup_push" = 1 ] && _backup push
     [ "$backup_pull" = 1 ] && _backup pull
-    [ "$backup_borg" = 1 ] && _backup_borg "$borg_host" "$borg_remote_path" "$borg_local_path"
-
+    [ "$backup_borg" = 1 ] && _backup_borg "$borg_host" "$borg_remote_path" "${borg_local_path[@]}"
+    [ "$set_vnc" = 1 ] && _set_vncserver "${set_vnc_args[@]}"
+    [ "$get_help" = 1 ] && _get_help
 }
 
 main "$@"
