@@ -184,7 +184,10 @@ _backup_with_borg() {
     remote_path="${ENV_REMOTE_BACKUP_PATH}"
     ## Local setup
     [ -d "$immich_dbdump_path" ] || mkdir -p "$immich_dbdump_path"
-    [ -d "$borg_path" ] || { mkdir -p "$borg_path"; borg init --encryption=none "$borg_path"; }
+    [ -d "$borg_path" ] || {
+        mkdir -p "$borg_path"
+        borg init --encryption=none "$borg_path"
+    }
     ## Remote setup
     # shellcheck disable=SC2029
     if ! ssh "$remote_host" "test -d \"$remote_path\""; then
@@ -378,12 +381,12 @@ _immich_upload() {
         args+=("--album-name" "$param_album")
     fi
 
-    import_path="${input_path##*/}"
+    import_path="/${input_path##*/}"
     docker run -it --rm \
-        -v "$input_path":/"$import_path":ro \
+        -v "$input_path":"$import_path":ro \
         -e IMMICH_INSTANCE_URL="${ENV_API_URL}" \
         -e IMMICH_API_KEY="${ENV_API_KEY}" \
-        ghcr.io/immich-app/immich-cli:latest upload /"$import_path" "${args[@]}"
+        ghcr.io/immich-app/immich-cli:latest upload "$import_path" "${args[@]}"
 }
 
 main() {
@@ -395,15 +398,17 @@ main() {
     ## script logic here
     me_name="$(basename "${BASH_SOURCE[0]}")"
     me_path="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-    if [ -d "${me_path}/../data" ]; then
+
+    if [ -f "${me_path}/${me_name}.env" ]; then
+        me_env="${me_path}/${me_name}.env"
+        me_log="${me_path}/${me_name}.log"
+    elif [ -f "${me_path}/../data/${me_name}.env" ]; then
         me_log="${me_path}/../data/${me_name}.log"
         me_env="${me_path}/../data/${me_name}.env"
     else
-        me_log="${me_path}/${me_name}.log"
-        me_env="${me_path}/${me_name}.env"
+        echo "not found $me_env, exit 1."
     fi
-    [ -f "$me_env" ] && source "$me_env" "${param_account-}"
-    [ -w "$me_path" ] || me_log="/tmp/${me_name}.log"
+    source "$me_env" "${param_account-}"
     [[ "${enable_log-}" -eq 1 ]] && echo "Log file is \"$me_log\""
 
     if [ -z "$param" ]; then
