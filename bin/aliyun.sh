@@ -504,9 +504,13 @@ _upload_cert() {
         _msg "key: $HOME/.acme.sh/dest/${domain}.key"
         _msg "pem: $HOME/.acme.sh/dest/${domain}.pem"
 
+        ## 删除证书
         if [ -f "$upload_log" ]; then
             _msg "cert id log file: ${upload_log}"
             remove_cert_id=$(jq -r '.CertId' "$upload_log")
+            _msg "remove cert id: $remove_cert_id"
+            $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}" || true
+
         else
             _msg "not found ${upload_log}"
         fi
@@ -514,13 +518,6 @@ _upload_cert() {
         ## 上传证书
         _msg "upload cert_name: ${upload_name}"
         $cmd_aliyun_p cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" | tee "$upload_log"
-
-        ## 删除证书
-        if [ -n "$remove_cert_id" ]; then
-            _msg "remove cert id: $remove_cert_id"
-            $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}" || true
-            unset remove_cert_id
-        fi
 
     done < <(
         $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
