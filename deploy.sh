@@ -26,11 +26,11 @@ _msg() {
     step)
         ((++STEP))
         color_on="\033[0;36m[${STEP}] $time_now \033[0m"
-        color_off=" $h_m_s"
+        color_off=" [$h_m_s]"
         ;;
     time)
         color_on="[${STEP}] $time_now "
-        color_off=" $h_m_s"
+        color_off=" [$h_m_s]"
         ;;
     log)
         shift
