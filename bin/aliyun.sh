@@ -426,20 +426,25 @@ _add_ram() {
 
     _get_aliyun_profile
     $cmd_aliyun_p ram ListUsers | jq '.Users.User[]'
+    read -rp "Enter account name: " read_account_name
+    acc_name="${read_account_name:-dev2app}"
     if _get_yes_no "Create aliyun RAM user?"; then
         _get_random_password
         ## 创建帐号, 设置密/码
-        acc_name=dev2app
-        $cmd_aliyun_p ram CreateUser --DisplayName $acc_name --UserName $acc_name | tee -a "$me_log"
-        $cmd_aliyun_p ram CreateLoginProfile --UserName $acc_name --Password "$password_rand" --PasswordResetRequired false | tee -a "$me_log"
+        $cmd_aliyun_p ram CreateUser --DisplayName "$acc_name" --UserName "$acc_name" | tee -a "$me_log"
+        $cmd_aliyun_p ram CreateLoginProfile --UserName "$acc_name" --Password "$password_rand" --PasswordResetRequired false | tee -a "$me_log"
         _msg log "$me_log" "aliyun profile: ${aliyun_profile}, account: $acc_name, password: $password_rand"
-        ## 为新帐号授权 oss
-        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunOSSFullAccess --PolicyType System --UserName $acc_name
-        ## 为新帐号授权 domain dns
-        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunDomainFullAccess --PolicyType System --UserName $acc_name
-        $cmd_aliyun_p ram AttachPolicyToUser --PolicyName AliyunDNSFullAccess --PolicyType System --UserName $acc_name
         ## 为新帐号创建 key
-        $cmd_aliyun_p ram CreateAccessKey --UserName $acc_name | tee -a "$me_log"
+        $cmd_aliyun_p ram CreateAccessKey --UserName "$acc_name" | tee -a "$me_log"
+    fi
+    if _get_yes_no "Attach Policy to user ?"; then
+        ## 为新帐号授权 oss
+        $cmd_aliyun_p ram AttachPolicyToUser --PolicyType System --PolicyName AliyunOSSFullAccess --UserName "$acc_name"
+        ## 为新帐号授权 domain dns
+        $cmd_aliyun_p ram AttachPolicyToUser --PolicyType System --PolicyName AliyunDomainFullAccess --UserName "$acc_name"
+        $cmd_aliyun_p ram AttachPolicyToUser --PolicyType System --PolicyName AliyunDNSFullAccess --UserName "$acc_name"
+        $cmd_aliyun_p ram AttachPolicyToUser --PolicyType System --PolicyName AliyunYundunCertFullAccess --UserName "$acc_name"
+        $cmd_aliyun_p ram AttachPolicyToUser --PolicyType System --PolicyName AliyunCDNFullAccess --UserName "$acc_name"
     fi
 
     $cmd_aliyun_p oss ls
