@@ -498,18 +498,25 @@ _upload_cert() {
         _msg "upload_name: ${upload_name}"
         _msg "key: $HOME/.acme.sh/dest/${domain}.key"
         _msg "pem: $HOME/.acme.sh/dest/${domain}.pem"
+
         if [ -f "$upload_log" ]; then
             _msg "cert id log file: ${upload_log}"
             remove_cert_id=$(jq -r '.CertId' "$upload_log")
-            ## 删除证书
-            _msg "remove cert id: $remove_cert_id"
-            $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}" || true
         else
             _msg "not found ${upload_log}"
         fi
+
         ## 上传证书
         _msg "upload cert_name: ${upload_name}"
         $cmd_aliyun_p cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" | tee "$upload_log"
+
+        ## 删除证书
+        if [ -n "$remove_cert_id" ]; then
+            _msg "remove cert id: $remove_cert_id"
+            $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}" || true
+            unset remove_cert_id
+        fi
+
     done < <(
         $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
             jq -r '.Domains.PageData[].DomainName' |
@@ -597,6 +604,17 @@ _functions_update() {
     done
 
     # aliyun fc PUT /2023-03-30/custom-domains/fc.vrupup.com --header "Content-Type=application/json;" --body "$(cat al.json)"
+}
+
+_install_jq_cli() {
+    command -v jq && return
+    sudo apt install -y jq
+}
+_install_aliyun_cli() {
+    command -v jq && return
+    #https://github.com/aliyun/aliyun-cli/releases
+    curl -LO https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
+    tar -C "${me_path_data}/bin/" -zxvf aliyun-cli-linux-latest-amd64.tgz
 }
 
 _usage() {
