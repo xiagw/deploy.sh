@@ -493,6 +493,8 @@ _upload_cert() {
     _get_aliyun_profile
     set -e
     aliyun_region=cn-hangzhou
+    _check_jq_cli
+    _check_aliyun_cli
     while read -r line; do
         domain="${line// /.}"
         upload_name="${domain//./-}-$($cmd_date +%m%d)"
@@ -510,7 +512,6 @@ _upload_cert() {
             remove_cert_id=$(jq -r '.CertId' "$upload_log")
             _msg "remove cert id: $remove_cert_id"
             $cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}" || true
-
         else
             _msg "not found ${upload_log}"
         fi
@@ -608,11 +609,11 @@ _functions_update() {
     # aliyun fc PUT /2023-03-30/custom-domains/fc.vrupup.com --header "Content-Type=application/json;" --body "$(cat al.json)"
 }
 
-_install_jq_cli() {
+_check_jq_cli() {
     command -v jq && return
     sudo apt install -y jq
 }
-_install_aliyun_cli() {
+_check_aliyun_cli() {
     command -v jq && return
     #https://github.com/aliyun/aliyun-cli/releases
     curl -LO https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
