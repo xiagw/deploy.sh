@@ -541,46 +541,33 @@ _upload_cert() {
     )
 }
 
-# if python3 -m pip list | grep alibabacloud-workorder; then
-#     python3 -m pip install alibabacloud_workorder20210610==1.0.0
-# fi
 _add_workorder() {
-    if [ -f ../data/aliyun.product.json ]; then
+    # if python3 -m pip list | grep alibabacloud-workorder; then
+    #     python3 -m pip install alibabacloud_workorder20210610==1.0.0
+    # fi
+    saved_json="$me_path/../data/aliyun.product.json"
+    ## 列出产品列表 （没有 aliyun cli 可用，使用 python sdk）
+    call_python_file="$me_path/aliyun.workorder.py"
+    if ! command -v fzf; then
+        sudo apt install -y fzf
+    fi
+    if [ -f "$saved_json" ]; then
         id_string="$(jq -r '.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' ../data/aliyun.product.json | fzf)"
     else
-        id_string="
-    11864 云解析DNS
-    18700 负载均衡NLB-CLB
-    18422 内容分发网络CDN
-    9457 对象存储OSS
-    7160 云服务器ECS
-    18474 容器服务Kubernetes版k8s
-    10293 财务finance
-    25352 备案beian
-    78102 云控制API
-    18528 函数计算function
-    18771 弹性容器实例ECI
-    25446 云存储网关SGW
-    "
+        id_string="$(
+            python3 "$call_python_file" | sed 's/\[LOG\]\s\+//' |
+                jq -r '.body.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' | fzf
+        )"
     fi
-    if command -v fzf; then
-        id_title=$(echo "$id_string" | fzf)
-        wo_id=$(echo "$id_title" | awk '{print $1}')
-        wo_title=$(echo "$id_title" | awk '{print $2}')
-    else
-        echo "$id_string"
-        select id in $(echo "$id_string" | awk '{print $1}'); do
-            wo_id=$(echo "$id_string" | awk "/$id/"'{print $1}')
-            wo_title=$(echo "$id_string" | awk "/$id/"'{print $2}')
-            break
-        done
-    fi
+    wo_id=$(echo "$id_string" | awk '{print $1}')
+    wo_title=$(echo "$id_string" | awk '{print $2}')
+
     echo "wo_id: ${wo_id:? ERR: empty id} , wo_title: ${wo_title:? ERR: 未设置标题}"
     if [ "$(uname -o)" = Darwin ]; then
         source "$HOME/.local/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
     fi
-    echo "python3 $me_path/aliyun.workorder.py ${wo_id} ${wo_title}"
-    python3 "$me_path/aliyun.workorder.py" "${wo_id}" "${wo_title}"
+    echo "python3 $call_python_file ${wo_id} ${wo_title}"
+    python3 "$call_python_file" "${wo_id}" "${wo_title}"
     # deactivate
 }
 

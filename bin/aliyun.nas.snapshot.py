@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
 # python3 -m pip install aliyun-python-sdk-nas
-# jq -r '.profiles[].access_key_id' ~/.aliyun/config.json | head -n 1
-# jq -r '.profiles[].access_key_secret' ~/.aliyun/config.json | head -n 1
+# jq -r '.profiles[] | select(.name == "flyh6") | .access_key_id' ~/.aliyun/config.json
+# jq -r '.profiles[] | select(.name == "flyh6") | .access_key_secret' ~/.aliyun/config.json
 
 import json
 import os
+import sys
 
 from aliyunsdkcore.client import AcsClient
 from aliyunsdknas.request.v20170626.CreateFileSystemRequest import CreateFileSystemRequest
 
 aliyun_config = os.getenv('HOME') + "/.aliyun/config.json"
-aliyun_profile = "flyh6"
-
-with open(aliyun_config,'r',encoding='utf8')as fp:
+with open(aliyun_config, 'r', encoding='utf8')as fp:
     data = json.load(fp)
     for i in data['profiles']:
-        if i['name'] == aliyun_profile:
-            access_key_id = i['access_key_id']
-            access_key_secret = i['access_key_secret']
+        if i['name'] == 'flyh6':
+            profile_key_id = i['access_key_id']
+            profile_key_secret = i['access_key_secret']
             break
 
 ## aliyun 极速型 NAS 创建的快照 id s-extreme-00848852jodmpq6w
-snapshot_id = os.getenv('ALIYUN_NAS_SNAP_ID')
+if os.getenv('ALIYUN_NAS_SNAP_ID'):
+    snapshot_id = os.getenv('ALIYUN_NAS_SNAP_ID')
+else:
+    snapshot_id = sys.argv[1]
 
 def create_file_system():
-    client = AcsClient(access_key_id, access_key_secret, 'cn-hangzhou')
+    client = AcsClient(profile_key_id, profile_key_secret, 'cn-hangzhou')
     request = CreateFileSystemRequest()
     request.set_accept_format('json')
     request.set_StorageType("advance")
