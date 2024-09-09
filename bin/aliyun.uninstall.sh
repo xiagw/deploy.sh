@@ -123,18 +123,16 @@ uninstall_service() {
 }
 
 wait_aegis_exit() {
-    var=1
-    limit=30
     echo "wait aegis exit"
 
-    while [[ $var -lt $limit ]]; do
-        if [ -n "$(ps -ef | grep aegis_client | grep -v grep)" ]; then
+    while [[ "${var:-1}" -lt 30 ]]; do
+        if pgrep -a aegis_client; then
             sleep 1
         else
             return
         fi
 
-        ((var++))
+        ((++var))
     done
 
     echo "wait AliYunDun process exit fail"
