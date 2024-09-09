@@ -12,29 +12,30 @@
 _msg() {
     local color_on
     local color_off='\033[0m' # Text Reset
-    h_m_s="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
-    time_now="$(date +%Y%m%d-%u-%T.%3N)"
+    time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
+    timestamp="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
-    red | error | err) color_on='\033[0;31m' ;;
-    green | info) color_on='\033[0;32m' ;;
-    yellow | warning | warn) color_on='\033[0;33m' ;;
+    info ) color_on='' ;;
+    warn | warning | yellow) color_on='\033[0;33m' ;;
+    error | err | red) color_on='\033[0;31m' ;;
+    question | ques | purple) color_on='\033[0;35m' ;;
+    green) color_on='\033[0;32m' ;;
     blue) color_on='\033[0;34m' ;;
-    purple | question | ques) color_on='\033[0;35m' ;;
     cyan) color_on='\033[0;36m' ;;
     orange) color_on='\033[1;33m' ;;
     step)
         ((++STEP))
-        color_on="\033[0;36m[${STEP}] $time_now \033[0m"
-        color_off=" [$h_m_s]"
+        color_on="\033[0;36m$timestamp - [$STEP] - \033[0m"
+        color_off=" - [$time_hms]"
         ;;
     time)
-        color_on="[${STEP}] $time_now "
-        color_off=" [$h_m_s]"
+        color_on="$timestamp - [${STEP}] "
+        color_off=" - [$time_hms]"
         ;;
     log)
         shift
-        echo "$time_now $*" >>$me_log
+        echo "$timestamp - $*" >>$me_log
         return
         ;;
     *)
@@ -105,7 +106,7 @@ _check_quality_sonar() {
     fi
 
     if [[ ! -f "$sonar_conf" ]]; then
-        _msg info "Creating $sonar_conf"
+        _msg green "Creating $sonar_conf"
 
         cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
@@ -919,7 +920,7 @@ _renew_cert() {
     done
     ## deploy with gitlab CI/CD,
     if [ -f "$file_reload_nginx" ]; then
-        _msg info "found $file_reload_nginx"
+        _msg green "found $file_reload_nginx"
         for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
             _msg "gitlab create pipeline, project id is $id"
             gitlab project-pipeline create --ref main --project-id $id
@@ -979,11 +980,11 @@ _get_balance_aliyun() {
 
 _install_python_gitlab() {
     command -v gitlab >/dev/null && return
-    _msg info "installing python3 gitlab api..."
+    _msg green "installing python3 gitlab api..."
     _set_mirror python
     python3 -m pip install --user --upgrade python-gitlab
     if python3 -m pip install --user --upgrade python-gitlab; then
-        _msg info "python-gitlab is installed successfully"
+        _msg green "python-gitlab is installed successfully"
     else
         _msg error "failed to install python-gitlab"
     fi
@@ -991,10 +992,10 @@ _install_python_gitlab() {
 
 _install_python_element() {
     python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
-    _msg info "installing python3 element api..."
+    _msg green "installing python3 element api..."
     _set_mirror python
     if python3 -m pip install --user --upgrade matrix-nio; then
-        _msg info "matrix-nio is installed successfully"
+        _msg green "matrix-nio is installed successfully"
     else
         _msg error "failed to install matrix-nio"
     fi
@@ -1002,7 +1003,7 @@ _install_python_element() {
 
 _install_flarectl() {
     command -v flarectl >/dev/null && return
-    _msg info "installing flarectl"
+    _msg green "installing flarectl"
     local ver='0.68.0'
     local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz"
 
@@ -1019,7 +1020,7 @@ _install_flarectl() {
 
 _install_aliyun_cli() {
     command -v aliyun >/dev/null && return
-    _msg info "install aliyun cli..."
+    _msg green "install aliyun cli..."
     curl -fsSLo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
     tar -C /tmp -zxf /tmp/aliyun.tgz
     $use_sudo install -m 0755 /tmp/aliyun "${me_path_data_bin}/aliyun"
@@ -1027,13 +1028,13 @@ _install_aliyun_cli() {
 
 _install_tencent_cli() {
     command -v tccli >/dev/null && return
-    _msg info "install tencent cli..."
+    _msg green "install tencent cli..."
     python3 -m pip install tccli
 }
 
 _install_jq_cli() {
     command -v jq >/dev/null && return
-    _msg info "install jq cli..."
+    _msg green "install jq cli..."
     case "$os_type" in
     debian | ubuntu | linuxmint)
         $use_sudo apt-get update -qq
@@ -1055,7 +1056,7 @@ _install_jq_cli() {
 
 _install_terraform() {
     command -v terraform >/dev/null && return
-    _msg info "installing terraform..."
+    _msg green "installing terraform..."
     $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg |
         gpg --dearmor |
@@ -1065,12 +1066,12 @@ _install_terraform() {
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq terraform >/dev/null
     # terraform version
-    _msg info "terraform installed successfully!"
+    _msg green "terraform installed successfully!"
 }
 
 _install_aws() {
     command -v aws >/dev/null && return
-    _msg info "installing aws cli..."
+    _msg green "installing aws cli..."
     curl -fsSLo "/tmp/awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -qq /tmp/awscliv2.zip -d /tmp
     /tmp/aws/install --bin-dir "${me_path_data_bin}" --install-dir "${me_path_data}" --update
@@ -1082,7 +1083,7 @@ _install_aws() {
 
 _install_kubectl() {
     command -v kubectl >/dev/null && return
-    _msg info "installing kubectl..."
+    _msg green "installing kubectl..."
     local kver
     kver="$(curl -sL https://dl.k8s.io/release/stable.txt)"
     curl -fsSLO "https://dl.k8s.io/release/${kver}/bin/linux/amd64/kubectl"
@@ -1098,7 +1099,7 @@ _install_kubectl() {
 
 _install_helm() {
     command -v helm >/dev/null && return
-    _msg info "installing helm..."
+    _msg green "installing helm..."
     curl -fsSLo get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
     export HELM_INSTALL_DIR="${me_path_data_bin}"
     bash get_helm.sh
@@ -1107,7 +1108,7 @@ _install_helm() {
 
 _install_jmeter() {
     command -v jmeter >/dev/null && return
-    _msg info "install jmeter..."
+    _msg green "install jmeter..."
     local ver_jmeter='5.4.1'
     local path_temp
     path_temp=$(mktemp -d)
@@ -1141,7 +1142,7 @@ _install_jmeter() {
 
 _install_docker() {
     command -v docker &>/dev/null && return
-    _msg info "installing docker"
+    _msg green "installing docker"
     local bash_temp
     bash_temp=$(mktemp)
     curl -fsSLo $bash_temp https://get.docker.com
@@ -1155,14 +1156,14 @@ _install_docker() {
 
 _install_podman() {
     command -v podman &>/dev/null && return
-    _msg info "installing podman"
+    _msg green "installing podman"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq podman >/dev/null
 }
 
 _install_cron() {
     command -v crontab &>/dev/null && return
-    _msg info "installing cron"
+    _msg green "installing cron"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq cron >/dev/null
 }
