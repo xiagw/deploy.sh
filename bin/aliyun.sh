@@ -542,33 +542,30 @@ _upload_cert() {
 }
 
 _add_workorder() {
-    # if python3 -m pip list | grep alibabacloud-workorder; then
-    #     python3 -m pip install alibabacloud_workorder20210610==1.0.0
-    # fi
-    saved_json="$me_path/../data/aliyun.product.json"
+    if [ "$(uname -o)" = Darwin ]; then
+        source "$HOME/.local/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
+    fi
+    # python3 -m pip list | grep 'alibabacloud-workorder' || python3 -m pip install alibabacloud_workorder20210610==1.0.0
+    # python3 -m pip list | grep 'alibabacloud_tea_console' || python3 -m pip install alibabacloud_tea_console
     ## 列出产品列表 （没有 aliyun cli 可用，使用 python sdk）
     call_python_file="$me_path/aliyun.workorder.py"
-    if ! command -v fzf; then
-        sudo apt install -y fzf
-    fi
+    saved_json="$me_path/../data/aliyun.product.list.json"
+    command -v fzf || sudo apt install -y fzf
     if [ -f "$saved_json" ]; then
-        id_string="$(jq -r '.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' ../data/aliyun.product.json | fzf)"
+        id_string="$(
+            cat "$saved_json" |
+                jq -r '.body.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' | fzf
+        )"
     else
         id_string="$(
             python3 "$call_python_file" | sed 's/\[LOG\]\s\+//' |
                 jq -r '.body.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' | fzf
         )"
     fi
-    wo_id=$(echo "$id_string" | awk '{print $1}')
-    wo_title=$(echo "$id_string" | awk '{print $2}')
 
-    echo "wo_id: ${wo_id:? ERR: empty id} , wo_title: ${wo_title:? ERR: 未设置标题}"
-    if [ "$(uname -o)" = Darwin ]; then
-        source "$HOME/.local/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
+    if _get_yes_no "python3 $call_python_file ${id_string} , create? "; then
+        python3 "$call_python_file" ${id_string}
     fi
-    echo "python3 $call_python_file ${wo_id} ${wo_title}"
-    python3 "$call_python_file" "${wo_id}" "${wo_title}"
-    # deactivate
 }
 
 _upgrade_aliyun() {
