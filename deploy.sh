@@ -26,7 +26,7 @@ _msg() {
     orange) color_on='\033[1;33m' ;;
     step)
         ((++STEP))
-        color_on="\033[0;36m$timestamp - [$STEP] - \033[0m"
+        color_on="\033[0;36m$timestamp - [$STEP] \033[0m"
         color_off=" - [$time_hms]"
         ;;
     time)
@@ -1371,7 +1371,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
-    _msg step "[inject] inject files from ${me_path_data}/inject/ (config/env/Dockerfile...)"
+    _msg step "[inject] from ${me_path_data}/inject/"
     ## backend (PHP/Java/Python) inject files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     local inject_dir="${me_path_data}/inject/${gitlab_project_name}"
