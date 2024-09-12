@@ -411,13 +411,13 @@ _helm_new() {
         -e '/readinessProbe/a \  initialDelaySeconds: 30' \
         "$file_values"
 
-    sed -i -e "/volumes: []/s//volumes:/" "$file_values"
+    sed -i -e "/volumes: \[\]/s//volumes:/" "$file_values"
     sed -i -e "/volumes:/ a \      claimName: cnfs-pvc-www" "$file_values"
     sed -i -e "/volumes:/ a \    persistentVolumeClaim:" "$file_values"
     sed -i -e "/volumes:/ a \  - name: volume-cnfs" "$file_values"
 
-    sed -i -e "/volumeMounts: []/s//volumeMounts:/" "$file_values"
-    sed -i -e "/volumeMounts:/ a \    mountPath: \"/app2\"" "$file_values"
+    sed -i -e "/volumeMounts: \[\]/s//volumeMounts:/" "$file_values"
+    sed -i -e "/volumeMounts:/ a \    mountPath: \"\/app2\"" "$file_values"
     sed -i -e "/volumeMounts:/ a \  - name: volume-cnfs" "$file_values"
     ## set livenessProbe
     if [[ "${protocol:-tcp}" == 'tcp' ]]; then
