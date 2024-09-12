@@ -16,7 +16,7 @@ _msg() {
     timestamp="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
-    info ) color_on='' ;;
+    info) color_on='' ;;
     warn | warning | yellow) color_on='\033[0;33m' ;;
     error | err | red) color_on='\033[0;31m' ;;
     question | ques | purple) color_on='\033[0;35m' ;;
@@ -406,7 +406,31 @@ _helm_new() {
         -e "/port: 80/ a \ \ port2: ${port_number2:-8081}" \
         -e "s@port: 80@port: ${port_number:-8080}@" \
         -e "s/create: true/create: false/" "$file_values"
-    sed -i -e "4 a cnfs: ${ENV_HELM_VALUES_CNFS:-cnfs-pvc-www}" "$file_values"
+    sed -i \
+        -e '/livenessProbe/ a \  initialDelaySeconds: 30' \
+        -e '/readinessProbe/a \  initialDelaySeconds: 30' \
+        "$file_values"
+
+    sed -i -e "/volumes: []/s//volumes:/" "$file_values"
+    sed -i -e "/volumes:/ a \      claimName: cnfs-pvc-www" "$file_values"
+    sed -i -e "/volumes:/ a \    persistentVolumeClaim:" "$file_values"
+    sed -i -e "/volumes:/ a \  - name: volume-cnfs" "$file_values"
+
+    sed -i -e "/volumeMounts: []/s//volumeMounts:/" "$file_values"
+    sed -i -e "/volumeMounts:/ a \    mountPath: \"/app2\"" "$file_values"
+    sed -i -e "/volumeMounts:/ a \  - name: volume-cnfs" "$file_values"
+    ## set livenessProbe
+    if [[ "${protocol:-tcp}" == 'tcp' ]]; then
+        sed -i \
+            -e "s@httpGet:@tcpSocket:@g" \
+            -e "s@\ \ \ \ path: /@#     path: /@g" \
+            -e "s@port: http@port: ${port_number:-8080}@g" \
+            "$file_values"
+    else
+        sed -i \
+            -e "s@port: http@port: ${port_number:-8080}@g" \
+            "$file_values"
+    fi
 
     ## change service.yaml
     sed -i -e "s@targetPort: http@targetPort: {{ .Values.service.port }}@" "$file_svc"
@@ -418,53 +442,21 @@ _helm_new() {
     sed -i -e '18 a \    {{- end }}' "$file_svc"
 
     ## change deployment.yaml
-    sed -i -e '39 a \            {{- if .Values.service.port2 }}' "$file_deploy"
-    sed -i -e '40 a \            - name: http2' "$file_deploy"
-    sed -i -e '41 a \              containerPort: {{ .Values.service.port2 }}' "$file_deploy"
-    sed -i -e '42 a \              protocol: TCP' "$file_deploy"
-    sed -i -e '43 a \            {{- end }}' "$file_deploy"
-    ## add volume
-    sed -i -e '54 a \          {{- if or .Values.cnfs .Values.nas .Values.nfs }}' "$file_deploy"
-    sed -i -e '55 a \          volumeMounts:' "$file_deploy"
-    sed -i -e '56 a \          {{- end }}' "$file_deploy"
-    sed -i -e '57 a \          {{- if .Values.cnfs }}' "$file_deploy"
-    sed -i -e '58 a \            - name: volume-cnfs' "$file_deploy"
-    sed -i -e '59 a \              mountPath: "/app2"' "$file_deploy"
-    sed -i -e '60 a \          {{- end }}' "$file_deploy"
+    sed -i -e '42 a \            {{- if .Values.service.port2 }}' "$file_deploy"
+    sed -i -e '43 a \            - name: http2' "$file_deploy"
+    sed -i -e '44 a \              containerPort: {{ .Values.service.port2 }}' "$file_deploy"
+    sed -i -e '45 a \              protocol: TCP' "$file_deploy"
+    sed -i -e '46 a \            {{- end }}' "$file_deploy"
+
+    ## dns config
     cat >>"$file_deploy" <<EOF
-      {{- if or .Values.cnfs .Values.nas .Values.nfs }}
-      volumes:
-      {{- end }}
-      {{- if .Values.cnfs }}
-        - name: volume-cnfs
-          persistentVolumeClaim:
-            claimName: {{ .Values.cnfs }}
-      {{- end }}
       dnsConfig:
         options:
         - name: ndots
           value: "2"
 EOF
-    ## set port
-    if [[ "${protocol:-tcp}" == 'tcp' ]]; then
-        sed -i \
-            -e "s@containerPort: 80@containerPort: {{ .Values.service.port }}@" \
-            -e "s@port: http@port: {{ .Values.service.port }}@g" \
-            -e "s@httpGet:@tcpSocket:@g" \
-            -e "s@path: /@# path: /@g" \
-            "$file_deploy"
-    else
-        sed -i \
-            -e "s@containerPort: 80@containerPort: {{ .Values.service.port }}@" \
-            -e "s@port: http@port: {{ .Values.service.port }}@g" \
-            "$file_deploy"
-    fi
+
     sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
-    #                initialDelaySeconds: 50
-    sed -i \
-        -e '/livenessProbe/a \            initialDelaySeconds: 30' \
-        -e '/readinessProbe/a \            initialDelaySeconds: 30' \
-        "$file_deploy"
 }
 
 _deploy_functions_aliyun() {
