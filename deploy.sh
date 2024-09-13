@@ -403,7 +403,7 @@ _create_helm_chart() {
 
     ## change values.yaml
     sed -i \
-        -e "/port: 80/ a \ \ port2: ${port_number2:-8081}" \
+        -e "/port: 80/ a \  port2: ${port_number2:-8081}" \
         -e "s@port: 80@port: ${port_number:-8080}@" \
         -e "s/create: true/create: false/" "$file_values"
     sed -i \
@@ -440,19 +440,19 @@ _create_helm_chart() {
 
     ## change service.yaml
     sed -i -e "s@targetPort: http@targetPort: {{ .Values.service.port }}@" "$file_svc"
-    sed -i -e '13 a \    {{- if .Values.service.port2 }}' "$file_svc"
-    sed -i -e '14 a \    - port: {{ .Values.service.port2 }}' "$file_svc"
-    sed -i -e '15 a \      targetPort: {{ .Values.service.port2 }}' "$file_svc"
-    sed -i -e '16 a \      protocol: TCP' "$file_svc"
-    sed -i -e '17 a \      name: http2' "$file_svc"
-    sed -i -e '18 a \    {{- end }}' "$file_svc"
+    sed -i -e '/  ports:/ a \    {{- end }}' "$file_svc"
+    sed -i -e '/  ports:/ a \      name: http2' "$file_svc"
+    sed -i -e '/  ports:/ a \      protocol: TCP' "$file_svc"
+    sed -i -e '/  ports:/ a \      targetPort: {{ .Values.service.port2 }}' "$file_svc"
+    sed -i -e '/  ports:/ a \    - port: {{ .Values.service.port2 }}' "$file_svc"
+    sed -i -e '/  ports:/ a \    {{- if .Values.service.port2 }}' "$file_svc"
 
     ## change deployment.yaml
-    sed -i -e '42 a \            {{- if .Values.service.port2 }}' "$file_deploy"
-    sed -i -e '43 a \            - name: http2' "$file_deploy"
-    sed -i -e '44 a \              containerPort: {{ .Values.service.port2 }}' "$file_deploy"
-    sed -i -e '45 a \              protocol: TCP' "$file_deploy"
-    sed -i -e '46 a \            {{- end }}' "$file_deploy"
+    sed -i -e '/  ports:/ a \            {{- end }}' "$file_deploy"
+    sed -i -e '/  ports:/ a \              protocol: TCP' "$file_deploy"
+    sed -i -e '/  ports:/ a \              containerPort: {{ .Values.service.port2 }}' "$file_deploy"
+    sed -i -e '/  ports:/ a \            - name: http2' "$file_deploy"
+    sed -i -e '/  ports:/ a \            {{- if .Values.service.port2 }}' "$file_deploy"
 
     ## dns config
     cat >>"$file_deploy" <<EOF
