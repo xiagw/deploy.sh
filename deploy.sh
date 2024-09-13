@@ -1815,6 +1815,8 @@ _set_args() {
         --create-helm)
             arg_create_helm=true
             exec_single_job=true
+            helm_dir="$2"
+            shift
             ;;
         --deploy-k8s)
             arg_deploy_k8s=true
@@ -2008,7 +2010,7 @@ main() {
         ${arg_build_image:-false} && _build_image
         ${arg_push_image:-false} && _push_image
         ${arg_deploy_functions:-false} && _deploy_functions_aliyun
-        ${arg_create_helm:-false} && _create_helm_chart
+        ${arg_create_helm:-false} && _create_helm_chart "${helm_dir}"
         ${arg_deploy_k8s:-false} && _deploy_k8s
         ${arg_deploy_rsync_ssh:-false} && _deploy_rsync_ssh
         ${arg_deploy_rsync:-false} && _deploy_rsync
