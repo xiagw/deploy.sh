@@ -410,6 +410,11 @@ _create_helm_chart() {
         -e '/livenessProbe/ a \  initialDelaySeconds: 30' \
         -e '/readinessProbe/a \  initialDelaySeconds: 30' \
         "$file_values"
+    sed -i -e "/resources: {}/s//resources:/" "$file_values"
+    sed -i -e "/resources:/ a \    cpu: 500m" "$file_values"
+    sed -i -e "/resources:/ a \  requests:" "$file_values"
+
+    sed -i -e '/autoscaling:/,$ s/enabled: false/enabled: true/' "$file_values"
 
     sed -i -e "/volumes: \[\]/s//volumes:/" "$file_values"
     sed -i -e "/volumes:/ a \      claimName: cnfs-pvc-www" "$file_values"
@@ -419,6 +424,7 @@ _create_helm_chart() {
     sed -i -e "/volumeMounts: \[\]/s//volumeMounts:/" "$file_values"
     sed -i -e "/volumeMounts:/ a \    mountPath: \"\/app2\"" "$file_values"
     sed -i -e "/volumeMounts:/ a \  - name: volume-cnfs" "$file_values"
+
     ## set livenessProbe
     if [[ "${protocol:-tcp}" == 'tcp' ]]; then
         sed -i \
