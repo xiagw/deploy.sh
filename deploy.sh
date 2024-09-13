@@ -1370,6 +1370,7 @@ _generate_apidoc() {
 }
 
 _inject_files() {
+    ${exec_inject_files:-true} || return
     _msg step "[inject] from ${me_path_data}/inject/"
     ## backend (PHP/Java/Python) inject files
     ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
@@ -1822,6 +1823,7 @@ _set_args() {
         --create-helm)
             arg_create_helm=true
             exec_single_job=true
+            exec_inject_files=false
             helm_dir="$2"
             shift
             ;;
