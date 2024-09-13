@@ -393,7 +393,7 @@ _create_helm_chart() {
 
     ## 创建 helm chart
     helm create "$release_name_path"
-    _msg log "helm create $release_name_path" >>"$me_log"
+    _msg log "helm create $release_name_path"
     ## 需要修改的配置文件
     file_values="$release_name_path/values.yaml"
     file_svc="$release_name_path/templates/service.yaml"
@@ -414,16 +414,16 @@ _create_helm_chart() {
     sed -i -e "/^resources:/ a \    cpu: 500m" "$file_values"
     sed -i -e "/^resources:/ a \  requests:" "$file_values"
 
-    sed -i -e '/autoscaling:/,$ s/enabled: false/enabled: true/' "$file_values"
+    # sed -i -e '/autoscaling:/,$ s/enabled: false/enabled: true/' "$file_values"
     sed -i -e '/autoscaling:/,$ s/maxReplicas: 100/maxReplicas: 9/' "$file_values"
 
     sed -i -e "/volumes: \[\]/s//volumes:/" "$file_values"
-    sed -i -e "/volumes:/ a \      claimName: cnfs-pvc-www" "$file_values"
+    sed -i -e "/volumes:/ a \      claimName: ${ENV_HELM_VALUES_CNFS:-cnfs-pvc-www}" "$file_values"
     sed -i -e "/volumes:/ a \    persistentVolumeClaim:" "$file_values"
     sed -i -e "/volumes:/ a \  - name: volume-cnfs" "$file_values"
 
     sed -i -e "/volumeMounts: \[\]/s//volumeMounts:/" "$file_values"
-    sed -i -e "/volumeMounts:/ a \    mountPath: \"\/app2\"" "$file_values"
+    sed -i -e "/volumeMounts:/ a \    mountPath: \"\/${ENV_HELM_VALUES_MOUNT_PATH:-app2}\"" "$file_values"
     sed -i -e "/volumeMounts:/ a \  - name: volume-cnfs" "$file_values"
 
     ## set livenessProbe
@@ -456,12 +456,12 @@ _create_helm_chart() {
     sed -i -e '/  ports:/ a \            {{- if .Values.service.port2 }}' "$file_deploy"
 
     ## dns config
-    cat >>"$file_deploy" <<EOF
-      dnsConfig:
-        options:
-        - name: ndots
-          value: "2"
-EOF
+    (
+        echo "      dnsConfig:"
+        echo "        options:"
+        echo "        - name: ndots"
+        echo "          value: \"2\""
+    ) >>"$file_deploy"
 
     sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
 }
