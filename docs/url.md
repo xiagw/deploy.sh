@@ -1,3 +1,9 @@
+Tutorial Nginx - Shell Script CGI [ Step by step ]
+https://techexpert.tips/nginx/nginx-shell-script-cgi/
+
+Nginx支持web界面执行bash|python等系统命令和脚本，可以传递参数 - 哈喽哈喽111111 - 博客园
+https://www.cnblogs.com/hahaha111122222/p/15593611.html
+
 nginx接收指令执行脚本 - 简书
 https://www.jianshu.com/p/985050dad2d5
 

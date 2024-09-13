@@ -384,7 +384,7 @@ _format_release_name() {
     # fi
 }
 
-_helm_new() {
+_create_helm_chart() {
     ## 获取 release 名称/端口/协议等信息
     release_name_path="$1"
     port_number=8080
@@ -539,13 +539,13 @@ _deploy_k8s() {
             break
         fi
     done
-    ## create helm files / 创建 helm 文件
+    ## create helm charts / 创建 helm 文件
     if [ -z "$helm_dir" ]; then
         _msg purple "Not found helm files"
         echo "Try to generate helm files"
         helm_dir="${me_path_data}/helm/${gitlab_project_path_slug}/${release_name}"
         [ -d "$helm_dir" ] || mkdir -p "$helm_dir"
-        _helm_new "${helm_dir}"
+        _create_helm_chart "${helm_dir}"
     fi
 
     echo "$helm_opt upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${env_namespace} --create-namespace --set image.pullPolicy=Always --timeout 120s --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag}" | sed "s#$HOME#\$HOME#g" | tee -a "$me_log"
@@ -1812,6 +1812,10 @@ _set_args() {
             arg_deploy_functions=true
             exec_single_job=true
             ;;
+        --create-helm)
+            arg_create_helm=true
+            exec_single_job=true
+            ;;
         --deploy-k8s)
             arg_deploy_k8s=true
             exec_single_job=true
@@ -2004,6 +2008,7 @@ main() {
         ${arg_build_image:-false} && _build_image
         ${arg_push_image:-false} && _push_image
         ${arg_deploy_functions:-false} && _deploy_functions_aliyun
+        ${arg_create_helm:-false} && _create_helm_chart
         ${arg_deploy_k8s:-false} && _deploy_k8s
         ${arg_deploy_rsync_ssh:-false} && _deploy_rsync_ssh
         ${arg_deploy_rsync:-false} && _deploy_rsync
