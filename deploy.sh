@@ -410,9 +410,9 @@ _create_helm_chart() {
         -e '/livenessProbe/ a \  initialDelaySeconds: 30' \
         -e '/readinessProbe/a \  initialDelaySeconds: 30' \
         "$file_values"
-    sed -i -e "/^resources: {}/s//resources:/" "$file_values"
-    sed -i -e "/^resources:/ a \    cpu: 500m" "$file_values"
-    sed -i -e "/^resources:/ a \  requests:" "$file_values"
+    # sed -i -e "/^resources: {}/s//resources:/" "$file_values"
+    # sed -i -e "/^resources:/ a \    cpu: 500m" "$file_values"
+    # sed -i -e "/^resources:/ a \  requests:" "$file_values"
 
     # sed -i -e '/autoscaling:/,$ s/enabled: false/enabled: true/' "$file_values"
     sed -i -e '/autoscaling:/,$ s/maxReplicas: 100/maxReplicas: 9/' "$file_values"
@@ -463,7 +463,7 @@ _create_helm_chart() {
         echo "          value: \"2\""
     ) >>"$file_deploy"
 
-    sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
+    # sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
 }
 
 _deploy_functions_aliyun() {
