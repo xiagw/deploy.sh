@@ -405,11 +405,9 @@ _create_helm_chart() {
     sed -i \
         -e "/port: 80/ a \  port2: ${port_number2:-8081}" \
         -e "s@port: 80@port: ${port_number:-8080}@" \
-        -e "s/create: true/create: false/" "$file_values"
-    sed -i \
-        -e '/livenessProbe/ a \  initialDelaySeconds: 30' \
-        -e '/readinessProbe/a \  initialDelaySeconds: 30' \
         "$file_values"
+    ## disable serviceAccount
+    sed -i -e "/create: true/s/true/false/" "$file_values"
     # sed -i -e "/^resources: {}/s//resources:/" "$file_values"
     # sed -i -e "/^resources:/ a \    cpu: 500m" "$file_values"
     # sed -i -e "/^resources:/ a \  requests:" "$file_values"
@@ -426,7 +424,11 @@ _create_helm_chart() {
     sed -i -e "/volumeMounts:/ a \    mountPath: \"\/${ENV_HELM_VALUES_MOUNT_PATH:-app2}\"" "$file_values"
     sed -i -e "/volumeMounts:/ a \  - name: volume-cnfs" "$file_values"
 
-    ## set livenessProbe
+    ## set livenessProbe, spring delay 30s
+    sed -i \
+        -e '/livenessProbe/ a \  initialDelaySeconds: 30' \
+        -e '/readinessProbe/a \  initialDelaySeconds: 30' \
+        "$file_values"
     if [[ "${protocol:-tcp}" == 'tcp' ]]; then
         sed -i \
             -e "s@httpGet:@tcpSocket:@g" \
