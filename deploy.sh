@@ -385,11 +385,21 @@ _format_release_name() {
 }
 
 _create_helm_chart() {
-    ## 获取 release 名称/端口/协议等信息
+    ## 获取 release 名称/协议/端口/等信息
     release_name_path="$1"
-    port_number=8080
-    port_number2=8081
-    protocol=tcp
+    helm_chart_env=$me_path_data/create_helm_chart.env
+    ## project_name  protocol  port  <port2>
+    if [ -f "${helm_chart_env}" ]; then
+        read -ra values_array <<<"$(grep "^${release_name}\s" "${helm_chart_env}")"
+        protocol="${values_array[1]}"
+        port_number="${values_array[2]}"
+        port_number2="${values_array[3]}"
+    fi
+    if [[ -z "$protocol" || -z "$port_number" ]]; then
+        protocol=tcp
+        port_number=8080
+        port_number2=8081
+    fi
 
     ## 创建 helm chart
     helm create "$release_name_path"
@@ -402,10 +412,14 @@ _create_helm_chart() {
     # rm -f "$release_name_path/templates/serviceaccount.yaml"
 
     ## change values.yaml
-    sed -i \
-        -e "/port: 80/ a \  port2: ${port_number2:-8081}" \
-        -e "s@port: 80@port: ${port_number:-8080}@" \
-        "$file_values"
+    if [ -z "${port_number2}" ]; then
+        sed -i -e "s@port: 80@port: ${port_number}@" "$file_values"
+    else
+        sed -i \
+            -e "/port: 80/ a \  port2: ${port_number2}" \
+            -e "s@port: 80@port: ${port_number}@" \
+            "$file_values"
+    fi
     ## disable serviceAccount
     sed -i -e "/create: true/s/true/false/" "$file_values"
     # sed -i -e "/^resources: {}/s//resources:/" "$file_values"
@@ -429,16 +443,16 @@ _create_helm_chart() {
         -e '/livenessProbe/ a \  initialDelaySeconds: 30' \
         -e '/readinessProbe/a \  initialDelaySeconds: 30' \
         "$file_values"
-    if [[ "${protocol:-tcp}" == 'tcp' ]]; then
+    if [[ "${protocol}" == 'tcp' ]]; then
         sed -i \
             -e "s/httpGet:/#httpGet:/" \
             -e "/httpGet:/ a \  tcpSocket:" \
             -e "s@\ \ \ \ path: /@#     path: /@g" \
-            -e "s/port: http/port: ${port_number:-8080}/" \
+            -e "s/port: http/port: ${port_number}/" \
             "$file_values"
     else
         sed -i \
-            -e "s@port: http@port: ${port_number:-8080}@g" \
+            -e "s@port: http@port: ${port_number}@g" \
             "$file_values"
     fi
 
