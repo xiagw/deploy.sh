@@ -619,7 +619,7 @@ _deploy_rsync_ssh() {
         rsync_exclude="${me_path_conf}/rsync.exclude"
     fi
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
-    # grep "^${gitlab_project_path}\s\+${env_namespace}" "$me_conf" | tee -a $conf_temp || true
+    # grep "^${gitlab_project_path}:${env_namespace}" "$me_conf" | awk -F: '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10}' "$me_conf"
     conf_line="$(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$me_conf" | wc -l)"
     if [ "$conf_line" -eq 0 ]; then
         _msg warn "[deploy] not config $me_conf"
