@@ -385,39 +385,41 @@ _format_release_name() {
 }
 
 _create_helm_chart() {
+    local helm_chart_path helm_chart_name helm_chart_env protocol port port2
+    helm_chart_path="$1"
+    helm_chart_name="${helm_chart_path#"$(dirname $helm_chart_path)"/}"
     ## 获取 release 名称/协议/端口/等信息
-    release_name_path="$1"
     helm_chart_env=$me_path_data/create_helm_chart.env
-    ## project_name  protocol  port  <port2>
+    ## create_helm_chart.env 格式： project_name  protocol  port  <port2> ，port2 可以为空
     if [ -f "${helm_chart_env}" ]; then
-        read -ra values_array <<<"$(grep "^${release_name}\s" "${helm_chart_env}")"
+        read -ra values_array <<<"$(grep "^${helm_chart_name}\s" "${helm_chart_env}")"
         protocol="${values_array[1]}"
-        port_number="${values_array[2]}"
-        port_number2="${values_array[3]}"
+        port="${values_array[2]}"
+        port2="${values_array[3]}"
     fi
-    if [[ -z "$protocol" || -z "$port_number" ]]; then
+    if [[ -z "$protocol" || -z "$port" ]]; then
         protocol=tcp
-        port_number=8080
-        port_number2=8081
+        port=8080
+        port2=8081
     fi
 
     ## 创建 helm chart
-    helm create "$release_name_path"
-    _msg log "helm create $release_name_path"
+    helm create "$helm_chart_path"
+    _msg log "helm create $helm_chart_path"
     ## 需要修改的配置文件
-    file_values="$release_name_path/values.yaml"
-    file_svc="$release_name_path/templates/service.yaml"
-    file_deploy="$release_name_path/templates/deployment.yaml"
+    file_values="$helm_chart_path/values.yaml"
+    file_svc="$helm_chart_path/templates/service.yaml"
+    file_deploy="$helm_chart_path/templates/deployment.yaml"
     ## remove serviceaccount.yaml
-    # rm -f "$release_name_path/templates/serviceaccount.yaml"
+    # rm -f "$helm_chart_path/templates/serviceaccount.yaml"
 
     ## change values.yaml
-    if [ -z "${port_number2}" ]; then
-        sed -i -e "s@port: 80@port: ${port_number}@" "$file_values"
+    if [ -z "${port2}" ]; then
+        sed -i -e "s@port: 80@port: ${port}@" "$file_values"
     else
         sed -i \
-            -e "/port: 80/ a \  port2: ${port_number2}" \
-            -e "s@port: 80@port: ${port_number}@" \
+            -e "/port: 80/ a \  port2: ${port2}" \
+            -e "s@port: 80@port: ${port}@" \
             "$file_values"
     fi
     ## disable serviceAccount
@@ -448,11 +450,11 @@ _create_helm_chart() {
             -e "s/httpGet:/#httpGet:/" \
             -e "/httpGet:/ a \  tcpSocket:" \
             -e "s@\ \ \ \ path: /@#     path: /@g" \
-            -e "s/port: http/port: ${port_number}/" \
+            -e "s/port: http/port: ${port}/" \
             "$file_values"
     else
         sed -i \
-            -e "s@port: http@port: ${port_number}@g" \
+            -e "s@port: http@port: ${port}@g" \
             "$file_values"
     fi
 
