@@ -431,9 +431,10 @@ _create_helm_chart() {
         "$file_values"
     if [[ "${protocol:-tcp}" == 'tcp' ]]; then
         sed -i \
-            -e "s@httpGet:@tcpSocket:@g" \
+            -e "s/httpGet:/#httpGet:/" \
+            -e "/httpGet:/ a \  tcpSocket:" \
             -e "s@\ \ \ \ path: /@#     path: /@g" \
-            -e "s@port: http@port: ${port_number:-8080}@g" \
+            -e "s/port: http/port: ${port_number:-8080}/" \
             "$file_values"
     else
         sed -i \
