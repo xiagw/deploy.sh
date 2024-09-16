@@ -180,18 +180,6 @@ _add_rds_account() {
     # $cmd_aliyun_p rds ModifySecurityIps --region "$aliyun_region" --DBInstanceId 'rm-xx' --DBInstanceIPArrayName mycustomer --SecurityIps '10.23.1.1'
 }
 
-_get_node_pod_numbers() {
-    deployments=(fly-php71)
-    ## 节点数量日常固定值
-    node_fixed_num=5
-    ## 获取节点信息和数量
-    readarray -t node_name < <($kubectl_cli get nodes -o name)
-    node_before_num="${#node_name[*]}"
-    ## 实际节点数 = 所有节点数 - 虚拟节点 1 个 (virtual-kubelet-cn-hangzhou-k)
-    pod_before_num=$((node_before_num - 1))
-    lock_file=/tmp/node_scale.lock
-}
-
 _get_cluster_info() {
     ## get cluster name from env
     cluster_id="$(
@@ -205,28 +193,37 @@ _get_cluster_info() {
     )"
 }
 
+_get_node_pod() {
+    deployment="$1"
+    readarray -t node_name < <($kubectl_cli get nodes -o name)
+    ## 实际节点数 = 所有节点数 - 虚拟节点 1 个 (virtual-kubelet-cn-hangzhou-k)
+    # node_total="$($kubectl_cli get nodes -o name | grep -vc 'virtual-kubelet')"
+    node_total="$($kubectl_cli get nodes -o name | grep -c 'node')"
+    pod_total=$($kubectl_clim get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
+    lock_file=/tmp/node_scale.lock
+}
+
 _scale_up() {
     if [[ -f $lock_file ]]; then
         _msg "another process is running...exit"
         return
     fi
-    _get_node_pod_numbers
+    _get_node_pod "$1"
     touch $lock_file
     ## 节点变更的数量
-    node_scale_num="${1:-2}"
-    node_after_num=$((node_before_num + node_scale_num))
-    pod_after_num=$((pod_before_num + node_scale_num))
+    node_inc="${2:-2}"
+    node_sum=$((node_total + node_inc))
 
     _get_cluster_info
     ## 扩容节点 x 个 ECS
-    _msg log "$me_log" "nodes scale to number: $node_after_num"
+    _msg log "$me_log" "nodes scale to number: $node_sum"
     $cmd_aliyun_p cs POST /clusters/"$cluster_id"/nodepools/"$nodepool_id" \
         --header "Content-Type=application/json;" \
-        --body "{\"count\": $node_scale_num}"
+        --body "{\"count\": $node_inc}"
 
     ## 等待节点就绪 / node ready
     unset sleeps
-    until [[ "$($kubectl_cli get nodes | grep -cw Ready)" = "$node_after_num" ]]; do
+    until [[ "$($kubectl_cli get nodes | grep -cw Ready)" = "$node_sum" ]]; do
         ((++sleeps))
         if [[ ${sleeps:-0} -ge 300 ]]; then
             _msg "FAIL to get node Ready, timeout exit"
@@ -238,43 +235,40 @@ _scale_up() {
     sleep 10
 
     ## 扩容 pod
-    for deployment in "${deployments[@]}"; do
-        scale=$((pod_before_num + 1))
-        while [[ $scale -le $pod_after_num ]]; do
-            _msg log "$me_log" "$deployment scale to number: $scale"
-            $kubectl_clim scale --replicas="${scale}" deploy "$deployment"
-            sleep 10
-            scale=$((scale + 1))
-        done
+    pod_sum=$((pod_total + node_inc))
+    pod_count=pod_total
+    while [[ ${pod_count:-1} -le $pod_sum ]]; do
+        $kubectl_clim scale --replicas="$((pod_count + 1))" deploy "$deployment"
+        _msg log "$me_log" "$deployment scale to number: $pod_count"
+        sleep 10
+        pod_count=$($kubectl_clim get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
     done
 
     sleep 30
 
     ## 等待容器就绪 / pod ready
     sleeps=0
-    for deployment in "${deployments[@]}"; do
-        until [[ $($kubectl_clim get pods | grep -cw "$deployment") = "$pod_after_num" ]]; do
-            ((++sleeps))
-            if [[ ${sleeps:-0} -ge 300 ]]; then
-                _msg "FAIL to get pod Ready, timeout exit"
-                return 1
-            fi
-            sleep 2
-        done
+    until [[ $($kubectl_clim get pods | grep -cw "$deployment") = "$pod_sum" ]]; do
+        ((++sleeps))
+        if [[ ${sleeps:-0} -ge 300 ]]; then
+            _msg "FAIL to get pod Ready, timeout exit"
+            return 1
+        fi
+        sleep 2
     done
 
     # 发消息到企业微信 / Send message to weixin_work
-    msg_body="扩容服务器数量=$node_scale_num"
+    msg_body="扩容服务器数量=$node_inc"
     _notify_weixin_work
 
     ## 禁止分配容器到新节点 / kubectl cordon new nodes
     _msg "kubectl cordon new nodes..."
     sleep 30
-    for new in $($kubectl_cli get nodes -o name); do
-        if echo "${node_name[@]}" | grep "$new"; then
+    for n in $($kubectl_cli get nodes -o name); do
+        if echo "${node_name[@]}" | grep "$n"; then
             _msg skip
         else
-            $kubectl_cli cordon "$new"
+            $kubectl_cli cordon "$n"
         fi
     done
     rm -f $lock_file
@@ -285,70 +279,61 @@ _scale_down() {
         _msg "another process is running...exit"
         return
     fi
-    _get_node_pod_numbers
-    if ((node_before_num <= node_fixed_num)); then
-        # _msg "node num: $node_before_num, skip"
+    _get_node_pod "$1"
+    if ((node_total <= 3)); then
+        # _msg "node num: $node_total, skip"
         return
     fi
     ## 节点变更数量
-    node_scale_num="${1:-2}"
-    node_after_num=$((node_before_num - node_scale_num))
-    pod_after_num=$((pod_before_num - node_scale_num))
+    node_inc="${1:-2}"
+    node_sum=$((node_total - node_inc))
+    pod_sum=$((pod_total - node_inc))
 
     ## 缩容 pod
-    for deployment in "${deployments[@]}"; do
-        _msg log "$me_log" "$deployment scale to number: $pod_after_num"
-        $kubectl_clim scale --replicas=$pod_after_num deploy "$deployment"
-        sleep 5
-    done
+    _msg log "$me_log" "$deployment scale to number: $pod_total"
+    $kubectl_clim scale --replicas=$pod_sum deploy "$deployment"
+    sleep 5
 
     _get_cluster_info
     ## 缩容节点 x 个 ECS
-    _msg log "$me_log" "nodes scale to number: $node_after_num"
+    _msg log "$me_log" "nodes scale to number: $node_sum"
     $cmd_aliyun_p cs POST /clusters/"$cluster_id"/nodepools/"$nodepool_id" \
         --header "Content-Type=application/json;" \
-        --body "{\"count\": -${node_scale_num:-2}}"
+        --body "{\"count\": -${node_inc:-2}}"
 
-    msg_body="缩容服务器数量=$node_scale_num"
+    msg_body="缩容服务器数量=$node_inc"
     _notify_weixin_work
 }
 
-_check_php_load() {
-    _get_node_pod_numbers
-    node_scale_num="${1:-2}"
+_auto_scaling() {
+    # set -xe
+    _get_node_pod "$1"
     ## 单个 pod 消耗 cpu/mem 超载警戒值 1000/1500
-    php_cpu_warn=$((pod_before_num * 1000))
-    php_mem_warn=$((pod_before_num * 1500))
+    pod_cpu_warn=$((pod_total * 1000))
+    pod_mem_warn=$((pod_total * 1500))
     ## 单个 pod 消耗 cpu/mem 低载闲置值 500/500
-    php_cpu_normal=$((pod_before_num * 500))
-    php_mem_normal=$((pod_before_num * 500))
-    ## 对 php pod 的 cpu/mem 求和
+    pod_cpu_normal=$((pod_total * 500))
+    pod_mem_normal=$((pod_total * 500))
+    ## 对当前 pod 的 cpu/mem 求和
     readarray -d " " -t cpu_mem < <(
-        $kubectl_clim top pod -l app.kubernetes.io/name=fly-php71 |
+        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" |
             awk 'NR>1 {s+=int($2); ss+=int($3)} END {printf "%d %d", s, ss}'
     )
-    ## 超载/扩容 业务超载
-    if (("${cpu_mem[0]}" > php_cpu_warn && "${cpu_mem[1]}" > php_mem_warn)); then
-        need_scale_up=true
+    ## 业务超载/扩容
+    if (("${cpu_mem[0]}" > pod_cpu_warn && "${cpu_mem[1]}" > pod_mem_warn)); then
+        _msg log "$me_log" "detected Overload, recommend scale up +2"
+        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
+        # _scale_up 2
+        $kubectl_clim scale --replicas=$((pod_total + 2)) deploy "$deployment"
     fi
-    ## 低载/缩容 业务闲置
-    if (("${cpu_mem[0]}" < php_cpu_normal && "${cpu_mem[1]}" < php_mem_normal)); then
-        ## 节点数量大于日常固定值才缩容
-        if ((node_before_num > node_fixed_num)); then
-            need_scale_down=true
+    ## 业务闲置低载/缩容
+    if [[ "$pod_total" -gt 2 ]]; then
+        if (("${cpu_mem[0]}" < pod_cpu_normal && "${cpu_mem[1]}" < pod_mem_normal)); then
+            _msg log "$me_log" "detected Normal load, recommend scale down to 2"
+            $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
+            # _scale_down 2
+            $kubectl_clim scale --replicas=2 deploy "$deployment"
         fi
-    fi
-
-    if ${need_scale_up:-false}; then
-        _msg log "$me_log" "detected Overload, recommend scale up ${node_scale_num}"
-        $kubectl_clim top pod -l app.kubernetes.io/name=fly-php71 | tee -a "$me_log"
-        #_scale_up ${node_scale_num}
-    fi
-
-    if ${need_scale_down:-false}; then
-        _msg log "$me_log" "detected Normal load, recommend scale down ${node_scale_num}"
-        $kubectl_clim top pod -l app.kubernetes.io/name=fly-php71 | tee -a "$me_log"
-        #_scale_down ${node_scale_num}
     fi
 }
 
@@ -656,9 +641,20 @@ main() {
 
     source "$me_env"
 
-    kubectl_cli="$(command -v kubectl) --kubeconfig $HOME/.kube/config"
-    kubectl_clim="$(command -v kubectl) --kubeconfig $HOME/.kube/config -n main"
-    cmd_aliyun="$(command -v aliyun) --config-path $HOME/.aliyun/config.json"
+    if [ -f "$HOME/.kube/config" ]; then
+        k_conf="$HOME/.kube/config"
+    elif [ -f "$HOME/.config/kube/config" ]; then
+        k_conf="$HOME/.config/kube/config"
+    fi
+    kubectl_cli="$(command -v kubectl) --kubeconfig $k_conf"
+    kubectl_clim="$(command -v kubectl) --kubeconfig $k_conf -n main"
+    if [ -f "$HOME/.aliyun/config.json" ]; then
+        a_conf="$HOME/.aliyun/config.json"
+    elif [ -f "$HOME/.config/aliyun/config.json" ]; then
+        a_conf="$HOME/.config/aliyun/config.json"
+    fi
+
+    cmd_aliyun="$(command -v aliyun) --config-path $a_conf"
     cmd_aliyun_p="$cmd_aliyun -p ${aliyun_profile:? ERR: empty aliyun profile}"
     # $cmd_aliyun --help | grep -m1 Version
 
@@ -688,15 +684,14 @@ main() {
         ;;
     up | --scale-up)
         shift
-        _scale_up "${1:-2}"
+        _scale_up "${2:-fly-php71}"
         ;;
     dn | --scale-down)
         shift
-        _scale_down "${1:-2}"
+        _scale_down "${2:-fly-php71}"
         ;;
-    load | php | --check-load)
-        shift
-        _check_php_load "${1:-2}"
+    auto | --auto-scaling | load)
+        _auto_scaling "${2:-fly-php71}"
         ;;
     cdn | pay | --pay-cdn-bag)
         _pay_cdn_bag "${2}"
