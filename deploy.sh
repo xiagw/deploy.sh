@@ -524,7 +524,6 @@ _deploy_functions_aliyun() {
 EOF
     fi
 
-    # _set_proxy off
     if aliyun -p "${ENV_ALIYUN_PROFILE-}" fc GET /2023-03-30/functions --prefix "${release_name:0:3}" --limit 100 --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "${release_name}$"; then
         _msg time "update function $release_name"
         aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${image_tag}\"}}"
@@ -872,42 +871,37 @@ _renew_cert() {
         case "${dns_type}" in
         dns_gd)
             _msg warn "dns type: Goddady"
-            _set_proxy on
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
             api_goddady="https://api.godaddy.com/v1/domains"
-            domains="$(
-                curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true
-            )"
+            domains="$(curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true)"
+            export GD_Key="${SAVED_GD_Key:-none}"
+            export GD_Secret="${SAVED_GD_Secret:-none}"
             ;;
         dns_cf)
             _msg warn "dns type: cloudflare"
-            _set_proxy on
             _install_flarectl
-            domains="$(
-                flarectl zone list | awk '/active/ {print $3}' || true
-            )"
+            domains="$(flarectl zone list | awk '/active/ {print $3}' || true)"
+            export CF_Token="${SAVED_CF_Token:-none}"
+            export CF_Account_ID="${SAVED_CF_Account_ID:-none}"
             ;;
         dns_ali)
             _msg warn "dns type: aliyun"
             _install_aliyun_cli
-            _set_proxy off
             aliyun configure set \
                 --mode AK \
                 --profile "deploy_${profile_name}" \
                 --region "${SAVED_Ali_region:-none}" \
                 --access-key-id "${SAVED_Ali_Key:-none}" \
                 --access-key-secret "${SAVED_Ali_Secret:-none}"
-            domains="$(
-                aliyun --profile "deploy_${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 | jq -r '.Data.Domain[].DomainName' || true
-            )"
+            domains="$(aliyun --profile "deploy_${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 | jq -r '.Data.Domain[].DomainName' || true)"
+            export Ali_Key=$SAVED_Ali_Key
+            export Ali_Secret=$SAVED_Ali_Secret
             ;;
         dns_tencent)
             _msg warn "dns type: tencent"
             _install_tencent_cli
             tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
-            domains="$(
-                tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true
-            )"
+            domains="$(tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true)"
             ;;
         from_env)
             _msg warn "get domains from env file"
@@ -919,7 +913,6 @@ _renew_cert() {
             ;;
         esac
 
-        _set_proxy on
         /usr/bin/cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
@@ -928,8 +921,6 @@ _renew_cert() {
                 "${acme_cmd}" --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
             else
                 ## create cert / 创建证书
-                export Ali_Key=$SAVED_Ali_Key
-                export Ali_Secret=$SAVED_Ali_Secret
                 "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" || true
             fi
             "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
@@ -952,7 +943,6 @@ _renew_cert() {
         echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}/custom.acme.sh"
     fi
-    _set_proxy off
     _msg time "[cert] renew cert with acme.sh using dns+api"
 
     if ${github_action:-false}; then
