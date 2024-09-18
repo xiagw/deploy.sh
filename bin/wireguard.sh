@@ -245,12 +245,13 @@ What do you want to do?
     6) Update DDNS
     7) Quit
 "
-    until [[ ${MENU_OPTION} =~ ^[1-6]$ ]]; do
-        read -rp "Select an option [1-6]: " MENU_OPTION
+    until [[ ${MENU_OPTION} =~ ^[1-7]$ ]]; do
+        read -rp "Select an option [1-7]: " MENU_OPTION
     done
+    [[ ${MENU_OPTION} == 7 ]] && return
 
     until [[ ${wireguard_network} =~ ^[1-3]$ ]]; do
-        read -rp "Select wireguard network (gitlab|jump|demo): [1-3]: " -e -i1 wireguard_network
+        read -rp "Select wireguard network [gitlab|jump|demo]: [1-3]: " -e -i1 wireguard_network
     done
     if [ "${wireguard_network:-1}" -gt 1 ]; then
         me_data="${me_path}/../data/wireguard${wireguard_network}"
