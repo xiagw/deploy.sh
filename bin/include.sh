@@ -4,57 +4,51 @@
 cmd_date="$(command -v gdate || command -v date)"
 
 _msg() {
-    local color_on=''
+    local color_on
     local color_off='\033[0m' # Text Reset
-    h_m_s="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
-    time_now="$($cmd_date +%Y%m%d-%u-%T.%3N)"
+    time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
+    timestamp="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
-    red | error | erro) color_on='\033[0;31m' ;;
-    green | info) color_on='\033[0;32m' ;;
-    yellow | warning | warn) color_on='\033[0;33m' ;;
-    blue) color_on='\033[0;34m' ;;
+    info) color_on='' ;;
+    yellow | warn | warning) color_on='\033[0;33m' ;;
+    red | error | err) color_on='\033[0;31m' ;;
     purple | question | ques) color_on='\033[0;35m' ;;
+    green) color_on='\033[0;32m' ;;
+    blue) color_on='\033[0;34m' ;;
     cyan) color_on='\033[0;36m' ;;
     orange) color_on='\033[1;33m' ;;
     step)
         ((++STEP))
-        color_on="\033[0;36m[${STEP}] $time_now \033[0m"
-        color_off=" $h_m_s"
+        color_on="\033[0;36m$timestamp - [$STEP] \033[0m"
+        color_off=" - [$time_hms]"
         ;;
     time)
-        color_on="[${STEP}] $time_now "
-        color_off=" $h_m_s"
+        color_on="$timestamp - [${STEP}] "
+        color_off=" - [$time_hms]"
         ;;
     log)
         log_file="$2"
         shift 2
-        echo "$time_now $*" | tee -a "$log_file"
+        echo "$timestamp - $*" | tee -a "$log_file"
         return
         ;;
     *)
         unset color_on color_off
         ;;
     esac
-
     [ "$#" -gt 1 ] && shift
     if [ "${silent_mode:-0}" -eq 1 ]; then
         return
     fi
 
-    printf "${time_now} ${color_on}%s${color_off}\n" "$*"
+    echo -e "${color_on}$*${color_off}"
 }
 
-_get_root() {
+_check_root() {
     case "$(id -u)" in
-    0)
-        unset use_sudo
-        return 0
-        ;;
-    *)
-        use_sudo=sudo
-        return 1
-        ;;
+    0) unset use_sudo && return 0 ;;
+    *) use_sudo=sudo && return 1 ;;
     esac
 }
 
@@ -119,28 +113,31 @@ _get_ip_current() {
     _msg green "get IPv6: $ip6_current"
 }
 
-_get_distribution() {
-    # case "$OSTYPE" in
-    # solaris*) os_type="SOLARIS" ;;
-    # darwin*) os_type="OSX" ;;
-    # linux*) os_type="LINUX" ;;
-    # bsd*) os_type="BSD" ;;
-    # msys*) os_type="WINDOWS" ;;
-    # cygwin*) os_type="ALSOWINDOWS" ;;
-    # *) os_type="unknown" ;;
-    # esac
-
+_check_distribution() {
     if [ -r /etc/os-release ]; then
-        lsb_dist="$(. /etc/os-release && echo "$ID")"
+        source /etc/os-release
+        # shellcheck disable=SC1091,SC2153
+        version_id="$VERSION_ID"
+        lsb_dist="$ID"
         lsb_dist="${lsb_dist,,}"
+    else
+        case "$OSTYPE" in
+        solaris*) lsb_dist="solaris" ;;
+        darwin*) lsb_dist="macos" ;;
+        linux*) lsb_dist="linux" ;;
+        bsd*) lsb_dist="bsd" ;;
+        msys*) lsb_dist="windows" ;;
+        cygwin*) lsb_dist="alsowindows" ;;
+        *) lsb_dist="unknown" ;;
+        esac
     fi
     lsb_dist="${lsb_dist:-unknown}"
-    _msg time "Your distribution is $lsb_dist"
+    _msg time "Your distribution is ${lsb_dist}."
 }
 
 _check_sudo() {
     ${already_check_sudo:-false} && return 0
-    if ! _get_root; then
+    if ! _check_root; then
         if $use_sudo -l -U "$USER"; then
             _msg time "User $USER has permission to execute this script!"
         else
@@ -161,4 +158,40 @@ _check_sudo() {
         return 1
     fi
     already_check_sudo=true
+}
+
+_install_ossutil() {
+    url_html='https://help.aliyun.com/zh/oss/developer-reference/install-ossutil'
+    {
+        # echo "$url_html"
+        echo "$url_html"2
+    } | while read -r line; do
+        if [ "$(uname -o)" = Darwin ]; then
+            url_down=$(curl -fsSL "$line" | grep -o -E 'href="[^\"]+"' | grep -o 'https.*ossutil.*mac-amd64\.zip')
+        else
+            url_down=$(curl -fsSL "$line" | grep -o -E 'href="[^\"]+"' | grep -o 'https.*ossutil.*linux-amd64\.zip')
+        fi
+        curl -o ossutil.zip "$url_down"
+        unzip -o -j ossutil.zip
+        if [[ "$line" == *ossutil2 ]]; then
+            install_path="/usr/local/bin/ossutil"
+        else
+            install_path="/usr/local/bin/ossutil-v1"
+        fi
+        sudo install -m 0755 ossutil $install_path
+    done
+    ossutil-v1 version
+    ossutil version
+}
+
+_install_aliyun_cli() {
+    if [ "$(uname -o)" = Darwin ]; then
+        url_down=$(curl -fsSL 'https://help.aliyun.com/zh/cli/install-cli-on-macos' | grep -o -E 'href="[^\"]+"' | grep -o 'https.*aliyun.*macos.*\.tgz')
+    else
+        url_down=$(curl -fsSL 'https://help.aliyun.com/zh/cli/install-cli-on-linux' | grep -o -E 'href="[^\"]+"' | grep -o 'https.*aliyun-cli.*amd64.tgz')
+    fi
+    curl -o aliyun-cli.tgz "$url_down"
+    tar xzvf aliyun-cli.tgz
+    sudo install -m 0755 aliyun /usr/local/bin/aliyun
+    aliyun --version | head -n 1
 }
