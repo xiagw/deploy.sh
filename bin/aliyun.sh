@@ -151,13 +151,14 @@ _add_rds_account() {
         break
     done
 
-    read -rp "Input RDS account NAME: " read_rds_account
-    rds_account="${read_rds_account:? ERR: empty account name }"
+    read -rp "Input RDS account NAME: " -e -idev2rds read_rds_account
+    rds_account="${read_rds_account:-dev2rds}"
     read -rp "Input account description (chinese name): " read_rds_account_desc
     rds_account_desc="$(date +%F)-${read_rds_account_desc-}"
     _get_random_password 14
 
     ## aliyun rds ResetAccountPassword
+    $cmd_aliyun_p rds DescribeAccounts --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account"
     if _get_yes_no "[+] Do you want ResetAccountPassword? "; then
         $cmd_aliyun_p rds ResetAccountPassword --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }"
     fi
@@ -170,7 +171,7 @@ _add_rds_account() {
         ## 授权
         $cmd_aliyun_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
     fi
-    _msg "$rds_id / Account/Password: $rds_account  /  $password_rand"
+    _msg log "aliyun profile: ${aliyun_profile}, $rds_id / Account/Password: $rds_account  /  $password_rand"
 
     # SET PASSWORD FOR 'huxinye2'@'%' = PASSWORD('xx');
     # ALTER USER 'huxinye2'@'%' IDENTIFIED BY 'xx';
@@ -411,7 +412,7 @@ _add_ram() {
 
     _get_aliyun_profile
     $cmd_aliyun_p ram ListUsers | jq '.Users.User[]'
-    read -rp "Enter account name: " read_account_name
+    read -rp "Enter account name: " -e -i dev2app read_account_name
     acc_name="${read_account_name:-dev2app}"
     if _get_yes_no "Create aliyun RAM user?"; then
         _get_random_password
