@@ -165,7 +165,7 @@ _build_php() {
     locale-gen en_US.UTF-8
 
     case "$PHP_VERSION" in
-    8.1)
+    8.1-disable)
         echo "install PHP from repo of OS..."
         ;;
     *)
