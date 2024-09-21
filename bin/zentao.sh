@@ -41,14 +41,27 @@ _add_account() {
 _get_project() {
     doing_path="${zen_project_path:? ERR: empty path}"
     closed_path="${doing_path}/已关闭"
-    file_tmp=$(mktemp)
+    get_project_json=$(mktemp)
     if [[ ! -d "$doing_path" ]]; then
         echo "not found path: $doing_path"
         return 1
     fi
     ## 获取项目列表
-    $curl_opt -H "token:${zen_token}" "${zen_api}/projects?limit=1000" >"$file_tmp"
-    # echo "Total projects: $(jq -r '.total' "$file_tmp")"
+    case "${zen_get_metho:-api}" in
+    api)
+        $curl_opt -H "token:${zen_token}" "${zen_api}/projects?limit=1000" >"$get_project_json"
+        # echo "Total projects: $(jq -r '.total' "$get_project_json")"
+        ;;
+    db)
+        tmp_file="$(mktemp)"
+        get_project_list="$(mktemp)"
+        cat >"$tmp_file" <<'EOF'
+SET SESSION group_concat_max_len =1024*50;
+select concat('[', group_concat(json_object('id',id,'name',name,'status',status)), ']') from zt_project where deleted = '0' and parent = '0';
+EOF
+        mysql zentao <"$tmp_file" >"$get_project_list"
+        ;;
+    esac
 
     while read -r line; do
         project_id="$(echo "$line" | awk -F';' '{print $1}')"
@@ -88,10 +101,10 @@ _get_project() {
             fi
         fi
         # sleep 5
-    done < <(jq -r '.projects[] | (.id|tostring) + ";" + .name + ";" + .status' "$file_tmp")
-    # jq -c '.projects[] | select (.status | contains("doing","closed"))' "$file_tmp" |
+    done < <(jq -r '.projects[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
+    # jq -c '.projects[] | select (.status | contains("doing","closed"))' "$get_project_json" |
     #         jq -r '(.id|tostring) + "-" + .name + ";" + .status'
-    rm -f "$file_tmp"
+    rm -f "$get_project_json"
 }
 
 main() {
