@@ -913,18 +913,17 @@ _renew_cert() {
             ;;
         esac
 
-        /usr/bin/cp -vf "$file" "${acme_home}/account.conf"
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
             if "${acme_cmd}" list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
+                "${acme_cmd}" --accountconf "$file" --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" || true
+                "${acme_cmd}" --accountconf "$file" --issue -d "${domain}" -d "*.${domain}" --dns $dns_type --renew-hook "$run_touch_file" || true
             fi
-            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
-            "${acme_cmd}" -d "${domain}" --install-cert --key-file "${acme_home}/dest/${domain}.key" --fullchain-file "${acme_home}/dest/${domain}.pem" || true
+            "${acme_cmd}" --accountconf "$file" -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
+            "${acme_cmd}" --accountconf "$file" -d "${domain}" --install-cert --key-file "${acme_home}/dest/${domain}.key" --fullchain-file "${acme_home}/dest/${domain}.pem" || true
         done
     done
     ## deploy with gitlab CI/CD,
