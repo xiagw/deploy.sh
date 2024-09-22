@@ -9,6 +9,7 @@ else
 fi
 
 me_path="$(dirname "$(readlink -f "$0")")"
+
 if command -v docker >/dev/null 2>&1; then
     cmd=$(command -v docker)
     cmd_opt="$cmd build --progress=plain"
@@ -24,6 +25,7 @@ image_repo=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
 for ver in "${vers[@]}"; do
     ## build base
     $cmd_opt -f Dockerfile.php.base -t $image_repo:"php-${ver}-base" --build-arg PHP_VERSION="$ver" --build-arg IN_CHINA="true" "$me_path"
+    $cmd push $image_repo:"php-${ver}-base"
     ## build for laradock
     echo "FROM $image_repo:php-${ver}-base" >Dockerfile.php
     $cmd_opt -f Dockerfile.php -t $image_repo:"php-$ver" "$me_path"
