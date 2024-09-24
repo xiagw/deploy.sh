@@ -1,10 +1,4 @@
-## arch: x86_64
-ARG IMAGE_NAME=redis:latest
-
-## arch: arm64
-# ARG IMAGE_NAME=arm64v8/redis:latest
-
-FROM ${IMAGE_NAME}
+FROM redis:latest
 
 ARG TZ=UTC
 

@@ -3,8 +3,6 @@
 # ARG IMAGE_JDK=amazoncorretto:8
 # ARG IMAGE_JDK=amazoncorretto:11
 ARG IMAGE_JDK=amazoncorretto:17
-## arch: arm64
-# ARG IMAGE_JDK=arm64v8/openjdk:8
 FROM ${IMAGE_JDK}
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main

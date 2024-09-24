@@ -1,9 +1,6 @@
 ## arch: x86_64
-# ARG IMAGE_NAME=mysql:8
-ARG IMAGE_NAME=mysql:5.7
-## arch: arm64
-# ARG IMAGE_NAME=arm64v8/mysql:8
-# ARG IMAGE_NAME=biarms/mysql:5.7
+ARG IMAGE_NAME=mysql:8.0
+# ARG IMAGE_NAME=mysql:5.7
 FROM ${IMAGE_NAME}
 ARG IN_CHINA=false
 ARG TZ=UTC

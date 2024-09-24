@@ -1,14 +1,10 @@
-#    docker build stage 1    #
-## arch: x86_64
+#### docker build stage 1 ####
 # ARG IMAGE_MVN=maven:3.8-openjdk-17
 ARG IMAGE_MVN=maven:3.8-jdk-8
 ARG IMAGE_JDK=openjdk:8
 # ARG IMAGE_JDK=amazoncorretto:8
 # ARG IMAGE_JDK=amazoncorretto:11
 # ARG IMAGE_JDK=amazoncorretto:17
-## arch: arm64
-# ARG IMAGE_MVN=arm64v8/maven:3.6-jdk-8
-# ARG IMAGE_JDK=arm64v8/openjdk:8
 FROM ${IMAGE_MVN} AS builder
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
@@ -24,7 +20,7 @@ RUN --mount=type=cache,target=/var/maven/.m2 \
     ## 假如此处中断，表明 maven build 失败，请检查代码
 
 
-#    docker build stage 2    #
+#### docker build stage 2 ####
 FROM ${IMAGE_JDK}
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main

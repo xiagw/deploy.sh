@@ -1,8 +1,4 @@
-## arch: x86_64
-ARG IMAGE_NAME=ubuntu:22.04
-## arch: arm64
-# ARG IMAGE_NAME=arm64v8/ubuntu:22.04
-FROM ${IMAGE_NAME}
+FROM ubuntu:22.04
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
 ARG PHP_VERSION=8.1

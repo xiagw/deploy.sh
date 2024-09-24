@@ -2,8 +2,6 @@
 ARG IMAGE_NAME=node:18-slim
 # ARG IMAGE_NAME=node:20-slim
 # ARG IMAGE_NAME=node:21-slim
-## arch: arm64
-# ARG IMAGE_NAME=arm64v8/openjdk:8
 FROM ${IMAGE_NAME}
 ARG IN_CHINA=true
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
