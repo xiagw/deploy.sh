@@ -164,20 +164,13 @@ _build_php() {
     fi
     locale-gen en_US.UTF-8
 
+    echo "install PHP from ppa:ondrej/php..."
+    $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
+    LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
     case "$PHP_VERSION" in
-    8.1-disable)
-        echo "install PHP from repo of OS..."
-        ;;
-    *)
-        echo "install PHP from ppa:ondrej/php..."
-        $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
-        LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
-        case "$PHP_VERSION" in
-        8.3) $cmd_pkg_opt php"${PHP_VERSION}"-common ;;
-        8.*) : ;;
-        *) $cmd_pkg_opt php"${PHP_VERSION}"-mcrypt ;;
-        esac
-        ;;
+    8.3) $cmd_pkg_opt php"${PHP_VERSION}"-common ;;
+    8.*) : ;;
+    *) $cmd_pkg_opt php"${PHP_VERSION}"-mcrypt ;;
     esac
 
     $cmd_pkg upgrade -yqq
@@ -420,10 +413,13 @@ _build_mysql() {
         sed -i '/skip-host-cache/d' /etc/my.cnf
     fi
 
-    printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >"$HOME"/.my.cnf
-    printf "export LANG=C.UTF-8\alias l='ls -al'" >"$HOME"/.bashrc
-
-    chmod +x /opt/*.sh
+    if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
+        printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >"$HOME"/.my.cnf
+        printf "export LANG=C.UTF-8\alias l='ls -al'" >"$HOME"/.bashrc
+    fi
+    if ls -A /opt/*.sh; then
+        chmod +x /opt/*.sh
+    fi
 }
 
 _build_redis() {
@@ -490,7 +486,7 @@ main() {
         _build_jdk_runtime
     elif command -v node; then
         _build_node
-    elif command -v python; then
+    elif command -v python && ! command -v mysqld; then
         _build_python
     elif command -v mysql; then
         _build_mysql

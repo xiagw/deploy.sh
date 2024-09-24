@@ -1,7 +1,7 @@
 ## arch: x86_64
 ARG IMAGE_NAME=nginx:stable-alpine
 ## arch: arm64
-# ARG IMAGE_NAME=arm64v8/nginx
+# ARG IMAGE_NAME=arm64v8/nginx:stable-alpine
 FROM ${IMAGE_NAME}
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
