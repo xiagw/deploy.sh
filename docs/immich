@@ -118,6 +118,7 @@ _parse_params() {
         -f | --fix-time) flag_fixtime=1 ;;
         -n | --dry-run) flag_dryrun=1 ;;
         -u | --upload) flag_upload=1 ;;
+        -k | --upgrade-apk) flag_upgrade=1 ;;
         -p | --path)
             param="${2-}"
             shift
@@ -389,6 +390,14 @@ _immich_upload() {
         ghcr.io/immich-app/immich-cli:latest upload "$import_path" "${args[@]}"
 }
 
+_upgrade_immich_apk() {
+    url_down="$(curl -fsSL https://api.github.com/repos/immich-app/immich/releases/latest | jq -r '.assets[].browser_download_url' | grep 'app-release.apk' | tail -n1)"
+    curl -Lo immich.apk "$url_down"
+    ossutil cp -f immich.apk oss://"${oss_bucket_name:? empty bucket name}"/d/immich.apk
+    rm -f immich.apk
+}
+
+
 main() {
     _color
     _parse_params "$@"
@@ -415,9 +424,11 @@ main() {
         param="$(readlink -f .)"
     fi
 
+    [ "${flag_upgrade-}" = 1 ] && _upgrade_immich_apk
     [ "${flag_backup-}" = 1 ] && _backup_with_borg
     [ "${flag_fixtime-}" = 1 ] && _set_file_time "$param"
     [ "${flag_upload-}" = 1 ] && _immich_upload "$param"
+
 }
 
 main "$@"
