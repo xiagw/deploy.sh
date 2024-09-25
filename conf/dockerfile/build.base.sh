@@ -3,9 +3,9 @@
 set -xe
 
 if [[ -z "$1" ]]; then
-    vers=(5.6 7.1 7.3 7.4 8.1 8.2 8.3)
+    ver=$(echo -e "5.6\n7.1\n7.3\n7.4\n8.1\n8.2\n8.3" | fzf)
 else
-    vers=("$1")
+    ver="$1"
 fi
 
 me_path="$(dirname "$(readlink -f "$0")")"
@@ -22,12 +22,10 @@ else
 fi
 
 image_repo=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
-for ver in "${vers[@]}"; do
-    ## build base
-    $cmd_opt -f Dockerfile.php.base -t $image_repo:"php-${ver}-base" --build-arg PHP_VERSION="$ver" --build-arg IN_CHINA="true" "$me_path"
-    $cmd push $image_repo:"php-${ver}-base"
-    ## build for laradock
-    echo "FROM $image_repo:php-${ver}-base" >Dockerfile.php
-    $cmd_opt -f Dockerfile.php -t $image_repo:"php-$ver" "$me_path"
-    $cmd push $image_repo:"php-$ver"
-done
+## build base
+$cmd_opt -f Dockerfile.php.base -t $image_repo:"php-${ver}-base" --build-arg PHP_VERSION="$ver" --build-arg IN_CHINA="true" "$me_path"
+$cmd push $image_repo:"php-${ver}-base"
+## build for laradock
+echo "FROM $image_repo:php-${ver}-base" >Dockerfile.php
+$cmd_opt -f Dockerfile.php -t $image_repo:"php-$ver" "$me_path"
+$cmd push $image_repo:"php-$ver"
