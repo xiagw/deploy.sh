@@ -424,6 +424,7 @@ _create_helm_chart() {
     fi
     ## disable serviceAccount
     sed -i -e "/create: true/s/true/false/" "$file_values"
+    ## resources limit
     # sed -i -e "/^resources: {}/s//resources:/" "$file_values"
     # sed -i -e "/^resources:/ a \    cpu: 500m" "$file_values"
     # sed -i -e "/^resources:/ a \  requests:" "$file_values"
@@ -460,19 +461,19 @@ _create_helm_chart() {
 
     ## change service.yaml
     sed -i -e "s@targetPort: http@targetPort: {{ .Values.service.port }}@" "$file_svc"
-    sed -i -e '/  ports:/ a \    {{- end }}' "$file_svc"
-    sed -i -e '/  ports:/ a \      name: http2' "$file_svc"
-    sed -i -e '/  ports:/ a \      protocol: TCP' "$file_svc"
-    sed -i -e '/  ports:/ a \      targetPort: {{ .Values.service.port2 }}' "$file_svc"
-    sed -i -e '/  ports:/ a \    - port: {{ .Values.service.port2 }}' "$file_svc"
-    sed -i -e '/  ports:/ a \    {{- if .Values.service.port2 }}' "$file_svc"
+    sed -i -e '/name: http$/ a \    {{- end }}' "$file_svc"
+    sed -i -e '/name: http$/ a \      name: http2' "$file_svc"
+    sed -i -e '/name: http$/ a \      protocol: TCP' "$file_svc"
+    sed -i -e '/name: http$/ a \      targetPort: {{ .Values.service.port2 }}' "$file_svc"
+    sed -i -e '/name: http$/ a \    - port: {{ .Values.service.port2 }}' "$file_svc"
+    sed -i -e '/name: http$/ a \    {{- if .Values.service.port2 }}' "$file_svc"
 
     ## change deployment.yaml
-    sed -i -e '/  ports:/ a \            {{- end }}' "$file_deploy"
-    sed -i -e '/  ports:/ a \              protocol: TCP' "$file_deploy"
-    sed -i -e '/  ports:/ a \              containerPort: {{ .Values.service.port2 }}' "$file_deploy"
-    sed -i -e '/  ports:/ a \            - name: http2' "$file_deploy"
-    sed -i -e '/  ports:/ a \            {{- if .Values.service.port2 }}' "$file_deploy"
+    sed -i -e '/  protocol: TCP/ a \            {{- end }}' "$file_deploy"
+    sed -i -e '/  protocol: TCP/ a \              containerPort: {{ .Values.service.port2 }}' "$file_deploy"
+    sed -i -e '/  protocol: TCP/ a \            - name: http2' "$file_deploy"
+    sed -i -e '/  protocol: TCP/ a \            {{- if .Values.service.port2 }}' "$file_deploy"
+    sed -i -e '/name: http2/ a \              protocol: TCP' "$file_deploy"
 
     ## dns config
     (
