@@ -393,7 +393,7 @@ _immich_upload() {
 _upgrade_immich_apk() {
     url_down="$(curl -fsSL https://api.github.com/repos/immich-app/immich/releases/latest | jq -r '.assets[].browser_download_url' | grep 'app-release.apk' | tail -n1)"
     curl -Lo immich.apk "$url_down"
-    ossutil cp -f immich.apk oss://"${oss_bucket_name:? empty bucket name}"/d/immich.apk
+    ossutil cp -f immich.apk oss://"${ENV_OSS_BUCKET_NAME:? empty bucket name}"/d/immich.apk
     rm -f immich.apk
 }
 
