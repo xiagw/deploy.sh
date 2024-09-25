@@ -13,4 +13,4 @@ RUN --mount=type=cache,target=/var/cache/apk \
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then sh /opt/onbuild.sh; else :; fi
-## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:nginx-alpine-base -f Dockerfile.nginx --progress=plain --build-arg IN_CHINA="true" .
+## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:nginx-alpine-base --push -f Dockerfile.nginx --progress=plain --build-arg IN_CHINA="true" .
