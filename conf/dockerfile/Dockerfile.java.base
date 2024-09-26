@@ -1,9 +1,9 @@
-## arch: x86_64
-# ARG IMAGE_JDK=openjdk:8
-# ARG IMAGE_JDK=amazoncorretto:8
-# ARG IMAGE_JDK=amazoncorretto:11
-ARG IMAGE_JDK=amazoncorretto:17
-FROM ${IMAGE_JDK}
+# ARG JDK_IMAGE=openjdk
+ARG JDK_IMAGE=amazoncorretto
+ARG JDK_VERSION=8
+# ARG JDK_VERSION=17
+# ARG JDK_VERSION=21
+FROM ${JDK_IMAGE}:${JDK_VERSION}
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG TZ=Asia/Shanghai
