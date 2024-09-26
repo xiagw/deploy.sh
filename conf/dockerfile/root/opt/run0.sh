@@ -14,6 +14,7 @@ for u in spring node; do
         echo "Found normal user [$u]..."
         su $u -c "bash /opt/run.sh"
         run_once=true
+        break
     fi
 done
 

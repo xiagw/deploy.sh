@@ -1,11 +1,13 @@
 #### docker build stage 1 ####
-# ARG IMAGE_MVN=maven:3.8-openjdk-17
-ARG IMAGE_MVN=maven:3.8-jdk-8
-ARG IMAGE_JDK=openjdk:8
-# ARG IMAGE_JDK=amazoncorretto:8
-# ARG IMAGE_JDK=amazoncorretto:11
-# ARG IMAGE_JDK=amazoncorretto:17
-FROM ${IMAGE_MVN} AS builder
+
+ARG MVN_IMAGE=maven:3.8-jdk-8
+# ARG MVN_IMAGE=maven:3.8-openjdk-17
+ARG JDK_IMAGE=openjdk
+# ARG JDK_IMAGE=amazoncorretto
+ARG JDK_VERSION=8
+# ARG JDK_VERSION=17
+# ARG JDK_VERSION=21
+FROM ${MVN_IMAGE} AS builder
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG MVN_DEBUG=off
@@ -21,7 +23,7 @@ RUN --mount=type=cache,target=/var/maven/.m2 \
 
 
 #### docker build stage 2 ####
-FROM ${IMAGE_JDK}
+FROM ${JDK_IMAGE}:${JDK_VERSION}
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG TZ=Asia/Shanghai

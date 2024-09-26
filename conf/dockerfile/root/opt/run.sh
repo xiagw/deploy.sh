@@ -116,9 +116,13 @@ _start_php() {
 }
 
 _start_node() {
-    command -v npm || return
-    cd /app && npm run start &
-    pids+=("$!")
+    if command -v npm; then
+        cd /app && npm run start &
+        pids+=("$!")
+    else
+        echo "Not found command npm. exit 1"
+        return 1
+    fi
 }
 
 _schedule_upgrade() {
@@ -234,6 +238,7 @@ main() {
     if [[ "$1" == debug || -f "$app_path"/.debug ]]; then
         start_debug=1
     fi
+    ## 统一兼容启动 start nodejs
     _start_node "$@"
     ## 统一兼容启动 start php
     _start_php "$@"
