@@ -23,6 +23,6 @@ fi
 
 tag=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-php-fpm-${ver}
 ## build base
-$cmd_opt -f Dockerfile.php.base -t "$tag" --build-arg PHP_VERSION="$ver" --build-arg IN_CHINA="true" "$me_path"
+$cmd_opt -f Dockerfile.php.base -t "$tag" --build-arg HTTP_PROXY "${http_proxy-}" --build-arg HTTPS_PROXY "${http_proxy-}" --build-arg PHP_VERSION="$ver" --build-arg IN_CHINA="true" "$me_path"
 $cmd push "$tag"
 
