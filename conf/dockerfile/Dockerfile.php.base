@@ -9,13 +9,15 @@ ENV PHP_VERSION=${PHP_VERSION}
 EXPOSE 80 8080 9000
 WORKDIR /app
 CMD ["bash", "/opt/run0.sh"]
-# RUN --mount=type=cache,target=/var/lib/apt/lists \
-#     --mount=type=cache,target=/var/cache/apt \
-RUN --mount=type=bind,target=/src,rw \
+
+# RUN --mount=type=bind,target=/src,rw \
+RUN --mount=type=cache,target=/var/lib/apt/lists \
+    --mount=type=cache,target=/var/cache/apt \
+    --mount=type=bind,target=/src,rw \
     if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
     elif [ -f build.sh ]; then bash build.sh; \
     else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi
-## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:php-8.1-base -f Dockerfile.php.base --progress=plain --build-arg IN_CHINA="true" .
+

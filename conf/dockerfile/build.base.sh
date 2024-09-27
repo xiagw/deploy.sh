@@ -21,11 +21,8 @@ else
     exit 1
 fi
 
-image_repo=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
+tag=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-php-fpm-${ver}
 ## build base
-$cmd_opt -f Dockerfile.php.base -t $image_repo:"php-${ver}-base" --build-arg PHP_VERSION="$ver" --build-arg IN_CHINA="true" "$me_path"
-$cmd push $image_repo:"php-${ver}-base"
-## build for laradock
-echo "FROM $image_repo:php-${ver}-base" >Dockerfile.php
-$cmd_opt -f Dockerfile.php -t $image_repo:"php-$ver" "$me_path"
-$cmd push $image_repo:"php-$ver"
+$cmd_opt -f Dockerfile.php.base -t "$tag" --build-arg PHP_VERSION="$ver" --build-arg IN_CHINA="true" "$me_path"
+$cmd push "$tag"
+
