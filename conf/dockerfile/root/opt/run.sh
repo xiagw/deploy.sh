@@ -99,7 +99,7 @@ _start_php() {
         [ -x "$fpm" ] && $fpm -F &
         pids+=("$!")
         if pgrep -a -i -n php-fpm; then
-            _msg "start php-fpm success."
+            _msg "start php-fpm OK."
         else
             _msg "start php-fpm FAIL."
         fi
@@ -120,7 +120,7 @@ _start_node() {
         cd /app && npm run start &
         pids+=("$!")
     else
-        echo "Not found command npm. exit 1"
+        echo "Not found command npm."
         return 1
     fi
 }
