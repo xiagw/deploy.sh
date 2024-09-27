@@ -12,7 +12,7 @@ me_path="$(dirname "$(readlink -f "$0")")"
 
 if command -v docker >/dev/null 2>&1; then
     cmd=$(command -v docker)
-    cmd_opt="$cmd build --progress=plain"
+    cmd_opt="$cmd build --progress=plain --platform linux/amd64,linux/arm64"
 elif command -v podman >/dev/null 2>&1; then
     cmd=$(command -v podman)
     cmd_opt="$cmd build --progress=plain --force-rm --format=docker"
