@@ -328,7 +328,7 @@ _build_image() {
     ## build container image
     $build_cmd build $build_cmd_opt --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
     ## push image to ttl.sh
-    if [[ "${MAN_TTL:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
+    if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
         echo "  $build_cmd tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
