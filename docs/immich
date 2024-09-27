@@ -4,7 +4,7 @@ _cleanup() {
     trap - SIGINT SIGTERM ERR EXIT
     # script cleanup here
     # rm -rf "${param:-empty-var-for-path}"
-    rm -f "${tmp_file-}"
+    test -f "${tmp_file-}" && rm -f "${tmp_file-}"
 }
 
 _loading_rotate() {
