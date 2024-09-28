@@ -1425,7 +1425,7 @@ _inject_files() {
     fi
 
     build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-    local repository_cn=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
+    local mirror=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
     ## from data/deploy.env， 使用 data/ 全局模板文件替换项目文件
     ${arg_disable_inject:-false} && ENV_INJECT=keep
     echo ENV_INJECT: ${ENV_INJECT:-keep}
@@ -1437,7 +1437,7 @@ _inject_files() {
     overwrite)
         ## 代码库内已存在 Dockerfile 不覆盖
         if [[ -f "${project_dockerfile}" ]]; then
-            echo "skip cp Dockerfile."
+            echo "found Dockerfile in project path, skip cp."
         else
             if [[ -f "${inject_dockerfile_1}" ]]; then
                 cp -avf "${inject_dockerfile_1}" "${project_dockerfile}"
@@ -1447,7 +1447,7 @@ _inject_files() {
         fi
         ## build image files 打包镜像时需要注入的文件
         if [ -d "${gitlab_project_dir}/root/opt" ]; then
-            echo "found exist ${gitlab_project_dir}/root/opt"
+            echo "found exist path root/opt in project path, skip cp"
         else
             cp -af "${inject_root_path}" "$gitlab_project_dir/"
         fi
@@ -1466,16 +1466,16 @@ _inject_files() {
                 [ -f "$f" ] || continue
                 case "$(grep -i 'jdk_version=' "${f}")" in
                 *=1.7 | *=7)
-                    sed -i -e "s@IMAGE_MVN=.*@IMAGE_MVN=${repository_cn}:maven-3.6-jdk-7@g" -e "s@IMAGE_JDK=.*@IMAGE_JDK=${repository_cn}:openjdk-7@g" "${project_dockerfile}"
+                    sed -i -e "s@MVN_IMAGE=.*@MVN_IMAGE=${mirror}:maven-3.6-jdk-7@g" -e "s@JDK_IMAGE=.*@JDK_IMAGE=${mirror}:openjdk-7@g" "${project_dockerfile}"
                     ;;
                 *=1.8 | *=8)
-                    sed -i -e "s@IMAGE_MVN=.*@IMAGE_MVN=${repository_cn}:maven-3.8-jdk-8@g" -e "s@IMAGE_JDK=.*@IMAGE_JDK=${repository_cn}:openjdk-8@g" "${project_dockerfile}"
+                    sed -i -e "s@MVN_IMAGE=.*@MVN_IMAGE=${mirror}:maven-3.8-jdk-8@g" -e "s@JDK_IMAGE=.*@JDK_IMAGE=${mirror}:amazoncorretto-8@g" "${project_dockerfile}"
                     ;;
                 *=11)
-                    sed -i -e "s@IMAGE_MVN=.*@IMAGE_MVN=${repository_cn}:maven-3.8-jdk-11@g" -e "s@IMAGE_JDK=.*@IMAGE_JDK=${repository_cn}:amazoncorretto-11@g" "${project_dockerfile}"
+                    sed -i -e "s@MVN_IMAGE=.*@MVN_IMAGE=${mirror}:maven-3.8-jdk-11@g" -e "s@JDK_IMAGE=.*@JDK_IMAGE=${mirror}:amazoncorretto-11@g" "${project_dockerfile}"
                     ;;
                 *=17)
-                    sed -i -e "s@IMAGE_MVN=.*@IMAGE_MVN=${repository_cn}:maven-3.8-jdk-17@g" -e "s@IMAGE_JDK=.*@IMAGE_JDK=${repository_cn}:amazoncorretto-17@g" "${project_dockerfile}"
+                    sed -i -e "s@MVN_IMAGE=.*@MVN_IMAGE=${mirror}:maven-3.8-jdk-17@g" -e "s@JDK_IMAGE=.*@JDK_IMAGE=${mirror}:amazoncorretto-17@g" "${project_dockerfile}"
                     ;;
                 *) : ;;
                 esac
