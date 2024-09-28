@@ -1381,22 +1381,35 @@ _generate_apidoc() {
 _inject_files() {
     [ "${exec_inject_files:-true}" = "false" ] && return 0
     _msg step "[inject] from ${me_path_data}/inject/"
-    ## backend (PHP/Java/Python) inject files
-    ## 方便运维人员替换项目内文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
-    local inject_dir="${me_path_data}/inject/${gitlab_project_name}"
-    local inject_dir_env="${me_path_data}/inject/${gitlab_project_name}/${env_namespace}"
-    if [ -d "$inject_dir_env" ]; then
-        _msg warning "found $inject_dir_env, sync to ${gitlab_project_dir}/"
-        rsync -av "$inject_dir_env"/ "${gitlab_project_dir}"/
-    elif [ -d "$inject_dir" ]; then
-        _msg warning "found $inject_dir, sync to ${gitlab_project_dir}/"
-        rsync -av "$inject_dir"/ "${gitlab_project_dir}"/
-    fi
 
-    ## frontend (VUE) .env file
+    ## 替换代码文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
+    local inject_code_path="${me_path_data}/inject/${gitlab_project_name}"
+    local inject_code_path_branch="${me_path_data}/inject/${gitlab_project_name}/${env_namespace}"
+    ## 项目代码库内已存在的 Dockerfile
+    local project_dockerfile="${gitlab_project_dir}/Dockerfile"
+    ## 打包镜像时注入的 Dockerfile 优先查找 data/ 目录 其次查找 conf/ 目录
+    local inject_dockerfile_1="${me_data_dockerfile}/Dockerfile.${project_lang}"
+    local inject_dockerfile_2="${me_dockerfile}/Dockerfile.${project_lang}"
+    ## 打包镜像时注入的 root/opt/ 目录
+    local inject_root_path="${me_dockerfile}/root"
+    ## 打包镜像时注入的 settings.xml 文件
+    local inject_setting="${me_data_dockerfile}/settings.xml"
+    ## 打包镜像时注入的 .dockerignore 文件
+    local inject_dockerignore="${me_dockerfile}/.dockerignore"
+    ## 打包镜像时注入的 /opt/init.sh 文件 容器启动时初始化配置文件 init.sh 可以注入 /etc/hosts 等配置
+    local inject_init="${me_data_dockerfile}"/init.sh
+    ## replace code files 替换代码文件
+    if [ -d "$inject_code_path_branch" ]; then
+        _msg warning "found $inject_code_path_branch, sync to ${gitlab_project_dir}/"
+        rsync -av "$inject_code_path_branch"/ "${gitlab_project_dir}"/
+    elif [ -d "$inject_code_path" ]; then
+        _msg warning "found $inject_code_path, sync to ${gitlab_project_dir}/"
+        rsync -av "$inject_code_path"/ "${gitlab_project_dir}"/
+    fi
+    ## frontend (VUE) .env file, 替换前端代码内配置文件
     if [[ "$project_lang" == node ]]; then
-        config_env_path="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}-*")"
-        for file in $config_env_path; do
+        env_files="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}-*")"
+        for file in $env_files; do
             [[ -f "$file" ]] || continue
             echo "Found $file"
             if [[ "$file" =~ 'config' ]]; then
@@ -1406,49 +1419,47 @@ _inject_files() {
             fi
         done
     fi
+    ## docker ignore file / 使用全局模板文件替换项目文件
+    if [[ -f "${project_dockerfile}" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
+        cp -avf "${inject_dockerignore}" "${gitlab_project_dir}/"
+    fi
 
+    build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+    local repository_cn=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
     ## from data/deploy.env， 使用 data/ 全局模板文件替换项目文件
     ${arg_disable_inject:-false} && ENV_INJECT=keep
     echo ENV_INJECT: ${ENV_INJECT:-keep}
-    build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-    project_dockerfile="${gitlab_project_dir}/Dockerfile"
-    local repository_cn=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
+
     case ${ENV_INJECT:-keep} in
     keep)
         echo '<skip>'
         ;;
     overwrite)
+        ## 代码库内已存在 Dockerfile 不覆盖
         if [[ -f "${project_dockerfile}" ]]; then
             echo "skip cp Dockerfile."
         else
-            ## Dockerfile 优先查找 data/ 目录
-            if [[ -f "${me_data_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                cp -avf "${me_data_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
-            ## Dockerfile 其次查找 conf/ 目录
-            elif [[ -f "${me_dockerfile}/Dockerfile.${project_lang}" ]]; then
-                cp -avf "${me_dockerfile}/Dockerfile.${project_lang}" "${project_dockerfile}"
+            if [[ -f "${inject_dockerfile_1}" ]]; then
+                cp -avf "${inject_dockerfile_1}" "${project_dockerfile}"
+            elif [[ -f "${inject_dockerfile_2}" ]]; then
+                cp -avf "${inject_dockerfile_2}" "${project_dockerfile}"
             fi
         fi
-
+        ## build image files 打包镜像时需要注入的文件
         if [ -d "${gitlab_project_dir}/root/opt" ]; then
             echo "found exist ${gitlab_project_dir}/root/opt"
         else
-            cp -af "${me_dockerfile}/root" "$gitlab_project_dir/"
+            cp -af "${inject_root_path}" "$gitlab_project_dir/"
         fi
-
-        ## inject files for build container image
-        if [[ -f "${me_data_dockerfile}"/init.sh && -d "$gitlab_project_dir/root/opt/" ]]; then
-            cp -avf "${me_data_dockerfile}"/init.sh "$gitlab_project_dir/root/opt/"
+        if [[ -f "${inject_init}" && -d "$gitlab_project_dir/root/opt/" ]]; then
+            cp -avf "${inject_init}" "$gitlab_project_dir/root/opt/"
         fi
 
         case "${project_lang}" in
-        node) : ;;
         java)
             ## java settings.xml 优先查找 data/ 目录
-            if [[ -f "${me_data_dockerfile}/settings.xml" ]]; then
-                cp -avf "${me_data_dockerfile}/settings.xml" "${gitlab_project_dir}/"
-            elif _is_china; then
-                cp -avf "${me_dockerfile}/root/opt/settings.xml" "${gitlab_project_dir}/"
+            if [[ -f "${inject_setting}" ]]; then
+                cp -avf "${inject_setting}" "${gitlab_project_dir}/"
             fi
             ## find jdk version
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
@@ -1470,13 +1481,13 @@ _inject_files() {
                 esac
                 case "$(grep -i 'INSTALL_.*=' "${f}")" in
                 INSTALL_FFMPEG=true)
-                    sed -i -e "s/INSTALL_FFMPEG=false/INSTALL_FFMPEG=true/g" "${project_dockerfile}"
+                    sed -i -e "/INSTALL_FFMPEG=/s/false/true/g" "${project_dockerfile}"
                     ;;
                 INSTALL_FONTS=true)
-                    sed -i -e "s/INSTALL_FONTS=false/INSTALL_FONTS=true/g" "${project_dockerfile}"
+                    sed -i -e "/INSTALL_FONTS=/s/false/true/g" "${project_dockerfile}"
                     ;;
                 INSTALL_LIBREOFFICE=true)
-                    sed -i -e "s/INSTALL_LIBREOFFICE=false/INSTALL_LIBREOFFICE=true/g" "${project_dockerfile}"
+                    sed -i -e "/INSTALL_LIBREOFFICE=/s/false/true/g" "${project_dockerfile}"
                     ;;
                 *) : ;;
                 esac
@@ -1490,33 +1501,11 @@ _inject_files() {
         rm -f "${project_dockerfile}"
         ;;
     create)
+        ## TODO
         echo "Generating docker-compose.yml (enable deploy docker-compose)"
         echo '## deploy with docker-compose' >>"${gitlab_project_dir}/docker-compose.yml"
         ;;
     esac
-    ## docker ignore file / 使用全局模板文件替换项目文件
-    if [[ -f "${project_dockerfile}" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
-        cp -avf "${me_dockerfile}/.dockerignore" "${gitlab_project_dir}/"
-    fi
-
-    ## flyway files sql & conf
-    for sql in ${ENV_FLYWAY_SQL:-docs/sql} flyway_sql doc/sql sql; do
-        path_flyway_sql_proj="${gitlab_project_dir}/${sql}"
-        if [[ -d "${path_flyway_sql_proj}" ]]; then
-            exec_deploy_flyway=true
-            copy_flyway_file=true
-            break
-        fi
-    done
-
-    if ${copy_flyway_file:-false}; then
-        path_flyway_conf="$gitlab_project_dir/flyway_conf"
-        path_flyway_sql="$gitlab_project_dir/flyway_sql"
-        [[ -d "$path_flyway_sql_proj" && ! -d "$path_flyway_sql" ]] && rsync -a "$path_flyway_sql_proj/" "$path_flyway_sql/"
-        [[ -d "$path_flyway_conf" ]] || mkdir -p "$path_flyway_conf"
-        [[ -d "$path_flyway_sql" ]] || mkdir -p "$path_flyway_sql"
-        [[ -f "${gitlab_project_dir}/Dockerfile.flyway" ]] || cp -avf "${me_dockerfile}/Dockerfile.flyway" "${gitlab_project_dir}/"
-    fi
 }
 
 _set_deploy_conf() {
@@ -1540,7 +1529,7 @@ _set_deploy_conf() {
         chmod 600 "${file}"
         ln -s "${file}" "$HOME/.ssh/"
     done
-    ## acme.sh/aws/kube/aliyun/python-gitlab
+    ## acme.sh / aws / kube / aliyun / python-gitlab
     [[ ! -d "${HOME}/.acme.sh" && -d "${path_conf_acme}" ]] && ln -sf "${path_conf_acme}" "$HOME/"
     [[ ! -d "${HOME}/.aws" && -d "${path_conf_aws}" ]] && ln -sf "${path_conf_aws}" "$HOME/"
     [[ ! -d "${HOME}/.kube" && -d "${path_conf_kube}" ]] && ln -sf "${path_conf_kube}" "$HOME/"
