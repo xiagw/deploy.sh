@@ -1379,10 +1379,11 @@ _generate_apidoc() {
 }
 
 _inject_files() {
+    # 如果禁用注入，则直接返回
     [ "${exec_inject_files:-true}" = "false" ] && return 0
     _msg step "[inject] from ${me_path_data}/inject/"
 
-    ## 替换代码文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
+    # 定义路径变量 替换代码文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
     local inject_code_path="${me_path_data}/inject/${gitlab_project_name}"
     local inject_code_path_branch="${me_path_data}/inject/${gitlab_project_name}/${env_namespace}"
     ## 项目代码库内已存在的 Dockerfile
@@ -1398,15 +1399,15 @@ _inject_files() {
     local inject_dockerignore="${me_dockerfile}/.dockerignore"
     ## 打包镜像时注入的 /opt/init.sh 文件 容器启动时初始化配置文件 init.sh 可以注入 /etc/hosts 等配置
     local inject_init="${me_data_dockerfile}"/init.sh
-    ## replace code files 替换代码文件
+    ## replace code files / 替换代码文件
     if [ -d "$inject_code_path_branch" ]; then
         _msg warning "found $inject_code_path_branch, sync to ${gitlab_project_dir}/"
-        rsync -av "$inject_code_path_branch"/ "${gitlab_project_dir}"/
+        rsync -av "$inject_code_path_branch/" "${gitlab_project_dir}/"
     elif [ -d "$inject_code_path" ]; then
         _msg warning "found $inject_code_path, sync to ${gitlab_project_dir}/"
-        rsync -av "$inject_code_path"/ "${gitlab_project_dir}"/
+        rsync -av "$inject_code_path/" "${gitlab_project_dir}/"
     fi
-    ## frontend (VUE) .env file, 替换前端代码内配置文件
+    ## frontend (VUE) .env file / 替换前端代码内配置文件
     if [[ "$project_lang" == node ]]; then
         env_files="$(find "${gitlab_project_dir}" -maxdepth 2 -name "${env_namespace}-*")"
         for file in $env_files; do
@@ -1419,11 +1420,12 @@ _inject_files() {
             fi
         done
     fi
-    ## docker ignore file / 使用全局模板文件替换项目文件
+    ## 检查并注入 .dockerignore 文件
     if [[ -f "${project_dockerfile}" && ! -f "${gitlab_project_dir}/.dockerignore" ]]; then
         cp -avf "${inject_dockerignore}" "${gitlab_project_dir}/"
     fi
 
+    # 设置构建参数
     build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
     if [ -n "${ENV_DOCKER_MIRROR}" ]; then
         build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR} --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
@@ -1464,9 +1466,9 @@ _inject_files() {
                 cp -avf "${inject_setting}" "${gitlab_project_dir}/"
             fi
 
-            ## find jdk version
+            ## 根据 README 或 readme 文件中的 JDK 版本设置构建参数
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
-                [ -f "$f" ] || continue
+                [[ -f "$f" ]] || continue
                 case "$(grep -i 'jdk_version=' "${f}" | tail -n1)" in
                 *=1.7 | *=7)
                     if [ -n "${ENV_DOCKER_MIRROR}" ]; then
