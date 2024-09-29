@@ -1517,7 +1517,12 @@ _inject_files() {
                     fi
                     ;;
                 esac
-                build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=${MVN_VERSION} --build-arg JDK_VERSION=${JDK_VERSION}"
+                if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=${MVN_VERSION:-maven-3.8-amazoncorretto-8} --build-arg JDK_VERSION=${JDK_VERSION:-amazoncorretto-8}"
+                else
+                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=${MVN_VERSION:-3.8-amazoncorretto-8} --build-arg JDK_VERSION=${JDK_VERSION:-8}"
+                fi
+
                 case "$(grep -i 'INSTALL_.*=' "${f}")" in
                 INSTALL_FFMPEG=true)
                     build_arg="${build_arg:+"$build_arg "}--build-arg INSTALL_FFMPEG=true"
