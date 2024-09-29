@@ -1466,28 +1466,29 @@ _inject_files() {
                 [ -f "$f" ] || continue
                 case "$(grep -i 'jdk_version=' "${f}")" in
                 *=1.7 | *=7)
-                    sed -i -e "s@MVN_IMAGE=.*@MVN_IMAGE=${mirror}:maven-3.6-jdk-7@g" -e "s@JDK_IMAGE=.*@JDK_IMAGE=${mirror}:openjdk-7@g" "${project_dockerfile}"
+                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${mirror} --build-arg MVN_VERSION=maven-3.6-jdk-7 --build-arg JDK_IMAGE=${mirror} --build-arg JDK_VERSION=openjdk-7"
                     ;;
                 *=1.8 | *=8)
-                    sed -i -e "s@MVN_IMAGE=.*@MVN_IMAGE=${mirror}:maven-3.8-jdk-8@g" -e "s@JDK_IMAGE=.*@JDK_IMAGE=${mirror}:amazoncorretto-8@g" "${project_dockerfile}"
+                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${mirror} --build-arg MVN_VERSION=maven-3.8-jdk-8 --build-arg JDK_IMAGE=${mirror} --build-arg JDK_VERSION=amazoncorretto-8"
                     ;;
                 *=11)
-                    sed -i -e "s@MVN_IMAGE=.*@MVN_IMAGE=${mirror}:maven-3.8-jdk-11@g" -e "s@JDK_IMAGE=.*@JDK_IMAGE=${mirror}:amazoncorretto-11@g" "${project_dockerfile}"
+                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${mirror} --build-arg MVN_VERSION=maven-3.8-jdk-11 --build-arg JDK_IMAGE=${mirror} --build-arg JDK_VERSION=amazoncorretto-11"
                     ;;
                 *=17)
-                    sed -i -e "s@MVN_IMAGE=.*@MVN_IMAGE=${mirror}:maven-3.8-jdk-17@g" -e "s@JDK_IMAGE=.*@JDK_IMAGE=${mirror}:amazoncorretto-17@g" "${project_dockerfile}"
+                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${mirror} --build-arg MVN_VERSION=maven-3.8-jdk-17 --build-arg JDK_IMAGE=${mirror} --build-arg JDK_VERSION=amazoncorretto-17"
                     ;;
                 *) : ;;
                 esac
+
                 case "$(grep -i 'INSTALL_.*=' "${f}")" in
                 INSTALL_FFMPEG=true)
-                    sed -i -e "/INSTALL_FFMPEG=/s/false/true/g" "${project_dockerfile}"
+                    build_arg="${build_arg:+"$build_arg "}--build-arg INSTALL_FFMPEG=true"
                     ;;
                 INSTALL_FONTS=true)
-                    sed -i -e "/INSTALL_FONTS=/s/false/true/g" "${project_dockerfile}"
+                    build_arg="${build_arg:+"$build_arg "}--build-arg INSTALL_FONTS=true"
                     ;;
                 INSTALL_LIBREOFFICE=true)
-                    sed -i -e "/INSTALL_LIBREOFFICE=/s/false/true/g" "${project_dockerfile}"
+                    build_arg="${build_arg:+"$build_arg "}--build-arg INSTALL_LIBREOFFICE=true"
                     ;;
                 *) : ;;
                 esac

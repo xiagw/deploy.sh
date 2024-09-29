@@ -1,12 +1,13 @@
 #### docker build stage 1 ####
-ARG MVN_IMAGE=maven:3.8-jdk-8
-# ARG MVN_IMAGE=maven:3.8-openjdk-17
+ARG MVN_IMAGE=maven
+ARG MVN_VERSION=3.8-jdk-8
+# ARG MVN_VERSION=3.8-jdk-17
 # ARG JDK_IMAGE=openjdk
 ARG JDK_IMAGE=amazoncorretto
 ARG JDK_VERSION=8
 # ARG JDK_VERSION=17
 # ARG JDK_VERSION=21
-FROM ${MVN_IMAGE} AS builder
+FROM ${MVN_IMAGE}:${MVN_VERSION} AS builder
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG MVN_DEBUG=off
