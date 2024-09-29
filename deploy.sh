@@ -1425,7 +1425,9 @@ _inject_files() {
     fi
 
     build_arg="${build_arg:+"$build_arg "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-    local mirror=registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5
+    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR} --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+    fi
     ## from data/deploy.env， 使用 data/ 全局模板文件替换项目文件
     ${arg_disable_inject:-false} && ENV_INJECT=keep
     echo ENV_INJECT: ${ENV_INJECT:-keep}
@@ -1461,23 +1463,46 @@ _inject_files() {
             if [[ -f "${inject_setting}" ]]; then
                 cp -avf "${inject_setting}" "${gitlab_project_dir}/"
             fi
+
             ## find jdk version
             for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
                 [ -f "$f" ] || continue
                 case "$(grep -i 'jdk_version=' "${f}")" in
                 *=1.7 | *=7)
-                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${mirror} --build-arg MVN_VERSION=maven-3.6-jdk-7 --build-arg JDK_IMAGE=${mirror} --build-arg JDK_VERSION=openjdk-7"
+                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=maven-3.6-jdk-7 --build-arg JDK_VERSION=openjdk-7"
+                    else
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=3.6-jdk-7 --build-arg JDK_VERSION=7"
+                    fi
                     ;;
                 *=1.8 | *=8)
-                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${mirror} --build-arg MVN_VERSION=maven-3.8-jdk-8 --build-arg JDK_IMAGE=${mirror} --build-arg JDK_VERSION=amazoncorretto-8"
+                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=maven-3.8-amazoncorretto-8 --build-arg JDK_VERSION=amazoncorretto-8"
+                    else
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=3.8-amazoncorretto-8 --build-arg JDK_VERSION=8"
+                    fi
                     ;;
                 *=11)
-                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${mirror} --build-arg MVN_VERSION=maven-3.8-jdk-11 --build-arg JDK_IMAGE=${mirror} --build-arg JDK_VERSION=amazoncorretto-11"
+                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=maven-3.9-amazoncorretto-11 --build-arg JDK_VERSION=amazoncorretto-11"
+                    else
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=3.9-amazoncorretto-11 --build-arg JDK_VERSION=11"
+                    fi
                     ;;
                 *=17)
-                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_IMAGE=${mirror} --build-arg MVN_VERSION=maven-3.8-jdk-17 --build-arg JDK_IMAGE=${mirror} --build-arg JDK_VERSION=amazoncorretto-17"
+                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=maven-3.9-amazoncorretto-17 --build-arg JDK_VERSION=amazoncorretto-17"
+                    else
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=3.9-amazoncorretto-17 --build-arg JDK_VERSION=17"
+                    fi
                     ;;
-                *) : ;;
+                *=21)
+                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=maven-3.9-amazoncorretto-21 --build-arg JDK_VERSION=amazoncorretto-21"
+                    else
+                        build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=3.9-amazoncorretto-21 --build-arg JDK_VERSION=21"
+                    fi
+                    ;;
                 esac
 
                 case "$(grep -i 'INSTALL_.*=' "${f}")" in
@@ -1490,7 +1515,6 @@ _inject_files() {
                 INSTALL_LIBREOFFICE=true)
                     build_arg="${build_arg:+"$build_arg "}--build-arg INSTALL_LIBREOFFICE=true"
                     ;;
-                *) : ;;
                 esac
                 break
             done
