@@ -71,7 +71,7 @@ all)
     _build "$arg"
     ;;
 *)
-    arg=$(for i in "${args[@]}"; do echo "$i"; done | fzf)
+    arg=$(echo "${args[@]}" | sed 's/\ /\n/g' | fzf)
     _build "$arg"
     ;;
 esac
