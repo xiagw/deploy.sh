@@ -2,8 +2,8 @@
 
 _get_input() {
     count=0
-    read -rp "[$((++count))]. Enter ssh name: [alias name] " read_ssh_name
     if [[ "${delete_flag:-0}" -eq 0 ]]; then
+        read -rp "[$((++count))]. Enter SSH name: [alias name] " read_ssh_name
         read -rp "[$((++count))]. Enter SSH IP: [ip|dns|user@ip:port] " read_ssh_host
         ssh_host=${read_ssh_host:? "Please enter ssh host."}
         if echo "$read_ssh_host" | grep -q ".*@.*"; then
@@ -22,7 +22,10 @@ _get_input() {
             ssh_port=${read_ssh_port:-22}
         fi
         read -rp "[$((++count))]. Enable byobu? [Y/n] " read_byobu
+    else
+        ssh_host=$(awk '/^Host/ {print $2}' "${conf_files[@]}" | grep -v '\*' | fzf)
     fi
+
     if [[ "$conf_nums" -eq 1 ]]; then
         ssh_conf=${conf_files[0]}
     else
@@ -62,8 +65,8 @@ EOF
 }
 
 _delete_host() {
-    sed -i "/^### ${read_ssh_name} begin/,/^### ${read_ssh_name} end/d" "$ssh_conf"
-    [ -f "$ansible_conf" ] && sed -i "/^${read_ssh_name}$/d" "$ansible_conf"
+    sed -i "/^### ${ssh_host} begin/,/^### ${ssh_host} end/d" "$ssh_conf"
+    [ -f "$ansible_conf" ] && sed -i "/^${ssh_host}$/d" "$ansible_conf"
 }
 
 _port_forward() {
