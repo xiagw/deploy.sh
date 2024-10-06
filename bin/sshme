@@ -10,8 +10,11 @@ _get_input() {
             ssh_user=${read_ssh_host%%@*}
             var_temp=${read_ssh_host#*@}
             ssh_host=${var_temp%%:*}
-            ssh_port=${read_ssh_host##*:}
-            ssh_port=${ssh_port:-22}
+            if echo "$read_ssh_host" | grep -q ".*@.*:"; then
+                ssh_port=${read_ssh_host##*:}
+            else
+                ssh_port=22
+            fi
         else
             read -rp "[$((++count))]. Enter ssh user: [root] " read_ssh_user
             read -rp "[$((++count))]. Enter ssh port: [22] " read_ssh_port
