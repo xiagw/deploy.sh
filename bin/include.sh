@@ -5,15 +5,15 @@ cmd_date="$(command -v gdate || command -v date)"
 
 _msg() {
     local color_on
-    local color_off='\033[0m' # Text Reset
+    local color_off='\033[0m' # color reset
     time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
     timestamp="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
     info) color_on='' ;;
-    yellow | warn | warning) color_on='\033[0;33m' ;;
-    red | error | err) color_on='\033[0;31m' ;;
-    purple | question | ques) color_on='\033[0;35m' ;;
+    warn | warning | yellow) color_on='\033[0;33m' ;;
+    error | err | red) color_on='\033[0;31m' ;;
+    question | ques | purple) color_on='\033[0;35m' ;;
     green) color_on='\033[0;32m' ;;
     blue) color_on='\033[0;34m' ;;
     cyan) color_on='\033[0;36m' ;;
@@ -28,7 +28,7 @@ _msg() {
         color_off=" - [$time_hms]"
         ;;
     log)
-        log_file="$2"
+        local log_file="$2"
         shift 2
         echo "$timestamp - $*" | tee -a "$log_file"
         return
@@ -37,6 +37,7 @@ _msg() {
         unset color_on color_off
         ;;
     esac
+
     [ "$#" -gt 1 ] && shift
     if [ "${silent_mode:-0}" -eq 1 ]; then
         return
@@ -161,37 +162,36 @@ _check_sudo() {
 }
 
 _install_ossutil() {
-    url_html='https://help.aliyun.com/zh/oss/developer-reference/install-ossutil'
-    {
-        # echo "$url_html"
-        echo "$url_html"2
-    } | while read -r line; do
-        if [ "$(uname -o)" = Darwin ]; then
-            url_down=$(curl -fsSL "$line" | grep -o -E 'href="[^\"]+"' | grep -o 'https.*ossutil.*mac-amd64\.zip')
-        else
-            url_down=$(curl -fsSL "$line" | grep -o -E 'href="[^\"]+"' | grep -o 'https.*ossutil.*linux-amd64\.zip')
-        fi
-        curl -o ossutil.zip "$url_down"
-        unzip -o -j ossutil.zip
-        if [[ "$line" == *ossutil2 ]]; then
-            install_path="/usr/local/bin/ossutil"
-        else
-            install_path="/usr/local/bin/ossutil-v1"
-        fi
-        sudo install -m 0755 ossutil $install_path
-    done
-    ossutil-v1 version
+    case "$1" in
+    1 | v1)
+        local url='https://help.aliyun.com/zh/oss/developer-reference/install-ossutil'
+        ;;
+    *)
+        local url='https://help.aliyun.com/zh/oss/developer-reference/install-ossutil2'
+        ;;
+    esac
+
+    if [ "$(uname -o)" = Darwin ]; then
+        url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o 'https.*ossutil.*mac-amd64\.zip')
+    else
+        url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o 'https.*ossutil.*linux-amd64\.zip')
+    fi
+    curl -o o.zip "$url_down"
+    unzip -o -j o.zip
+    sudo install -m 0755 ossutil /usr/local/bin/ossutil
     ossutil version
 }
 
 _install_aliyun_cli() {
+    local url_mac='https://help.aliyun.com/zh/cli/install-cli-on-macos'
+    local url_lin='https://help.aliyun.com/zh/cli/install-cli-on-linux'
     if [ "$(uname -o)" = Darwin ]; then
-        url_down=$(curl -fsSL 'https://help.aliyun.com/zh/cli/install-cli-on-macos' | grep -o -E 'href="[^\"]+"' | grep -o 'https.*aliyun.*macos.*\.tgz')
+        url_down=$(curl -fsSL $url_mac | grep -oE 'href="[^\"]+"' | grep -o 'https.*aliyun.*macos.*\.tgz')
     else
-        url_down=$(curl -fsSL 'https://help.aliyun.com/zh/cli/install-cli-on-linux' | grep -o -E 'href="[^\"]+"' | grep -o 'https.*aliyun-cli.*amd64.tgz')
+        url_down=$(curl -fsSL $url_lin | grep -oE 'href="[^\"]+"' | grep -o 'https.*aliyun-cli.*amd64.tgz')
     fi
-    curl -o aliyun-cli.tgz "$url_down"
-    tar xzvf aliyun-cli.tgz
+    curl -o a.tgz "$url_down"
+    tar xzvf a.tgz
     sudo install -m 0755 aliyun /usr/local/bin/aliyun
     aliyun --version | head -n 1
 }
