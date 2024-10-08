@@ -554,15 +554,6 @@ _add_workorder() {
     fi
 }
 
-_upgrade_aliyun() {
-    if hostname -s | grep gitlab; then
-        curl -fL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz |
-            tar -zx -C "$HOME"/.local/bin/
-    else
-        brew install aliyun-cli
-    fi
-}
-
 _functions_update() {
     _get_aliyun_profile
     # read -rp "Enter functions name ? " fc_name
@@ -592,7 +583,7 @@ _check_aliyun_cli() {
 
 _usage() {
     cat <<EOF
-Usage: $me_name [res|dns|ecs|nas|nas_snap|rds|up|dn|load|cdn|ram|cas|wo|upgrade-cli]
+Usage: $me_name [res|dns|ecs|nas|nas_snap|rds|up|dn|load|cdn|ram|cas|wo|cli]
     res        - get resource list
     dns        - update dns record
     ecs        - get ecs list
@@ -606,7 +597,7 @@ Usage: $me_name [res|dns|ecs|nas|nas_snap|rds|up|dn|load|cdn|ram|cas|wo|upgrade-
     ram        - add ram user
     cas        - upload cert to cas
     wo         - add workorder
-    upgrade-aliyun - upgrade aliyun cli
+    cli        - install aliyun-cli
 
 EOF
 }
@@ -709,8 +700,8 @@ main() {
     fc)
         _functions_update
         ;;
-    upgrade-aliyun)
-        _upgrade_aliyun
+    cli)
+        _install_aliyun_cli
         ;;
     *)
         _usage
