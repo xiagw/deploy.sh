@@ -318,36 +318,49 @@ _auto_scaling() {
             awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}'
     )
 
+    ## 业务超载/扩容
+    if (("${cpu_mem[0]}" > pod_cpu_warn && "${cpu_mem[1]}" > pod_mem_warn)); then
+        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
+        # _scale_up 2
+        $kubectl_clim scale --replicas=$((pod_total + 2)) deploy "$deployment"
+        if $kubectl_clim rollout status deployment "$deployment" --timeout 120s; then
+            touch "$lock_file"
+            scale_status=OK
+        else
+            scale_status=FAIL
+        fi
+        msg_body="${scale_status}: Overload, $deployment scale up +2"
+        _msg log "$me_log" "$msg_body"
+        _notify_weixin_work
+    fi
+
     if [[ -f "$lock_file" ]]; then
         time_lock="$(stat -t -c %Y "$lock_file" 2>/dev/null || echo 0)"
         five_min_ago="$(date +%s -d '5 minutes ago')"
-        if ((five_min_ago > time_lock)); then
-            rm -f "$lock_file"
-        else
+        if ((time_lock > five_min_ago)); then
             return
+        else
+            rm -f "$lock_file"
         fi
     fi
-    ## 业务超载/扩容
-    if (("${cpu_mem[0]}" > pod_cpu_warn && "${cpu_mem[1]}" > pod_mem_warn)); then
-        # _scale_up 2
-        $kubectl_clim scale --replicas=$((pod_total + 2)) deploy "$deployment"
-        touch "$lock_file"
-        msg_body="Overload, $deployment scale up +2"
-        _msg log "$me_log" "$msg_body"
-        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
-        _notify_weixin_work
-    fi
+
     ## 业务闲置低载/缩容
-    if [[ "$pod_total" -gt "$node_fixed" ]]; then
-        if (("${cpu_mem[0]}" < pod_cpu_normal && "${cpu_mem[1]}" < pod_mem_normal)); then
-            # _scale_down 2
-            touch "$lock_file"
-            $kubectl_clim scale --replicas="$node_fixed" deploy "$deployment"
-            msg_body="Normal status, $deployment scale down to $node_fixed"
-            _msg log "$me_log" "$msg_body"
-            $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
-            _notify_weixin_work
+    if [[ "$pod_total" -le "$node_fixed" ]]; then
+        return
+    fi
+    if (("${cpu_mem[0]}" < pod_cpu_normal && "${cpu_mem[1]}" < pod_mem_normal)); then
+        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
+        # _scale_down 2
+        $kubectl_clim scale --replicas="$node_fixed" deploy "$deployment"
+        if $kubectl_clim rollout status deployment "$deployment" --timeout 120s; then
+            # touch "$lock_file"
+            scale_status=OK
+        else
+            scale_status=FAIL
         fi
+        msg_body="${scale_status}: Unload, $deployment scale down to $node_fixed"
+        _msg log "$me_log" "$msg_body"
+        _notify_weixin_work
     fi
 }
 

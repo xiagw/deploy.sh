@@ -337,7 +337,6 @@ _build_image() {
         echo "  $build_cmd pull $image_uuid"
         echo "  $build_cmd tag $image_uuid laradock_spring"
     fi
-    _msg time "[image] build container image"
 }
 
 _push_image() {
