@@ -35,10 +35,7 @@ _get_resource() {
         _msg "ecs:"
         # $cmd_aliyun_p ecs DescribeInstances --pager PagerSize=100 --output text cols=InstanceId,VpcAttributes.PrivateIpAddress.IpAddress,PublicIpAddress.IpAddress,InstanceName,ExpiredTime,Status,ImageId rows='Instances.Instance'
         # region_ids=(cn-hangzhou cn-beijing cn-shenzhen cn-chengdu)
-        for rid in $(
-            $cmd_aliyun_p ecs DescribeRegions | jq -r '.Regions.Region[].RegionId' |
-                grep '^cn'
-        ); do
+        for rid in $($cmd_aliyun_p ecs DescribeRegions | jq -r '.Regions.Region[].RegionId' | grep '^cn'); do
             $cmd_aliyun_p ecs DescribeInstances --pager PagerSize=100 --RegionId "$rid"
         done
         _msg "slb:"
@@ -480,7 +477,7 @@ _upload_cert() {
     set -e
     aliyun_region=cn-hangzhou
     _check_jq_cli
-    _check_aliyun_cli
+    _check_aliyun_cli || _install_aliyun_cli
     while read -r line; do
         domain="${line// /.}"
         upload_name="${domain//./-}-$($cmd_date +%m%d)"
@@ -512,7 +509,7 @@ _upload_cert() {
             awk -F. '{$1=""; print $0}' | sort | uniq
     )
 
-    ## 设置 cdn 域名的证书，
+    ## 设置 cdn 域名证书
     while read -r line; do
         domain_cdn="${line}"
         domain="${domain_cdn#*.}"
@@ -525,6 +522,8 @@ _upload_cert() {
         $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
             jq -r '.Domains.PageData[].DomainName'
     )
+    ## 设置 负载均衡 ALB 证书
+    # aliyun alb AssociateAdditionalCertificatesWithListener --region cn-hangzhou --ListenerId 'lsn-9of9xjofjpc53yyp3f' --Certificates.1.CertificateId '15246054-cn-hangzhou' --force
 }
 
 _add_workorder() {
@@ -574,15 +573,18 @@ _check_jq_cli() {
     command -v jq && return
     sudo apt install -y jq
 }
+
 _check_aliyun_cli() {
-    command -v jq && return
-    #https://github.com/aliyun/aliyun-cli/releases
-    curl -LO https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
-    tar -C "${me_path_data}/bin/" -zxvf aliyun-cli-linux-latest-amd64.tgz
+    if command -v aliyun; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 _usage() {
     cat <<EOF
+
 Usage: $me_name [res|dns|ecs|nas|nas_snap|rds|up|dn|load|cdn|ram|cas|wo|cli]
     res        - get resource list
     dns        - update dns record
@@ -625,21 +627,19 @@ main() {
     cmd_readlink="$(command -v greadlink)"
     me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
+    me_env="${me_path}/${me_name}.env"
+    me_log="${me_path}/${me_name}.log"
+
     me_path_data="${me_path}/../data"
-    me_env="${me_path_data}/${me_name}.env"
-    me_log="${me_path_data}/${me_name}.log"
+    if [[ -d "$me_path_data" ]]; then
+        me_env="${me_path_data}/${me_name}.env"
+        me_log="${me_path_data}/${me_name}.log"
+    fi
 
     source "$me_path"/include.sh
 
     source "$me_env"
 
-    if [ -f "$HOME/.kube/config" ]; then
-        k_conf="$HOME/.kube/config"
-    elif [ -f "$HOME/.config/kube/config" ]; then
-        k_conf="$HOME/.config/kube/config"
-    fi
-    kubectl_cli="$(command -v kubectl) --kubeconfig $k_conf"
-    kubectl_clim="$(command -v kubectl) --kubeconfig $k_conf -n main"
     if [ -f "$HOME/.aliyun/config.json" ]; then
         a_conf="$HOME/.aliyun/config.json"
     elif [ -f "$HOME/.config/aliyun/config.json" ]; then
@@ -649,6 +649,14 @@ main() {
     cmd_aliyun="$(command -v aliyun) --config-path $a_conf"
     cmd_aliyun_p="$cmd_aliyun -p ${aliyun_profile:? ERR: empty aliyun profile}"
     # $cmd_aliyun --help | grep -m1 Version
+
+    if [ -f "$HOME/.kube/config" ]; then
+        k_conf="$HOME/.kube/config"
+    elif [ -f "$HOME/.config/kube/config" ]; then
+        k_conf="$HOME/.config/kube/config"
+    fi
+    kubectl_cli="$(command -v kubectl) --kubeconfig $k_conf"
+    kubectl_clim="$(command -v kubectl) --kubeconfig $k_conf -n main"
 
     # while [[ "$#" -gt 0 ]]; do
     case "$1" in
