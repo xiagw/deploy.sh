@@ -195,7 +195,7 @@ _get_node_pod() {
     deployment="$1"
     readarray -t node_name < <($kubectl_cli get nodes -o name)
     ## 实际节点数 = 所有节点数 - 虚拟节点 1 个 (virtual-kubelet-cn-hangzhou-k)
-    # node_total="$($kubectl_cli get nodes -o name | grep -vc 'virtual-kubelet')"
+    node_fixed="$($kubectl_cli get nodes -o name | grep -vc 'virtual-kubelet')"
     node_total="$($kubectl_cli get nodes -o name | grep -c 'node')"
     pod_total=$($kubectl_clim get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
     lock_file=/tmp/node_scale.lock
@@ -325,12 +325,12 @@ _auto_scaling() {
         $kubectl_clim scale --replicas=$((pod_total + 2)) deploy "$deployment"
     fi
     ## 业务闲置低载/缩容
-    if [[ "$pod_total" -gt 2 ]]; then
+    if [[ "$pod_total" -gt "$node_fixed" ]]; then
         if (("${cpu_mem[0]}" < pod_cpu_normal && "${cpu_mem[1]}" < pod_mem_normal)); then
             _msg log "$me_log" "detected Normal load, recommend scale down to 2"
             $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
             # _scale_down 2
-            $kubectl_clim scale --replicas=2 deploy "$deployment"
+            $kubectl_clim scale --replicas="$node_fixed" deploy "$deployment"
         fi
     fi
 }
