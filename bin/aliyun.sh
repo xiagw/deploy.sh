@@ -198,7 +198,7 @@ _get_node_pod() {
     node_total="${#node_name[@]}"
     node_fixed="$((node_total - 1))"
     pod_total=$($kubectl_clim get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
-    lock_file=/tmp/node_scale.lock
+    lock_file="$(mktemp)"
 }
 
 _scale_up() {
@@ -207,7 +207,7 @@ _scale_up() {
         return
     fi
     _get_node_pod "$1"
-    touch $lock_file
+    touch "$lock_file"
     ## 节点变更的数量
     node_inc="${2:-2}"
     node_sum=$((node_total + node_inc))
@@ -269,11 +269,11 @@ _scale_up() {
             $kubectl_cli cordon "$n"
         fi
     done
-    rm -f $lock_file
+    rm -f "$lock_file"
 }
 
 _scale_down() {
-    if [[ -f $lock_file ]]; then
+    if [[ -f "$lock_file" ]]; then
         _msg "another process is running...exit"
         return
     fi
@@ -317,22 +317,37 @@ _auto_scaling() {
         $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" |
             awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}'
     )
+
+    if [[ -f "$lock_file" ]]; then
+        time_lock="$(stat -t -c %Y "$lock_file" 2>/dev/null || echo 0)"
+        five_min_ago="$(date +%s -d '5 minutes ago')"
+        if ((five_min_ago > time_lock)); then
+            rm -f "$lock_file"
+        else
+            return
+        fi
+    fi
     ## 业务超载/扩容
     if (("${cpu_mem[0]}" > pod_cpu_warn && "${cpu_mem[1]}" > pod_mem_warn)); then
-        _msg log "$me_log" "Overload, $deployment scale up +2"
-        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
         # _scale_up 2
         $kubectl_clim scale --replicas=$((pod_total + 2)) deploy "$deployment"
+        touch "$lock_file"
+        msg_body="Overload, $deployment scale up +2"
+        _msg log "$me_log" "$msg_body"
+        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
     fi
     ## 业务闲置低载/缩容
     if [[ "$pod_total" -gt "$node_fixed" ]]; then
         if (("${cpu_mem[0]}" < pod_cpu_normal && "${cpu_mem[1]}" < pod_mem_normal)); then
-            _msg log "$me_log" "Normal status, $deployment scale down to $node_fixed"
-            $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
             # _scale_down 2
+            touch "$lock_file"
             $kubectl_clim scale --replicas="$node_fixed" deploy "$deployment"
+            msg_body="Normal status, $deployment scale down to $node_fixed"
+            _msg log "$me_log" "$msg_body"
+            $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
         fi
     fi
+    _notify_weixin_work
 }
 
 _pay_cdn_bag() {
