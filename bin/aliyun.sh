@@ -315,11 +315,11 @@ _auto_scaling() {
     ## 对当前 pod 的 cpu/mem 求和
     readarray -d " " -t cpu_mem < <(
         $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" |
-            awk 'NR>1 {s+=int($2); ss+=int($3)} END {printf "%d %d", s, ss}'
+            awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}'
     )
     ## 业务超载/扩容
     if (("${cpu_mem[0]}" > pod_cpu_warn && "${cpu_mem[1]}" > pod_mem_warn)); then
-        _msg log "$me_log" "detected Overload, recommend scale up +2"
+        _msg log "$me_log" "Overload, $deployment scale up +2"
         $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
         # _scale_up 2
         $kubectl_clim scale --replicas=$((pod_total + 2)) deploy "$deployment"
@@ -327,7 +327,7 @@ _auto_scaling() {
     ## 业务闲置低载/缩容
     if [[ "$pod_total" -gt "$node_fixed" ]]; then
         if (("${cpu_mem[0]}" < pod_cpu_normal && "${cpu_mem[1]}" < pod_mem_normal)); then
-            _msg log "$me_log" "detected Normal load, recommend scale down to 2"
+            _msg log "$me_log" "Normal status, $deployment scale down to $node_fixed"
             $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
             # _scale_down 2
             $kubectl_clim scale --replicas="$node_fixed" deploy "$deployment"
