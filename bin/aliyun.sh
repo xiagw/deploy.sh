@@ -195,8 +195,8 @@ _get_node_pod() {
     deployment="$1"
     readarray -t node_name < <($kubectl_cli get nodes -o name)
     ## 实际节点数 = 所有节点数 - 虚拟节点 1 个 (virtual-kubelet-cn-hangzhou-k)
-    node_fixed="$($kubectl_cli get nodes -o name | grep -vc 'virtual-kubelet')"
-    node_total="$($kubectl_cli get nodes -o name | grep -c 'node')"
+    node_total="${#node_name[@]}"
+    node_fixed="$((node_total - 1))"
     pod_total=$($kubectl_clim get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
     lock_file=/tmp/node_scale.lock
 }
