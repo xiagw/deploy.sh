@@ -198,7 +198,7 @@ _get_node_pod() {
     node_total="${#node_name[@]}"
     node_fixed="$((node_total - 1))"
     pod_total=$($kubectl_clim get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
-    lock_file="$(mktemp)"
+    lock_file="/tmp/lock.scale.$deployment"
 }
 
 _scale_up() {
@@ -335,6 +335,7 @@ _auto_scaling() {
         msg_body="Overload, $deployment scale up +2"
         _msg log "$me_log" "$msg_body"
         $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
+        _notify_weixin_work
     fi
     ## 业务闲置低载/缩容
     if [[ "$pod_total" -gt "$node_fixed" ]]; then
@@ -345,9 +346,9 @@ _auto_scaling() {
             msg_body="Normal status, $deployment scale down to $node_fixed"
             _msg log "$me_log" "$msg_body"
             $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
+            _notify_weixin_work
         fi
     fi
-    _notify_weixin_work
 }
 
 _pay_cdn_bag() {
