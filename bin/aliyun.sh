@@ -12,7 +12,7 @@ _get_aliyun_profile() {
     g_cmd_aliyun_p="$g_cmd_aliyun -p $aliyun_profile"
 }
 
-_get_resource() {
+_export_resource() {
     resource_export_log="${g_me_data_path}/${g_me_name}.$(${cmd_date-} +%F).$($cmd_date +%s).log"
     _get_aliyun_profile
 
@@ -65,11 +65,10 @@ _get_ecs_list() {
     done
 }
 
-_dns_record() {
+_update_dns_record() {
     _get_aliyun_profile
 
     while read -r domain; do
-        # [[ $domain == flyh6.com ]] && continue
         _msg "select domain: $domain ..."
 
         while read -r id; do
@@ -82,7 +81,7 @@ _dns_record() {
         )
 
         # sleep 5
-        _msg "add new record ... lb.flyh6.com"
+        _msg "add new record ..."
         $g_cmd_aliyun_p alidns AddDomainRecord --Type CNAME --DomainName "$domain" --RR '*' --Value "${aliyun_lb_cname:-from-env}"
         $g_cmd_aliyun_p alidns AddDomainRecord --Type CNAME --DomainName "$domain" --RR '@' --Value "$aliyun_lb_cname"
 
@@ -319,7 +318,7 @@ _auto_scaling() {
         _msg log "$g_me_log" "$g_msg_body"
         _notify_weixin_work "${wechat_key-}"
     fi
-
+    ## 扩容后 5 分钟之内锁定，不做缩容检测
     if [[ -f "$lock_file" ]]; then
         time_lock="$(stat -t -c %Y "$lock_file" 2>/dev/null || echo 0)"
         five_min_ago="$(date +%s -d '5 minutes ago')"
@@ -354,7 +353,7 @@ _pay_cdn_bag() {
     set -e
     enable_msg="$1"
     aliyun_region=cn-hangzhou
-    ## 在线查询CDN资源包剩余量
+    ## 在线查询CDN资源包剩余量，求和TB，排除https计次
     cdn_amount=$(
         $g_cmd_aliyun_p bssopenapi QueryResourcePackageInstances --region "$aliyun_region" --ProductCode dcdn |
             jq -r '.Data.Instances.Instance[] | select ( .RemainingAmount != "0" and .RemainingAmountUnit != "GB" and .RemainingAmountUnit != "次" ) | .RemainingAmount' |
@@ -404,7 +403,7 @@ _pay_cdn_bag() {
         --Duration 1 --PricingCycle Year --Specification "$spec"
 }
 
-_add_ram() {
+_add_ram_account() {
     # set -e
     $g_cmd_aliyun configure list
     if _get_yes_no "Add new Aliyun profile?"; then
@@ -487,7 +486,7 @@ _add_ram() {
     fi
 }
 
-_upload_cert() {
+_upload_ssl_cert() {
     _get_aliyun_profile
     set -e
     _check_jq_cli
@@ -572,7 +571,7 @@ _add_workorder() {
     fi
 }
 
-_functions_update() {
+_update_functions() {
     _get_aliyun_profile
     # read -rp "Enter functions name ? " fc_name
     select line in $(
@@ -675,11 +674,10 @@ main() {
     # while [[ "$#" -gt 0 ]]; do
     case "$1" in
     res)
-        _get_resource
+        _export_resource
         ;;
     dns)
-        # _dns_record
-        _dns_update_lb
+        _update_dns_record
         ;;
     ecs)
         _get_ecs_list
@@ -711,18 +709,18 @@ main() {
         _pay_cdn_bag "${2}"
         ;;
     ram)
-        _add_ram nothing
+        _add_ram_account nothing
         ;;
     cas)
         shift
         ## 参数输入域名，例如 example.com
-        _upload_cert "$@"
+        _upload_ssl_cert "$@"
         ;;
     wo)
         _add_workorder
         ;;
     fc)
-        _functions_update
+        _update_functions
         ;;
     cli)
         _install_aliyun_cli
