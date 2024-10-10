@@ -195,3 +195,11 @@ _install_aliyun_cli() {
     sudo install -m 0755 aliyun /usr/local/bin/aliyun
     aliyun --version | head -n 1
 }
+
+_notify_weixin_work() {
+    local wechat_key="$1"
+    local wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wechat_key}"
+    curl -fsSL -X POST -H 'Content-Type: application/json' \
+        -d '{"msgtype": "text", "text": {"content": "'"${g_msg_body-}"'"}}' "$wechat_api"
+    echo
+}
