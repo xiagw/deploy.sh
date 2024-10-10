@@ -308,7 +308,7 @@ _auto_scaling() {
     _get_node_pod "$1"
     ## 单个 pod 消耗 cpu/mem 超载警戒值 1000/1500
     pod_cpu_warn=$((pod_total * 1000))
-    pod_mem_warn=$((pod_total * 1500))
+    pod_mem_warn=$((pod_total * 1200))
     ## 单个 pod 消耗 cpu/mem 低载闲置值 500/500
     pod_cpu_normal=$((pod_total * 500))
     pod_mem_normal=$((pod_total * 500))
@@ -678,7 +678,7 @@ main() {
         cmd_aliyun="$cmd_aliyun --config-path $HOME/.config/aliyun/config.json"
     fi
     cmd_aliyun_p="$cmd_aliyun -p ${aliyun_profile:? ERR: empty aliyun profile}"
-    $cmd_aliyun version
+    # $cmd_aliyun version
 
     kubectl_cli="$(command -v kubectl)"
     if [ -f "$HOME/.config/kube/config" ]; then
