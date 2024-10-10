@@ -197,7 +197,7 @@ _get_node_pod() {
     ## 实际节点数 = 所有节点数 - 虚拟节点 1 个 (virtual-kubelet-cn-hangzhou-k)
     node_total="${#node_name[@]}"
     node_fixed="$((node_total - 1))"
-    pod_total=$($kubectl_clim get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
+    pod_total=$($kubectl_cli_m get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
     lock_file="/tmp/lock.scale.$deployment"
 }
 
@@ -236,17 +236,17 @@ _scale_up() {
     pod_sum=$((pod_total + node_inc))
     pod_count=pod_total
     while [[ ${pod_count:-1} -le $pod_sum ]]; do
-        $kubectl_clim scale --replicas="$((pod_count + 1))" deploy "$deployment"
+        $kubectl_cli_m scale --replicas="$((pod_count + 1))" deploy "$deployment"
         _msg log "$me_log" "$deployment scale to number: $pod_count"
         sleep 10
-        pod_count=$($kubectl_clim get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
+        pod_count=$($kubectl_cli_m get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
     done
 
     sleep 30
 
     ## 等待容器就绪 / pod ready
     sleeps=0
-    until [[ $($kubectl_clim get pods | grep -cw "$deployment") = "$pod_sum" ]]; do
+    until [[ $($kubectl_cli_m get pods | grep -cw "$deployment") = "$pod_sum" ]]; do
         ((++sleeps))
         if [[ ${sleeps:-0} -ge 300 ]]; then
             _msg "FAIL to get pod Ready, timeout exit"
@@ -289,7 +289,7 @@ _scale_down() {
 
     ## 缩容 pod
     _msg log "$me_log" "$deployment scale to number: $pod_total"
-    $kubectl_clim scale --replicas=$pod_sum deploy "$deployment"
+    $kubectl_cli_m scale --replicas=$pod_sum deploy "$deployment"
     sleep 5
 
     _get_cluster_info
@@ -314,16 +314,16 @@ _auto_scaling() {
     pod_mem_normal=$((pod_total * 500))
     ## 对当前 pod 的 cpu/mem 求和
     readarray -d " " -t cpu_mem < <(
-        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" |
+        $kubectl_cli_m top pod -l app.kubernetes.io/name="$deployment" |
             awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}'
     )
 
     ## 业务超载/扩容
     if (("${cpu_mem[0]}" > pod_cpu_warn && "${cpu_mem[1]}" > pod_mem_warn)); then
-        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
+        $kubectl_cli_m top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
         # _scale_up 2
-        $kubectl_clim scale --replicas=$((pod_total + 2)) deploy "$deployment"
-        if $kubectl_clim rollout status deployment "$deployment" --timeout 120s; then
+        $kubectl_cli_m scale --replicas=$((pod_total + 2)) deploy "$deployment"
+        if $kubectl_cli_m rollout status deployment "$deployment" --timeout 120s; then
             touch "$lock_file"
             scale_status=OK
         else
@@ -349,10 +349,10 @@ _auto_scaling() {
         return
     fi
     if (("${cpu_mem[0]}" < pod_cpu_normal && "${cpu_mem[1]}" < pod_mem_normal)); then
-        $kubectl_clim top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
+        $kubectl_cli_m top pod -l app.kubernetes.io/name="$deployment" | tee -a "$me_log"
         # _scale_down 2
-        $kubectl_clim scale --replicas="$node_fixed" deploy "$deployment"
-        if $kubectl_clim rollout status deployment "$deployment" --timeout 120s; then
+        $kubectl_cli_m scale --replicas="$node_fixed" deploy "$deployment"
+        if $kubectl_cli_m rollout status deployment "$deployment" --timeout 120s; then
             # touch "$lock_file"
             scale_status=OK
         else
@@ -504,17 +504,18 @@ _add_ram() {
 _upload_cert() {
     _get_aliyun_profile
     set -e
-    aliyun_region=cn-hangzhou
     _check_jq_cli
     _check_aliyun_cli || _install_aliyun_cli
+    local today
+    today="$($cmd_date +%m%d)"
     while read -r line; do
         domain="${line// /.}"
-        upload_name="${domain//./-}-$($cmd_date +%m%d)"
+        upload_name="${domain//./-}-$today"
         file_key="$(cat "$HOME/.acme.sh/dest/${domain}.key")"
         file_pem="$(cat "$HOME/.acme.sh/dest/${domain}.pem")"
         upload_log="$me_path_data/${me_name}.upload.cert.${domain}.log"
         _msg "domain: ${domain}"
-        _msg "upload_name: ${upload_name}"
+        _msg "upload ssl cert name: ${upload_name}"
         _msg "key: $HOME/.acme.sh/dest/${domain}.key"
         _msg "pem: $HOME/.acme.sh/dest/${domain}.pem"
 
@@ -529,22 +530,25 @@ _upload_cert() {
         fi
 
         ## 上传证书
-        _msg "upload cert_name: ${upload_name}"
         $cmd_aliyun_p cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" | tee "$upload_log"
 
     done < <(
-        $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
-            jq -r '.Domains.PageData[].DomainName' |
-            awk -F. '{$1=""; print $0}' | sort | uniq
+        if [[ -n "$1" ]]; then
+            for i in "$@"; do echo "$i"; done
+        else
+            $cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
+                jq -r '.Domains.PageData[].DomainName' |
+                awk -F. '{$1=""; print $0}' | sort | uniq
+        fi
     )
 
     ## 设置 cdn 域名证书
     while read -r line; do
         domain_cdn="${line}"
         domain="${domain_cdn#*.}"
-        upload_name="${domain//./-}-$($cmd_date +%m%d)"
-        _msg "found domain: ${domain_cdn}"
-        _msg "set domain to cert_name: ${upload_name}"
+        upload_name="${domain//./-}-$$today"
+        _msg "found cdn domain: ${domain_cdn}"
+        _msg "set ssl to: ${upload_name}"
 
         $cmd_aliyun_p cdn BatchSetCdnDomainServerCertificate --region cn-hangzhou --SSLProtocol on --CertType cas --DomainName "${domain_cdn}" --CertName "${upload_name}"
     done < <(
@@ -563,7 +567,7 @@ _add_workorder() {
     # python3 -m pip list | grep 'alibabacloud_tea_console' || python3 -m pip install alibabacloud_tea_console
     ## 列出产品列表 （没有 aliyun cli 可用，使用 python sdk）
     call_python_file="$me_path/aliyun.workorder.py"
-    saved_json="$me_path/../data/aliyun.product.list.json"
+    saved_json="$me_path_data/aliyun.product.list.json"
     command -v fzf || sudo apt install -y fzf
     if [ -f "$saved_json" ]; then
         id_string="$(
@@ -669,23 +673,18 @@ main() {
 
     source "$me_env"
 
-    if [ -f "$HOME/.aliyun/config.json" ]; then
-        a_conf="$HOME/.aliyun/config.json"
-    elif [ -f "$HOME/.config/aliyun/config.json" ]; then
-        a_conf="$HOME/.config/aliyun/config.json"
+    cmd_aliyun="$(command -v aliyun)"
+    if [ -f "$HOME/.config/aliyun/config.json" ]; then
+        cmd_aliyun="$cmd_aliyun --config-path $HOME/.config/aliyun/config.json"
     fi
-
-    cmd_aliyun="$(command -v aliyun) --config-path $a_conf"
     cmd_aliyun_p="$cmd_aliyun -p ${aliyun_profile:? ERR: empty aliyun profile}"
-    # $cmd_aliyun --help | grep -m1 Version
+    $cmd_aliyun version
 
-    if [ -f "$HOME/.kube/config" ]; then
-        k_conf="$HOME/.kube/config"
-    elif [ -f "$HOME/.config/kube/config" ]; then
-        k_conf="$HOME/.config/kube/config"
+    kubectl_cli="$(command -v kubectl)"
+    if [ -f "$HOME/.config/kube/config" ]; then
+        kubectl_cli="$kubectl_cli --kubeconfig $HOME/.config/kube/config"
     fi
-    kubectl_cli="$(command -v kubectl) --kubeconfig $k_conf"
-    kubectl_clim="$(command -v kubectl) --kubeconfig $k_conf -n main"
+    kubectl_cli_m="$kubectl_cli -n main"
 
     # while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -729,7 +728,9 @@ main() {
         _add_ram nothing
         ;;
     cas)
-        _upload_cert
+        shift
+        ## 参数输入域名，例如 example.com
+        _upload_cert "$@"
         ;;
     wo)
         _add_workorder
