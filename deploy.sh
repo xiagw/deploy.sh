@@ -1684,6 +1684,7 @@ _probe_deploy_method() {
         docker-compose.yml)
             exec_deploy_docker_compose=true
             deploy_method=docker-compose
+            break
             ;;
         Dockerfile*)
             exec_build_image=true
@@ -1692,10 +1693,12 @@ _probe_deploy_method() {
             exec_build_langs=false
             exec_deploy_rsync_ssh=false
             deploy_method=helm
+            break
             ;;
         esac
     done
-    echo "deploy method: $deploy_method"
+
+    echo "Deploy method: $deploy_method"
 }
 
 _checkout_svn_repo() {
@@ -1705,16 +1708,21 @@ _checkout_svn_repo() {
         mkdir -p "$g_me_builds_path"
     fi
     local svn_repo_name
-    svn_repo_name=$(echo "$svn_url" | awk -F '/' '{print $NF}')
-    local svn_repo_dir="${g_me_builds_path}/${svn_repo_name}"
+    svn_repo_name=$(basename "$svn_url")
+    local svn_repo_dir
+    svn_repo_dir="${g_me_builds_path}/${svn_repo_name}"
+
     if [ -d "$svn_repo_dir" ]; then
-        echo "\"$svn_repo_dir\" exists"
-        cd "$svn_repo_dir" && svn update
+        echo "Updating existing repo: $svn_repo_dir"
+        (cd "$svn_repo_dir" && svn update) || {
+            echo "Failed to update svn repo: $svn_url"
+            return 1
+        }
     else
-        echo "checkout svn repo: $svn_url"
+        echo "Checking out new repo: $svn_url"
         svn checkout "$svn_url" "$svn_repo_dir" || {
             echo "Failed to checkout svn repo: $svn_url"
-            exit 1
+            return 1
         }
     fi
 }
@@ -1726,22 +1734,22 @@ _clone_git_repo() {
         mkdir -p "$g_me_builds_path"
     fi
     local git_repo_name
-    git_repo_name=$(echo "$arg_git_clone_url" | awk -F '/' '{print $NF}')
+    git_repo_name="$(basename $arg_git_clone_url)"
     local git_repo_dir="${g_me_builds_path}/${git_repo_name%.git}"
+
     if [ -d "$git_repo_dir" ]; then
-        echo "\"$git_repo_dir\" exists"
-        cd "$git_repo_dir"
-        if [[ -n "$arg_git_clone_branch" ]]; then
-            git checkout --quiet "$arg_git_clone_branch" || {
-                echo "Failed to checkout $arg_git_clone_branch"
-                exit 1
-            }
-        fi
+        echo "Updating existing repo: $git_repo_dir"
+        git -C "$git_repo_dir" fetch --quiet || return 1
+        git -C "$git_repo_dir" checkout --quiet "${arg_git_clone_branch:-main}" || {
+            echo "Failed to checkout ${arg_git_clone_branch:-main}"
+            return 1
+        }
+        git -C "$git_repo_dir" pull --quiet || return 1
     else
-        echo "Clone git repo: $arg_git_clone_url"
-        git clone --quiet -b "$arg_git_clone_branch" "$arg_git_clone_url" "$git_repo_dir" || {
+        echo "Cloning git repo: $arg_git_clone_url"
+        git clone --quiet -b "${arg_git_clone_branch:-main}" "$arg_git_clone_url" "$git_repo_dir" || {
             echo "Failed to clone git repo: $arg_git_clone_url"
-            exit 1
+            return 1
         }
     fi
 }
@@ -1749,48 +1757,48 @@ _clone_git_repo() {
 _create_k8s() {
     ${create_k8s_with_terraform:-false} || return 0
     local terraform_dir="$g_me_data_path/terraform"
-    if [ ! -d "$terraform_dir" ]; then
-        return 0
-    fi
+    [[ -d "$terraform_dir" ]] || return 0
+
     _msg step "[PaaS] create k8s cluster"
     cd "$terraform_dir" || return 1
-    if terraform init; then
-        terraform apply -auto-approve
+
+    if terraform init && terraform apply -auto-approve; then
+        _msg info "Kubernetes cluster created successfully"
     else
-        _msg error "Terraform init failed"
-        exit $?
+        _msg error "Failed to create Kubernetes cluster"
+        return 1
     fi
 }
 
 _usage() {
-    echo "
+    cat <<EOF
 Usage: $0 [parameters ...]
 
 Parameters:
     -h, --help               Show this help message.
     -v, --version            Show version info.
     -r, --renew-cert         Renew all the certs.
-    --get-balance            get balance from aliyun.
+    --get-balance            Get balance from Aliyun.
     --code-style             Check code style.
     --code-quality           Check code quality.
-    --build-langs            Build all the languages.
-    --build-docker           Build image with docker.
-    --build-podman           Build image with podman.
-    --push-image             Push image with docker.
-    --deploy-k8s             Deploy to kubernetes.
-    --deploy-flyway          Deploy database with flyway.
-    --deploy-rsync-ssh       Deploy to rsync with ssh.
+    --build-langs            Build all languages.
+    --build-docker           Build image with Docker.
+    --build-podman           Build image with Podman.
+    --push-image             Push image with Docker.
+    --deploy-k8s             Deploy to Kubernetes.
+    --deploy-flyway          Deploy database with Flyway.
+    --deploy-rsync-ssh       Deploy using rsync over SSH.
     --deploy-rsync           Deploy to rsync server.
-    --deploy-ftp             Deploy to ftp server.
-    --deploy-sftp            Deploy to sftp server.
+    --deploy-ftp             Deploy to FTP server.
+    --deploy-sftp            Deploy to SFTP server.
     --test-unit              Run unit tests.
-    --test-function          Run function tests.
-    --debug                  Run with debug.
-    --cron                   Run on crontab.
-    --create-k8s             Create k8s with terraform.
-    --git-clone https://xxx.com/yyy/zzz.git      Clone git repo url, clone to builds/zzz.git
-    --git-clone-branch [dev|main] default \"main\"      git branch name
-"
+    --test-function          Run functional tests.
+    --debug                  Run in debug mode.
+    --cron                   Run as a cron job.
+    --create-k8s             Create K8s cluster with Terraform.
+    --git-clone URL          Clone git repo URL(https://xxx.com/yyy/zzz.git) to builds/REPO_NAME(zzz.git)
+    --git-clone-branch NAME  Specify git branch (default: main)
+EOF
 }
 
 _parse_args() {
@@ -1939,20 +1947,22 @@ main() {
     g_me_path="$(dirname "$(readlink -f "$0")")"
     g_me_conf_path="${g_me_path}/conf"
     g_me_bin_path="${g_me_path}/bin"
-    g_me_data_path="${g_me_path}/data" ## deploy.sh data folder
-    g_me_data_bin_path="${g_me_path}/data/bin"
+    g_me_data_path="${g_me_path}/data"
+    g_me_data_bin_path="${g_me_data_path}/bin"
     g_me_builds_path="${g_me_path}/builds"
     g_me_log="${g_me_data_path}/${g_me_name}.log"
-    g_me_conf="${g_me_data_path}/deploy.json"           ## deploy to app server 发布到目标服务器的配置信息
-    g_me_env="${g_me_data_path}/deploy.env"             ## deploy.sh ENV 发布配置信息(密)
-    g_me_conf_dockerfile="${g_me_conf_path}/dockerfile" ## deploy.sh dependent dockerfile
-    g_me_data_dockerfile="${g_me_data_path}/dockerfile" ## deploy.sh dependent dockerfile
-    ## create path data/bin  /  创建目录 data/bin
-    [ -d "${g_me_data_bin_path}" ] || mkdir -p "${g_me_data_bin_path}"
-    ## 准备配置文件
+    g_me_conf="${g_me_data_path}/deploy.json"
+    g_me_env="${g_me_data_path}/deploy.env"
+    g_me_conf_dockerfile="${g_me_conf_path}/dockerfile"
+    g_me_data_dockerfile="${g_me_data_path}/dockerfile"
+
+    mkdir -p "${g_me_data_bin_path}"
+
+    # Copy config files if they don't exist
     [[ -f "$g_me_conf" ]] || cp -v "${g_me_conf_path}/example-deploy.json" "$g_me_conf"
     [[ -f "$g_me_env" ]] || cp -v "${g_me_conf_path}/example-deploy.env" "$g_me_env"
-    ## 设定 PATH
+
+    # Set PATH
     declare -a paths_append=(
         "/usr/local/sbin"
         "/snap/bin"
@@ -1971,13 +1981,12 @@ main() {
 
     export PATH
 
-    run_cmd="$build_cmd run $ENV_ADD_HOST --interactive --rm -u $(id -u):$(id -g)"
+    # Set up run commands
     run_cmd_root="$build_cmd run $ENV_ADD_HOST --interactive --rm"
-    if ${debug_on:-false}; then
-        build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}--progress plain $ENV_ADD_HOST $quiet_flag"
-    else
-        build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}$ENV_ADD_HOST $quiet_flag"
-    fi
+    run_cmd+=" -u $(id -u):$(id -g)"
+    build_cmd_opt="${build_cmd_opt:+"$build_cmd_opt "}$ENV_ADD_HOST $quiet_flag"
+    ${debug_on:-false} && build_cmd_opt+=" --progress plain"
+
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
     _detect_os
 
@@ -1993,12 +2002,13 @@ main() {
     ## source ENV, get global variables / 获取 ENV_ 开头的所有全局变量
     source "$g_me_env"
 
-    if [ -f "$HOME/.kube/$env_namespace/config" ]; then
-        kubectl_opt="kubectl --kubeconfig $HOME/.kube/$env_namespace/config"
-        helm_opt="helm --kubeconfig $HOME/.kube/$env_namespace/config"
-    else
-        kubectl_opt="kubectl --kubeconfig $HOME/.kube/config"
-        helm_opt="helm --kubeconfig $HOME/.kube/config"
+    # Set up kubectl and helm
+    kubectl_opt="kubectl"
+    helm_opt="helm"
+    k_conf="$HOME/.kube/$env_namespace/config"
+    if [ -f "$k_conf" ]; then
+        kubectl_opt+=" --kubeconfig $k_conf"
+        helm_opt+=" --kubeconfig $k_conf"
     fi
 
     image_tag="${gitlab_commit_short_sha}-$(date +%s%3N)"
