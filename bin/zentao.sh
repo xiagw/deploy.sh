@@ -47,19 +47,19 @@ _get_project() {
         return 1
     fi
     ## 获取项目列表
-    case "${zen_get_metho:-api}" in
+    case "${zen_get_method:-api}" in
     api)
-        $curl_opt -H "token:${zen_token}" "${zen_api}/projects?limit=1000" >"$get_project_json"
+        $curl_opt -H "token:${zen_token}" "${zen_api}/projects?limit=1000" | jq '.projects' >"$get_project_json"
         # echo "Total projects: $(jq -r '.total' "$get_project_json")"
         ;;
     db)
         tmp_file="$(mktemp)"
-        get_project_list="$(mktemp)"
         cat >"$tmp_file" <<'EOF'
 SET SESSION group_concat_max_len =1024*50;
 select concat('[', group_concat(json_object('id',id,'name',name,'status',status)), ']') from zt_project where deleted = '0' and parent = '0';
 EOF
-        mysql zentao <"$tmp_file" >"$get_project_list"
+        mysql zentao -N <"$tmp_file" >"$get_project_json"
+        rm -f "$tmp_file"
         ;;
     esac
 
@@ -69,7 +69,7 @@ EOF
         project_status="$(echo "$line" | awk -F';' '{print $3}')"
         project_dir="${project_id}-${project_name}"
         ## 排除 id
-        if echo "${zen_project_exclude[@]}" | grep -q -w "$project_id"; then
+        if echo "${zen_project_exclude[@]}" | grep -qw "$project_id"; then
             continue
         fi
         ## 不足3位数前面补0
@@ -101,7 +101,7 @@ EOF
             fi
         fi
         # sleep 5
-    done < <(jq -r '.projects[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
+    done < <(jq -r '.[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
     # jq -c '.projects[] | select (.status | contains("doing","closed"))' "$get_project_json" |
     #         jq -r '(.id|tostring) + "-" + .name + ";" + .status'
     rm -f "$get_project_json"
@@ -109,7 +109,6 @@ EOF
 
 main() {
     # set -xe
-    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
     cmd_readlink="$(command -v greadlink)"
     me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
     me_name="$(basename "$0")"
