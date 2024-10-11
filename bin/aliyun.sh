@@ -153,7 +153,7 @@ _add_rds_account() {
         ## 授权
         $g_cmd_aliyun_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
     fi
-    _msg log "aliyun profile: ${aliyun_profile}, $rds_id / Account/Password: $rds_account  /  $password_rand"
+    _msg log "$g_me_log" "aliyun profile: ${aliyun_profile}, $rds_id / Account/Password: $rds_account  /  $password_rand"
 
     # SET PASSWORD FOR 'huxinye2'@'%' = PASSWORD('xx');
     # ALTER USER 'huxinye2'@'%' IDENTIFIED BY 'xx';
