@@ -10,9 +10,9 @@
 ################################################################################
 
 _msg() {
-    local color_on
-    local color_off='\033[0m' # Text Reset
-    time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
+    local color_on color_off='\033[0m'
+    local time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
+    local timestamp
     timestamp="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
@@ -38,9 +38,7 @@ _msg() {
         echo "$timestamp - $*" >>$g_me_log
         return
         ;;
-    *)
-        unset color_on color_off
-        ;;
+    *) unset color_on color_off ;;
     esac
     [ "$#" -gt 1 ] && shift
 
@@ -69,32 +67,28 @@ _is_root() {
     fi
 }
 
-## install phpunit
 _test_unit() {
-    if [[ -f "$gitlab_project_dir"/tests/unit_test.sh ]]; then
-        echo "Found $gitlab_project_dir/tests/unit_test.sh"
-        bash "$gitlab_project_dir"/tests/unit_test.sh
-    elif [[ -f "$g_me_data_path"/tests/unit_test.sh ]]; then
-        echo "Found $g_me_data_path/tests/unit_test.sh"
-        bash "$g_me_data_path"/tests/unit_test.sh
-    else
-        _msg purple "not found tests/unit_test.sh, skip unit test."
-    fi
-    _msg time "[test] unit test"
+    local test_script
+    for test_script in "$gitlab_project_dir/tests/unit_test.sh" "$g_me_data_path/tests/unit_test.sh"; do
+        if [[ -f "$test_script" ]]; then
+            echo "Found $test_script"
+            bash "$test_script"
+            return
+        fi
+    done
+    _msg purple "not found tests/unit_test.sh, skip unit test."
 }
 
-## install jdk/ant/jmeter
 _test_function() {
-    if [ -f "$gitlab_project_dir"/tests/func_test.sh ]; then
-        echo "Found $gitlab_project_dir/tests/func_test.sh"
-        bash "$gitlab_project_dir"/tests/func_test.sh
-    elif [ -f "$g_me_data_path"/tests/func_test.sh ]; then
-        echo "Found $g_me_data_path/tests/func_test.sh"
-        bash "$g_me_data_path"/tests/func_test.sh
-    else
-        echo "Not found tests/func_test.sh, skip function test."
-    fi
-    _msg time "[test] function test"
+    local test_script
+    for test_script in "$gitlab_project_dir/tests/func_test.sh" "$g_me_data_path/tests/func_test.sh"; do
+        if [[ -f "$test_script" ]]; then
+            echo "Found $test_script"
+            bash "$test_script"
+            return
+        fi
+    done
+    _msg purple "Not found tests/func_test.sh, skip function test."
 }
 
 _check_quality_sonar() {
@@ -107,7 +101,6 @@ _check_quality_sonar() {
 
     if [[ ! -f "$sonar_conf" ]]; then
         _msg green "Creating $sonar_conf"
-
         cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
 sonar.projectKey=${gitlab_project_namespace}_${gitlab_project_name}
@@ -122,7 +115,6 @@ test/**/*
 sonar.projectVersion=1.0
 sonar.import_unknown_files=true
 EOF
-
     fi
 
     ${github_action:-false} && return 0
