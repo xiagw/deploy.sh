@@ -47,6 +47,72 @@ _check_root() {
     esac
 }
 
+_check_distribution() {
+    if [ -r /etc/os-release ]; then
+        . /etc/os-release
+        version_id="${VERSION_ID-}"
+        lsb_dist="${ID,,}"
+    else
+        lsb_dist=$(
+            case "$OSTYPE" in
+            solaris*) echo "solaris" ;;
+            darwin*) echo "macos" ;;
+            linux*) echo "linux" ;;
+            bsd*) echo "bsd" ;;
+            msys*) echo "windows" ;;
+            cygwin*) echo "alsowindows" ;;
+            *) echo "unknown" ;;
+            esac
+        )
+    fi
+    lsb_dist="${lsb_dist:-unknown}"
+    _msg time "Your distribution is ${lsb_dist}."
+}
+
+_check_cmd() {
+    if [[ "$1" == install ]]; then
+        shift
+        local updated=0
+        for c in "$@"; do
+            if ! command -v "$c" &>/dev/null; then
+                if [[ $updated -eq 0 && "${apt_update:-0}" -eq 1 ]]; then
+                    ${cmd_pkg-} update -yqq
+                    updated=1
+                fi
+                pkg=$c
+                [[ "$c" == strings ]] && pkg=binutils
+                $cmd_pkg install -y "$pkg"
+            fi
+        done
+    else
+        command -v "$@"
+    fi
+}
+
+_check_sudo() {
+    ${already_check_sudo:-false} && return 0
+    if ! _check_root; then
+        if ! $use_sudo -l -U "$USER" &>/dev/null; then
+            _msg time "User $USER has no permission to execute this script!"
+            _msg time "Please run visudo with root, and set sudo for ${USER}."
+            return 1
+        fi
+        _msg time "User $USER has permission to execute this script!"
+    fi
+
+    for pkg_manager in apt yum dnf; do
+        if command -v "$pkg_manager" &>/dev/null; then
+            cmd_pkg="$use_sudo $pkg_manager"
+            [[ $pkg_manager == apt ]] && apt_update=1
+            already_check_sudo=true
+            return 0
+        fi
+    done
+
+    _msg time "Package manager (apt/yum/dnf) not found, exiting."
+    return 1
+}
+
 _get_yes_no() {
     # read -rp "${1:-Confirm the action?} [y/N] " -n 1 -s read_yes_no
     # [[ ${read_yes_no,,} == y ]] && return 0 || return 1
@@ -98,52 +164,6 @@ _get_ip_current() {
     esac
     _msg green "get IPv4: $ip4_current"
     _msg green "get IPv6: $ip6_current"
-}
-
-_check_distribution() {
-    if [ -r /etc/os-release ]; then
-        . /etc/os-release
-        version_id="${VERSION_ID-}"
-        lsb_dist="${ID,,}"
-    else
-        lsb_dist=$(
-            case "$OSTYPE" in
-            solaris*) echo "solaris" ;;
-            darwin*) echo "macos" ;;
-            linux*) echo "linux" ;;
-            bsd*) echo "bsd" ;;
-            msys*) echo "windows" ;;
-            cygwin*) echo "alsowindows" ;;
-            *) echo "unknown" ;;
-            esac
-        )
-    fi
-    lsb_dist="${lsb_dist:-unknown}"
-    _msg time "Your distribution is ${lsb_dist}."
-}
-
-_check_sudo() {
-    ${already_check_sudo:-false} && return 0
-    if ! _check_root; then
-        if ! $use_sudo -l -U "$USER" &>/dev/null; then
-            _msg time "User $USER has no permission to execute this script!"
-            _msg time "Please run visudo with root, and set sudo for ${USER}."
-            return 1
-        fi
-        _msg time "User $USER has permission to execute this script!"
-    fi
-
-    for pkg_manager in apt yum dnf; do
-        if command -v "$pkg_manager" &>/dev/null; then
-            cmd_pkg="$use_sudo $pkg_manager"
-            [[ $pkg_manager == apt ]] && apt_update=1
-            already_check_sudo=true
-            return 0
-        fi
-    done
-
-    _msg time "Package manager (apt/yum/dnf) not found, exiting."
-    return 1
 }
 
 _install_ossutil() {
