@@ -33,9 +33,9 @@ _get_token() {
 _add_account() {
     read -rp "请输入用户姓名: " user_realname
     read -rp "请输入账号: " user_account
-    _get_random_password
-    echo "$user_realname / $user_account / ${password_rand:? }" | tee -a "$me_log"
-    $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${password_rand:? ERR: empty password }"'", "group": "1", "gender": "m"}'
+    password_rand=$(_get_random_password 2>/dev/null)
+    echo "$user_realname / $user_account / ${password_rand}" | tee -a "$me_log"
+    $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${password_rand}"'", "group": "1", "gender": "m"}'
 }
 
 _get_project() {

@@ -54,22 +54,22 @@ _get_yes_no() {
     [[ ${read_yes_no,,} =~ ^y(es)?$ ]]
 }
 
-## global variable: password_rand
 _get_random_password() {
-    # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
-    local cmd_hash password_bits=${1:-14}
-    cmd_hash=$(command -v md5sum || command -v sha256sum || command -v md5)
+    local cmd_hash bits=${1:-14}
+    cmd_hash=$(command -v md5sum || command -v sha256sum || command -v md5 2>/dev/null)
     count=0
     while [ -z "$password_rand" ]; do
         ((++count))
         case $count in
-        1) password_rand="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c"$password_bits")" ;;
-        2) password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c"$password_bits")" ;;
-        3) password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c"$password_bits") ;;
-        4) password_rand="$(echo "$RANDOM$($cmd_date)$RANDOM" | $cmd_hash | base64 | head -c"$password_bits")" ;;
-        *) echo "${password_rand:?Failed to generate password}" && return 1 ;;
+        1) password_rand="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
+        2) password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
+        3) password_rand="$(dd if=/dev/urandom bs=1 count=15 | base64 | head -c"$bits" 2>/dev/null)" ;;
+        4) password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null) ;;
+        5) password_rand="$(echo "$RANDOM$($cmd_date)$RANDOM" | $cmd_hash | base64 | head -c"$bits" 2>/dev/null)" ;;
+        *) echo "${password_rand:?Failed-to-generate-password}" && return 1 ;;
         esac
     done
+    echo "$password_rand"
 }
 
 _get_ip_current() {

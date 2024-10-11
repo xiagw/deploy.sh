@@ -137,19 +137,19 @@ _add_rds_account() {
     rds_account="${read_rds_account:-dev2rds}"
     read -rp "Input account description (chinese name): " read_rds_account_desc
     rds_account_desc="$(date +%F)-${read_rds_account_desc-}"
-    _get_random_password 14
+    password_rand=$(_get_random_password 2>/dev/null)
 
     ## aliyun rds ResetAccountPassword
     $g_cmd_aliyun_p rds DescribeAccounts --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account"
     if _get_yes_no "[+] Do you want ResetAccountPassword? "; then
-        $g_cmd_aliyun_p rds ResetAccountPassword --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }"
+        $g_cmd_aliyun_p rds ResetAccountPassword --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand}"
     fi
     ## aliyun rds CreateAccount
     if _get_yes_no "[+] Do you want create RDS account? "; then
         ## 创建 db
         $g_cmd_aliyun_p rds CreateDatabase --region "$aliyun_region" --CharacterSetName utf8mb4 --DBInstanceId "$rds_id" --DBName "$rds_account"
         ## 创建 account , Normal / Super
-        $g_cmd_aliyun_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand:? ERR: empty password }" --AccountType Normal --AccountDescription "$rds_account_desc"
+        $g_cmd_aliyun_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand}" --AccountType Normal --AccountDescription "$rds_account_desc"
         ## 授权
         $g_cmd_aliyun_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
     fi
@@ -426,7 +426,7 @@ _add_ram_account() {
     read -rp "Enter account name: " -e -i dev2app read_account_name
     acc_name="${read_account_name:-dev2app}"
     if _get_yes_no "Create aliyun RAM user?"; then
-        _get_random_password
+        password_rand=$(_get_random_password 2>/dev/null)
         ## 创建帐号, 设置密/码
         $g_cmd_aliyun_p ram CreateUser --DisplayName "$acc_name" --UserName "$acc_name" | tee -a "$g_me_log"
         $g_cmd_aliyun_p ram CreateLoginProfile --UserName "$acc_name" --Password "$password_rand" --PasswordResetRequired false | tee -a "$g_me_log"

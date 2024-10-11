@@ -2,17 +2,16 @@
 # shellcheck disable=1090
 
 _add_account() {
-
     if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -w "$user_name"; then
         if _get_yes_no "user $user_name exists, update $user_name password?"; then
             user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
-            $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand:? empty password}" --name "$user_name" --email "$user_name@${gitlab_domain}" --skip-reconfirmation 1
+            $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand}" --name "$user_name" --email "$user_name@${gitlab_domain}" --skip-reconfirmation 1
             return
         fi
         return 1
     fi
 
-    $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand:? empty password}" --email "${user_name}@${gitlab_domain}" --skip-confirmation 1 --can-create-group 0
+    $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand}" --email "${user_name}@${gitlab_domain}" --skip-confirmation 1 --can-create-group 0
     _msg log "$me_log" "username=$user_name / password=$password_rand"
 
     _msg "add to default group \"pms\"."
@@ -192,7 +191,7 @@ main() {
         gitlab_domain=${gitlab_domain:? ERR: empty domain name}
     fi
 
-    _get_random_password
+    password_rand=$(_get_random_password 2>/dev/null)
     _add_account
     _send_msg
     # _new_element_user
