@@ -143,6 +143,7 @@ _scan_vulmap() {
     # https://github.com/zhzyker/vulmap
     # $build_cmd run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
     # Load environment variables from config file
+    # shellcheck disable=SC1091
     source $g_me_data_path/config.cfg
     # Run vulmap scan
     $run_cmd_root -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/vulmap_report.html"
@@ -169,6 +170,7 @@ _deploy_flyway_docker() {
     flyway_docker_run="$build_cmd run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
 
     ## ssh port-forward mysql 3306 to localhost / 判断是否需要通过 ssh 端口转发建立数据库远程连接
+    # shellcheck disable=SC1091
     [ -f "$g_me_bin_path/ssh-port-forward.sh" ] && source "$g_me_bin_path/ssh-port-forward.sh" port
     ## exec flyway
     if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
@@ -587,6 +589,7 @@ _deploy_k8s() {
 
     if [ -f "$gitlab_project_dir/deploy.custom.sh" ]; then
         _msg time "custom deploy."
+        # shellcheck disable=SC1091
         source "$gitlab_project_dir/deploy.custom.sh"
     fi
 
@@ -1241,6 +1244,7 @@ _set_mirror() {
 _detect_os() {
     _is_root || use_sudo=sudo
     if [[ -e /etc/os-release ]]; then
+        # shellcheck disable=SC1091
         source /etc/os-release
         os_type="${ID}"
     elif [[ -e /etc/centos-release ]]; then
