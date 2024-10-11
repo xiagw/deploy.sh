@@ -48,6 +48,7 @@ _check_root() {
 }
 
 _check_distribution() {
+    _msg time "Check distribution..."
     if [ -r /etc/os-release ]; then
         . /etc/os-release
         version_id="${VERSION_ID-}"
@@ -66,7 +67,7 @@ _check_distribution() {
         )
     fi
     lsb_dist="${lsb_dist:-unknown}"
-    _msg time "Your distribution is ${lsb_dist}."
+    _msg time "Your distribution is ${lsb_dist}, ARCH is $(uname -m)."
 }
 
 _check_cmd() {
