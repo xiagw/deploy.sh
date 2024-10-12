@@ -151,13 +151,20 @@ _get_random_password() {
     echo "$password_rand"
 }
 
-_get_ip_current() {
+_get_current_ip() {
     _check_distribution
     case "$lsb_dist" in
     macos)
-        ip4_current=$(curl -x '' -4 --connect-timeout 5 -fsSL 4.ipw.cn)
-        ip6_current=$(curl -x '' -6 --connect-timeout 5 -fsSL 6.ipw.cn | tail -n 1)
-        [ -z "$ip6_current" ] && ip6_current=$(ifconfig en0 | awk '/inet6.*temporary/ {print $2}' | head -n 1)
+        ip4_current=$(curl -x '' -4 --connect-timeout 10 -fsSL 4.ipw.cn)
+        c=0
+        while [ -z "$ip6_current" ]; do
+            ((++c))
+            case $c in
+            1) ip6_current=$(curl -x '' -6 --connect-timeout 10 -fsSL 6.ipw.cn | tail -n 1) ;;
+            2) ip6_current=$(ifconfig en0 | awk '/inet6.*temporary/ {print $2}' | head -n 1) ;;
+            *) break ;;
+            esac
+        done
         ;;
     *)
         if grep -i -q 'ID="openwrt2"' /etc/os-release; then
