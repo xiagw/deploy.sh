@@ -480,7 +480,7 @@ EOF
     # sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
 }
 
-_deploy_functions_aliyun() {
+_deploy_to_aliyun_functions() {
     _format_release_name
     ${github_action:-false} && return 0
     ${ENV_ENABLE_FUNC:-false} || {
@@ -534,7 +534,7 @@ EOF
     _msg time "[deploy] create/update functions end"
 }
 
-_deploy_k8s() {
+_deploy_to_kubernetes() {
     if "${ENV_DISABLE_K8S:-false}"; then
         _msg time "!!! disable deploy to k8s !!!"
         return
@@ -604,7 +604,7 @@ _deploy_k8s() {
     _msg time "[deploy] deploy k8s with helm"
 }
 
-_deploy_rsync_ssh() {
+_deploy_via_rsync_ssh() {
     _msg step "[deploy] deploy files with rsync+ssh"
     ## rsync exclude some files / rsync 排除某些文件
     rsync_exclude="${gitlab_project_dir}/rsync.exclude"
@@ -829,7 +829,7 @@ _set_proxy() {
     esac
 }
 
-_renew_cert() {
+_renew_ssl_certificates() {
     _msg step "[cert] renew SSL cert with acme.sh using dns+api"
     acme_home="${HOME}/.acme.sh"
     acme_cmd="${acme_home}/acme.sh"
@@ -1206,20 +1206,12 @@ _set_mirror() {
     esac
 }
 
-_detect_os() {
-    _check_root || use_sudo=sudo
-    if [[ -e /etc/os-release ]]; then
-        source /etc/os-release
-        os_type="${ID}"
-    elif [[ -e /etc/centos-release ]]; then
-        os_type=centos
-    elif [[ -e /etc/arch-release ]]; then
-        os_type=arch
-    elif [[ $OSTYPE == darwin* ]]; then
-        os_type=macos
-    fi
+_setup_environment() {
+    _check_root
+    _check_distribution
+
     pkgs=()
-    case "$os_type" in
+    case "${lsb_dist:-}" in
     debian | ubuntu | linuxmint)
         # RUN apt-get update && \
         #        apt-get -y install sudo dialog apt-utils
@@ -1244,7 +1236,7 @@ _detect_os() {
         ;;
     centos | amzn | rhel | fedora)
         rpm -q epel-release >/dev/null || {
-            if [ "$os_type" = amzn ]; then
+            if [ "${lsb_dist:-}" = amzn ]; then
                 $use_sudo amazon-linux-extras install -y epel >/dev/null
             else
                 $use_sudo yum install -y epel-release >/dev/null
@@ -1287,14 +1279,13 @@ _detect_os() {
         fi
         ;;
     *)
-        echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        _msg error "Unsupported. exit."
+        _msg error "Unsupported OS distribution. Exiting."
         return 1
         ;;
     esac
 }
 
-_clean_disk() {
+_clean_up_disk_space() {
     # Check disk usage and exit if below the threshold
     local disk_usage
     disk_usage=$(df / | awk 'NR==2 {print int($5)}')
@@ -1551,7 +1542,7 @@ _set_deploy_conf() {
     return 0
 }
 
-_setup_gitlab_vars() {
+_initialize_gitlab_variables() {
     # Set default values for GitLab CI variables
     gitlab_project_dir=${CI_PROJECT_DIR:-$PWD}
     gitlab_project_name=${CI_PROJECT_NAME:-${gitlab_project_dir##*/}}
@@ -1608,7 +1599,7 @@ _setup_gitlab_vars() {
     fi
 }
 
-_probe_langs() {
+_detect_project_language() {
     _msg step "[language] probe program language"
     local lang_files=("pom.xml" "composer.json" "package.json" "requirements.txt" "README.md" "readme.md" "README.txt" "readme.txt")
 
@@ -1635,7 +1626,7 @@ _probe_langs() {
     echo "Probe program language: ${project_lang}"
 }
 
-_probe_deploy_method() {
+_determine_deployment_method() {
     _msg step "[probe] deploy method"
     local deploy_method=rsync
     for f in Dockerfile* docker-compose.yml; do
@@ -1662,7 +1653,7 @@ _probe_deploy_method() {
     echo "Deploy method: $deploy_method"
 }
 
-_checkout_svn_repo() {
+_setup_svn_repo() {
     ${checkout_with_svn:-false} || return 0
     if [[ ! -d "$g_me_builds_path" ]]; then
         echo "Not found $g_me_builds_path, create it..."
@@ -1688,7 +1679,7 @@ _checkout_svn_repo() {
     fi
 }
 
-_clone_git_repo() {
+_setup_git_repo() {
     ${arg_git_clone:-false} || return 0
     if [[ ! -d "$g_me_builds_path" ]]; then
         echo "Not found $g_me_builds_path, create it..."
@@ -1715,7 +1706,7 @@ _clone_git_repo() {
     fi
 }
 
-_create_k8s() {
+_setup_kubernetes_cluster() {
     ${create_k8s_with_terraform:-false} || return 0
     local terraform_dir="$g_me_data_path/terraform"
     [[ -d "$terraform_dir" ]] || return 0
@@ -1946,17 +1937,16 @@ main() {
     ${debug_on:-false} && build_cmd_opt+=" --progress plain"
 
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
-    _check_distribution
-    _detect_os
+    _setup_environment
 
     ## git clone repo / 克隆 git 仓库
-    _clone_git_repo
+    _setup_git_repo
 
     ## svn checkout repo / 克隆 svn 仓库
-    _checkout_svn_repo
+    _setup_svn_repo
 
     ## run deploy.sh by hand / 手动执行 deploy.sh 时假定的 gitlab 配置
-    _setup_gitlab_vars
+    _initialize_gitlab_variables
 
     ## source ENV, get global variables / 获取 ENV_ 开头的所有全局变量
     source "$g_me_env"
@@ -1988,10 +1978,10 @@ main() {
     ${ENV_INSTALL_CRON:-false} && _install_cron
 
     ## clean up disk space / 清理磁盘空间
-    _clean_disk
+    _clean_up_disk_space
 
     ## create k8s / 创建 kubernetes 集群
-    _create_k8s
+    _setup_kubernetes_cluster
 
     ## setup ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     _set_deploy_conf
@@ -2006,17 +1996,17 @@ main() {
     # echo "MAN_RENEW_CERT: ${MAN_RENEW_CERT:-false}"
     if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${github_action:-false} || ${arg_renew_cert:-false}; then
         exec_single_job=true
-        _renew_cert
+        _renew_ssl_certificates
     fi
 
     ## probe program lang / 探测项目的程序语言
-    _probe_langs
+    _detect_project_language
 
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
     _inject_files
 
     ## probe deploy method / 探测文件并确定发布方式
-    _probe_deploy_method
+    _determine_deployment_method
 
     ## code style check / 代码格式检查
     code_style_sh="$g_me_bin_path/style.${project_lang}.sh"
@@ -2041,10 +2031,10 @@ main() {
         }
         ${arg_build_image:-false} && _build_image
         ${arg_push_image:-false} && _push_image
-        ${arg_deploy_functions:-false} && _deploy_functions_aliyun
+        ${arg_deploy_functions:-false} && _deploy_to_aliyun_functions
         ${arg_create_helm:-false} && _create_helm_chart "${helm_dir}"
-        ${arg_deploy_k8s:-false} && _deploy_k8s
-        ${arg_deploy_rsync_ssh:-false} && _deploy_rsync_ssh
+        ${arg_deploy_k8s:-false} && _deploy_to_kubernetes
+        ${arg_deploy_rsync_ssh:-false} && _deploy_via_rsync_ssh
         ${arg_deploy_rsync:-false} && _deploy_rsync
         ${arg_deploy_ftp:-false} && _deploy_ftp
         ${arg_deploy_sftp:-false} && _deploy_sftp
@@ -2117,9 +2107,9 @@ main() {
     ${exec_push_image:-false} && _push_image
 
     ## deploy k8s
-    ${exec_deploy_k8s:-false} && _deploy_k8s
+    ${exec_deploy_k8s:-false} && _deploy_to_kubernetes
     ## deploy functions aliyun
-    ${exec_deploy_functions:-true} && _deploy_functions_aliyun
+    ${exec_deploy_functions:-true} && _deploy_to_aliyun_functions
     ## deploy rsync server
     ${exec_deploy_rsync:-false} && _deploy_rsync
     ## deploy ftp server
@@ -2127,7 +2117,7 @@ main() {
     ## deploy sftp server
     ${exec_deploy_sftp:-false} && _deploy_sftp
     ## deploy with rsync / 使用 rsync 发布
-    ${exec_deploy_rsync_ssh:-true} && _deploy_rsync_ssh
+    ${exec_deploy_rsync_ssh:-true} && _deploy_via_rsync_ssh
 
     ## function test / 功能测试
     ## 在 gitlab 的 pipeline 配置环境变量 MAN_FUNCTION_TEST ，true 启用，false 禁用[default]
