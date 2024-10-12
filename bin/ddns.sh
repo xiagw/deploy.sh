@@ -1,26 +1,21 @@
 #!/bin/sh
 
 _get_config() {
-    ## get config from file
-    XDG_CONFIG_HOME="$HOME/.config"
-    if [ -d "$XDG_CONFIG_HOME/ddns" ]; then
-        me_env="$XDG_CONFIG_HOME/ddns/${me_name}.env"
-        me_log="$XDG_CONFIG_HOME/ddns/${me_name}.log"
-    else
-        [ -d "$me_path_data" ] || mkdir -p "$me_path_data"
-        me_env="$me_path_data/${me_name}.env"
-        me_log="$me_path_data/${me_name}.log"
-    fi
-    _msg "config file: $me_env"
-    _msg "log file: $me_log"
+    XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+    ddns_conf_path="${XDG_CONFIG_HOME}/ddns"
+    [ -d "$ddns_conf_path" ] || ddns_conf_path="$g_me_data_path"
 
-    . "$me_env"
+    g_me_env="${ddns_conf_path}/${g_me_name}.env"
+    g_me_log="${ddns_conf_path}/${g_me_name}.log"
 
-    ## get config from args
-    if [ -z "$dynv6_host" ] || [ -z "$dynv6_token" ]; then
-        dynv6_host=${ddns_host}
-        dynv6_token=${ddns_token}
-    fi
+    _msg "config file: $g_me_env"
+    _msg "log file: $g_me_log"
+    # shellcheck disable=SC1090
+    . "$g_me_env"
+
+    dynv6_host="${dynv6_host:-$ddns_host}"
+    dynv6_token="${dynv6_token:-$ddns_token}"
+
     if [ -z "$dynv6_host" ] || [ -z "$dynv6_token" ]; then
         echo "Usage: $0 <your-name>.dynv6.net <token> [device]"
         return 1
@@ -29,49 +24,36 @@ _get_config() {
 }
 
 ## get last ip from log
-_get_ip_last() {
-    ip4_last=$(awk 'END {print $3}' "$me_log")
-    ip6_last=$(awk 'END {print $5}' "$me_log")
+_get_saved_ip() {
+    ip4_last=$(tail -n1 "$g_me_log" | awk '{print $4}')
+    ip6_last=$(tail -n1 "$g_me_log" | awk '{print $6}')
     _msg "get old IPv4 from log file: $ip4_last"
     _msg "get old IPv6 from log file: $ip6_last"
 }
 
 # address with netmask
 # ip6_current=$ip6_current/${netmask:-128}
-_compare_ip() {
-    if [ "$ip6_last" = "$ip6_current" ] && [ "$ip4_last" = "$ip4_current" ]; then
-        _msg "IP not changed, skip update"
-        if [ "${force_update:-0}" -eq 1 ]; then
-            _msg "force update ddns"
-            return 1
-        else
-            return 0
-        fi
-    else
-        return 1
-    fi
-}
 
 _update_dynv6() {
-    if [ -z "$ip4_current" ]; then
-        _msg "Not found IPv4 address"
-    else
-        $cmd "http://ipv4.dynv6.com/api/update?ipv4=auto&zone=${dynv6_host}&token=${dynv6_token}"
-        # $cmd "http://ipv4.dynv6.com/api/update?ipv4=${ip4_current}&zone=${dynv6_host}&token=${dynv6_token}"
-        echo
-        _msg log "$me_log" "IPV4:  ${ip4_current:-none}  IPV6:  ${ip6_current:-none}"
-    fi
-    if [ -z "$ip6_current" ]; then
-        _msg "Not found IPv6 address"
-    else
-        # $cmd "http://ipv6.dynv6.com/api/update?ipv6=auto&zone=${dynv6_host}&token=${dynv6_token}"
-        $cmd "http://ipv6.dynv6.com/api/update?ipv6=${ip6_current}&zone=${dynv6_host}&token=${dynv6_token}"
-        echo
-        _msg log "$me_log" "IPV4:  ${ip4_current:-none}  IPV6:  ${ip6_current:-none}"
-    fi
+    [ "$ip6_last" = "${ip6_current-}" ] && [ "$ip4_last" = "${ip4_current-}" ] && [ "${force_update:-0}" -ne 1 ] && return
+
+    base_url="http://dynv6.com/api/update?hostname=${dynv6_host}&token=${dynv6_token}"
+    $cmd "${base_url}&ipv4=${ip4_current}"
+    echo
+    $cmd "${base_url}&ipv6=${ip6_current}"
+    echo
+    _msg log "$g_me_log" "IPV4: ${ip4_current:-none} IPV6: ${ip6_current:-none}"
 }
 
-_set_args() {
+_include_sh() {
+    include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
+    include_sh=/tmp/include.sh
+    [ -f "$include_sh" ] || $cmd "$include_url" >"$include_sh"
+    # shellcheck disable=SC1090
+    . "$include_sh"
+}
+
+_parse_args() {
     ## disable proxy
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
     if [ -x /usr/local/opt/curl/bin/curl ]; then
@@ -81,55 +63,39 @@ _set_args() {
     elif [ -x /usr/bin/wget ]; then
         cmd="wget --quiet -O-"
     else
-        echo "neither curl nor wget found"
-        echo "try to install curl"
+        echo "Neither curl nor wget found. Please install curl."
         echo "opkg update && opkg install curl"
-        exit 1
+        return 1
     fi
 
     wan_device=pppoe-wan
-    case "$1" in
-    -f | --force)
-        force_update=1
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -f | --force) force_update=1 ;;
+        -h | --host) ddns_host=$2 && shift ;;
+        -t | --token) ddns_token=$2 && shift ;;
+        -d | --device) wan_device=$2 && shift ;;
+        -s | --auto | --silent) silent_mode=1 ;;
+        *) _msg "Unknown option: $1" ;;
+        esac
         shift
-        ;;
-    -h | --host)
-        ddns_host=$2
-        shift 2
-        ;;
-    -t | --token)
-        ddns_token=$2
-        shitf 2
-        ;;
-    -d | --device)
-        wan_device=$2
-        shitf 2
-        ;;
-    -s | --auto | --silent)
-        silent_mode=1
-        ;;
-    # *)
-    #     _msg "Usage: $me_name [force] <config>"
-    #     ;;
-    esac
+    done
+    echo "$wan_device $silent_mode" >/dev/null
 }
 
 main() {
-    cmd_readlink="$(command -v greadlink)"
-    me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
-    me_path_data="$me_path/../data"
-    me_name="$(basename "$0")"
-
-    # source <(curl -fsSL https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh)
-    [ -f "$me_path"/include.sh ] || curl -fLo "$me_path"/include.sh https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh
-    . "$me_path"/include.sh
+    g_me_name="$(basename "$0")"
+    g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
+    g_me_env="$g_me_path/${g_me_name}.env"
+    g_me_log="$g_me_path/${g_me_name}.log"
+    g_me_data_path="$g_me_path/../data"
 
     ## interface name in openwrt
-    _set_args "$@"
+    _parse_args "$@" || return
+    _include_sh || return
     _get_config || return
-    _get_ip_last
-    _get_ip_current  ## include.sh
-    _compare_ip && return
+    _get_saved_ip
+    _get_current_ip
     _update_dynv6
 }
 
