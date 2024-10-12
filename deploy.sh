@@ -1005,17 +1005,19 @@ _install_flarectl() {
     command -v flarectl >/dev/null && return
     _msg green "installing flarectl"
     local ver='0.107.0'
-    local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.xz"
+    local temp_file=/tmp/f.tgz
+    local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.gz"
 
-    if curl -fsSLo /tmp/flarectl.tar.xz $url; then
+    if curl -fsSLo $temp_file $url; then
         #  | tar xJf - -C "/tmp/" flarectl
-        tar -C /tmp -xJf /tmp/flarectl.tar.xz flarectl
+        tar -C /tmp -xzf $temp_file flarectl
         $use_sudo install -m 0755 /tmp/flarectl "${g_me_data_bin_path}/flarectl"
         _msg success "flarectl installed successfully"
     else
         _msg error "failed to download and install flarectl"
         return 1
     fi
+    rm -f$temp_file
 }
 
 _install_tencent_cli() {
