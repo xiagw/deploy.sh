@@ -52,7 +52,8 @@ _check_distribution() {
     if [ -r /etc/os-release ]; then
         . /etc/os-release
         version_id="${VERSION_ID:-}"
-        lsb_dist="${ID,,}"
+        # lsb_dist="${ID,,}"
+        lsb_dist="$(echo "${ID:-}" | tr '[:upper:]' '[:lower:]')"
     else
         lsb_dist=$(
             case "$OSTYPE" in
