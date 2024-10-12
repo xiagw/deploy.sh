@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034,SC1090,SC1091
 
+# Use gdate if available, otherwise fallback to date command
 cmd_date="$(command -v gdate || command -v date)"
 
 _msg() {
@@ -24,7 +25,7 @@ _msg() {
         color_off=" - [$time_hms]"
         ;;
     time)
-        color_on="$timestamp - $([ -n "${STEP}" ] && echo "[$STEP]") "
+        color_on="$timestamp - ${STEP:+[$STEP] }"
         color_off=" - [$time_hms]"
         ;;
     log)
@@ -41,7 +42,7 @@ _msg() {
     esac
 
     [ "$#" -gt 1 ] && shift
-    [ "${silent_mode:-0}" -eq 0 ] && echo -e "${color_on}$*${color_off}"
+    [ "${silent_mode:-0}" -eq 0 ] && printf "%b%s%b\n" "${color_on}" "$*" "${color_off}"
 }
 
 _check_root() {
@@ -218,7 +219,7 @@ _install_ossutil() {
     url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${os}-amd64\.zip")
     curl -fLo ossu.zip "$url_down"
     unzip -o -j ossu.zip
-    sudo install -m 0755 ossutil /usr/local/bin/ossutil
+    $use_sudo install -m 0755 ossutil /usr/local/bin/ossutil
     ossutil version
     rm -f ossu.zip
 }
@@ -233,7 +234,7 @@ _install_aliyun_cli() {
     url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*aliyun-cli.*${os}.*\.tgz")
     curl -fLo aly.tgz "$url_down"
     tar -xzf aly.tgz
-    sudo install -m 0755 aliyun /usr/local/bin/aliyun
+    $use_sudo install -m 0755 aliyun /usr/local/bin/aliyun
     aliyun --version | head -n 1
     rm -f aly.tgz
 }
