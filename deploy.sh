@@ -1018,40 +1018,10 @@ _install_flarectl() {
     fi
 }
 
-_install_aliyun_cli() {
-    command -v aliyun >/dev/null && return
-    _msg green "install aliyun cli..."
-    curl -fsSLo /tmp/aliyun.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
-    tar -C /tmp -zxf /tmp/aliyun.tgz
-    $use_sudo install -m 0755 /tmp/aliyun "${g_me_data_bin_path}/aliyun"
-}
-
 _install_tencent_cli() {
     command -v tccli >/dev/null && return
     _msg green "install tencent cli..."
     python3 -m pip install tccli
-}
-
-_install_jq_cli() {
-    command -v jq >/dev/null && return
-    _msg green "install jq cli..."
-    case "$os_type" in
-    debian | ubuntu | linuxmint)
-        $use_sudo apt-get update -qq
-        $use_sudo apt-get install -yqq jq >/dev/null
-        ;;
-    centos | amzn | rhel | fedora)
-        $use_sudo yum install -y jq >/dev/null
-        ;;
-    alpine)
-        $use_sudo apk add --no-cache "jq" >/dev/null
-        ;;
-    *)
-        echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        _msg error "Unsupported. exit."
-        return 1
-        ;;
-    esac
 }
 
 _install_terraform() {
@@ -1153,16 +1123,16 @@ _install_docker() {
 
 _install_podman() {
     command -v podman &>/dev/null && return
-        _msg green "installing podman"
-        $use_sudo apt-get update -qq
-        $use_sudo apt-get install -yqq podman >/dev/null
+    _msg green "installing podman"
+    $use_sudo apt-get update -qq
+    $use_sudo apt-get install -yqq podman >/dev/null
 }
 
 _install_cron() {
     command -v crontab &>/dev/null && return
-        _msg green "installing cron"
-        $use_sudo apt-get update -qq
-        $use_sudo apt-get install -yqq cron >/dev/null
+    _msg green "installing cron"
+    $use_sudo apt-get update -qq
+    $use_sudo apt-get install -yqq cron >/dev/null
 }
 
 _is_china() {
@@ -1926,12 +1896,13 @@ main() {
     set -e ## 出现错误自动退出
     # set -u ## 变量未定义报错 # set -Eeuo pipefail
     SECONDS=0
+    g_me_name="$(basename "$0")"
+    g_me_path="$(dirname "$(readlink -f "$0")")"
+    source "$g_me_path/bin/include.sh"
     _msg step "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _parse_args "$@"
 
-    g_me_name="$(basename "$0")"
-    g_me_path="$(dirname "$(readlink -f "$0")")"
     g_me_conf_path="${g_me_path}/conf"
     g_me_bin_path="${g_me_path}/bin"
     g_me_data_path="${g_me_path}/data"
@@ -1942,7 +1913,7 @@ main() {
     g_me_env="${g_me_data_path}/deploy.env"
     g_me_conf_dockerfile="${g_me_conf_path}/dockerfile"
     g_me_data_dockerfile="${g_me_data_path}/dockerfile"
-    source "$g_me_path/include.sh"
+
     mkdir -p "${g_me_data_bin_path}"
 
     # Copy config files if they don't exist
@@ -1975,6 +1946,7 @@ main() {
     ${debug_on:-false} && build_cmd_opt+=" --progress plain"
 
     ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
+    _check_distribution
     _detect_os
 
     ## git clone repo / 克隆 git 仓库

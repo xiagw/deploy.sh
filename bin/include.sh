@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2034
+# shellcheck disable=SC2034,SC1090,SC1091
 
 cmd_date="$(command -v gdate || command -v date)"
 
@@ -228,6 +228,28 @@ _install_aliyun_cli() {
     sudo install -m 0755 aliyun /usr/local/bin/aliyun
     aliyun --version | head -n 1
     rm -f aly.tgz
+}
+
+_install_jq_cli() {
+    command -v jq >/dev/null && return
+    _msg green "install jq cli..."
+    case "$lsb_dist" in
+    debian | ubuntu | linuxmint | linux)
+        $use_sudo apt-get update -qq
+        $use_sudo apt-get install -yqq jq >/dev/null
+        ;;
+    centos | amzn | rhel | fedora)
+        $use_sudo yum install -y jq >/dev/null
+        ;;
+    alpine)
+        $use_sudo apk add --no-cache jq >/dev/null
+        ;;
+    *)
+        echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
+        _msg error "Unsupported. exit."
+        return 1
+        ;;
+    esac
 }
 
 _notify_weixin_work() {

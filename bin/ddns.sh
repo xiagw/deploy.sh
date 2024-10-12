@@ -38,8 +38,8 @@ _update_dynv6() {
     [ "$ip6_last" = "${ip6_current-}" ] && [ "$ip4_last" = "${ip4_current-}" ] && [ "${force_update:-0}" -ne 1 ] && return
 
     base_url="http://dynv6.com/api/update?hostname=${dynv6_host}&token=${dynv6_token}"
-    $cmd "${base_url}&ipv4=${ip4_current}" && echo
-    $cmd "${base_url}&ipv6=${ip6_current}" && echo
+    $cmd "${base_url}&ipv4=${ip4_current}" \
+        -fsSL "${base_url}&ipv6=${ip6_current}" && echo
     _msg log "$g_me_log" "IPV4: ${ip4_current:-none} IPV6: ${ip6_current:-none}"
 }
 
