@@ -51,7 +51,7 @@ _check_distribution() {
     _msg time "Check distribution..."
     if [ -r /etc/os-release ]; then
         . /etc/os-release
-        version_id="${VERSION_ID-}"
+        version_id="${VERSION_ID:-}"
         lsb_dist="${ID,,}"
     else
         lsb_dist=$(
