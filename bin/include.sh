@@ -127,10 +127,10 @@ _check_timezone() {
 }
 
 _get_yes_no() {
-    # read -rp "${1:-Confirm the action?} [y/N] " -n 1 -s read_yes_no
-    # [[ ${read_yes_no,,} == y ]] && return 0 || return 1
-    read -rp "${1:-Confirm the action?} [y/N] " read_yes_no
-    [[ ${read_yes_no,,} =~ ^y(es)?$ ]]
+    read -rp "${1:-Confirm the action?} [y/N] " -n 1 -s read_yes_no
+    [[ ${read_yes_no,,} == y ]] && return 0 || return 1
+    # read -rp "${1:-Confirm the action?} [y/N] " read_yes_no
+    # [[ ${read_yes_no,,} =~ ^y(es)?$ ]]
 }
 
 _get_random_password() {
