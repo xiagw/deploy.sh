@@ -209,10 +209,13 @@ _install_wg() {
 _install_ossutil() {
     command -v ossutil >/dev/null && return
     _check_distribution
+    local os=${lsb_dist/ubuntu/linux}
+    os=${os/centos/linux}
+    os=${os/macos/mac}
     local url
     url="https://help.aliyun.com/zh/oss/developer-reference/install-ossutil$([[ $1 == 1 || $1 == v1 ]] && echo '' || echo '2')"
     local url_down
-    url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${lsb_dist%os}-amd64\.zip")
+    url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${os}-amd64\.zip")
     curl -fLo ossu.zip "$url_down"
     unzip -o -j ossu.zip
     sudo install -m 0755 ossutil /usr/local/bin/ossutil
@@ -223,11 +226,13 @@ _install_ossutil() {
 _install_aliyun_cli() {
     command -v aliyun >/dev/null && return
     _check_distribution
-    local url="https://help.aliyun.com/zh/cli/install-cli-on-${lsb_dist,,}"
+    local os=${lsb_dist/ubuntu/linux}
+    os=${os/centos/linux}
+    local url="https://help.aliyun.com/zh/cli/install-cli-on-${os}"
     local url_down
-    url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*aliyun.*${lsb_dist,,}.*\.tgz")
+    url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*aliyun-cli.*${os}.*\.tgz")
     curl -fLo aly.tgz "$url_down"
-    tar xzvf aly.tgz
+    tar -xzf aly.tgz
     sudo install -m 0755 aliyun /usr/local/bin/aliyun
     aliyun --version | head -n 1
     rm -f aly.tgz
