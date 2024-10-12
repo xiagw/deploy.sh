@@ -192,6 +192,7 @@ _get_current_ip() {
 }
 
 _install_wg() {
+    command -v wg >/dev/null && return
     case "${lsb_dist-}" in
     centos | alinux | openEuler)
         ${cmd_pkg-} install -y epel-release elrepo-release
@@ -206,6 +207,7 @@ _install_wg() {
 }
 
 _install_ossutil() {
+    command -v ossutil >/dev/null && return
     _check_distribution
     local url
     url="https://help.aliyun.com/zh/oss/developer-reference/install-ossutil$([[ $1 == 1 || $1 == v1 ]] && echo '' || echo '2')"
@@ -219,6 +221,7 @@ _install_ossutil() {
 }
 
 _install_aliyun_cli() {
+    command -v aliyun >/dev/null && return
     _check_distribution
     local url="https://help.aliyun.com/zh/cli/install-cli-on-${lsb_dist,,}"
     local url_down
