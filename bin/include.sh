@@ -24,13 +24,17 @@ _msg() {
         color_off=" - [$time_hms]"
         ;;
     time)
-        color_on="$timestamp - [${STEP}] "
+        color_on="$timestamp - $([ -n "${STEP}" ] && echo "[$STEP]") "
         color_off=" - [$time_hms]"
         ;;
     log)
         local log_file="$2"
         shift 2
-        echo "$timestamp - $*" | tee -a "$log_file"
+        if [ -d "$(dirname "$log_file")" ]; then
+            echo "$timestamp - $*" | tee -a "$log_file"
+        else
+            echo "$timestamp - $*"
+        fi
         return
         ;;
     *) unset color_on color_off ;;
@@ -138,7 +142,7 @@ _get_random_password() {
     local cmd_hash bits=${1:-14}
     cmd_hash=$(command -v md5sum || command -v sha256sum || command -v md5 2>/dev/null)
     count=0
-    while [ -z "$password_rand" ]; do
+    while [ -z "$password_rand" ] || [ "${#password_rand}" -lt "$bits" ]; do
         ((++count))
         case $count in
         1) password_rand="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
