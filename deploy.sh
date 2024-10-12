@@ -1017,7 +1017,7 @@ _install_flarectl() {
         _msg error "failed to download and install flarectl"
         return 1
     fi
-    rm -f$temp_file
+    rm -f $temp_file
 }
 
 _install_tencent_cli() {
