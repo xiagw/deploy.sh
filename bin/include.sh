@@ -187,13 +187,16 @@ _get_current_ip() {
 }
 
 _install_wg() {
-    if [[ "${lsb_dist-}" =~ (centos|alinux|openEuler) ]]; then
+    case "${lsb_dist-}" in
+    centos | alinux | openEuler)
         ${cmd_pkg-} install -y epel-release elrepo-release
         $cmd_pkg install -y yum-plugin-elrepo
         $cmd_pkg install -y kmod-wireguard wireguard-tools
-    else
+        ;;
+    *)
         $cmd_pkg install -yqq wireguard wireguard-tools
-    fi
+        ;;
+    esac
     $use_sudo modprobe wireguard
 }
 
