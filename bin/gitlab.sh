@@ -12,7 +12,7 @@ _add_account() {
     fi
 
     $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand}" --email "${user_name}@${gitlab_domain}" --skip-confirmation 1 --can-create-group 0
-    _msg log "$me_log" "username=$user_name / password=$password_rand"
+    _msg log "$g_me_log" "username=$user_name / password=$password_rand"
 
     _msg "add to default group \"pms\"."
     pms_group_id=$($cmd_gitlab group list --search pms | jq -r '.[] | select (.name == "pms") | .id')
@@ -42,7 +42,7 @@ _send_msg() {
 _new_element_user() {
     cd ~/src/matrix-docker-ansible-deploy || exit 1
     # file_secret=inventory/host_vars/matrix.example.com/user_pass.txt
-    _msg log "$me_log" "username=${user_name} / password=${password_rand}"
+    _msg log "$g_me_log" "username=${user_name} / password=${password_rand}"
     sed -i -e 's/^matrix.example1.com/#matrix.example2.com/' inventory/hosts
     ansible-playbook -i inventory/hosts setup.yml --extra-vars="username=$user_name password=$password_rand admin=no" --tags=register-user
     # ansible-playbook -i inventory/hosts setup.yml --extra-vars='username=fangzheng password=Eefaiyau6de1' --tags=update-user-password
@@ -146,16 +146,27 @@ EOF
     fi
 }
 
+_include_sh() {
+    include_sh="$g_me_path/include.sh"
+    if [ ! -f "$include_sh" ]; then
+        include_sh='/tmp/include.sh'
+        include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
+        [ -f "$include_sh" ] || curl -fsSL "$include_url" >"$include_sh"
+    fi
+    # shellcheck disable=SC1090
+    . "$include_sh"
+}
+
 main() {
     set -e
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
-    cmd_readlink="$(command -v greadlink || command -v readlink)"
-    me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
-    me_data_path="$me_path/../data"
-    me_name="$(basename "$0")"
-    me_log="$me_data_path/${me_name}.log"
-    me_env="$me_data_path/${me_name}.env"
-    source "$me_path"/include.sh
+    g_me_name="$(basename "$0")"
+    g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
+    g_me_data_path="$g_me_path/../data"
+    g_me_log="$g_me_data_path/${g_me_name}.log"
+    g_me_env="$g_me_data_path/${g_me_name}.env"
+
+    _include_sh
 
     case "$1" in
     install)
@@ -179,7 +190,9 @@ main() {
         gitlab_profile=$f
         break
     done
-    . "$me_env" "$gitlab_profile"
+
+    . "$g_me_env" "$gitlab_profile"
+
     _msg "gitlab profile is: $gitlab_profile"
     cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
     if [[ -z "$user_name" ]]; then

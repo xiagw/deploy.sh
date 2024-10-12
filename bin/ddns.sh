@@ -43,16 +43,6 @@ _update_dynv6() {
     _msg log "$g_me_log" "IPV4: ${ip4_current:-none} IPV6: ${ip6_current:-none}"
 }
 
-_include_sh() {
-    include_sh="$g_me_path/include.sh"
-    if [ ! -f "$include_sh" ]; then
-        include_sh=/tmp/include.sh
-        [ -f "$include_sh" ] || $cmd 'https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh' > "$include_sh"
-    fi
-    # shellcheck disable=SC1090
-    . "$include_sh"
-}
-
 _parse_args() {
     ## disable proxy
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
@@ -81,6 +71,17 @@ _parse_args() {
         shift
     done
     echo "$wan_device $silent_mode" >/dev/null
+}
+
+_include_sh() {
+    include_sh="$g_me_path/include.sh"
+    if [ ! -f "$include_sh" ]; then
+        include_sh='/tmp/include.sh'
+        include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
+        [ -f "$include_sh" ] || curl -fsSL "$include_url" >"$include_sh"
+    fi
+    # shellcheck disable=SC1090
+    . "$include_sh"
 }
 
 main() {

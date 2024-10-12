@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 
 _get_token() {
-    if [ -f "$me_env" ]; then
-        source "$me_env" "$@"
+    if [ -f "$g_me_env" ]; then
+        source "$g_me_env" "$@"
         if [ -z "$zen_domain" ]; then
             select z in "${zen_domains[@]}"; do
                 zen_domain="${z}"
                 break
             done
         fi
-        source "$me_env" "${zen_domain:?empty}"
+        source "$g_me_env" "${zen_domain:?empty}"
         token_time=$(${cmd_date:?empty date cmd} +%s -d '3600 seconds ago')
         if ((token_time > ${zen_token_time_save:-0})); then
             unset zen_token
         fi
     else
-        echo "not found $me_env"
+        echo "not found $g_me_env"
         return 1
     fi
     if [ -z "$zen_token" ]; then
@@ -26,7 +26,7 @@ _get_token() {
             $curl_opt "${zen_api:?empty}"/tokens -d '{"account": "'"${zen_account:-root}"'", "password": "'"$zen_root_password"'"}' |
                 jq -r '.token'
         )"
-        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($cmd_date +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$me_env"
+        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($cmd_date +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$g_me_env"
     fi
 }
 
@@ -34,7 +34,7 @@ _add_account() {
     read -rp "请输入用户姓名: " user_realname
     read -rp "请输入账号: " user_account
     password_rand=$(_get_random_password 2>/dev/null)
-    echo "$user_realname / $user_account / ${password_rand}" | tee -a "$me_log"
+    echo "$user_realname / $user_account / ${password_rand}" | tee -a "$g_me_log"
     $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${password_rand}"'", "group": "1", "gender": "m"}'
 }
 
@@ -107,18 +107,28 @@ EOF
     rm -f "$get_project_json"
 }
 
+_include_sh() {
+    include_sh="$g_me_path/include.sh"
+    if [ ! -f "$include_sh" ]; then
+        include_sh='/tmp/include.sh'
+        include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
+        [ -f "$include_sh" ] || curl -fsSL "$include_url" >"$include_sh"
+    fi
+    # shellcheck disable=SC1090
+    . "$include_sh"
+}
+
 main() {
     # set -xe
-    cmd_readlink="$(command -v greadlink)"
-    me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
-    me_name="$(basename "$0")"
-    me_path_data="$me_path/../data"
-    me_log="$me_path_data/$me_name.log"
-    me_env="$me_path_data/$me_name.env"
-
-    source "$me_path"/include.sh
+    g_me_name="$(basename "$0")"
+    g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
+    g_me_data_path="${g_me_path}/../data"
+    g_me_log="${g_me_data_path}/${g_me_name}.log"
+    g_me_env="${g_me_data_path}/${g_me_name}.env"
 
     curl_opt='curl -fsSL'
+
+    _include_sh
 
     _get_token "$@"
 
@@ -130,7 +140,7 @@ main() {
         _get_project
         ;;
     *)
-        echo "Usage: $me_name [add|update|project]"
+        echo "Usage: $g_me_name [add|update|project]"
         ;;
     esac
 }

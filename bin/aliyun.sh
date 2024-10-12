@@ -622,6 +622,17 @@ Usage: $g_me_name [res|dns|ecs|nas|nas_snap|rds|up|dn|load|cdn|ram|cas|wo|cli]
 EOF
 }
 
+_include_sh() {
+    include_sh="$g_me_path/include.sh"
+    if [ ! -f "$include_sh" ]; then
+        include_sh='/tmp/include.sh'
+        include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
+        [ -f "$include_sh" ] || curl -fsSL "$include_url" >"$include_sh"
+    fi
+    # shellcheck disable=SC1090
+    . "$include_sh"
+}
+
 main() {
     ## set PATH for crontab
     declare -a paths_to_append=(
@@ -652,7 +663,7 @@ main() {
         g_me_log="${g_me_data_path}/${g_me_name}.log"
     fi
 
-    source "$g_me_path"/include.sh
+    _include_sh
 
     source "$g_me_env"
 

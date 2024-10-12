@@ -9,7 +9,7 @@ _set_peer2peer() {
     ## 不是新建的client，需要选择已存在的client
     else
         _msg green "select exist conf..."
-        cd "$me_data" || exit 1
+        cd "$g_me_data_path" || exit 1
         select client_conf in wg*.conf quit; do
             [[ "$client_conf" == 'quit' ]] && exit
             break
@@ -25,8 +25,8 @@ _set_peer2peer() {
     fi
     ## select server
     _msg red "select peer conf..."
-    cd "$me_data" || exit 1
-    # select svr_conf in $me_data/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
+    cd "$g_me_data_path" || exit 1
+    # select svr_conf in $g_me_data_path/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
     select svr_conf in wg*.conf quit; do
         [[ "$svr_conf" == 'quit' ]] && break
         svr_key_pub="$(awk '/^### public_key:/ {print $3}' "$svr_conf" | head -n 1)"
@@ -84,15 +84,15 @@ _new_key() {
         port_prefix="40000"
     fi
     client_num="${1:-21}"
-    client_conf="$me_data/wg${client_num}.conf"
+    client_conf="$g_me_data_path/wg${client_num}.conf"
     until [[ "${client_num}" -lt 254 ]]; do
         read -rp "Error! enter ip again [1-254]: " client_num
-        client_conf="$me_data/wg${client_num}.conf"
+        client_conf="$g_me_data_path/wg${client_num}.conf"
     done
     while [ -f "$client_conf" ]; do
         _msg warn "File exists: $client_conf"
         client_num=$((client_num + 1))
-        client_conf="$me_data/wg${client_num}.conf"
+        client_conf="$g_me_data_path/wg${client_num}.conf"
     done
     _msg green "Generate: $client_conf , client IP: $ip_prefix${client_num}, $ip6_prefix${client_num}"
     read -rp "Comment? (Options: username or hostname): " -e -i "host${client_num}" client_comment
@@ -137,7 +137,7 @@ _get_qrcode() {
         fi
     fi
     local conf
-    cd "$me_data" || exit 1
+    cd "$g_me_data_path" || exit 1
     select conf in wg*.conf quit; do
         [[ "${conf}" == 'quit' || ! -f "${conf}" ]] && break
         _msg green "${conf}.png"
@@ -147,13 +147,13 @@ _get_qrcode() {
 
 _revoke_client() {
     _msg green "Select conf to revoke..."
-    cd "$me_data" || exit 1
+    cd "$g_me_data_path" || exit 1
     select conf in wg*.conf quit; do
         [[ "$conf" == 'quit' ]] && break
         _msg green "Selected: $conf"
         _msg yellow "revoke ${conf##*/} from all conf."
-        grep --color "^### ${conf##*/} begin" "$me_data"/wg*.conf
-        sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$me_data"/wg*.conf
+        grep --color "^### ${conf##*/} begin" "$g_me_data_path"/wg*.conf
+        sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$g_me_data_path"/wg*.conf
         _msg yellow "remove $conf."
         rm -f "$conf"
         _msg red "!!! DONT forget update conf to Server/Client and restart wireguard !!!"
@@ -177,7 +177,7 @@ _restart_host() {
 
 _reload_conf() {
     _msg red "Please select conf."
-    cd "$me_data" || exit 1
+    cd "$g_me_data_path" || exit 1
     select conf in wg*.conf quit; do
         [[ "${conf}" == 'quit' ]] && break
         _msg red "selected $conf"
@@ -217,18 +217,28 @@ _update_ddns() {
     $use_sudo wg show all dump | awk 'NR>1 {print $4"\t"$5"\t"$6}'
 }
 
+_include_sh() {
+    include_sh="$g_me_path/include.sh"
+    if [ ! -f "$include_sh" ]; then
+        include_sh='/tmp/include.sh'
+        include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
+        [ -f "$include_sh" ] || curl -fsSL "$include_url" >"$include_sh"
+    fi
+    # shellcheck disable=SC1090
+    . "$include_sh"
+}
+
 main() {
-    cmd_readlink="$(command -v greadlink)"
-    me_path="$(dirname "$(${cmd_readlink:-readlink} -f "$0")")"
-    me_name="$(basename "$0")"
-    me_data="${me_path}/../data/wireguard"
-    me_log="${me_data}/${me_name}.log"
+    g_me_name="$(basename "$0")"
+    g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
+    g_me_data_path="${g_me_path}/../data/wireguard"
+    g_me_log="${g_me_data_path}/${g_me_name}.log"
 
-    source "$me_path"/include.sh
+    _include_sh
 
-    _msg "log file: $me_log"
+    _msg "log file: $g_me_log"
 
-    [ -d "$me_data" ] || mkdir -p "$me_data"
+    [ -d "$g_me_data_path" ] || mkdir -p "$g_me_data_path"
 
     if [[ "$1" = u ]]; then
         _update_ddns
@@ -254,10 +264,10 @@ What do you want to do?
         read -rp "Select wireguard network [gitlab|jump|demo]: [1-3]: " -e -i1 wireguard_network
     done
     if [ "${wireguard_network:-1}" -gt 1 ]; then
-        me_data="${me_path}/../data/wireguard${wireguard_network}"
-        [ -d "$me_data" ] || mkdir -p "$me_data"
+        g_me_data_path="${g_me_path}/../data/wireguard${wireguard_network}"
+        mkdir -p "$g_me_data_path"
     fi
-    _msg green "wireguard data path: $me_data"
+    _msg green "wireguard data path: $g_me_data_path"
 
     case "${MENU_OPTION}" in
     1) _new_key "$@" ;;
