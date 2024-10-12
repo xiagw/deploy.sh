@@ -7,7 +7,7 @@ _msg() {
     local color_on color_off='\033[0m'
     local time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
     local timestamp
-    timestamp="$(date +%Y%m%d-%u-%T.%3N)"
+    timestamp="$($cmd_date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
     info) color_on='' ;;
