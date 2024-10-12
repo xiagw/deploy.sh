@@ -982,7 +982,6 @@ _install_python_gitlab() {
     command -v gitlab >/dev/null && return
     _msg green "installing python3 gitlab api..."
     _set_mirror python
-    python3 -m pip install --user --upgrade python-gitlab
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg green "python-gitlab is installed successfully"
     else
@@ -1005,11 +1004,11 @@ _install_flarectl() {
     command -v flarectl >/dev/null && return
     _msg green "installing flarectl"
     local ver='0.107.0'
-    local temp_file=/tmp/f.tgz
+    local temp_file
+    temp_file="$(mktemp)"
     local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.gz"
 
     if curl -fsSLo $temp_file $url; then
-        #  | tar xJf - -C "/tmp/" flarectl
         tar -C /tmp -xzf $temp_file flarectl
         $use_sudo install -m 0755 /tmp/flarectl "${g_me_data_bin_path}/flarectl"
         _msg success "flarectl installed successfully"
@@ -1023,6 +1022,7 @@ _install_flarectl() {
 _install_tencent_cli() {
     command -v tccli >/dev/null && return
     _msg green "install tencent cli..."
+    _set_mirror python
     python3 -m pip install tccli
 }
 
@@ -1044,10 +1044,12 @@ _install_terraform() {
 _install_aws() {
     command -v aws >/dev/null && return
     _msg green "installing aws cli..."
-    curl -fsSLo "/tmp/awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
-    unzip -qq /tmp/awscliv2.zip -d /tmp
+    local temp_file
+    temp_file=$(mktemp)
+    curl -fsSLo "$temp_file" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    unzip -qq "$temp_file" -d /tmp
     /tmp/aws/install --bin-dir "${g_me_data_bin_path}" --install-dir "${g_me_data_path}" --update
-    rm -rf /tmp/aws
+    rm -rf /tmp/aws "$temp_file"
     ## install eksctl / 安装 eksctl
     curl -fsSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
     $use_sudo install -m 0755 /tmp/eksctl /usr/local/bin/
@@ -1072,19 +1074,20 @@ _install_kubectl() {
 _install_helm() {
     command -v helm >/dev/null && return
     _msg green "installing helm..."
-    local helm_script="h.sh"
-    curl -fsSLo "$helm_script" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+    local temp_file
+    temp_file="$(mktemp)"
+    curl -fsSLo "$temp_file" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
     export HELM_INSTALL_DIR="${g_me_data_bin_path}"
-    bash "$helm_script"
-    rm -f "$helm_script"
+    bash "$temp_file"
+    rm -f "$temp_file"
 }
 
 _install_jmeter() {
     command -v jmeter >/dev/null && return
     _msg green "install jmeter..."
     local ver_jmeter='5.4.1'
-    local path_temp
-    path_temp=$(mktemp -d)
+    local temp_file
+    temp_file=$(mktemp)
 
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
     if ! command -v java >/dev/null; then
@@ -1104,23 +1107,23 @@ _install_jmeter() {
         $use_sudo apt-get install -yqq openjdk-17-jdk
     fi
     url_jmeter="https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
-    curl --retry -C - -Lo "$path_temp"/jmeter.zip $url_jmeter
+    curl --retry -C - -Lo "$temp_file" $url_jmeter
     (
         cd "$g_me_data_path"
-        unzip -q "$path_temp"/jmeter.zip
+        unzip -q "$temp_file"
         ln -sf apache-jmeter-${ver_jmeter} jmeter
     )
-    rm -rf "$path_temp"
+    rm -rf "$temp_file"
 }
 
 _install_docker() {
     command -v docker &>/dev/null && return
     _msg green "installing docker"
-    local temp
-    temp=$(mktemp)
-    curl -fsSLo "$temp" https://get.docker.com
-    $use_sudo bash "$temp" "$(_is_china && echo "--mirror Aliyun")"
-    rm -f "$temp"
+    local temp_file
+    temp_file=$(mktemp)
+    curl -fsSLo "$temp_file" https://get.docker.com
+    $use_sudo bash "$temp_file" "$(_is_china && echo "--mirror Aliyun")"
+    rm -f "$temp_file"
 }
 
 _install_podman() {
@@ -1138,11 +1141,10 @@ _install_cron() {
 }
 
 _is_china() {
-    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} || grep -q 'ENV_IN_CHINA=true' $g_me_env; then
+    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} || grep -q 'ENV_IN_CHINA=true' "$g_me_env"; then
         return 0
-    else
-        return 1
     fi
+    return 1
 }
 
 _set_mirror() {

@@ -208,7 +208,8 @@ _install_wg() {
 }
 
 _install_ossutil() {
-    command -v ossutil >/dev/null && return
+    [ "$1" = upgrade ] || command -v ossutil >/dev/null && return
+
     _check_distribution
     local os=${lsb_dist/ubuntu/linux}
     os=${os/centos/linux}
@@ -225,7 +226,8 @@ _install_ossutil() {
 }
 
 _install_aliyun_cli() {
-    command -v aliyun >/dev/null && return
+    [ "$1" = upgrade ] || command -v aliyun >/dev/null && return
+
     _check_distribution
     local os=${lsb_dist/ubuntu/linux}
     os=${os/centos/linux}
@@ -240,7 +242,8 @@ _install_aliyun_cli() {
 }
 
 _install_jq_cli() {
-    command -v jq >/dev/null && return
+    [ "$1" = upgrade ] || command -v jq >/dev/null && return
+
     _msg green "install jq cli..."
     case "$lsb_dist" in
     debian | ubuntu | linuxmint | linux)

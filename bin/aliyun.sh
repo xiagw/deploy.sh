@@ -495,8 +495,7 @@ _add_ram_account() {
 _upload_ssl_cert() {
     _get_aliyun_profile
     set -e
-    _check_jq_cli
-    _check_aliyun_cli || _install_aliyun_cli
+
     local today
     today="$($cmd_date +%m%d)"
     while read -r line; do
@@ -589,14 +588,6 @@ _update_functions() {
     # aliyun fc PUT /2023-03-30/custom-domains/fc.vrupup.com --header "Content-Type=application/json;" --body "$(cat al.json)"
 }
 
-_check_jq_cli() {
-    command -v jq >/dev/null 2>&1 || sudo apt install -y jq
-}
-
-_check_aliyun_cli() {
-    command -v aliyun >/dev/null 2>&1
-}
-
 _usage() {
     cat <<EOF
 
@@ -676,6 +667,9 @@ main() {
     [[ -f "$HOME/.config/kube/config" ]] && g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.config/kube/config"
     g_cmd_kubectl_m="$g_cmd_kubectl -n main"
 
+    _install_jq_cli
+    _install_aliyun_cli
+
     # while [[ "$#" -gt 0 ]]; do
     case "$1" in
     res)
@@ -728,7 +722,7 @@ main() {
         _update_functions
         ;;
     cli)
-        _install_aliyun_cli
+        _install_aliyun_cli upgrade
         ;;
     *)
         _usage
