@@ -5,10 +5,14 @@ _get_aliyun_profile() {
     aliyun_profile=$(jq -r '.profiles[].name' "$g_aliyun_conf" | fzf)
     aliyun_region=$(jq -r ".profiles[] | select (.name == \"$aliyun_profile\") | .region_id" "$g_aliyun_conf")
 
+    # Prompt for profile and region if not selected
     [ -z "$aliyun_profile" ] && read -rp "Aliyun profile name: " aliyun_profile
     [ -z "$aliyun_region" ] && read -rp "Aliyun region name: " aliyun_region
 
+    # Set the selected profile
     $g_cmd_aliyun configure set -p "$aliyun_profile"
+
+    # Create a command with the profile set
     g_cmd_aliyun_p="$g_cmd_aliyun -p $aliyun_profile"
 }
 
@@ -89,17 +93,18 @@ _update_dns_record() {
         $g_cmd_aliyun_p alidns DescribeDomains --PageNumber 1 --PageSize 100 |
             jq -r '.Domains.Domain[].DomainName'
     )
-
 }
 
 _remove_nas() {
     _get_aliyun_profile
 
+    # Select file system ID
     select filesys_id in $($g_cmd_aliyun_p nas DescribeFileSystems | jq -r '.FileSystems.FileSystem[].FileSystemId'); do
         _msg "file_system_id is: $filesys_id"
         break
     done
 
+    # Select mount target ID
     select mount_id in $(
         $g_cmd_aliyun_p nas DescribeFileSystems --FileSystemId "$filesys_id" |
             jq -r '.FileSystems.FileSystem[].MountTargets.MountTarget[].MountTargetDomain'
@@ -108,8 +113,10 @@ _remove_nas() {
         break
     done
 
+    # Delete mount target
     $g_cmd_aliyun_p nas DeleteMountTarget --FileSystemId "$filesys_id" --MountTargetDomain "$mount_id"
 
+    # Wait for mount target deletion (up to 5 minutes)
     unset sleeps
     until [[ "${sleeps:-0}" -gt 300 ]]; do
         if $g_cmd_aliyun_p nas DescribeFileSystems --FileSystemId "$filesys_id" |
@@ -122,6 +129,7 @@ _remove_nas() {
         fi
     done
 
+    # Delete file system
     $g_cmd_aliyun_p nas DeleteFileSystem --FileSystemId "$filesys_id"
 }
 
@@ -166,13 +174,18 @@ _add_rds_account() {
 _get_cluster_info() {
     ## get cluster name from env
     cluster_id="$(
-        $g_cmd_aliyun_p cs GET /api/v1/clusters --header "Content-Type=application/json;" --body "{}" |
-            jq -r ".clusters[] | select (.name == \"${aliyun_cluster_name:? ERR: empty cluster name}\") | .cluster_id"
+        $g_cmd_aliyun_p cs GET /api/v1/clusters \
+            --header "Content-Type=application/json;" \
+            --body "{}" |
+            jq -r ".clusters[] | select(.name == \"${aliyun_cluster_name:? ERR: empty cluster name}\") | .cluster_id"
     )"
+
     ## get cluster node pool name from env
     nodepool_id="$(
-        $g_cmd_aliyun_p cs GET /clusters/"$cluster_id"/nodepools --header "Content-Type=application/json;" --body "{}" |
-            jq -r ".nodepools[].nodepool_info | select (.name == \"${aliyun_cluster_node_pool:? ERR: empty node pool}\") | .nodepool_id"
+        $g_cmd_aliyun_p cs GET /clusters/"$cluster_id"/nodepools \
+            --header "Content-Type=application/json;" \
+            --body "{}" |
+            jq -r ".nodepools[].nodepool_info | select(.name == \"${aliyun_cluster_node_pool:? ERR: empty node pool}\") | .nodepool_id"
     )"
 }
 
@@ -219,12 +232,10 @@ _scale_up() {
 
     ## 扩容 pod
     pod_sum=$((pod_total + node_inc))
-    pod_count=pod_total
-    while [[ ${pod_count:-1} -le $pod_sum ]]; do
-        $g_cmd_kubectl_m scale --replicas="$((pod_count + 1))" deploy "$deployment"
-        _msg log "$g_me_log" "$deployment scale to number: $pod_count"
+    for ((pod_count = pod_total; pod_count < pod_sum; pod_count++)); do
+        $g_cmd_kubectl_m scale --replicas=$((pod_count + 1)) deploy "$deployment"
+        _msg log "$g_me_log" "$deployment scale to number: $((pod_count + 1))"
         sleep 10
-        pod_count=$($g_cmd_kubectl_m get pod -l app.kubernetes.io/name="$deployment" | grep -c "$deployment")
     done
 
     sleep 30
@@ -248,7 +259,7 @@ _scale_up() {
     _msg "kubectl cordon new nodes..."
     sleep 30
     for n in $($g_cmd_kubectl get nodes -o name); do
-        if echo "${node_name[@]}" | grep "$n"; then
+        if echo "${node_name[@]}" | grep -qw "$n"; then
             _msg skip
         else
             $g_cmd_kubectl cordon "$n"
@@ -273,7 +284,7 @@ _scale_down() {
     pod_sum=$((pod_total - node_inc))
 
     ## 缩容 pod
-    _msg log "$g_me_log" "$deployment scale to number: $pod_total"
+    _msg log "$g_me_log" "$deployment scale to number: $pod_sum"
     $g_cmd_kubectl_m scale --replicas=$pod_sum deploy "$deployment"
     sleep 5
 
@@ -318,6 +329,7 @@ _auto_scaling() {
         _msg log "$g_me_log" "$g_msg_body"
         _notify_weixin_work "${wechat_key-}"
     fi
+
     ## 扩容后 5 分钟之内锁定，不做缩容检测
     if [[ -f "$lock_file" ]]; then
         time_lock="$(stat -t -c %Y "$lock_file" 2>/dev/null || echo 0)"
@@ -368,10 +380,8 @@ _pay_cdn_bag() {
     balance_threshold=700
 
     ## CDN资源包小于 1TB 则购买新资源包
-    if [[ $(echo "${cdn_amount:-0} > $cdn_threshold" | bc) -eq 1 ]]; then
-        if [[ -n "$enable_msg" ]]; then
-            echo -e "[dcdn] \033[0;31m remain: ${cdn_amount:-0}TB \033[0m, skip pay."
-        fi
+    if (($(echo "$cdn_amount > $cdn_threshold" | bc -l))); then
+        [[ -n "$enable_msg" ]] && echo -e "[dcdn] \033[0;31m remain: ${cdn_amount:-0}TB \033[0m, skip pay."
         return
     fi
 
@@ -381,17 +391,13 @@ _pay_cdn_bag() {
             awk '{gsub(/,/,""); print int($0)}'
     )"
     ## 根据余额计算购买能力，200/50/10/5/1 TB
-    if (("${balance:-0}" < $((balance_threshold + price_unit * 1)))); then
-        _msg log "$g_me_log" "[dcdn] balance ${balance:-0} too low, skip pay."
+    if ((balance < balance_threshold + price_unit)); then
+        _msg log "$g_me_log" "[dcdn] balance $balance too low, skip pay."
         return 1
     fi
     for i in 200 50 10 5 1; do
-        if [[ "$i" -eq 200 ]]; then
-            discount=7870
-        else
-            discount=0
-        fi
-        if (("${balance:-0}" > $((balance_threshold + price_unit * i - discount)))); then
+        discount=$((i == 200 ? 7870 : 0))
+        if ((balance > balance_threshold + price_unit * i - discount)); then
             spec=$((spec_unit * i))
             break
         fi
@@ -545,30 +551,26 @@ _upload_ssl_cert() {
 }
 
 _add_workorder() {
-    if [ "$(uname -o)" = Darwin ]; then
-        source "$HOME/.local/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
-    fi
+    # Activate virtual environment for Darwin
+    [ "$(uname -o)" = Darwin ] && source "$HOME/.local/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
+
     # python3 -m pip list | grep 'alibabacloud-workorder' || python3 -m pip install alibabacloud_workorder20210610==1.0.0
     # python3 -m pip list | grep 'alibabacloud_tea_console' || python3 -m pip install alibabacloud_tea_console
     ## 列出产品列表 （没有 aliyun cli 可用，使用 python sdk）
     call_python_file="$g_me_path/aliyun.workorder.py"
     saved_json="$g_me_data_path/aliyun.product.list.json"
-    command -v fzf || sudo apt install -y fzf
+    command -v fzf >/dev/null 2>&1 || sudo apt install -y fzf
+
+    # Use saved JSON if available, otherwise generate new list
     if [ -f "$saved_json" ]; then
-        id_string="$(
-            cat "$saved_json" |
-                jq -r '.body.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' | fzf
-        )"
+        id_string=$(jq -r '.body.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' "$saved_json" | fzf)
     else
-        id_string="$(
-            python3 "$call_python_file" | sed 's/\[LOG\]\s\+//' |
-                jq -r '.body.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' | fzf
-        )"
+        id_string=$(python3 "$call_python_file" | sed 's/\[LOG\]\s\+//' |
+            jq -r '.body.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' | fzf)
     fi
 
-    if _get_yes_no "python3 $call_python_file ${id_string} , create? "; then
-        python3 "$call_python_file" ${id_string}
-    fi
+    # Prompt for confirmation before creating
+    _get_yes_no "python3 $call_python_file ${id_string} , create? " && python3 "$call_python_file" ${id_string}
 }
 
 _update_functions() {
@@ -588,16 +590,11 @@ _update_functions() {
 }
 
 _check_jq_cli() {
-    command -v jq && return
-    sudo apt install -y jq
+    command -v jq >/dev/null 2>&1 || sudo apt install -y jq
 }
 
 _check_aliyun_cli() {
-    if command -v aliyun; then
-        return 0
-    else
-        return 1
-    fi
+    command -v aliyun >/dev/null 2>&1
 }
 
 _usage() {
@@ -645,22 +642,21 @@ main() {
         "/home/linuxbrew/.linuxbrew/bin"
     )
     for p in "${paths_to_append[@]}"; do
-        if [[ -d "$p" && "$PATH" != *":$p:"* ]]; then
-            PATH="${PATH:+"$PATH:"}$p"
-        fi
+        [[ -d "$p" && ":$PATH:" != *":$p:"* ]] && PATH="${PATH:+"$PATH:"}$p"
     done
 
     export PATH
 
-    g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
-    g_me_name="$(basename "$0")"
-    g_me_env="${g_me_path}/${g_me_name}.env"
-    g_me_log="${g_me_path}/${g_me_name}.log"
-
+    g_me_path=$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")
+    g_me_name=$(basename "$0")
     g_me_data_path="${g_me_path}/../data"
+
     if [[ -d "$g_me_data_path" ]]; then
         g_me_env="${g_me_data_path}/${g_me_name}.env"
         g_me_log="${g_me_data_path}/${g_me_name}.log"
+    else
+        g_me_env="${g_me_path}/${g_me_name}.env"
+        g_me_log="${g_me_path}/${g_me_name}.log"
     fi
 
     _include_sh
@@ -676,10 +672,8 @@ main() {
     fi
     g_cmd_aliyun_p="$g_cmd_aliyun -p ${aliyun_profile:-flyh6}"
 
-    g_cmd_kubectl="$(command -v kubectl)"
-    if [ -f "$HOME/.config/kube/config" ]; then
-        g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.config/kube/config"
-    fi
+    g_cmd_kubectl=$(command -v kubectl)
+    [[ -f "$HOME/.config/kube/config" ]] && g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.config/kube/config"
     g_cmd_kubectl_m="$g_cmd_kubectl -n main"
 
     # while [[ "$#" -gt 0 ]]; do
