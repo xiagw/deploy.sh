@@ -1209,7 +1209,7 @@ _set_mirror() {
 }
 
 _setup_environment() {
-    _check_root
+    _check_root || true
     _check_distribution
 
     pkgs=()
