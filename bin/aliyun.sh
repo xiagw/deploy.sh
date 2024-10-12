@@ -551,6 +551,7 @@ _upload_ssl_cert() {
 
 _add_workorder() {
     # Activate virtual environment for Darwin
+    # shellcheck disable=SC1091
     [ "$(uname -o)" = Darwin ] && source "$HOME/.local/pipx/venvs/alibabacloud-workorder20210610/bin/activate"
 
     # python3 -m pip list | grep 'alibabacloud-workorder' || python3 -m pip install alibabacloud_workorder20210610==1.0.0
@@ -568,7 +569,7 @@ _add_workorder() {
             jq -r '.body.Data[].ProductList[] | (.ProductId | tostring) + "\t" + .ProductName' | fzf)
     fi
 
-    # Prompt for confirmation before creating
+    # shellcheck disable=SC2086
     _get_yes_no "python3 $call_python_file ${id_string} , create? " && python3 "$call_python_file" ${id_string}
 }
 
@@ -651,7 +652,7 @@ main() {
     fi
 
     _include_sh
-
+    # shellcheck disable=SC1090
     source "$g_me_env"
 
     g_cmd_aliyun="$(command -v aliyun)"

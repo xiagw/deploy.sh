@@ -686,9 +686,7 @@ _deploy_aliyun_oss() {
     fi
 
     # Check if OSS CLI is installed
-    if ! command -v ossutil >/dev/null 2>&1; then
-        curl https://gosspublic.alicdn.com/ossutil/install.sh | $use_sudo bash
-    fi
+    _install_ossutil
     oss_config_file=${g_me_data_path}/aliyun.oss.key.conf
     bucket_name=demo-bucket
     remote_dir=demo-dir
