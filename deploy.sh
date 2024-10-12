@@ -976,110 +976,6 @@ _get_balance_aliyun() {
     fi
 }
 
-_install_python_gitlab() {
-    command -v gitlab >/dev/null && return
-    _msg green "installing python3 gitlab api..."
-    _set_mirror python
-    if python3 -m pip install --user --upgrade python-gitlab; then
-        _msg green "python-gitlab is installed successfully"
-    else
-        _msg error "failed to install python-gitlab"
-    fi
-}
-
-_install_python_element() {
-    python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
-    _msg green "installing python3 element api..."
-    _set_mirror python
-    if python3 -m pip install --user --upgrade matrix-nio; then
-        _msg green "matrix-nio is installed successfully"
-    else
-        _msg error "failed to install matrix-nio"
-    fi
-}
-
-_install_flarectl() {
-    command -v flarectl >/dev/null && return
-    _msg green "installing flarectl"
-    local ver='0.107.0'
-    local temp_file
-    temp_file="$(mktemp)"
-    local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.gz"
-
-    if curl -fsSLo $temp_file $url; then
-        tar -C /tmp -xzf $temp_file flarectl
-        $use_sudo install -m 0755 /tmp/flarectl "${g_me_data_bin_path}/flarectl"
-        _msg success "flarectl installed successfully"
-    else
-        _msg error "failed to download and install flarectl"
-        return 1
-    fi
-    rm -f $temp_file
-}
-
-_install_tencent_cli() {
-    command -v tccli >/dev/null && return
-    _msg green "install tencent cli..."
-    _set_mirror python
-    python3 -m pip install tccli
-}
-
-_install_terraform() {
-    command -v terraform >/dev/null && return
-    _msg green "installing terraform..."
-    $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
-    curl -fsSL https://apt.releases.hashicorp.com/gpg |
-        gpg --dearmor |
-        $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null 2>&1
-    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
-        $use_sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null 2>&1
-    $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq terraform >/dev/null
-    # terraform version
-    _msg green "terraform installed successfully!"
-}
-
-_install_aws() {
-    command -v aws >/dev/null && return
-    _msg green "installing aws cli..."
-    local temp_file
-    temp_file=$(mktemp)
-    curl -fsSLo "$temp_file" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
-    unzip -qq "$temp_file" -d /tmp
-    /tmp/aws/install --bin-dir "${g_me_data_bin_path}" --install-dir "${g_me_data_path}" --update
-    rm -rf /tmp/aws "$temp_file"
-    ## install eksctl / 安装 eksctl
-    curl -fsSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    $use_sudo install -m 0755 /tmp/eksctl /usr/local/bin/
-}
-
-_install_kubectl() {
-    command -v kubectl >/dev/null && return
-    _msg green "installing kubectl..."
-    local kver
-    kver=$(curl -sL https://dl.k8s.io/release/stable.txt)
-    curl -fsSLO "https://dl.k8s.io/release/${kver}/bin/linux/amd64/kubectl" \
-        -fsSLO "https://dl.k8s.io/${kver}/bin/linux/amd64/kubectl.sha256"
-    if echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check; then
-        $use_sudo install -m 0755 kubectl "${g_me_data_bin_path}"/kubectl
-        rm -f kubectl kubectl.sha256
-    else
-        _msg error "failed to install kubectl"
-        return 1
-    fi
-}
-
-_install_helm() {
-    command -v helm >/dev/null && return
-    _msg green "installing helm..."
-    local temp_file
-    temp_file="$(mktemp)"
-    curl -fsSLo "$temp_file" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
-    export HELM_INSTALL_DIR="${g_me_data_bin_path}"
-    bash "$temp_file"
-    rm -f "$temp_file"
-}
-
 _install_jmeter() {
     command -v jmeter >/dev/null && return
     _msg green "install jmeter..."
@@ -1120,22 +1016,8 @@ _install_docker() {
     local temp_file
     temp_file=$(mktemp)
     curl -fsSLo "$temp_file" https://get.docker.com
-    $use_sudo bash "$temp_file" "$(_is_china && echo "--mirror Aliyun")"
+    ${use_sudo:-} bash "$temp_file" "$(_is_china && echo "--mirror Aliyun")"
     rm -f "$temp_file"
-}
-
-_install_podman() {
-    command -v podman &>/dev/null && return
-    _msg green "installing podman"
-    $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq podman >/dev/null
-}
-
-_install_cron() {
-    command -v crontab &>/dev/null && return
-    _msg green "installing cron"
-    $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq cron >/dev/null
 }
 
 _is_china() {
@@ -1143,69 +1025,6 @@ _is_china() {
         return 0
     fi
     return 1
-}
-
-_set_mirror() {
-    if ${set_in_china:-false}; then
-        sed -i -e '/ENV_IN_CHINA=/s/false/true/' $g_me_env
-    fi
-    if _is_china; then
-        url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
-    else
-        url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
-        return
-    fi
-    case ${1:-none} in
-    os)
-        ## OS ubuntu:22.04 php
-        if [ -f /etc/apt/sources.list ]; then
-            $use_sudo sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
-                -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-        ## OS Debian
-        elif [ -f /etc/apt/sources.list.d/debian.sources ]; then
-            $use_sudo sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
-        ## OS alpine, nginx:alpine
-        elif [ -f /etc/apk/repositories ]; then
-            # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
-            $use_sudo sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
-        fi
-        ;;
-    maven)
-        local m2_dir=/root/.m2
-        mkdir -p $m2_dir
-        ## 项目内自带 settings.xml docs/settings.xml
-        if [ -f settings.xml ]; then
-            cp -vf settings.xml $m2_dir/
-        elif [ -f docs/settings.xml ]; then
-            cp -vf docs/settings.xml $m2_dir/
-        elif [ -f /opt/settings.xml ]; then
-            mv -vf /opt/settings.xml $m2_dir/
-        else
-            curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
-        fi
-        ;;
-    composer)
-        _check_root || return
-        composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
-        mkdir -p /var/www/.composer /.composer
-        chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
-        ;;
-    node)
-        # npm_mirror=https://mirrors.ustc.edu.cn/node/
-        # npm_mirror=http://mirrors.cloud.tencent.com/npm/
-        # npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
-        npm_mirror=https://registry.npmmirror.com/
-        yarn config set registry $npm_mirror
-        npm config set registry $npm_mirror
-        ;;
-    python)
-        pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
-        python3 -m pip config set global.index-url $pip_mirror
-        ;;
-    *)
-        echo "Nothing to do."
-        ;;
-    esac
 }
 
 _setup_environment() {
@@ -1230,7 +1049,7 @@ _setup_environment() {
         # command -v shc >/dev/null || $use_sudo apt-get install -qq -y shc
 
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _set_mirror os
+            _is_china && _set_mirror os
             $use_sudo apt-get update -qq
             $use_sudo apt-get install -yqq apt-utils >/dev/null
             $use_sudo apt-get install -yqq "${pkgs[@]}" >/dev/null
@@ -1252,7 +1071,7 @@ _setup_environment() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _set_mirror os
+            _is_china && _set_mirror os
             $use_sudo yum install -y "${pkgs[@]}" >/dev/null
         fi
         ;;
@@ -1264,7 +1083,7 @@ _setup_environment() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _set_mirror os
+            _is_china && _set_mirror os
             $use_sudo apk add --no-cache "${pkgs[@]}" >/dev/null
         fi
         ;;
@@ -1276,7 +1095,7 @@ _setup_environment() {
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         if (("${#pkgs[*]}")); then
-            _set_mirror os
+            _is_china && _set_mirror os
             brew install "${pkgs[@]}"
         fi
         ;;
@@ -1778,7 +1597,7 @@ _parse_args() {
             github_action=true
             ;;
         --in-china)
-            set_in_china=true
+            sed -i -e '/ENV_IN_CHINA=/s/false/true/' $g_me_env
             ;;
         --svn-checkout)
             checkout_with_svn=true
