@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=1090,2086
+# shellcheck disable=1090,1091,2086
 ################################################################################
 #
 # Description: deploy.sh is a CI/CD program.
@@ -9,94 +9,57 @@
 #
 ################################################################################
 
-_msg() {
-    local color_on color_off='\033[0m'
-    local time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
-    local timestamp
-    timestamp="$(date +%Y%m%d-%u-%T.%3N)"
-
-    case "${1:-none}" in
-    info) color_on='' ;;
-    warn | warning | yellow) color_on='\033[0;33m' ;;
-    error | err | red) color_on='\033[0;31m' ;;
-    question | ques | purple) color_on='\033[0;35m' ;;
-    green) color_on='\033[0;32m' ;;
-    blue) color_on='\033[0;34m' ;;
-    cyan) color_on='\033[0;36m' ;;
-    orange) color_on='\033[1;33m' ;;
-    step)
-        ((++STEP))
-        color_on="\033[0;36m$timestamp - [$STEP] \033[0m"
-        color_off=" - [$time_hms]"
-        ;;
-    time)
-        color_on="$timestamp - [${STEP}] "
-        color_off=" - [$time_hms]"
-        ;;
-    log)
-        shift
-        echo "$timestamp - $*" >>$g_me_log
-        return
-        ;;
-    *) unset color_on color_off ;;
-    esac
-    [ "$#" -gt 1 ] && shift
-
-    echo -e "${color_on}$*${color_off}"
-}
-
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
 _is_demo_mode() {
     local skip_msg="$1"
-    if grep -q -E '=your_password|=your_username' $g_me_env; then
-        _msg purple "Found default docker username/password, skip $skip_msg ..."
+    if grep -qE '=your_(password|username)' "$g_me_env"; then
+        _msg purple "Found default docker credentials, skipping $skip_msg ..."
         return 0
-    else
-        return 1
     fi
+    return 1
 }
-
-_is_root() {
-    if [ "$(id -u)" -eq 0 ]; then
-        unset use_sudo
-        return 0
-    else
-        use_sudo=sudo
-        return 1
-    fi
-}
-
 _test_unit() {
-    local test_script
-    for test_script in "$gitlab_project_dir/tests/unit_test.sh" "$g_me_data_path/tests/unit_test.sh"; do
-        if [[ -f "$test_script" ]]; then
-            echo "Found $test_script"
-            bash "$test_script"
-            return
-        fi
-    done
-    _msg purple "not found tests/unit_test.sh, skip unit test."
-}
+    local test_scripts=("$gitlab_project_dir/tests/unit_test.sh" "$g_me_data_path/tests/unit_test.sh")
 
+    for test_script in "${test_scripts[@]}"; do
+        [[ -f "$test_script" ]] || continue
+        _msg info "Executing unit test script: $test_script"
+        if bash "$test_script"; then
+            _msg green "Unit tests passed successfully"
+        else
+            _msg error "Unit tests failed"
+        fi
+        return
+    done
+
+    _msg purple "No unit test script found. Skipping unit tests."
+}
 _test_function() {
-    local test_script
-    for test_script in "$gitlab_project_dir/tests/func_test.sh" "$g_me_data_path/tests/func_test.sh"; do
-        if [[ -f "$test_script" ]]; then
-            echo "Found $test_script"
-            bash "$test_script"
-            return
+    local test_scripts=("$gitlab_project_dir/tests/func_test.sh" "$g_me_data_path/tests/func_test.sh")
+
+    for test_script in "${test_scripts[@]}"; do
+        [[ -f "$test_script" ]] || continue
+        _msg info "Executing functional test script: $test_script"
+        if bash "$test_script"; then
+            _msg green "Functional tests passed successfully"
+            return 0
+        else
+            _msg error "Functional tests failed"
+            return 1
         fi
     done
-    _msg purple "Not found tests/func_test.sh, skip function test."
+
+    _msg purple "No functional test script found. Skipping functional tests."
 }
 
 _check_quality_sonar() {
     local sonar_url="${ENV_SONAR_URL:?empty}"
     local sonar_conf="$gitlab_project_dir/sonar-project.properties"
+
     if ! curl --silent --head --fail --connect-timeout 5 "$sonar_url" >/dev/null 2>&1; then
-        _msg warning "Could not found sonarqube server, exit."
-        return
+        _msg warning "SonarQube server not found, exiting."
+        return 1
     fi
 
     if [[ ! -f "$sonar_conf" ]]; then
@@ -118,8 +81,13 @@ EOF
     fi
 
     ${github_action:-false} && return 0
-    $run_cmd -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli
-    _msg time "[quality] check code with sonarqube"
+
+    if ! $run_cmd -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$gitlab_project_dir":/usr/src sonarsource/sonar-scanner-cli; then
+        _msg error "SonarQube scan failed"
+        return 1
+    fi
+
+    _msg time "[quality] Code quality check with SonarQube completed"
 }
 
 _scan_zap() {
@@ -134,25 +102,27 @@ _scan_zap() {
         _msg green "ZAP scan completed. Report saved to zap_report_latest.html"
     else
         _msg error "ZAP scan failed."
+        return 1
     fi
-    _msg time "[scan] run ZAP scan"
+    _msg time "[scan] ZAP scan completed"
 }
 # _security_scan_zap "http://example.com" "my/zap-image" "-t http://example.com -r report.html -x report.xml"
 
 _scan_vulmap() {
     # https://github.com/zhzyker/vulmap
     # $build_cmd run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
-    # Load environment variables from config file
-    # shellcheck disable=SC1091
-    source $g_me_data_path/config.cfg
-    # Run vulmap scan
-    $run_cmd_root -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/vulmap_report.html"
+    local config_file="$g_me_data_path/config.cfg"
+    local output_file="vulmap_report.html"
 
-    # Display scan results
-    if [[ -f "vulmap_report.html" ]]; then
-        echo "Vulmap scan complete. Results saved to 'vulmap_report.html'."
+    # Load environment variables from config file
+    source "$config_file"
+
+    # Run vulmap scan
+    $run_cmd_root -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/$output_file"
+    if [[ -f "$output_file" ]]; then
+        _msg green "Vulmap scan complete. Results saved to '$output_file'."
     else
-        echo "Vulmap scan failed or no vulnerabilities found."
+        _msg error "Vulmap scan failed or no vulnerabilities found."
     fi
 }
 
@@ -160,46 +130,64 @@ _scan_vulmap() {
 _check_gitleaks() {
     local path="$1"
     local config_file="$2"
+    local gitleaks_image="zricethezav/gitleaks:v7.5.0"
+    local gitleaks_cmd="gitleaks --path=/repo --config=/config.toml"
 
-    $run_cmd_root -v "$path:/repo" -v "$config_file:/config.toml" zricethezav/gitleaks:v7.5.0 gitleaks --path=/repo --config=/config.toml
+    $run_cmd_root \
+        -v "$path:/repo" \
+        -v "$config_file:/config.toml" \
+        "$gitleaks_image" \
+        $gitleaks_cmd
 }
 
 _deploy_flyway_docker() {
-    flyway_conf_volume="${gitlab_project_dir}/flyway_conf:/flyway/conf"
-    flyway_sql_volume="${gitlab_project_dir}/flyway_sql:/flyway/sql"
-    flyway_docker_run="$build_cmd run --rm -v ${flyway_conf_volume} -v ${flyway_sql_volume} flyway/flyway"
+    local vol_conf="${gitlab_project_dir}/flyway_conf:/flyway/conf"
+    local vol_sql="${gitlab_project_dir}/flyway_sql:/flyway/sql"
+    local run="$build_cmd run --rm -v ${vol_conf} -v ${vol_sql} flyway/flyway"
 
-    ## ssh port-forward mysql 3306 to localhost / 判断是否需要通过 ssh 端口转发建立数据库远程连接
-    # shellcheck disable=SC1091
+    # SSH port-forward if needed
     [ -f "$g_me_bin_path/ssh-port-forward.sh" ] && source "$g_me_bin_path/ssh-port-forward.sh" port
-    ## exec flyway
-    if $flyway_docker_run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
-        $flyway_docker_run repair
-        $flyway_docker_run migrate || deploy_result=1
-        $flyway_docker_run info | tail -n 10
+
+    # Execute Flyway
+    if $run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
+        $run repair
+        if $run migrate; then
+            _msg green "Flyway migrate result = OK"
+        else
+            _msg error "Flyway migrate result = FAIL"
+            return 1
+        fi
+        $run info | tail -n 10
     else
         _msg warning "No SQL migrations to apply."
     fi
-    if [ ${deploy_result:-0} = 0 ]; then
-        _msg green "flyway migrate result = OK"
-    else
-        _msg error "flyway migrate result = FAIL"
-    fi
-    _msg time "[database] deploy SQL files with flyway"
+
+    _msg time "[database] Deploy SQL files with Flyway"
 }
 
 _deploy_flyway_helm_job() {
-    _msg step "[database] deploy SQL with flyway (helm job)"
-    echo "$image_tag_flyway"
-    ${github_action:-false} && return 0
-    $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"
-    $run_cmd_root "$image_tag_flyway" || deploy_result=1
-    if [ ${deploy_result:-0} = 0 ]; then
-        _msg green "flyway migrate result = OK"
-    else
-        _msg error "flyway migrate result = FAIL"
+    _msg step "[database] Deploy SQL with Flyway (Helm job)"
+
+    if ${github_action:-false}; then
+        _msg info "Skipping Flyway deployment in GitHub Actions"
+        return 0
     fi
-    _msg time "[database] deploy SQL with flyway (helm job)"
+
+    echo "Image tag for Flyway: $image_tag_flyway"
+
+    if ! $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"; then
+        _msg error "Failed to build Flyway image"
+        return 1
+    fi
+
+    if $run_cmd_root "$image_tag_flyway"; then
+        _msg green "Flyway migration successful"
+    else
+        _msg error "Flyway migration failed"
+        return 1
+    fi
+
+    _msg time "[database] Completed SQL deployment with Flyway (Helm job)"
 }
 
 # python-gitlab list all projects / 列出所有项目
@@ -211,6 +199,7 @@ _login_registry() {
     ${github_action:-false} && return 0
     local lock_login_registry="$g_me_data_path/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
     local time_last
+
     case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
     aws)
         time_last="$(stat -t -c %Y "$lock_login_registry" 2>/dev/null || echo 0)"
@@ -219,9 +208,13 @@ _login_registry() {
             return 0
         fi
         _msg time "[login] aws ecr login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
-        aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" |
-            $build_cmd login --username AWS --password-stdin ${ENV_DOCKER_REGISTRY%%/*} >/dev/null &&
+        if aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" |
+            $build_cmd login --username AWS --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" >/dev/null; then
             touch "$lock_login_registry"
+        else
+            _msg error "AWS ECR login failed"
+            return 1
+        fi
         ;;
     *)
         _is_demo_mode "docker-login" && return 0
@@ -229,18 +222,23 @@ _login_registry() {
         if [[ -f "$lock_login_registry" ]]; then
             return 0
         fi
-        echo "${ENV_DOCKER_PASSWORD}" |
-            $build_cmd login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" &&
+        if echo "${ENV_DOCKER_PASSWORD}" |
+            $build_cmd login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"; then
             touch "$lock_login_registry"
+        else
+            _msg error "Docker login failed"
+            return 1
+        fi
         ;;
     esac
 }
 
 _get_docker_context() {
     ## use local context / 使用本地 context
-    if [[ ${ENV_DOCKER_CONTEXT:-local} == local ]]; then
-        return
-    fi
+    [[ ${ENV_DOCKER_CONTEXT:-local} == local ]] && return
+
+    local docker_contexts docker_endpoints selected_context
+
     ## use remote context (exclude local) / 使用远程 context
     if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
         read -ra docker_contexts <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .Name' | tr '\n' ' ')"
@@ -250,17 +248,20 @@ _get_docker_context() {
         read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
         read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
     fi
+
     ## create context when not found remote / 没有 remote 时则根据环境变量创建
+    local c=0
     for dk_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
         ((++c))
-        if echo "${docker_endpoints[@]}" | grep -q "$dk_host"; then
+        if echo "${docker_endpoints[@]}" | grep -qw "$dk_host"; then
             : ## found docker endpoint
         else
             ## not found docker endpoint, create it
-            docker context create remote$c --docker "host=${dk_host}" || _msg error "Failed to create docker context remote$c: ${dk_host}"
+            docker context create "remote$c" --docker "host=${dk_host}" || _msg error "Failed to create docker context remote$c: ${dk_host}"
         fi
     done
     ## use remote context (exclude local) / 使用远程 context
+    ## Refresh context list after potential new additions
     if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
         read -ra docker_contexts <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .Name' | tr '\n' ' ')"
         read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .DockerEndpoint' | tr '\n' ' ')"
@@ -269,23 +270,22 @@ _get_docker_context() {
         read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
         read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
     fi
+
     case ${ENV_DOCKER_CONTEXT_ALGO:-rr} in
     rand)
-        ## random algorithum
-        random_index=$((RANDOM % ${#docker_contexts[@]}))
-        selected_context="${docker_contexts[$random_index]}"
+        ## random algorithm / 随机算法
+        selected_context="${docker_contexts[RANDOM % ${#docker_contexts[@]}]}"
         ;;
     rr)
-        ## round-robin algorithum
+        ## round-robin algorithm / 轮询算法
         position_file="${g_me_data_path:-.}/.docker_context_history"
         [[ -f "$position_file" ]] || echo 0 >"$position_file"
-        # 读取当前轮询位置
-        position=$(tail -n 1 $position_file)
-        # 输出当前位置的值
-        selected_context="${docker_contexts[$position]}"
-        # 更新轮询位置
-        position=$(((position + 1) % ${#docker_contexts[@]}))
-        echo $position >$position_file
+        # Read current position / 读取当前轮询位置
+        position=$(<"$position_file")
+        # Select context / 输出当前位置的值
+        selected_context="${docker_contexts[position]}"
+        # Update position / 更新轮询位置
+        echo $((++position % ${#docker_contexts[@]})) >"$position_file"
         ;;
     esac
 
@@ -302,18 +302,19 @@ _build_image() {
     ## build from Dockerfile.base
     if [[ -z "$ENV_DOCKER_REGISTRY_BASE" ]]; then
         _msg warn "ENV_DOCKER_REGISTRY_BASE is undefined, use $ENV_DOCKER_REGISTRY instead."
-        registry_base=ENV_DOCKER_REGISTRY
+        registry_base=$ENV_DOCKER_REGISTRY
     else
-        registry_base=ENV_DOCKER_REGISTRY_BASE
+        registry_base=$ENV_DOCKER_REGISTRY_BASE
     fi
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
         if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
             echo "Found ${gitlab_project_dir}/build.base.sh, run it..."
             bash "${gitlab_project_dir}/build.base.sh"
         else
-            echo "$registry_base:${gitlab_project_name}-${gitlab_project_branch}"
-            $build_cmd build $build_cmd_opt --tag $registry_base:${gitlab_project_name}-${gitlab_project_branch} $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
-            $build_cmd push $quiet_flag $registry_base:${gitlab_project_name}-${gitlab_project_branch}
+            base_tag="${registry_base}:${gitlab_project_name}-${gitlab_project_branch}"
+            echo "$base_tag"
+            $build_cmd build $build_cmd_opt --tag "$base_tag" $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
+            $build_cmd push $quiet_flag "$base_tag"
         fi
         _msg time "[image] build base image"
         exit_directly=true
@@ -337,15 +338,24 @@ _push_image() {
     _msg step "[image] push container image"
     _is_demo_mode "push-image" && return 0
     _login_registry
-    if $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        $build_cmd rmi "${ENV_DOCKER_REGISTRY}:${image_tag}" >/dev/null
-    else
+
+    local push_error=false
+
+    # Push main image
+    if ! $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
         push_error=true
+    else
+        $build_cmd rmi "${ENV_DOCKER_REGISTRY}:${image_tag}" >/dev/null
     fi
+
+    # Push Flyway image if enabled
     if ${ENV_FLYWAY_HELM_JOB:-false}; then
         $build_cmd push $quiet_flag "$image_tag_flyway" || push_error=true
     fi
-    ${push_error:-false} && _msg error "got an error here, probably caused by network..."
+
+    # Check for errors
+    $push_error && _msg error "got an error here, probably caused by network..."
+
     _msg time "[image] push container image"
 }
 
@@ -390,31 +400,24 @@ _create_helm_chart() {
         port="${values_array[2]}"
         port2="${values_array[3]}"
     fi
-    if [[ -z "$protocol" || -z "$port" ]]; then
-        protocol=tcp
-        port=8080
-        port2=8081
-    fi
+    protocol="${protocol:-tcp}"
+    port="${port:-8080}"
+    port2="${port2:-8081}"
 
     ## 创建 helm chart
     helm create "$helm_chart_path"
-    _msg log "helm create $helm_chart_path"
+    _msg "helm create $helm_chart_path" >>$g_me_log
     ## 需要修改的配置文件
-    file_values="$helm_chart_path/values.yaml"
-    file_svc="$helm_chart_path/templates/service.yaml"
-    file_deploy="$helm_chart_path/templates/deployment.yaml"
+    local file_values="$helm_chart_path/values.yaml"
+    local file_svc="$helm_chart_path/templates/service.yaml"
+    local file_deploy="$helm_chart_path/templates/deployment.yaml"
     ## remove serviceaccount.yaml
     # rm -f "$helm_chart_path/templates/serviceaccount.yaml"
 
     ## change values.yaml
-    if [ -z "${port2}" ]; then
-        sed -i -e "s@port: 80@port: ${port}@" "$file_values"
-    else
-        sed -i \
-            -e "/port: 80/ a \  port2: ${port2}" \
-            -e "s@port: 80@port: ${port}@" \
-            "$file_values"
-    fi
+    sed -i -e "s@port: 80@port: ${port}@" "$file_values"
+    [ -n "${port2}" ] && sed -i "/port: ${port}/ a \  port2: ${port2}" "$file_values"
+
     ## disable serviceAccount
     sed -i -e "/create: true/s/true/false/" "$file_values"
     ## resources limit
@@ -447,9 +450,7 @@ _create_helm_chart() {
             -e "s/port: http/port: ${port}/" \
             "$file_values"
     else
-        sed -i \
-            -e "s@port: http@port: ${port}@g" \
-            "$file_values"
+        sed -i -e "s@port: http@port: ${port}@g" "$file_values"
     fi
 
     ## change service.yaml
@@ -469,12 +470,12 @@ _create_helm_chart() {
     sed -i -e '/name: http2/ a \              protocol: TCP' "$file_deploy"
 
     ## dns config
-    (
-        echo "      dnsConfig:"
-        echo "        options:"
-        echo "        - name: ndots"
-        echo "          value: \"2\""
-    ) >>"$file_deploy"
+    cat <<EOF >>"$file_deploy"
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "2"
+EOF
 
     # sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
 }
@@ -486,13 +487,12 @@ _deploy_functions_aliyun() {
         _msg time "!!! disable deploy to functions3.0 aliyun !!!"
         return 0
     }
-    if [ "${env_namespace}" != main ]; then
-        release_name="${release_name}-${env_namespace}"
-    fi
+    [ "${env_namespace}" != main ] && release_name="${release_name}-${env_namespace}"
+
     ## create FC
     _msg step "[deploy] create/update functions"
-    functions_conf_tmpl="$g_me_data_path"/aliyun.functions.${project_lang}.json
-    functions_conf="$g_me_data_path"/aliyun.functions.json
+    functions_conf_tmpl="$g_me_data_path/aliyun.functions.${project_lang}.json"
+    functions_conf="$g_me_data_path/aliyun.functions.json"
     if [ -f "$functions_conf_tmpl" ]; then
         TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_TAG=${image_tag} envsubst <$functions_conf_tmpl >$functions_conf
     else
@@ -552,9 +552,9 @@ _deploy_k8s() {
         "${g_me_data_path}/helm/${gitlab_project_path_slug}/${release_name}"
         "${g_me_data_path}/helm/${release_name}"
     )
-    for i in "${helm_dirs[@]}"; do
-        if [ -d "$i" ]; then
-            helm_dir="$i"
+    for dir in "${helm_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            helm_dir="$dir"
             break
         fi
     done
@@ -563,7 +563,7 @@ _deploy_k8s() {
         _msg purple "Not found helm files"
         echo "Try to generate helm files"
         helm_dir="${g_me_data_path}/helm/${gitlab_project_path_slug}/${release_name}"
-        [ -d "$helm_dir" ] || mkdir -p "$helm_dir"
+        mkdir -p "$helm_dir"
         _create_helm_chart "${helm_dir}"
     fi
 
@@ -577,6 +577,7 @@ _deploy_k8s() {
         --timeout 120s --set image.pullPolicy='Always' \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${image_tag}" >/dev/null
+
     ## Clean up rs 0 0 / 清理 rs 0 0
     $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs -t -r $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
     $kubectl_opt -n "${env_namespace}" get pod | awk '/Evicted/ {print $1}' | xargs -t -r $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
@@ -584,12 +585,11 @@ _deploy_k8s() {
     ## 检测 helm upgrade 状态
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${release_name}" --timeout 120s >/dev/null || deploy_result=1
     if [[ "$deploy_result" -eq 1 ]]; then
-        echo "此处探测应用是否正常超时120秒，不能百分之百以此作为依据，如遇错误，需要去k8s内检查容器是否正常，或者通过日志去判断"
+        echo "此处探测超时值120秒，不能百分之百以此作为应用是否正常的依据，如遇错误，需要去k8s内检查容器是否正常，或者通过日志去判断"
     fi
 
     if [ -f "$gitlab_project_dir/deploy.custom.sh" ]; then
         _msg time "custom deploy."
-        # shellcheck disable=SC1091
         source "$gitlab_project_dir/deploy.custom.sh"
     fi
 
@@ -607,11 +607,9 @@ _deploy_k8s() {
 _deploy_rsync_ssh() {
     _msg step "[deploy] deploy files with rsync+ssh"
     ## rsync exclude some files / rsync 排除某些文件
-    if [[ -f "${gitlab_project_dir}/rsync.exclude" ]]; then
-        rsync_exclude="${gitlab_project_dir}/rsync.exclude"
-    else
-        rsync_exclude="${g_me_conf_path}/rsync.exclude"
-    fi
+    rsync_exclude="${gitlab_project_dir}/rsync.exclude"
+    [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${g_me_conf_path}/rsync.exclude"
+
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     # grep "^${gitlab_project_path}:${env_namespace}" "$g_me_conf" | awk -F: '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10}' "$g_me_conf"
     conf_line="$(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$g_me_conf" | wc -l)"
@@ -619,6 +617,7 @@ _deploy_rsync_ssh() {
         _msg warn "[deploy] not config $g_me_conf"
         return
     fi
+
     while read -r line; do
         ssh_host=$(echo "$line" | jq -r '.ssh_host')
         ssh_port=$(echo "$line" | jq -r '.ssh_port')
@@ -638,16 +637,14 @@ _deploy_rsync_ssh() {
         ## rsync source folder / rsync 源目录
         ## define rsync_relative_path in bin/build.*.sh / 在 bin/build.*.sh 中定义 rsync_relative_path
         ## default: rsync_relative_path=''
-        if [[ "$project_lang" == java ]]; then
-            rsync_relative_path=jars/
-        elif [[ "$project_lang" == node ]]; then
-            rsync_relative_path=dist/
-        fi
-        if [[ -z "${rsync_src_from_conf}" ]]; then
-            rsync_src="${gitlab_project_dir}/${rsync_relative_path-}"
-        else
-            rsync_src="${rsync_src_from_conf}/"
-        fi
+        case "$project_lang" in
+        java) rsync_relative_path=jars/ ;;
+        node) rsync_relative_path=dist/ ;;
+        *) rsync_relative_path='' ;;
+        esac
+
+        rsync_src="${rsync_src_from_conf:-${gitlab_project_dir}/${rsync_relative_path-}}/"
+
         ## rsycn dest folder / rsync 目标目录
         if [[ "$rsync_dest" == 'none' || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${env_namespace}.${gitlab_project_name}/"
@@ -660,8 +657,9 @@ _deploy_rsync_ssh() {
             # rclone sync "${gitlab_project_dir}/" "$rsync_dest/"
             return
         fi
+
         echo "destination: ${ssh_host}:${rsync_dest}"
-        $ssh_opt -n "${ssh_host}" "[[ -d $rsync_dest ]] || mkdir -p $rsync_dest"
+        $ssh_opt -n "${ssh_host}" "mkdir -p $rsync_dest"
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
 
@@ -1087,9 +1085,9 @@ _install_kubectl() {
     command -v kubectl >/dev/null && return
     _msg green "installing kubectl..."
     local kver
-    kver="$(curl -sL https://dl.k8s.io/release/stable.txt)"
-    curl -fsSLO "https://dl.k8s.io/release/${kver}/bin/linux/amd64/kubectl"
-    curl -fsSLO "https://dl.k8s.io/${kver}/bin/linux/amd64/kubectl.sha256"
+    kver=$(curl -sL https://dl.k8s.io/release/stable.txt)
+    curl -fsSLO "https://dl.k8s.io/release/${kver}/bin/linux/amd64/kubectl" \
+        -fsSLO "https://dl.k8s.io/${kver}/bin/linux/amd64/kubectl.sha256"
     if echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check; then
         $use_sudo install -m 0755 kubectl "${g_me_data_bin_path}"/kubectl
         rm -f kubectl kubectl.sha256
@@ -1102,10 +1100,11 @@ _install_kubectl() {
 _install_helm() {
     command -v helm >/dev/null && return
     _msg green "installing helm..."
-    curl -fsSLo get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+    local helm_script="h.sh"
+    curl -fsSLo "$helm_script" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
     export HELM_INSTALL_DIR="${g_me_data_bin_path}"
-    bash get_helm.sh
-    rm -f get_helm.sh
+    bash "$helm_script"
+    rm -f "$helm_script"
 }
 
 _install_jmeter() {
@@ -1145,29 +1144,25 @@ _install_jmeter() {
 _install_docker() {
     command -v docker &>/dev/null && return
     _msg green "installing docker"
-    local bash_temp
-    bash_temp=$(mktemp)
-    curl -fsSLo $bash_temp https://get.docker.com
-    if _is_china; then
-        $use_sudo bash $bash_temp --mirror Aliyun
-    else
-        $use_sudo bash $bash_temp
-    fi
-    rm -f $bash_temp
+    local temp
+    temp=$(mktemp)
+    curl -fsSLo "$temp" https://get.docker.com
+    $use_sudo bash "$temp" "$(_is_china && echo "--mirror Aliyun")"
+    rm -f "$temp"
 }
 
 _install_podman() {
     command -v podman &>/dev/null && return
-    _msg green "installing podman"
-    $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq podman >/dev/null
+        _msg green "installing podman"
+        $use_sudo apt-get update -qq
+        $use_sudo apt-get install -yqq podman >/dev/null
 }
 
 _install_cron() {
     command -v crontab &>/dev/null && return
-    _msg green "installing cron"
-    $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq cron >/dev/null
+        _msg green "installing cron"
+        $use_sudo apt-get update -qq
+        $use_sudo apt-get install -yqq cron >/dev/null
 }
 
 _is_china() {
@@ -1205,7 +1200,7 @@ _set_mirror() {
         ;;
     maven)
         local m2_dir=/root/.m2
-        [ -d $m2_dir ] || mkdir -p $m2_dir
+        mkdir -p $m2_dir
         ## 项目内自带 settings.xml docs/settings.xml
         if [ -f settings.xml ]; then
             cp -vf settings.xml $m2_dir/
@@ -1218,7 +1213,7 @@ _set_mirror() {
         fi
         ;;
     composer)
-        _is_root || return
+        _check_root || return
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
         mkdir -p /var/www/.composer /.composer
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
@@ -1242,9 +1237,8 @@ _set_mirror() {
 }
 
 _detect_os() {
-    _is_root || use_sudo=sudo
+    _check_root || use_sudo=sudo
     if [[ -e /etc/os-release ]]; then
-        # shellcheck disable=SC1091
         source /etc/os-release
         os_type="${ID}"
     elif [[ -e /etc/centos-release ]]; then
@@ -1342,27 +1336,32 @@ _clean_disk() {
     # Log disk usage and clean up images
     _msg "$(df /)"
     _msg warning "Disk space is less than ${clean_disk_threshold}%, removing images..."
-    $build_cmd images "${ENV_DOCKER_REGISTRY}" | awk 'NR>1 {print $1":"$2}' | xargs -t -r $build_cmd rmi >/dev/null || true
-    $build_cmd system prune -f >/dev/null || true
+    $build_cmd images --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | xargs -t -r $build_cmd rmi >/dev/null || true
+    $build_cmd system prune -af --volumes >/dev/null || true
 }
 
 # https://github.com/sherpya/geolite2legacy
 # https://www.miyuru.lk/geoiplegacy
 # https://github.com/leev/ngx_http_geoip2_module
 _get_maxmind_ip() {
+    local tmp_dir tmp_country tmp_city
     tmp_dir="$(mktemp -d)"
     tmp_country="$tmp_dir/maxmind-Country.dat"
     tmp_city="$tmp_dir/maxmind-City.dat"
+
     curl -LqsSf https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz | gunzip -c >"$tmp_country"
     curl -LqsSf https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz | gunzip -c >"$tmp_city"
+
     if [[ -z "${ENV_NGINX_IPS}" ]]; then
         _msg error "ENV_NGINX_IPS is not defined or is empty"
         return 1
     fi
+
     for ip in ${ENV_NGINX_IPS}; do
         echo "$ip"
         rsync -av "${tmp_dir}/" "root@$ip":/etc/nginx/conf.d/
     done
+
     rm -rf "$tmp_dir"
 }
 
@@ -1565,9 +1564,7 @@ _set_deploy_conf() {
 
     # Link SSH files
     for file in "$ssh_dir"/*; do
-        local base_name
-        base_name=$(basename "${file}")
-        [[ -f "$HOME/.ssh/$base_name" ]] && continue
+        [[ -f "$HOME/.ssh/$(basename "${file}")" ]] && continue
         echo "Link $file to $HOME/.ssh/"
         chmod 600 "${file}"
         ln -s "${file}" "$HOME/.ssh/"
@@ -1575,9 +1572,7 @@ _set_deploy_conf() {
 
     # Link configuration directories
     for dir in "${conf_dirs[@]}"; do
-        local src="${path_conf_base}/${dir}"
-        local dest="$HOME/${dir}"
-        [[ ! -d "${dest}" && -d "${src}" ]] && ln -sf "${src}" "$HOME/"
+        [[ ! -d "$HOME/${dir}" && -d "${path_conf_base}/${dir}" ]] && ln -sf "${path_conf_base}/${dir}" "$HOME/"
     done
 
     # Link python-gitlab config file
@@ -1758,7 +1753,7 @@ _create_k8s() {
     _msg step "[PaaS] create k8s cluster"
     cd "$terraform_dir" || return 1
 
-    if terraform init && terraform apply -auto-approve; then
+    if terraform init -input=false && terraform apply -auto-approve; then
         _msg info "Kubernetes cluster created successfully"
     else
         _msg error "Failed to create Kubernetes cluster"
@@ -1924,11 +1919,7 @@ _parse_args() {
         esac
         shift
     done
-    if ${debug_on:-false}; then
-        unset quiet_flag
-    else
-        quiet_flag='--quiet'
-    fi
+    ${debug_on:-false} && unset quiet_flag || quiet_flag='--quiet'
 }
 
 main() {
@@ -1951,7 +1942,7 @@ main() {
     g_me_env="${g_me_data_path}/deploy.env"
     g_me_conf_dockerfile="${g_me_conf_path}/dockerfile"
     g_me_data_dockerfile="${g_me_data_path}/dockerfile"
-
+    source "$g_me_path/include.sh"
     mkdir -p "${g_me_data_bin_path}"
 
     # Copy config files if they don't exist
