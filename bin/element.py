@@ -13,6 +13,7 @@ import sys
 import asyncio
 from nio import AsyncClient, MatrixRoom, RoomMessageText
 
+
 async def main(homeserver, user_id, password, room_id, message):
     client = AsyncClient(homeserver, user_id)
     await client.login(password)
@@ -30,13 +31,14 @@ if __name__ == "__main__":
     if len(sys.argv) != 5:
         print("Usage: python script.py <homeserver> <user_id> <password> <room_id>")
         sys.exit(1)
-    
-    homeserver = sys.argv[1]
-    user_id = sys.argv[2]
-    password = sys.argv[3]
-    room_id = sys.argv[4]
-    
+
+    homeserver = sys.argv[1]  # https://matrix.example.com
+    user_id = sys.argv[2]  # @bot:example.com
+    password = sys.argv[3]  # your_password
+    room_id = sys.argv[4]  # !xXxXxXxXxXxXxXxXxX:example.com
+
     # Read message from stdin
     message = sys.stdin.read().strip()
 
-    asyncio.get_event_loop().run_until_complete(main(homeserver, user_id, password, room_id, message))
+    asyncio.get_event_loop().run_until_complete(
+        main(homeserver, user_id, password, room_id, message))
