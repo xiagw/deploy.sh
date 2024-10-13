@@ -665,7 +665,11 @@ main() {
     g_cmd_aliyun_p="$g_cmd_aliyun -p ${aliyun_profile:-flyh6}"
 
     g_cmd_kubectl=$(command -v kubectl)
-    [[ -f "$HOME/.config/kube/config" ]] && g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.config/kube/config"
+    if [[ -f "$HOME/.config/kube/config" ]]; then
+        g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.config/kube/config"
+    else
+        g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.kube/config"
+    fi
     g_cmd_kubectl_m="$g_cmd_kubectl -n main"
 
     _install_jq_cli
