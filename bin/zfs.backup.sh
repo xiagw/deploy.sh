@@ -9,12 +9,18 @@ _backup_zfs() {
     zfs list -t snapshot
 
     # Rename existing snapshots
-    for fs in "$zfs_src" "$zfs_dest"; do
-        if zfs list -t snapshot -o name -s creation -H -r "${fs}@now" >/dev/null 2>&1; then
-            zfs rename "${fs}@now" "${fs}@last" 2>/dev/null || true
-            zfs rename "${fs}@last" "${fs}@${snap}" 2>/dev/null || true
+    if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@now"; then
+        if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last"; then
+            zfs rename "${zfs_src}@last" "${zfs_src}@${snap}"
         fi
-    done
+        zfs rename "${zfs_src}@now" "${zfs_src}@last"
+    fi
+    if zfs list -t snapshot -o name -s creation -H -r "${zfs_dest}@now"; then
+        if zfs list -t snapshot -o name -s creation -H -r "${zfs_dest}@last"; then
+            zfs rename "${zfs_dest}@last" "${zfs_dest}@${snap}"
+        fi
+        zfs rename "${zfs_dest}@now" "${zfs_dest}@last"
+    fi
 
     # Create new snapshot
     zfs snapshot "${zfs_src}@now"
