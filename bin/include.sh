@@ -190,6 +190,43 @@ _get_current_ip() {
     _msg green "get IPv6: $ip6_current"
 }
 
+_install_jmeter() {
+    command -v jmeter >/dev/null && return
+    _msg green "Installing JMeter..."
+    local ver_jmeter='5.4.1'
+    local temp_file
+    temp_file=$(mktemp)
+
+    ## 6. Asia, 31. Hong_Kong, 70. Shanghai
+    if ! command -v java >/dev/null; then
+        _msg green "Installing Java..."
+        export DEBIAN_FRONTEND=noninteractive
+        export DEBCONF_NONINTERACTIVE_SEEN=true
+        export TZ=Asia/Shanghai
+
+        # Set timezone
+        echo "tzdata tzdata/Areas select Asia" | ${use_sudo:-} debconf-set-selections
+        echo "tzdata tzdata/Zones/Asia select Shanghai" | $use_sudo debconf-set-selections
+
+        # Update and install Java
+        $use_sudo apt-get update -qq
+        $use_sudo apt-get install -qq tzdata openjdk-17-jdk
+
+        unset DEBIAN_FRONTEND DEBCONF_NONINTERACTIVE_SEEN TZ
+    fi
+
+    # Download and install JMeter
+    local url="https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
+    curl -sSL -o "$temp_file" "$url"
+    $use_sudo unzip -q "$temp_file" -d /usr/local/
+    $use_sudo ln -sf "/usr/local/apache-jmeter-${ver_jmeter}" /usr/local/jmeter
+    rm -f "$temp_file"
+
+    # Add JMeter to PATH
+    echo "export PATH=\$PATH:/usr/local/jmeter/bin" | $use_sudo tee -a /etc/profile.d/jmeter.sh
+    source /etc/profile.d/jmeter.sh
+}
+
 _install_wg() {
     command -v wg >/dev/null && return
     case "${lsb_dist-}" in
@@ -241,7 +278,7 @@ _install_aliyun_cli() {
 
 _install_flarectl() {
     command -v flarectl >/dev/null && return
-    _msg green "installing flarectl"
+    _msg green "Installing flarectl"
     local ver='0.107.0'
     local temp_file
     temp_file="$(mktemp)"
@@ -283,7 +320,7 @@ _install_jq_cli() {
 
 _install_kubectl() {
     command -v kubectl >/dev/null && return
-    _msg green "installing kubectl..."
+    _msg green "Installing kubectl..."
     local kver
     kver=$(curl -sL https://dl.k8s.io/release/stable.txt)
     curl -fsSLO "https://dl.k8s.io/release/${kver}/bin/linux/amd64/kubectl" \
@@ -299,7 +336,7 @@ _install_kubectl() {
 
 _install_helm() {
     command -v helm >/dev/null && return
-    _msg green "installing helm..."
+    _msg green "Installing helm..."
     local temp_file
     temp_file="$(mktemp)"
     curl -fsSLo "$temp_file" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
@@ -317,7 +354,7 @@ _install_tencent_cli() {
 
 _install_terraform() {
     command -v terraform >/dev/null && return
-    _msg green "installing terraform..."
+    _msg green "Installing terraform..."
     $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg |
         gpg --dearmor |
@@ -332,7 +369,7 @@ _install_terraform() {
 
 _install_aws() {
     command -v aws >/dev/null && return
-    _msg green "installing aws cli..."
+    _msg green "Installing aws cli..."
     local temp_file
     temp_file=$(mktemp)
     curl -fsSLo "$temp_file" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
@@ -346,7 +383,7 @@ _install_aws() {
 
 _install_python_gitlab() {
     command -v gitlab >/dev/null && return
-    _msg green "installing python3 gitlab api..."
+    _msg green "Installing python3 gitlab api..."
     _is_china && _set_mirror python
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg green "python-gitlab is installed successfully"
@@ -357,7 +394,7 @@ _install_python_gitlab() {
 
 _install_python_element() {
     python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
-    _msg green "installing python3 element api..."
+    _msg green "Installing python3 element api..."
     _is_china && _set_mirror python
     if python3 -m pip install --user --upgrade matrix-nio; then
         _msg green "matrix-nio is installed successfully"
@@ -366,16 +403,26 @@ _install_python_element() {
     fi
 }
 
+_install_docker() {
+    command -v docker &>/dev/null && return
+    _msg green "Installing docker"
+    local temp_file
+    temp_file=$(mktemp)
+    curl -fsSLo "$temp_file" https://get.docker.com
+    $use_sudo bash "$temp_file" "$@"
+    rm -f "$temp_file"
+}
+
 _install_podman() {
     command -v podman &>/dev/null && return
-    _msg green "installing podman"
+    _msg green "Installing podman"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq podman >/dev/null
 }
 
 _install_cron() {
     command -v crontab &>/dev/null && return
-    _msg green "installing cron"
+    _msg green "Installing cron"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq cron >/dev/null
 }

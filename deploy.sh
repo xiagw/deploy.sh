@@ -976,50 +976,6 @@ _get_balance_aliyun() {
     fi
 }
 
-_install_jmeter() {
-    command -v jmeter >/dev/null && return
-    _msg green "install jmeter..."
-    local ver_jmeter='5.4.1'
-    local temp_file
-    temp_file=$(mktemp)
-
-    ## 6. Asia, 31. Hong_Kong, 70. Shanghai
-    if ! command -v java >/dev/null; then
-        export DEBIAN_FRONTEND=noninteractive
-        export DEBCONF_NONINTERACTIVE_SEEN=true
-        export TIME_ZOME=Asia/Shanghai
-        truncate -s0 /tmp/preseed.cfg
-        echo "tzdata tzdata/Areas select Asia" >>/tmp/preseed.cfg
-        echo "tzdata tzdata/Zones/Asia select Shanghai" >>/tmp/preseed.cfg
-        debconf-set-selections /tmp/preseed.cfg
-        rm -f /etc/timezone /etc/localtime
-        ${use_sudo:-} apt-get update -yqq
-        $use_sudo apt-get install -yqq tzdata
-        rm -rf /tmp/preseed.cfg
-        unset DEBIAN_FRONTEND DEBCONF_NONINTERACTIVE_SEEN TIME_ZOME
-        ## install jdk
-        $use_sudo apt-get install -yqq openjdk-17-jdk
-    fi
-    url_jmeter="https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
-    curl --retry -C - -Lo "$temp_file" $url_jmeter
-    (
-        cd "$g_me_data_path"
-        unzip -q "$temp_file"
-        ln -sf apache-jmeter-${ver_jmeter} jmeter
-    )
-    rm -rf "$temp_file"
-}
-
-_install_docker() {
-    command -v docker &>/dev/null && return
-    _msg green "installing docker"
-    local temp_file
-    temp_file=$(mktemp)
-    curl -fsSLo "$temp_file" https://get.docker.com
-    ${use_sudo:-} bash "$temp_file" "$(_is_china && echo "--mirror Aliyun")"
-    rm -f "$temp_file"
-}
-
 _is_china() {
     if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} || grep -q 'ENV_IN_CHINA=true' "$g_me_env"; then
         return 0
@@ -1050,7 +1006,7 @@ _setup_environment() {
 
         if [[ "${#pkgs[*]}" -ne 0 ]]; then
             _is_china && _set_mirror os
-            $use_sudo apt-get update -qq
+            ${use_sudo:-} apt-get update -qq
             $use_sudo apt-get install -yqq apt-utils >/dev/null
             $use_sudo apt-get install -yqq "${pkgs[@]}" >/dev/null
         fi
@@ -1794,7 +1750,7 @@ main() {
     ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab
     ${ENV_INSTALL_JMETER:-false} && _install_jmeter
     ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
-    ${ENV_INSTALL_DOCKER:-false} && _install_docker
+    ${ENV_INSTALL_DOCKER:-false} && _install_docker "$(_is_china && echo "--mirror Aliyun")"
     ${ENV_INSTALL_PODMAN:-false} && _install_podman
     ${ENV_INSTALL_CRON:-false} && _install_cron
 
