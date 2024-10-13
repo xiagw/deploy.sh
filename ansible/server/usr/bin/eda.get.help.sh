@@ -38,7 +38,7 @@ _parse_params() {
         case "${1-}" in
         --no-color) no_color=1 ;;
         -h | --help) _usage ;;
-        -c | --cron) flag=1 ;; # example flag
+        -c | --cron) flag=1 ;;    # example flag
         -m | --manual) flag2=1 ;; # example flag
         -v | --verbose)
             set -x

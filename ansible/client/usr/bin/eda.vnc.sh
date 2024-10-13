@@ -13,7 +13,7 @@ _vnc_start() {
     ## find available port
     vnc_port=5901
     while ss -4lntu | grep -q "\:$vnc_port\ "; do
-        vnc_port=$((vnc_port + 1))
+        ((vnc_port++))
     done
     echo "Using empty port: $vnc_port"
     vncserver :$((vnc_port - 5900))

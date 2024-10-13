@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-
+# shellcheck disable=SC1090
 _get_token() {
     if [ -f "$g_me_env" ]; then
         source "$g_me_env" "$@"
         if [ -z "$zen_domain" ]; then
-            select z in "${zen_domains[@]}"; do
+            select z in "${zen_domains[@]:-}"; do
                 zen_domain="${z}"
                 break
             done
@@ -64,22 +64,15 @@ EOF
     esac
 
     while read -r line; do
-        project_id="$(echo "$line" | awk -F';' '{print $1}')"
-        project_name="$(echo "$line" | awk -F';' '{print $2}')"
-        project_status="$(echo "$line" | awk -F';' '{print $3}')"
+        IFS=';' read -r project_id project_name project_status <<< "$line"
         project_dir="${project_id}-${project_name}"
         ## 排除 id
-        if echo "${zen_project_exclude[@]}" | grep -qw "$project_id"; then
+        if echo "${zen_project_exclude[@]:-}" | grep -qw "$project_id"; then
             continue
         fi
         ## 不足3位数前面补0
-        if [[ "${#project_id}" -eq 1 ]]; then
-            project_dir="00$project_dir"
-            project_id="00$project_id"
-        elif [[ "${#project_id}" -eq 2 ]]; then
-            project_dir="0$project_dir"
-            project_id="0$project_id"
-        fi
+        printf -v project_id "%03d" "$project_id"
+        project_dir="${project_id}-${project_name}"
         ## 是否已经存在目录
         dir_exist="$(find "$doing_path" -maxdepth 1 -iname "${project_id}-*" | head -n1)"
         if [[ "$project_status" == 'closed' ]]; then
@@ -92,9 +85,7 @@ EOF
         else
             if [[ -d "$dir_exist" ]]; then
                 ## 存在同id目录，修改为标准目录名
-                if [[ "$dir_exist" != "${doing_path}/${project_dir}" ]]; then
-                    mv "$dir_exist" "${doing_path}/${project_dir}"
-                fi
+                [[ "$dir_exist" != "${doing_path}/${project_dir}" ]] && mv "$dir_exist" "${doing_path}/${project_dir}"
             else
                 ## 不存在目录，创建标准目录
                 mkdir "${doing_path}/${project_dir}"

@@ -14,14 +14,12 @@ _set_peer2peer() {
             [[ "$client_conf" == 'quit' ]] && exit
             break
         done
-        client_key_pub="$(awk '/^### public_key:/ {print $3}' "$client_conf" | head -n 1)"
-        client_key_pre="$(awk '/PresharedKey/ {print $4}' "$client_conf" | head -n 1)"
-        client_ip_public="$(awk '/^### public_ip:/ {print $3}' "$client_conf" | head -n 1)"
-        client_ip_pri="$(awk '/^Address/ {print $3}' "$client_conf" | head -n 1)"
-        client_ip_pri="${client_ip_pri%/24*}"
-        client_ip6_pri="$(awk '/^Address/ {print $4}' "$client_conf" | head -n 1)"
-        client_ip6_pri="${client_ip6_pri%/64*}"
-        client_ip_port="$(awk '/^ListenPort/ {print $3}' "$client_conf" | head -n 1)"
+        client_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$client_conf")
+        client_key_pre=$(awk '/PresharedKey/ {print $4; exit}' "$client_conf")
+        client_ip_public=$(awk '/^### public_ip:/ {print $3; exit}' "$client_conf")
+        client_ip_pri=$(awk '/^Address/ {print $3}' "$client_conf" | cut -d'/' -f1)
+        client_ip6_pri=$(awk '/^Address/ {print $4}' "$client_conf" | cut -d'/' -f1)
+        client_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$client_conf")
     fi
     ## select server
     _msg red "select peer conf..."
@@ -29,25 +27,23 @@ _set_peer2peer() {
     # select svr_conf in $g_me_data_path/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
     select svr_conf in wg*.conf quit; do
         [[ "$svr_conf" == 'quit' ]] && break
-        svr_key_pub="$(awk '/^### public_key:/ {print $3}' "$svr_conf" | head -n 1)"
-        svr_ip_pub="$(awk '/^### public_ip:/ {print $3}' "$svr_conf" | head -n 1)"
-        svr_ip_pri="$(awk '/^Address/ {print $3}' "$svr_conf" | head -n 1)"
-        svr_ip_pri=${svr_ip_pri%/24*}
-        svr_ip6_pri="$(awk '/^Address/ {print $4}' "$svr_conf" | head -n 1)"
-        svr_ip6_pri=${svr_ip6_pri%/64*}
-        svr_ip_port="$(awk '/^ListenPort/ {print $3}' "$svr_conf" | head -n 1)"
-        svr_lan_cidr="$(awk '/^### site2site_lan_cidr:/ {print $3}' "$svr_conf" | head -n 1)"
-        # read -rp "Set route(client-to-server): [192.168.1.0/24, 172.16.0.0/16] " read_ip_route
+        svr_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$svr_conf")
+        svr_ip_pub=$(awk '/^### public_ip:/ {print $3; exit}' "$svr_conf")
+        svr_ip_pri=$(awk '/^Address/ {print $3}' "$svr_conf" | cut -d'/' -f1)
+        svr_ip6_pri=$(awk '/^Address/ {print $4}' "$svr_conf" | cut -d'/' -f1)
+        svr_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$svr_conf")
+        svr_lan_cidr=$(awk '/^### site2site_lan_cidr:/ {print $3; exit}' "$svr_conf")
+
         _msg red "From: $svr_conf to ${client_conf##*/}"
         if ! grep -q "### ${svr_conf##*/} begin" "$client_conf"; then
-            (
+            {
                 echo ""
                 echo "### ${svr_conf##*/} begin"
                 echo "[Peer]"
                 echo "PublicKey = $svr_key_pub"
                 echo "# PresharedKey = $client_key_pre"
                 echo "endpoint = $svr_ip_pub:$svr_ip_port"
-                if [[ -z "${svr_lan_cidr}" ]]; then
+                if [[ -z "$svr_lan_cidr" ]]; then
                     echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128"
                 else
                     echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128, ${svr_lan_cidr}"
@@ -55,11 +51,12 @@ _set_peer2peer() {
                 echo "PersistentKeepalive = 60"
                 echo "### ${svr_conf##*/} end"
                 echo ""
-            ) >>"$client_conf"
+            } >>"$client_conf"
         fi
+
         _msg green "From ${client_conf##*/} to $svr_conf"
         if ! grep -q "### ${client_conf##*/} begin" "$svr_conf"; then
-            (
+            {
                 echo ""
                 echo "### ${client_conf##*/} begin  $client_comment"
                 echo "[Peer]"
@@ -68,7 +65,7 @@ _set_peer2peer() {
                 echo "AllowedIPs = ${client_ip_pri}/32, ${client_ip6_pri}/128"
                 echo "### ${client_conf##*/} end"
                 echo ""
-            ) >>"$svr_conf"
+            } >>"$svr_conf"
         fi
     done
 }
@@ -91,7 +88,7 @@ _new_key() {
     done
     while [ -f "$client_conf" ]; do
         _msg warn "File exists: $client_conf"
-        client_num=$((client_num + 1))
+        ((client_num++))
         client_conf="$g_me_data_path/wg${client_num}.conf"
     done
     _msg green "Generate: $client_conf , client IP: $ip_prefix${client_num}, $ip6_prefix${client_num}"

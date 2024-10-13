@@ -10,7 +10,8 @@ _get_yes_no() {
 }
 
 _msg() {
-    color_off='\033[0m' # Text Reset
+    local color_off='\033[0m' # Text Reset
+    local color_on
     case "$1" in
     red | error | erro) color_on='\033[0;31m' ;;       # Red
     green | info) color_on='\033[0;32m' ;;             # Green
@@ -48,7 +49,7 @@ _check_root() {
 
 _get_username() {
     _msg green "all existing users..."
-    ls $path_home
+    ls "$path_home"
     echo
     read -rp "[$1] Input <USER> name: " read_user_name
     # read -rp "[$1] Input <GROUP> name: " read_user_group
@@ -63,7 +64,7 @@ _create_user() {
     _get_random_password
     if ! id "$user_name"; then
         # useradd -p $(openssl passwd -crypt $user_pass_sys) test1
-        useradd -m -s "$user_shell" -b $path_home "$user_name" && create_ok=1
+        useradd -m -s "$user_shell" -b "$path_home" "$user_name" && create_ok=1
         echo "$user_pass_sys" | passwd --stdin "$user_name"
     else
         _msg warn "sys user $user_name exists, skip."
@@ -85,7 +86,6 @@ _create_user() {
         _msg red "ERR: create system user $user_name failed."
         return 1
     fi
-
 }
 
 _change_user_password() {
@@ -143,8 +143,8 @@ _remove_user() {
 
 _backup() {
     _msg log "start backup..."
-    ssh_opt='ssh -o StrictHostKeyChecking=no -oConnectTimeout=10'
-    rsync_opt=(
+    local ssh_opt='ssh -o StrictHostKeyChecking=no -oConnectTimeout=10'
+    local rsync_opt=(
         /usr/bin/rsync
         -az
         --backup
@@ -152,19 +152,19 @@ _backup() {
         --exclude={'Trash','.swp','*.log','CDS.log*','libManager.log.*','simulation','*panic.log*','matlab_crash_dump.*','.recycle','.DS_Store'}
     )
 
-    rsync_exclude=$me_path/rsync.exclude.conf
-    rsync_include=$me_path/rsync.include.conf
+    local rsync_exclude=$me_path/rsync.exclude.conf
+    local rsync_include=$me_path/rsync.include.conf
     [ -f "$rsync_exclude" ] && rsync_opt+=(--exclude-from="$rsync_exclude")
     [ -f "$rsync_include" ] && rsync_opt+=(--files-from="$rsync_include")
 
-    src_dirs=(
+    local src_dirs=(
         "$path_eda"
         "$path_home"
     )
-    dest_dir='/volume1/backup'
+    local dest_dir='/volume1/backup'
 
-    pull_servers=(node11)
-    push_server=nas
+    local pull_servers=(node11)
+    local push_server=nas
 
     case "$1" in
     pull)
@@ -198,7 +198,7 @@ _backup() {
 
 _backup_borg() {
     set -e
-    borg_opt=(borg create --remote-path /usr/bin/borg)
+    local borg_opt=(borg create --remote-path /usr/bin/borg)
     if [ "${backup_borg_debug:-0}" -eq 1 ]; then
         borg_opt+=(
             --verbose
@@ -231,8 +231,8 @@ _backup_borg() {
         --exclude '*/.DS_Store'
     )
 
-    remote_host="${1:-nas}"
-    remote_path="${2:-/volume1/backup-borg}"
+    local remote_host="${1:-nas}"
+    local remote_path="${2:-/volume1/backup-borg}"
     shift 2
     IFS=" " read -r -a local_path <<<"${*}"
 
@@ -257,14 +257,9 @@ _backup_borg() {
 
 _get_random_password() {
     # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
-    if command -v md5sum; then
-        bin_hash=md5sum
-    elif command -v sha256sum; then
-        bin_hash=sha256sum
-    elif command -v md5; then
-        bin_hash=md5
-    fi
-    count=0
+    local cmd
+    cmd=$(command -v md5sum || command -v sha256sum || command -v md5)
+    local count=0
     while [ -z "$user_pass_sys" ]; do
         ((++count))
         case $count in
@@ -281,8 +276,8 @@ _get_random_password() {
             user_pass_vnc="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
             ;;
         4)
-            user_pass_sys="$(echo "$RANDOM$(date)$RANDOM" | $bin_hash | base64 | head -c10)"
-            user_pass_vnc="$(echo "$RANDOM$(date)$RANDOM" | $bin_hash | base64 | head -c10)"
+            user_pass_sys="$(echo "$RANDOM$(date)$RANDOM" | $cmd | base64 | head -c10)"
+            user_pass_vnc="$(echo "$RANDOM$(date)$RANDOM" | $cmd | base64 | head -c10)"
             ;;
         *)
             echo "Failed to generate password, exit 1"
@@ -307,9 +302,9 @@ _set_vncserver() {
 }
 
 _get_help() {
-    NOFORMAT='\033[0m'
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
+    local NOFORMAT='\033[0m'
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
     echo -e "${RED}Connecting to stunnel server...${NOFORMAT}"
     sleep 0.5
     echo -e "${GREEN}OK.${NOFORMAT}"

@@ -26,25 +26,17 @@ main() {
         play_minutes=45
         rest_minutes=120
     fi
-    file_play="$me_path/${me_name}.play"
-    file_rest="$me_path/${me_name}.rest"
-    file_disable="$me_path/${me_name}.disable"
-    file_force="$me_path/${me_name}.force"
+    file_play="${me_path}/${me_name}.play"
+    file_rest="${me_path}/${me_name}.rest"
+    file_disable="${me_path}/${me_name}.disable"
+    file_force="${me_path}/${me_name}.force"
 
     ## manual cancel
     case $1 in
-    c | cancel)
-        rm -f "$file_play"
-        ;;
-    d | disable)
-        touch "$file_disable"
-        ;;
-    f | force)
-        touch "$file_force"
-        ;;
-    r | revert)
-        rm -f "$file_force" "$file_disable"
-        ;;
+    c | cancel) rm -f "$file_play" ;;
+    d | disable) touch "$file_disable" ;;
+    f | force) touch "$file_force" ;;
+    r | revert) rm -f "$file_force" "$file_disable" ;;
     esac
     if [[ -f $file_disable ]]; then
         rm -f "$file_rest" "$file_play"

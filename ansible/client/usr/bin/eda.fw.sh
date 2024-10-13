@@ -18,45 +18,44 @@ _rule_clean() {
 
 _rule_server() {
     ## nfs, nis
-    firewall-cmd --add-service=nfs --permanent
-    firewall-cmd --add-service={nfs3,mountd,rpc-bind} --permanent
-    firewall-cmd --add-port=944-946/tcp --permanent
-    firewall-cmd --add-port=944-946/udp --permanent
+    firewall-cmd --permanent --add-service={nfs,nfs3,mountd,rpc-bind}
+    firewall-cmd --permanent --add-port={944-946/tcp,944-946/udp}
     ## vpn
-    firewall-cmd --add-port=39036-39038/udp --permanent
+    firewall-cmd --permanent --add-port=39036-39038/udp
     ## vncserver
-    firewall-cmd --add-port=5900-5999/tcp --permanent
+    firewall-cmd --permanent --add-port=5900-5999/tcp
     ## EDA license
-    firewall-cmd --add-port=30000/tcp --permanent
+    firewall-cmd --permanent --add-port=30000/tcp
     ## openlava
-    firewall-cmd --add-port=16322-16325/tcp --permanent
+    firewall-cmd --permanent --add-port=16322-16325/tcp
 }
 
 _rule_default() {
+    local cmd="firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT"
     ## allow loopback
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -o lo -p all -j ACCEPT
+    $cmd 0 -o lo -p all -j ACCEPT
     ## allow icmp
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -p icmp -m icmp --icmp-type 8 -j ACCEPT
+    $cmd 0 -p icmp -m icmp --icmp-type 8 -j ACCEPT
     ## allow established
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT
+    $cmd 0 -m state --state ESTABLISHED,RELATED -j ACCEPT
     ## Allow for DNS queries:
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp -m tcp --dport 53 -j ACCEPT
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p udp --dport 53 -j ACCEPT
+    $cmd 1 -p tcp -m tcp --dport 53 -j ACCEPT
+    $cmd 1 -p udp --dport 53 -j ACCEPT
     ## Allow SSH:
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp --sport 22 -j ACCEPT
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp --dport 22 -j ACCEPT
-    # firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp -m multiport --dports 22,18941 -j ACCEPT
+    $cmd 1 -p tcp --sport 22 -j ACCEPT
+    $cmd 1 -p tcp --dport 22 -j ACCEPT
+    # $cmd 1 -p tcp -m multiport --dports 22,18941 -j ACCEPT
     ## Allow VPN:
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p udp --sport 39001:39100 -j ACCEPT
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p udp --dport 39001:39100 -j ACCEPT
+    $cmd 1 -p udp --sport 39001:39100 -j ACCEPT
+    $cmd 1 -p udp --dport 39001:39100 -j ACCEPT
     ## Allow License:
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p udp --sport 30000:30005 -j ACCEPT
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p udp --dport 30000:30005 -j ACCEPT
+    $cmd 1 -p udp --sport 30000:30005 -j ACCEPT
+    $cmd 1 -p udp --dport 30000:30005 -j ACCEPT
     ## Allow VNC:
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp --sport 5900:5999 -j ACCEPT
-    firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -p tcp --dport 5900:5999 -j ACCEPT
+    $cmd 1 -p tcp --sport 5900:5999 -j ACCEPT
+    $cmd 1 -p tcp --dport 5900:5999 -j ACCEPT
     ## Allow NAS web 5000, 5001, ssh 22
-    # firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 1 -d 192.168.7.10/32 -j ACCEPT
+    # $cmd 1 -d 192.168.7.10/32 -j ACCEPT
 }
 
 _rule_enable_web() {
@@ -75,17 +74,17 @@ _rule_reload() {
 }
 
 main() {
-    if [[ $(id -u) -ne 0 ]]; then
+    [[ $(id -u) -ne 0 ]] && {
         echo "Need root. exit."
-        exit 1
-    fi
-    if [[ -z "$1" ]]; then
+        return 1
+    }
+
+    choice=${1:-$(
         select choice in disable_out enable_out enable_only_web firewall_status quit; do
             break
         done
-    else
-        choice="$1"
-    fi
+    )}
+
     case $choice in
     disable_out)
         _rule_clean

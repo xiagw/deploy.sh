@@ -993,7 +993,7 @@ _install_jmeter() {
         echo "tzdata tzdata/Zones/Asia select Shanghai" >>/tmp/preseed.cfg
         debconf-set-selections /tmp/preseed.cfg
         rm -f /etc/timezone /etc/localtime
-        $use_sudo apt-get update -yqq
+        ${use_sudo:-} apt-get update -yqq
         $use_sudo apt-get install -yqq tzdata
         rm -rf /tmp/preseed.cfg
         unset DEBIAN_FRONTEND DEBCONF_NONINTERACTIVE_SEEN TIME_ZOME

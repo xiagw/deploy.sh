@@ -15,16 +15,14 @@ _get_input() {
     else
         read -rp "[$((++count))]. Enter SSH IP: [ip|dns|user@ip:port] " read_ssh_host
         if [[ "$read_ssh_host" == *@* ]]; then
-            ssh_user=${read_ssh_host%%@*}
-            ssh_host=$(echo "${read_ssh_host##*@}" | awk -F: '{print $1}')
-            ssh_port=$(echo "${read_ssh_host##*@}" | awk -F: '{print $2}')
+            IFS='@:' read -r ssh_user ssh_host ssh_port <<<"$read_ssh_host"
             ssh_port=${ssh_port:-22}
         else
-            read -rp "[$((++count))]. Enter SSH user: [root] " read_ssh_user
-            read -rp "[$((++count))]. Enter SSH port: [22] " read_ssh_port
-            ssh_user=${read_ssh_user:-root}
+            read -rp "[$((++count))]. Enter SSH user: [root] " ssh_user
+            read -rp "[$((++count))]. Enter SSH port: [22] " ssh_port
+            ssh_user=${ssh_user:-root}
             ssh_host=${read_ssh_host:? "SSH IP empty"}
-            ssh_port=${read_ssh_port:-22}
+            ssh_port=${ssh_port:-22}
         fi
         read -rp "[$((++count))]. Enter SSH name: [alias name] " read_ssh_name
         read -rp "[$((++count))]. Enable byobu? [Y/n] " read_byobu
@@ -32,17 +30,13 @@ _get_input() {
     fi
 
     if "${has_fzf:-false}"; then
-        ssh_conf="$(echo "${ssh_conf_files[@]}" | sed 's/ \+/\n/g' | fzf)"
+        ssh_conf=$(printf '%s\n' "${ssh_conf_files[@]}" | fzf)
+        ansible_conf=$(printf '%s\n' "${ansible_host_files[@]}" | fzf)
     else
         select c in "${ssh_conf_files[@]}"; do
             ssh_conf="$(readlink -f "$c")"
             break
         done
-    fi
-
-    if "${has_fzf:-false}"; then
-        ansible_conf="$(echo "${ansible_host_files[@]}" | sed 's/ \+/\n/g' | fzf)"
-    else
         select a in "${ansible_host_files[@]}"; do
             ansible_conf="$(readlink -f "$a")"
             break
@@ -51,7 +45,7 @@ _get_input() {
 }
 
 _add_host() {
-    if grep -q -E "^Host.*${ssh_name}$|^### ${ssh_name} begin" "$ssh_conf"; then
+    if grep -qE "^Host.*${ssh_name}$|^### ${ssh_name} begin" "$ssh_conf"; then
         echo "host ${ssh_name} exist, skip"
         return 1
     fi
@@ -75,8 +69,8 @@ _delete_host() {
 }
 
 _port_forward() {
-    if command -v nc &>/dev/null; then
-        echo >&2 "I require nc but it's not installed.  Aborting."
+    if ! command -v nc &>/dev/null; then
+        echo >&2 "I require nc but it's not installed. Aborting."
         return 1
     fi
     ssh_opt='ssh -qfg -o ExitOnForwardFailure=yes'
@@ -85,16 +79,19 @@ _port_forward() {
     ## create ssh tunnel
     $ssh_opt -L "$ssh_forward_port":localhost:3306 $ssh_host "sleep 300" || true
     ## kill ssh tunnel timeout
-    while nc -vz localhost "$ssh_forward_port"; do
-        # echo "ssh forward port $ssh_forward_port exist."
-        count=$((count + 1))
-        if [ $count -gt 30 ]; then
-            echo "ssh forward port $ssh_forward_port exist too long, break."
-            pkill -f "$ssh_opt -L $ssh_forward_port:localhost:3306" || true
-            break
-        fi
-        sleep 10
-    done &
+    (
+        count=0
+        while nc -vz localhost "$ssh_forward_port"; do
+            # echo "ssh forward port $ssh_forward_port exist."
+            ((count++))
+            if [ $count -gt 30 ]; then
+                echo "ssh forward port $ssh_forward_port exist too long, break."
+                pkill -f "$ssh_opt -L $ssh_forward_port:localhost:3306" || true
+                break
+            fi
+            sleep 10
+        done
+    ) &
 }
 
 main() {
@@ -116,10 +113,10 @@ main() {
     ssh_conf_files=("$HOME"/.ssh/config*)
     ansible_host_files=("$HOME"/src/*devops*/ansible/hosts "$HOME"/.ansible/hosts)
 
-    if command -v fzf >/dev/null; then has_fzf=true; else has_fzf=false; fi
+    has_fzf=$(command -v fzf >/dev/null && echo true || echo false)
 
-    if "${has_fzf:-false}"; then
-        host=$(echo -e "add\nupdate\ndelete\n$(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*')" | fzf)
+    if "${has_fzf}"; then
+        host=$(printf 'add\nupdate\ndelete\n%s\n' "$(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*')" | fzf)
     else
         select h in add update delete $(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*'); do
             host=$h

@@ -8,25 +8,24 @@ _backup_zfs() {
     snap="$(date +%s)"
     zfs list -t snapshot
 
-    if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@now"; then
-        if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last"; then
-            zfs rename "${zfs_src}@last" "${zfs_src}@${snap}"
+    # Rename existing snapshots
+    for fs in "$zfs_src" "$zfs_dest"; do
+        if zfs list -t snapshot -o name -s creation -H -r "${fs}@now" >/dev/null 2>&1; then
+            zfs rename "${fs}@now" "${fs}@last" 2>/dev/null || true
+            zfs rename "${fs}@last" "${fs}@${snap}" 2>/dev/null || true
         fi
-        zfs rename "${zfs_src}@now" "${zfs_src}@last"
-    fi
-    if zfs list -t snapshot -o name -s creation -H -r "${zfs_dest}@now"; then
-        if zfs list -t snapshot -o name -s creation -H -r "${zfs_dest}@last"; then
-            zfs rename "${zfs_dest}@last" "${zfs_dest}@${snap}"
-        fi
-        zfs rename "${zfs_dest}@now" "${zfs_dest}@last"
-    fi
+    done
 
+    # Create new snapshot
     zfs snapshot "${zfs_src}@now"
 
-    if command -v pv >/dev/null 2>&1; then
-        local has_pv=1
-    fi
-    if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last"; then
+    # Check for pv command
+    local has_pv=0
+    command -v pv >/dev/null 2>&1 && has_pv=1
+
+    # Perform incremental or full backup
+    if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last" >/dev/null 2>&1; then
+        # Incremental backup
         if [[ "$has_pv" -eq 1 ]]; then
             zfs send -v -i "${zfs_src}@last" "${zfs_src}@now" | pv | zfs recv "${zfs_dest}"
         else
@@ -41,6 +40,7 @@ _backup_zfs() {
             zfs send -v "${zfs_src}@last" | zfs recv "${zfs_dest}"
         fi
     fi
+
     ## clear snapshot
     zfs destroy "${zfs_src}@${snap}"
     zfs destroy "${zfs_dest}@${snap}"
