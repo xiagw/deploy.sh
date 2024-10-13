@@ -1386,7 +1386,7 @@ _detect_project_language() {
         case $f in
         composer.json) project_lang=php ;;
         package.json) project_lang=node ;;
-        pom.xml)
+        pom.xml | build.gradle)
             project_lang=java
             build_arg+=" --build-arg MVN_PROFILE=${gitlab_project_branch}"
             ${debug_on:-false} && build_arg+=" --build-arg MVN_DEBUG=on"
