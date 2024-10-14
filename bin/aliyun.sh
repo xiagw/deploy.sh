@@ -718,7 +718,7 @@ main() {
     source "$g_me_env"
 
     _install_jq_cli
-    _install_aliyun
+    _install_aliyun_cli
 
     _parse_args "$@"
 }
