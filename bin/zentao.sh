@@ -19,9 +19,7 @@ _get_token() {
         return 1
     fi
     if [ -z "$zen_token" ]; then
-        if [ -z "$zen_root_password" ]; then
-            read -rp "请输入管理员root密码: " zen_root_password
-        fi
+        zen_root_password=${zen_root_password:-$(read -rsp "请输入管理员root密码: " pwd && echo "$pwd")}
         zen_token="$(
             $curl_opt "${zen_api:?empty}"/tokens -d '{"account": "'"${zen_account:-root}"'", "password": "'"$zen_root_password"'"}' |
                 jq -r '.token'
@@ -35,7 +33,9 @@ _add_account() {
     read -rp "请输入账号: " user_account
     password_rand=$(_get_random_password 2>/dev/null)
     echo "$user_realname / $user_account / ${password_rand}" | tee -a "$g_me_log"
-    $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d '{"realname": "'"${user_realname:?}"'", "account": "'"${user_account:?}"'", "password": "'"${password_rand}"'", "group": "1", "gender": "m"}'
+    $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d @- <<EOF
+{"realname": "${user_realname:?}", "account": "${user_account:?}", "password": "${password_rand}", "group": "1", "gender": "m"}
+EOF
 }
 
 _get_project() {
@@ -63,8 +63,7 @@ EOF
         ;;
     esac
 
-    while read -r line; do
-        IFS=';' read -r project_id project_name project_status <<< "$line"
+    while IFS=';' read -r project_id project_name project_status; do
         project_dir="${project_id}-${project_name}"
         ## 排除 id
         if echo "${zen_project_exclude[@]:-}" | grep -qw "$project_id"; then
@@ -83,15 +82,13 @@ EOF
                 mv "$doing_path/${project_id}-"* "$closed_path/" 2>/dev/null
             fi
         else
-            if [[ -d "$dir_exist" ]]; then
-                ## 存在同id目录，修改为标准目录名
-                [[ "$dir_exist" != "${doing_path}/${project_dir}" ]] && mv "$dir_exist" "${doing_path}/${project_dir}"
-            else
-                ## 不存在目录，创建标准目录
-                mkdir "${doing_path}/${project_dir}"
+            dir_path="${doing_path}/${project_dir}"
+            if [[ -d "$dir_exist" && "$dir_exist" != "$dir_path" ]]; then
+                mv "$dir_exist" "$dir_path"
+            elif [[ ! -d "$dir_path" ]]; then
+                mkdir "$dir_path"
             fi
         fi
-        # sleep 5
     done < <(jq -r '.[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
     # jq -c '.projects[] | select (.status | contains("doing","closed"))' "$get_project_json" |
     #         jq -r '(.id|tostring) + "-" + .name + ";" + .status'
