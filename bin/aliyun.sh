@@ -3,22 +3,16 @@
 
 _get_aliyun_profile() {
     g_cmd_aliyun="$(command -v aliyun)"
-    g_aliyun_conf="$HOME/.config/aliyun/config.json"
-    if [ -f "$g_aliyun_conf" ]; then
-        g_cmd_aliyun="$g_cmd_aliyun --config-path $g_aliyun_conf"
-    else
-        g_aliyun_conf="$HOME/.aliyun/config.json"
-    fi
-
-    # $g_cmd_aliyun version
+    g_aliyun_conf="${HOME}/.config/aliyun/config.json"
+    [ ! -f "$g_aliyun_conf" ] && g_aliyun_conf="${HOME}/.aliyun/config.json"
+    g_cmd_aliyun="$g_cmd_aliyun --config-path $g_aliyun_conf"
 
     if [ "${1:-by_hand}" = auto ]; then
-        ## get aliyun_profile from $g_me_env
-        aliyun_region=$(jq -r ".profiles[] | select (.name == \"${aliyun_profile:-}\") | .region_id" "$g_aliyun_conf")
+        aliyun_region=$(jq -r ".profiles[] | select(.name == \"${aliyun_profile:-}\") | .region_id" "$g_aliyun_conf")
         g_cmd_aliyun_p="$g_cmd_aliyun -p ${aliyun_profile:-} --region ${aliyun_region:-cn-hangzhou}"
     else
         aliyun_profile=$(jq -r '.profiles[].name' "$g_aliyun_conf" | fzf)
-        aliyun_region=$($g_cmd_aliyun_p ecs DescribeRegions | jq -r '.Regions.Region[].RegionId' | fzf)
+        aliyun_region=$($g_cmd_aliyun ecs DescribeRegions | jq -r '.Regions.Region[].RegionId' | fzf)
 
         # Prompt for profile and region if not selected
         [ -z "$aliyun_profile" ] && read -rp "Aliyun profile name: " aliyun_profile
