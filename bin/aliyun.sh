@@ -385,50 +385,61 @@ _auto_scaling() {
 _pay_cdn() {
     set -e
     _get_aliyun_profile auto
-    enable_msg="$1"
-    aliyun_region=cn-hangzhou
-    ## 在线查询CDN资源包剩余量，求和TB，排除https计次
-    cdn_amount=$(
-        $g_cmd_aliyun_p bssopenapi QueryResourcePackageInstances --ProductCode dcdn |
-            jq -r '.Data.Instances.Instance[] | select ( .RemainingAmount != "0" and .RemainingAmountUnit != "GB" and .RemainingAmountUnit != "次" ) | .RemainingAmount' |
-            awk '{s+=$1} END {printf "%f", s}'
-    )
+    local enable_msg="$1"
+    local aliyun_region=cn-hangzhou
     ## CDN 资源包 1TB(spec=1024) 单价 126¥
-    spec_unit=1024
-    price_unit=126
+    local spec_unit=1024
+    local price_unit=126
     ## 资源包余量阈值 1TB (已有资源报剩余量小于1TB则需要购买)
-    cdn_threshold=1
+    local cdn_threshold=1.900
     ## 账户余额阈值 700¥ (余额小于 700￥则不购买)
-    balance_threshold=700
+    local balance_threshold=700
 
-    ## CDN资源包小于 1TB 则购买新资源包
+    # Query CDN resource package remaining amount / 在线查询CDN资源包剩余量，求和TB，排除https计次
+    local cdn_amount
+    cdn_amount="$(
+        $g_cmd_aliyun_p bssopenapi QueryResourcePackageInstances --ProductCode dcdn |
+            jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit != "GB" and .RemainingAmountUnit != "次") | .RemainingAmount' |
+            awk '{s+=$1} END {printf "%.3f", s}'
+    )"
+
+    # Check if CDN amount is above threshold
     if (($(echo "$cdn_amount > $cdn_threshold" | bc -l))); then
-        [[ -n "$enable_msg" ]] && echo -e "[dcdn] \033[0;31m remain: ${cdn_amount:-0}TB \033[0m, skip pay."
-        return
+        [[ -n "$enable_msg" ]] && echo -e "[dcdn] \033[0;31mremain: ${cdn_amount:-0}TB\033[0m, skip pay."
+        return 0
     fi
 
+    # Query account balance
+    local balance
     balance="$(
         $g_cmd_aliyun_p bssopenapi QueryAccountBalance |
             jq -r '.Data.AvailableAmount' |
             awk '{gsub(/,/,""); print int($0)}'
     )"
-    ## 根据余额计算购买能力，200/50/10/5/1 TB
+    # Check if balance is too low / 余额小于 700￥则不购买
     if ((balance < balance_threshold + price_unit)); then
         _msg log "$g_me_log" "[dcdn] balance $balance too low, skip pay."
         return 1
     fi
+
+    # Calculate purchase capacity / 根据余额计算购买能力，200/50/10/5/1 TB
+    local spec
     for i in 200 50 10 5 1; do
-        discount=$((i == 200 ? 7870 : 0))
+        local discount=$((i == 200 ? 7870 : 0))
         if ((balance > balance_threshold + price_unit * i - discount)); then
             spec=$((spec_unit * i))
             break
         fi
     done
 
+    # Purchase resource package / 购买资源包
     _msg log "$g_me_log" "[dcdn] remain: ${cdn_amount:-0}TB, pay bag $((spec / spec_unit))TB ..."
-    $g_cmd_aliyun_p bssopenapi CreateResourcePackage --ProductCode dcdn \
+    $g_cmd_aliyun_p bssopenapi CreateResourcePackage \
+        --ProductCode dcdn \
         --PackageType FPT_dcdnpaybag_deadlineAcc_1541405199 \
-        --Duration 1 --PricingCycle Year --Specification "$spec"
+        --Duration 1 \
+        --PricingCycle Year \
+        --Specification "$spec"
 }
 
 _add_account() {
