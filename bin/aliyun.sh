@@ -1,19 +1,34 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090
 
 _get_aliyun_profile() {
-    $g_cmd_aliyun version
-    aliyun_profile=$(jq -r '.profiles[].name' "$g_aliyun_conf" | fzf)
-    aliyun_region=$(jq -r ".profiles[] | select (.name == \"$aliyun_profile\") | .region_id" "$g_aliyun_conf")
+    g_cmd_aliyun="$(command -v aliyun)"
+    g_aliyun_conf="$HOME/.config/aliyun/config.json"
+    if [ -f "$g_aliyun_conf" ]; then
+        g_cmd_aliyun="$g_cmd_aliyun --config-path $g_aliyun_conf"
+    else
+        g_aliyun_conf="$HOME/.aliyun/config.json"
+    fi
 
-    # Prompt for profile and region if not selected
-    [ -z "$aliyun_profile" ] && read -rp "Aliyun profile name: " aliyun_profile
-    [ -z "$aliyun_region" ] && read -rp "Aliyun region name: " aliyun_region
+    # $g_cmd_aliyun version
 
-    # Set the selected profile
-    $g_cmd_aliyun configure set -p "$aliyun_profile"
+    if [ "${1:-by_hand}" = auto ]; then
+        ## get aliyun_profile from $g_me_env
+        aliyun_region=$(jq -r ".profiles[] | select (.name == \"${aliyun_profile:-}\") | .region_id" "$g_aliyun_conf")
+        g_cmd_aliyun_p="$g_cmd_aliyun -p ${aliyun_profile:-} --region ${aliyun_region:-cn-hangzhou}"
+    else
+        aliyun_profile=$(jq -r '.profiles[].name' "$g_aliyun_conf" | fzf)
+        aliyun_region=$($g_cmd_aliyun_p ecs DescribeRegions | jq -r '.Regions.Region[].RegionId' | fzf)
 
-    # Create a command with the profile set
-    g_cmd_aliyun_p="$g_cmd_aliyun -p $aliyun_profile"
+        # Prompt for profile and region if not selected
+        [ -z "$aliyun_profile" ] && read -rp "Aliyun profile name: " aliyun_profile
+        [ -z "$aliyun_region" ] && read -rp "Aliyun region name: " aliyun_region
+
+        # Set the selected profile
+        # $g_cmd_aliyun configure set -p "$aliyun_profile"
+
+        g_cmd_aliyun_p="$g_cmd_aliyun -p $aliyun_profile --region ${aliyun_region:-cn-hangzhou}"
+    fi
 }
 
 _export_resource() {
@@ -54,13 +69,13 @@ _export_resource() {
 }
 
 _get_ecs_list() {
-    _get_aliyun_profile
     # 1. 如何进入 lifseaOS 的shell
-    # aliyun ecs RunCommand --region "$aliyun_region" --RegionId 'cn-hangzhou' --Name lifseacli --Type RunShellScript --CommandContent 'lifseacli container start' --InstanceId.1 'i-xxxx'
+    # aliyun ecs RunCommand  --RegionId 'cn-hangzhou' --Name lifseacli --Type RunShellScript --CommandContent 'lifseacli container start' --InstanceId.1 'i-xxxx'
     # aliyun ecs RunCommand --RegionId "$aliyun_region" --Name 'lifseacli' --Username 'root' --Type 'RunShellScript' --CommandContent 'IyEvYmluL2Jhc2gKbGlmc2VhY2xpIGNvbnRhaW5lciBzdGFydA==' --Timeout '60' --RepeatMode 'Once' --ContentEncoding 'Base64' --InstanceId.1 'i-xxxx'
     ## 创建ecs时查询等待结果
     # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.Instance[0].Status' to=Running
     # aliyun -p nabaichuan ecs DescribeInstances --InstanceIds '["i-xxxx"]' --waiter expr='Instances.
+    _get_aliyun_profile
     for rid in $(
         $g_cmd_aliyun_p ecs DescribeRegions | jq -r '.Regions.Region[].RegionId' |
             grep '^cn'
@@ -69,9 +84,8 @@ _get_ecs_list() {
     done
 }
 
-_update_dns_record() {
+_dns_recored() {
     _get_aliyun_profile
-
     while read -r domain; do
         _msg "select domain: $domain ..."
 
@@ -97,7 +111,6 @@ _update_dns_record() {
 
 _remove_nas() {
     _get_aliyun_profile
-
     # Select file system ID
     select filesys_id in $($g_cmd_aliyun_p nas DescribeFileSystems | jq -r '.FileSystems.FileSystem[].FileSystemId'); do
         _msg "file_system_id is: $filesys_id"
@@ -135,7 +148,6 @@ _remove_nas() {
 
 _add_rds_account() {
     _get_aliyun_profile
-
     select rds_id in $($g_cmd_aliyun_p rds DescribeDBInstances | jq -r '.Items.DBInstance[].DBInstanceId'); do
         echo "choose rds id: $rds_id"
         break
@@ -148,16 +160,16 @@ _add_rds_account() {
     password_rand=$(_get_random_password 2>/dev/null)
 
     ## aliyun rds ResetAccountPassword
-    $g_cmd_aliyun_p rds DescribeAccounts --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account"
+    $g_cmd_aliyun_p rds DescribeAccounts --DBInstanceId "$rds_id" --AccountName "$rds_account"
     if _get_yes_no "[+] Do you want ResetAccountPassword? "; then
-        $g_cmd_aliyun_p rds ResetAccountPassword --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand}"
+        $g_cmd_aliyun_p rds ResetAccountPassword --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand}"
     fi
     ## aliyun rds CreateAccount
     if _get_yes_no "[+] Do you want create RDS account? "; then
         ## 创建 db
-        $g_cmd_aliyun_p rds CreateDatabase --region "$aliyun_region" --CharacterSetName utf8mb4 --DBInstanceId "$rds_id" --DBName "$rds_account"
+        $g_cmd_aliyun_p rds CreateDatabase --CharacterSetName utf8mb4 --DBInstanceId "$rds_id" --DBName "$rds_account"
         ## 创建 account , Normal / Super
-        $g_cmd_aliyun_p rds CreateAccount --region "$aliyun_region" --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand}" --AccountType Normal --AccountDescription "$rds_account_desc"
+        $g_cmd_aliyun_p rds CreateAccount --DBInstanceId "$rds_id" --AccountName "$rds_account" --AccountPassword "${password_rand}" --AccountType Normal --AccountDescription "$rds_account_desc"
         ## 授权
         $g_cmd_aliyun_p rds GrantAccountPrivilege --AccountPrivilege ReadWrite --DBInstanceId "$rds_id" --AccountName "$rds_account" --DBName "$rds_account"
     fi
@@ -168,10 +180,11 @@ _add_rds_account() {
     # ALTER USER 'huxinye2'@'%' IDENTIFIED WITH mysql_native_password  BY 'xx';
     # revoke all on abc5.* from abc5; drop user abc5; drop database abc5;
     ## RDS IP 白名单
-    # $g_cmd_aliyun_p rds ModifySecurityIps --region "$aliyun_region" --DBInstanceId 'rm-xx' --DBInstanceIPArrayName mycustomer --SecurityIps '10.23.1.1'
+    # $g_cmd_aliyun_p rds ModifySecurityIps  --DBInstanceId 'rm-xx' --DBInstanceIPArrayName mycustomer --SecurityIps '10.23.1.1'
 }
 
 _get_cluster_info() {
+    _get_aliyun_profile auto
     ## get cluster name from env
     cluster_id="$(
         $g_cmd_aliyun_p cs GET /api/v1/clusters \
@@ -190,6 +203,14 @@ _get_cluster_info() {
 }
 
 _get_node_pod() {
+    g_cmd_kubectl=$(command -v kubectl)
+    if [[ -f "$HOME/.config/kube/config" ]]; then
+        g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.config/kube/config"
+    else
+        g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.kube/config"
+    fi
+    g_cmd_kubectl_m="$g_cmd_kubectl -n main"
+
     deployment="$1"
     readarray -t node_name < <($g_cmd_kubectl get nodes -o name)
     ## 实际节点数 = 所有节点数 - 虚拟节点 1 个 (virtual-kubelet-cn-hangzhou-k)
@@ -361,13 +382,14 @@ _auto_scaling() {
     fi
 }
 
-_pay_cdn_bag() {
+_pay_cdn() {
     set -e
+    _get_aliyun_profile auto
     enable_msg="$1"
     aliyun_region=cn-hangzhou
     ## 在线查询CDN资源包剩余量，求和TB，排除https计次
     cdn_amount=$(
-        $g_cmd_aliyun_p bssopenapi QueryResourcePackageInstances --region "$aliyun_region" --ProductCode dcdn |
+        $g_cmd_aliyun_p bssopenapi QueryResourcePackageInstances --ProductCode dcdn |
             jq -r '.Data.Instances.Instance[] | select ( .RemainingAmount != "0" and .RemainingAmountUnit != "GB" and .RemainingAmountUnit != "次" ) | .RemainingAmount' |
             awk '{s+=$1} END {printf "%f", s}'
     )
@@ -404,12 +426,12 @@ _pay_cdn_bag() {
     done
 
     _msg log "$g_me_log" "[dcdn] remain: ${cdn_amount:-0}TB, pay bag $((spec / spec_unit))TB ..."
-    $g_cmd_aliyun_p bssopenapi CreateResourcePackage --region "$aliyun_region" --ProductCode dcdn \
+    $g_cmd_aliyun_p bssopenapi CreateResourcePackage --ProductCode dcdn \
         --PackageType FPT_dcdnpaybag_deadlineAcc_1541405199 \
         --Duration 1 --PricingCycle Year --Specification "$spec"
 }
 
-_add_ram_account() {
+_add_account() {
     # set -e
     $g_cmd_aliyun configure list
     if _get_yes_no "Add new Aliyun profile?"; then
@@ -428,6 +450,7 @@ _add_ram_account() {
     fi
 
     _get_aliyun_profile
+
     $g_cmd_aliyun_p ram ListUsers | jq '.Users.User[]'
     read -rp "Enter account name: " -e -i dev2app read_account_name
     acc_name="${read_account_name:-dev2app}"
@@ -456,10 +479,10 @@ _add_ram_account() {
         # read -rp "OSS Region? [cn-hangzhou] " oss_region
         # oss_endpoint=oss-cn-hangzhou.aliyuncs.com
         # oss_acl=public-read
-        $g_cmd_aliyun_p oss mb oss://"${oss_bucket:?empty}" --region "${aliyun_region:?empty}"
+        $g_cmd_aliyun_p oss mb oss://"${oss_bucket:?empty}"
     fi
 
-    $g_cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" | jq '.Domains.PageData[]'
+    $g_cmd_aliyun_p cdn DescribeUserDomains | jq '.Domains.PageData[]'
     if _get_yes_no "Create CDN domain?"; then
         set -e
         ## 创建 CDN 加速域名
@@ -477,10 +500,10 @@ _add_ram_account() {
         ## 增加 dns 校验记录
         $g_cmd_aliyun_p alidns AddDomainRecord --region cn-hangzhou --DomainName "${domain_name}" --Type TXT --RR "${dns_verify[0]}" --Value "${dns_verify[1]}"
 
-        $g_cmd_aliyun_p cdn VerifyDomainOwner --region "$aliyun_region" --DomainName "$cdn_domain" --VerifyType dnsCheck
+        $g_cmd_aliyun_p cdn VerifyDomainOwner --region cn-hangzhou --DomainName "$cdn_domain" --VerifyType dnsCheck
 
         ## 创建 CDN 加速域名
-        $g_cmd_aliyun_p cdn AddCdnDomain --region "$aliyun_region" --CdnType web --DomainName "${cdn_domain}" \
+        $g_cmd_aliyun_p cdn AddCdnDomain --region cn-hangzhou --CdnType web --DomainName "${cdn_domain}" \
             --Sources '[{"content":"'"${dns_oss}"'","type":"oss","priority":"20","port":80,"weight":"10"}]'
         ## 新增 DNS 记录
         $g_cmd_aliyun_p alidns AddDomainRecord --Type CNAME --DomainName "${domain_name}" --RR cdn --Value "$dns_cname"
@@ -492,7 +515,7 @@ _add_ram_account() {
     fi
 }
 
-_upload_ssl_cert() {
+_upload_cert() {
     _get_aliyun_profile
     set -e
 
@@ -514,19 +537,19 @@ _upload_ssl_cert() {
             _msg "cert id log file: ${upload_log}"
             remove_cert_id=$(jq -r '.CertId' "$upload_log")
             _msg "remove cert id: $remove_cert_id"
-            $g_cmd_aliyun_p cas DeleteUserCertificate --region "$aliyun_region" --CertId "${remove_cert_id:-1000}" || true
+            $g_cmd_aliyun_p cas DeleteUserCertificate --CertId "${remove_cert_id:-1000}" || true
         else
             _msg "not found ${upload_log}"
         fi
 
         ## 上传证书
-        $g_cmd_aliyun_p cas UploadUserCertificate --region "$aliyun_region" --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" | tee "$upload_log"
+        $g_cmd_aliyun_p cas UploadUserCertificate --Name "${upload_name}" --Key="$file_key" --Cert="$file_pem" | tee "$upload_log"
 
     done < <(
         if [[ -n "$1" ]]; then
             for i in "$@"; do echo "$i"; done
         else
-            $g_cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
+            $g_cmd_aliyun_p cdn DescribeUserDomains |
                 jq -r '.Domains.PageData[].DomainName' |
                 awk -F. '{$1=""; print $0}' | sort | uniq
         fi
@@ -540,13 +563,12 @@ _upload_ssl_cert() {
         _msg "found cdn domain: ${domain_cdn}"
         _msg "set ssl to: ${upload_name}"
 
-        $g_cmd_aliyun_p cdn BatchSetCdnDomainServerCertificate --region cn-hangzhou --SSLProtocol on --CertType cas --DomainName "${domain_cdn}" --CertName "${upload_name}"
+        $g_cmd_aliyun_p cdn BatchSetCdnDomainServerCertificate --SSLProtocol on --CertType cas --DomainName "${domain_cdn}" --CertName "${upload_name}"
     done < <(
-        $g_cmd_aliyun_p cdn DescribeUserDomains --region "$aliyun_region" |
-            jq -r '.Domains.PageData[].DomainName'
+        $g_cmd_aliyun_p cdn DescribeUserDomains | jq -r '.Domains.PageData[].DomainName'
     )
     ## 设置 负载均衡 ALB 证书
-    # aliyun alb AssociateAdditionalCertificatesWithListener --region cn-hangzhou --ListenerId 'lsn-9of9xjofjpc53yyp3f' --Certificates.1.CertificateId '15246054-cn-hangzhou' --force
+    # aliyun alb AssociateAdditionalCertificatesWithListener --ListenerId 'lsn-9of9xjofjpc53yyp3f' --Certificates.1.CertificateId '15246054-cn-hangzhou' --force
 }
 
 _add_workorder() {
@@ -573,9 +595,15 @@ _add_workorder() {
     _get_yes_no "python3 $call_python_file ${id_string} , create? " && python3 "$call_python_file" ${id_string}
 }
 
+_create_nas_from_snapshot() {
+    _get_aliyun_profile
+    nas_snap_id=$($g_cmd_aliyun_p nas DescribeSnapshots | jq -r '.Snapshots.Snapshot[] | .SnapshotId' | fzf)
+    export ALIYUN_NAS_SNAP_ID=${nas_snap_id}
+    python3 aliyun.nas.snapshot.py "$@"
+}
+
 _update_functions() {
     _get_aliyun_profile
-    # read -rp "Enter functions name ? " fc_name
     select line in $(
         $g_cmd_aliyun_p fc GET /2023-03-30/functions --limit=100 --header "Content-Type=application/json;" |
             jq -r '.functions[].functionName'
@@ -592,23 +620,46 @@ _update_functions() {
 _usage() {
     cat <<EOF
 
-Usage: $g_me_name [res|dns|ecs|nas|nas_snap|rds|up|dn|load|cdn|ram|cas|wo|cli]
-    res        - get resource list
-    dns        - update dns record
-    ecs        - get ecs list
-    nas        - remove nas filesystem-id
-    nas_snap   - recovery from nas snapshot
-    rds        - add rds account database
-    up         - k8s scale up
-    dn         - k8s scale down
-    load       - check overload for PHP
-    cdn        - pay cdn bag
-    ram        - add ram user
-    cas        - upload cert to cas
-    wo         - add workorder
-    cli        - install aliyun-cli
-
+Usage: $g_me_name [options]
+    -a, --export-resource  Get Aliyun resource list
+    -d, --dns-record       Update Aliyun DNS record
+    -e, --ecs-list         Get Aliyun ECS list
+    -n, --remove-nas       Remove Aliyun NAS filesystem-id
+    -s, --nas-snapshot     Recover from Aliyun NAS snapshot
+    -r, --rds-account      Add Aliyun RDS account database
+    -u, --scale-up         K8s scale up nodepool
+    -o, --scale-down       K8s scale down nodepool
+    -l, --check-overload   Check overload for PHP
+    -c, --pay-cdn-bag      Pay Aliyun CDN bag
+    -m, --add-ram-account  Add Aliyun RAM user
+    -t, --upload-ssl-cert  Upload cert to Aliyun CAS
+    -w, --add-workorder    Add Aliyun workorder
+    -f, --update-functions Update Aliyun functions
 EOF
+}
+
+_parse_args() {
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+        -a | --export-resource) _export_resource ;;
+        -b | --dns-record) _dns_recored ;;
+        -e | --ecs-list) _get_ecs_list ;;
+        -n | --remove-nas) _remove_nas ;;
+        -s | --nas-snapshot) shift && _create_nas_from_snapshot "$@" ;;
+        -d | --rds-account) _add_rds_account ;;
+        -u | --scale-up) shift && _scale_up "${1:-fly-php71}" ;;
+        -o | --scale-down) shift && _scale_down "${1:-fly-php71}" ;;
+        -l | --auto-scaling) shift && _auto_scaling "${1:-fly-php71}" ;;
+        -c | --pay-cdn) shift && _pay_cdn "$@" ;;
+        -m | --add-account) _add_account ;;
+        -r | --upload-cert) shift && _upload_cert "$@" ;; # 参数输入域名，例如 example.com
+        -w | --add-workorder) _add_workorder ;;
+        -f | --update-functions) _update_functions ;;
+        -i | --install-aliyun) shift && _install_aliyun "$@" ;;
+        *) _usage ;;
+        esac
+        shift
+    done
 }
 
 _include_sh() {
@@ -652,89 +703,13 @@ main() {
     fi
 
     _include_sh
-    # shellcheck disable=SC1090
+
     source "$g_me_env"
 
-    g_cmd_aliyun="$(command -v aliyun)"
-    g_aliyun_conf="$HOME/.config/aliyun/config.json"
-    if [ -f "$g_aliyun_conf" ]; then
-        g_cmd_aliyun="$g_cmd_aliyun --config-path $g_aliyun_conf"
-    else
-        g_aliyun_conf="$HOME/.aliyun/config.json"
-    fi
-    g_cmd_aliyun_p="$g_cmd_aliyun -p ${aliyun_profile:-flyh6}"
-
-    g_cmd_kubectl=$(command -v kubectl)
-    if [[ -f "$HOME/.config/kube/config" ]]; then
-        g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.config/kube/config"
-    else
-        g_cmd_kubectl="$g_cmd_kubectl --kubeconfig $HOME/.kube/config"
-    fi
-    g_cmd_kubectl_m="$g_cmd_kubectl -n main"
-
     _install_jq_cli
-    _install_aliyun_cli
+    _install_aliyun
 
-    # while [[ "$#" -gt 0 ]]; do
-    case "$1" in
-    res)
-        _export_resource
-        ;;
-    dns)
-        _update_dns_record
-        ;;
-    ecs)
-        _get_ecs_list
-        ;;
-    nas | --remove-nas)
-        _remove_nas
-        ;;
-    nas_snap)
-        shift
-        read -rp "Aliyun nas snap shot id: " nas_snap_id
-        export ALIYUN_NAS_SNAP_ID=${nas_snap_id:?empty}
-        python3 aliyun.nas.snapshot.py "$@"
-        ;;
-    rds)
-        _add_rds_account
-        ;;
-    up | --scale-up)
-        shift
-        _scale_up "${2:-fly-php71}"
-        ;;
-    dn | --scale-down)
-        shift
-        _scale_down "${2:-fly-php71}"
-        ;;
-    auto | --auto-scaling | load)
-        _auto_scaling "${2:-fly-php71}"
-        ;;
-    cdn | pay | --pay-cdn-bag)
-        _pay_cdn_bag "${2}"
-        ;;
-    ram)
-        _add_ram_account nothing
-        ;;
-    cas)
-        shift
-        ## 参数输入域名，例如 example.com
-        _upload_ssl_cert "$@"
-        ;;
-    wo)
-        _add_workorder
-        ;;
-    fc)
-        _update_functions
-        ;;
-    cli)
-        _install_aliyun_cli upgrade
-        ;;
-    *)
-        _usage
-        ;;
-    esac
-    #     shift
-    # done
+    _parse_args "$@"
 }
 
 main "$@"
