@@ -198,7 +198,7 @@ _dump_mysql() {
 
 _backup_directories() {
     local path="$1/$2"
-    local file="${2}.tar.xz"
+    local file="${2}.tar.gz"
 
     for host in "${HOSTS[@]}"; do
         host_path="$path/${host}"
@@ -210,11 +210,11 @@ _backup_directories() {
             _log $LOG_LEVEL_INFO "$me_log" "Backing up $host:$dir to $host_path/${path_right}_${file}"
 
             if [[ $host == "localhost" ]]; then
-                tar -C "${path_left}" -cJf "${host_path}/${path_right}_${file}" "${path_right}"
+                tar -C "${path_left}" -czf "${host_path}/${path_right}_${file}" "${path_right}"
                 continue
             fi
 
-            if ssh -o StrictHostKeyChecking=no "$host" "tar -C ${path_left} -cf - ${path_right}" | xz --threads="$(nproc)" -e >"$host_path/${path_right}_${file}"; then
+            if ssh -o StrictHostKeyChecking=no "$host" "tar -C ${path_left} -czf - ${path_right}" >"$host_path/${path_right}_${file}"; then
                 _log $LOG_LEVEL_INFO "$me_log" "Backup successful $host:$dir to $host_path/${path_right}_${file}"
             else
                 _log $LOG_LEVEL_ERROR "$me_log" "Backup failed $host:$dir to $host_path/${path_right}_${file}"
@@ -227,31 +227,29 @@ _backup_directories() {
 _compress_file() {
     local path="$1"
     local file="$2"
-    local file_tar="${file}.tar.xz"
+    local file_tar="${file}.tar.gz"
 
-    _log $LOG_LEVEL_INFO "$me_log" "tar -cJf $path/${file_tar} $file"
-    tar -cJf "$path/${file_tar}" "$file"
+    _log $LOG_LEVEL_INFO "$me_log" "Compressing: tar -czf $path/${file_tar} $file"
+    tar -czf "$path/${file_tar}" "$file"
 }
 
 _encrypt_file() {
     local path="$1"
-    local file="${2}.tar.xz"
+    local file="${2}.tar.gz"
     local file_enc="${file}.enc"
 
-    # gpg -v --pinentry-mode loopback --passphrase=$g_pass_rand --yes --symmetric ${g_gz_file}
-    # gpg -v --pinentry-mode loopback --passphrase=$g_pass_rand --yes --decrypt ${g_gz_file}.gpg
     if _check_commands gpg; then
-        _log $LOG_LEVEL_INFO "$me_log" "${g_gpg_opt[*]} --symmetric ${path}/$file"
+        _log $LOG_LEVEL_INFO "$me_log" "Encrypting: ${g_gpg_opt[*]} --symmetric ${path}/$file"
         "${g_gpg_opt[@]}" --symmetric "${path}/$file"
         mv "${path}/${file}.gpg" "${path}/$file_enc"
     elif _check_commands openssl; then
-        _log $LOG_LEVEL_INFO "$me_log" "${g_openssl_opt[*]} -in ${path}/$file -out ${path}/$file_enc"
+        _log $LOG_LEVEL_INFO "$me_log" "Encrypting: ${g_openssl_opt[*]} -in ${path}/$file -out ${path}/$file_enc"
         "${g_openssl_opt[@]}" -in "${path}/$file" -out "${path}/$file_enc"
     else
         _log $LOG_LEVEL_ERROR "$me_log" "Unsupported encryption method."
         return 1
     fi
-    _log $LOG_LEVEL_INFO "$me_log" "sha256sum ${file_enc} > ${file_enc}.sha256sum"
+    _log $LOG_LEVEL_INFO "$me_log" "Generating sha256sum: sha256sum ${file_enc} > ${file_enc}.sha256sum"
     pushd "$path"
     sha256sum "$file_enc" >"${file_enc}.sha256sum"
     popd
@@ -278,13 +276,13 @@ _configure_aliyun_cli() {
 }
 
 _upload_file() {
-    if [[ -z "${VIA_DOMAIN:-}" ]]; then
-        _log $LOG_LEVEL_WARNING "$me_log" "VIA_DOMAIN not set. Skipping file upload."
+    if [[ -z "${ALIYUN_OSS_BUCKET:-}" ]]; then
+        _log $LOG_LEVEL_WARNING "$me_log" "ALIYUN_OSS_BUCKET not set. Skipping file upload."
         return
     fi
 
     local path="$1"
-    local file_enc="${2}.tar.xz.enc"
+    local file_enc="${2}.tar.gz.enc"
     local files=("${file_enc}" "${file_enc}.sha256sum")
 
     for file in "${files[@]}"; do
@@ -322,7 +320,7 @@ _upload_file() {
 
 _notify_wechat_work() {
     local path="$1"
-    local file="${2}.tar.xz"
+    local file="${2}.tar.gz"
     local sleep_time="$3"
     local file_enc="${file}.enc"
     local download_url="https://${VIA_DOMAIN:-cdn.example.com}/${file_enc}"
@@ -346,7 +344,6 @@ _notify_wechat_work() {
     if [[ -n "$REDIS_HOST" && -n "$REDIS_PORT" && -n "${REDIS_DB_NUMBERS[*]}" ]]; then
         backup_contents+=$'\n- Redis 数据库 ('"${REDIS_DB_NUMBERS[*]}"')'
     fi
-    backup_contents+=$'\n- 主机:路径:'
     for host in "${HOSTS[@]}"; do
         for path in "${PATHS[@]}"; do
             backup_contents+=$'\n  - '"$host:$path"
@@ -362,7 +359,7 @@ _notify_wechat_work() {
 ## 解密
   ${decryption_instructions}
 ## 解压
-  tar -xJf ${file}
+  tar -xzf ${file}
 ## 内容：${backup_contents}
 "
 
@@ -393,7 +390,7 @@ _refresh_cdn() {
     _configure_aliyun_cli
 
     local path="$1"
-    local file="${2}.tar.xz.enc"
+    local file="${2}.tar.gz.enc"
     local sleep_time="$3"
     local bucket_path="oss://${ALIYUN_OSS_BUCKET:-cdn.example.com}/${file}"
     local url="https://${VIA_DOMAIN:-cdn.example.com}/${file}"
@@ -417,7 +414,7 @@ _securely_remove_files() {
 
     local path="$1"
     local timestamp="$2"
-    local file="${timestamp}.tar.xz"
+    local file="${timestamp}.tar.gz"
 
     # Check if shred is available
     if ! command -v shred &>/dev/null; then
@@ -475,7 +472,7 @@ main() {
     _load_config "$me_env" "$@"
 
     ## 检查必要的命令
-    _check_commands openssl curl tar xz || return 1
+    _check_commands openssl curl tar gzip || return 1
 
     ## 检查磁盘空间
     _check_disk_space || return 1
