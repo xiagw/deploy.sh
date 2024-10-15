@@ -26,7 +26,7 @@ _get_input() {
         fi
         read -rp "[$((++count))]. Enter SSH name: [alias name] " read_ssh_name
         read -rp "[$((++count))]. Enable byobu? [Y/n] " read_byobu
-        ssh_name="host_${read_ssh_name:-${ssh_host//./_}}"
+        ssh_name="${read_ssh_name:-host_${ssh_host//./_}}"
     fi
 
     if "${has_fzf:-false}"; then
