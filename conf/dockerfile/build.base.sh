@@ -6,69 +6,77 @@ _build() {
     local v="$1"
     case "$v" in
     5.6 | 7.1 | 7.3 | 7.4 | 8.1 | 8.2 | 8.3)
-        docker_file=Dockerfile.php.base
-        tag=registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-php-fpm-${v}
-        php_ver=$v
+        cmd_opt+=(
+            -f Dockerfile.php.base
+            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-php-fpm-"$v"
+            --build-arg PHP_VERSION="$v"
+        )
         ;;
     redis | nginx)
-        docker_file=Dockerfile.$v
-        tag=registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-${v}
+        cmd_opt+=(
+            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
+            -f Dockerfile."$v"
+        )
         ;;
     mysql-5.7 | mysql-8.0)
-        docker_file=Dockerfile.mysql
-        mysql_ver=${v#*-}
-        tag=registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-${v}
+        cmd_opt+=(
+            -f Dockerfile.mysql
+            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
+            --build-arg MYSQL_VERSION="${v#*-}"
+        )
         ;;
     spring-8 | spring-17 | spring-21)
-        docker_file=Dockerfile.java.base
-        jdk_ver=${v#*-}
-        tag=registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-${v}
+        cmd_opt+=(
+            -f Dockerfile.java.base
+            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
+            --build-arg JDK_VERSION="${v#*-}"
+        )
         ;;
     nodejs-18 | nodejs-20 | nodejs-21)
-        docker_file=Dockerfile.node.base
-        node_ver=${v#*-}
-        tag=registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-${v}
+        cmd_opt+=(
+            -f Dockerfile.node.base
+            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
+            --build-arg NODE_VERSION="${v#*-}"
+        )
         ;;
     esac
 
-    $cmd_opt -f "$docker_file" \
-        -t "$tag" \
-        --build-arg CHANGE_SOURCE=true \
-        --build-arg IN_CHINA=true \
-        --build-arg HTTP_PROXY="${http_proxy-}" \
-        --build-arg HTTPS_PROXY="${http_proxy-}" \
-        --build-arg PHP_VERSION="$php_ver" \
-        --build-arg MYSQL_VERSION="$mysql_ver" \
-        --build-arg NODE_VERSION="$node_ver" \
-        --build-arg JDK_VERSION="$jdk_ver" \
-        --push \
-        "$me_path/"
+    # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
+    if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
+        docker run --privileged --rm tonistiigi/binfmt --install all
+    fi
 
+    # echo "${cmd_opt[@]} $me_path/"
+    "${cmd_opt[@]}" "$me_path/"
 }
 
+cmd_opt=()
+cmd_opt+=(
+    "$(
+        if command -v docker >/dev/null 2>&1; then
+            echo docker build
+        elif command -v podman >/dev/null 2>&1; then
+            echo podman build --force-rm --format=docker
+        fi
+    )"
+    --progress=plain
+    --platform "linux/amd64,linux/arm64"
+    --build-arg CHANGE_SOURCE=true
+    --build-arg IN_CHINA=true
+    --build-arg HTTP_PROXY="${http_proxy-}"
+    --build-arg HTTPS_PROXY="${http_proxy-}"
+    --push
+)
+
 me_path="$(dirname "$(readlink -f "$0")")"
-
-if command -v docker >/dev/null 2>&1; then
-    cmd=$(command -v docker)
-    cmd_opt="$cmd build --progress=plain --platform linux/amd64,linux/arm64"
-elif command -v podman >/dev/null 2>&1; then
-    cmd=$(command -v podman)
-    cmd_opt="$cmd build --progress=plain --force-rm --format=docker --platform linux/amd64,linux/arm64"
-else
-    echo "No docker or podman command found."
-    exit 1
-fi
-
 args=(5.6 7.1 7.3 7.4 8.1 8.2 8.3 mysql-5.7 mysql-8.0 spring-8 spring-17 spring-21 nodejs-18 nodejs-20 nodejs-21 redis nginx)
-arg="$1"
+arg="${1:-}"
+
 case "$arg" in
 all)
     for i in "${args[@]}"; do
         _build "$i"
     done
-    ;;
-"${args[@]}")
-    _build "$arg"
     ;;
 *)
     arg=$(echo "${args[@]}" | sed 's/\ /\n/g' | fzf)
