@@ -1,57 +1,72 @@
 #!/usr/bin/env bash
 
 _msg() {
-    if [ "$1" == log ]; then
-        shift
-        echo "[$(date +%Y%m%d-%u-%T.%3N)], [RUN] $*" >>"$me_log"
-    else
-        echo "[$(date +%Y%m%d-%u-%T.%3N)], [RUN] $*"
-    fi
+    case "${1:-}" in
+        log)
+            shift
+            echo "[$(date +%Y%m%d-%u-%T.%3N)] - [RUN] $*" >>"$me_log"
+            ;;
+        *)
+            echo "[$(date +%Y%m%d-%u-%T.%3N)] - [RUN] $*"
+            ;;
+    esac
 }
 
 _start_java() {
     command -v java || return
     command -v redis-server && redis-server --daemonize yes
-    ## 修改内存占用值，
-    if [ -f $app_path/.java_opts ]; then
-        source $app_path/.java_opts
-    elif [ -z "$JAVA_OPTS" ]; then
-        JAVA_OPTS='java -Xms256m -Xmx384m'
+
+    # Load Java options
+    if [ -f "$app_path/.java_opts" ]; then
+        # shellcheck disable=SC1091
+        . "$app_path/.java_opts"
+    else
+        JAVA_OPTS=${JAVA_OPTS:-'java -Xms256m -Xmx384m'}
     fi
+
     java -version
-    echo "$JAVA_OPTS"
-    # -XX:+UseG1GC
+    _msg "Java options: $JAVA_OPTS"
 
     ## 启动方式三，nohup 后台启动
     [[ "${start_nohup:-0}" -eq 1 ]] && JAVA_OPTS="nohup $JAVA_OPTS"
 
     ## 启动方式一， jar 内置配置(profile)文件 yml，
     ## Dockerfile ARG MVN_PROFILE=test （此处对应 git 分支名） 镜像内生成文件 profile.<分支名>
+    # Find profile
+    local profile_name=""
     for file in "$app_path"/profile.*; do
         [[ -f "$file" ]] || continue
         profile_name="--spring.profiles.active=${file##*.}"
-        _msg "Found $profile_name ..."
+        _msg "Found profile: $profile_name"
         break
     done
 
-    jars=("$app_path"/*.jar)
-    ymls=("$app_path"/*.yml "$app_path"/*.yaml)
-    echo "${jars[@]}"
-    echo "${ymls[@]}"
-    i=0
+    # Find JAR and YML files
+    local jars=("$app_path"/*.jar)
+    local ymls=("$app_path"/*.{yml,yaml})
+
+    _msg "JAR files: ${jars[*]}"
+    _msg "YML files: ${ymls[*]}"
+
+    local i=0
     for jar in "${jars[@]}"; do
-        [[ -f "${jar}" ]] || continue
+        [ -f "$jar" ] || continue
         ((++i))
-        if [ "$profile_name" ]; then
-            $JAVA_OPTS -jar "${jar}" "$profile_name" >>"$me_log" 2>&1 &
+        local start_command="$JAVA_OPTS -jar $jar"
+
+        if [ -n "$profile_name" ]; then
+            start_command+=" $profile_name"
         elif [ -f "${ymls[$i]}" ]; then
-            ## 配置文件 yml 在 jar 包外，非内置.自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
-            $JAVA_OPTS -Dspring.config.location="${ymls[$i]}" -jar "${jar}" >>"$me_log" 2>&1 &
-        else
-            $JAVA_OPTS -jar "${jar}" >>"$me_log" 2>&1 &
+        ## 配置文件 yml 在 jar 包外，非内置.自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
+            start_command+=" -Dspring.config.location=${ymls[$i]}"
         fi
+
+        _msg "Starting Java application: $start_command"
+        eval "$start_command" >>"$me_log" 2>&1 &
         pids+=("$!")
     done
+
+    [ "${#pids[@]}" -eq 0 ] && _msg "No Java applications started."
 }
 
 _start_php() {
