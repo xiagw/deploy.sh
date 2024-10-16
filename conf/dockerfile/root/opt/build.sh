@@ -1,19 +1,11 @@
 #!/bin/bash
 
 _is_root() {
-    if [ "$(id -u)" -eq 0 ]; then
-        return 0
-    else
-        return 1
-    fi
+    [ "$(id -u)" -eq 0 ]
 }
 
 _is_china() {
-    if ${IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
-        return 0
-    else
-        return 1
-    fi
+    ${IN_CHINA:-false} || ${CHANGE_SOURCE:-false}
 }
 
 _set_mirror() {
@@ -26,19 +18,13 @@ _set_mirror() {
 
     url_fly_cdn="http://oss.flyh6.com/d"
 
-    if command -v apt-get; then
-        cmd_pkg=apt-get
-        cmd_pkg_opt="$cmd_pkg install -yqq --no-install-recommends"
-        update_cache=true
-    elif command -v microdnf; then
-        cmd_pkg=microdnf
-    elif command -v yum; then
-        cmd_pkg=yum
-        cmd_pkg_opt="$cmd_pkg install -y --setopt=tsflags=nodocs"
-    elif command -v apk; then
-        cmd_pkg=apk
-        cmd_pkg_opt="$cmd_pkg add --no-cache"
-    fi
+    case "$(command -v apt-get || command -v apt || command -v microdnf || command -v dnf || command -v yum || command -v apk)" in
+    */apt-get | */apt) cmd_pkg=apt-get && cmd_pkg_opt="$cmd_pkg install -yqq --no-install-recommends" && update_cache=true ;;
+    */microdnf) cmd_pkg=microdnf ;;
+    */dnf) cmd_pkg=dnf ;;
+    */yum) cmd_pkg=yum && cmd_pkg_opt="$cmd_pkg install -y --setopt=tsflags=nodocs" ;;
+    */apk) cmd_pkg=apk && cmd_pkg_opt="$cmd_pkg add --no-cache" ;;
+    esac
 
     if _is_china; then
         url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
@@ -52,8 +38,7 @@ _set_mirror() {
     if _is_root; then
         ## OS ubuntu:22.04 php
         if [ -f /etc/apt/sources.list ]; then
-            sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
-                -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+            sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
         ## OS Debian
         elif [ -f /etc/apt/sources.list.d/debian.sources ]; then
             sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
@@ -64,7 +49,8 @@ _set_mirror() {
         fi
     fi
 
-    if command -v mvn; then
+    case "$(command -v mvn || command -v composer || command -v node || command -v python || command -v python3)" in
+    */mvn)
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
         ## 项目内自带 settings.xml docs/settings.xml
@@ -77,29 +63,30 @@ _set_mirror() {
         else
             curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
         fi
-    elif command -v composer; then
+        ;;
+    */composer)
         _is_root || return
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
         mkdir -p /var/www/.composer /.composer
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
-    elif command -v node; then
+        ;;
+    */node)
         # npm_mirror=https://mirrors.ustc.edu.cn/node/
         # npm_mirror=http://mirrors.cloud.tencent.com/npm/
         # npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
+        # http://npm.taobao.org => http://npmmirror.com
+        # http://registry.npm.taobao.org => http://registry.npmmirror.com
         npm_mirror=https://registry.npmmirror.com/
         yarn config set registry $npm_mirror
         npm config set registry $npm_mirror
-    elif command -v python || command -v python3; then
-        if command -v java; then
-            return
-        fi
+        ;;
+    */python | */python3)
+        command -v java && return
         pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
-        if command -v python3; then
-            python3 -m pip config set global.index-url $pip_mirror
-        else
-            python -m pip config set global.index-url $pip_mirror
-        fi
-    fi
+        command -v python3 && python3 -m pip config set global.index-url $pip_mirror
+        command -v python && python -m pip config set global.index-url $pip_mirror
+        ;;
+    esac
 }
 
 _check_run_sh() {
@@ -107,17 +94,19 @@ _check_run_sh() {
         if [ -f "$i" ]; then
             echo "Found $i, skip download."
         elif [ -f "/src/root$i" ]; then
-            cp -avf "/src/root$i" "$i"
+            ## Dockerfile 中 mount bind /src 内sh
+            install -m 0755 "/src/root$i" "$i"
         else
             echo "Not found $i, download..."
             curl -fLo "$i" "$url_deploy_raw/conf/dockerfile/root$i"
         fi
         chmod +x "$i"
     done
+
     if [ -f "/src/root/opt/init.sh" ]; then
-        cp -avf "/src/root/opt/init.sh" "/opt/init.sh"
+        install -m 0755 "/src/root/opt/init.sh" "/opt/init.sh"
     else
-        return 0
+        echo "Not found /src/root/opt/init.sh, skip copy."
     fi
 }
 
@@ -380,7 +369,7 @@ _build_jmeter() {
 
 _build_python() {
     echo TODO...
-    return 1
+    return
 }
 
 _build_mysql() {
@@ -461,25 +450,22 @@ main() {
         ;;
     esac
 
-    if command -v nginx; then
-        _build_nginx
-    elif command -v composer; then
-        _build_composer
-    elif [ -n "$PHP_VERSION" ]; then
-        _build_php
-    elif command -v mvn; then
-        _build_maven
-    elif command -v jmeter; then
-        _build_jmeter
-    elif command -v java; then
-        _build_jdk_runtime
-    elif command -v node; then
-        _build_node
-    elif command -v python && ! command -v mysqld; then
-        _build_python
-    elif command -v mysql; then
-        _build_mysql
-    fi
+    case "$(command -v nginx || command -v composer || echo "$PHP_VERSION" || command -v mvn || command -v jmeter || command -v java || command -v node || command -v mysql || command -v python || command -v redis || command -v catalina.sh || command -v memcached || command -v rabbitmq)" in
+    */nginx) _build_nginx ;;
+    */composer) _build_composer ;;
+    *[0-9].[0-9]) _build_php ;;
+    */mvn) _build_maven ;;
+    */jmeter) _build_jmeter ;;
+    */java) _build_jdk_runtime ;;
+    */node) _build_node ;;
+    */mysql) _build_mysql ;;
+    */python) command -v mysqld >/dev/null || _build_python ;;
+    */redis) _build_redis ;;
+    */catalina.sh) _build_tomcat ;;
+    */memcached) _build_memcached ;;
+    */rabbitmq) _build_rabbitmq ;;
+    *) echo "No specific build environment detected." ;;
+    esac
 
     ## copy run.sh run0.sh
 
