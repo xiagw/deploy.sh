@@ -377,6 +377,10 @@ _build_jdk_runtime() {
             touch "/app/profile.${MVN_PROFILE:-main}"
         fi
     done
+    if command -v yum; then
+        yum clean all
+        rm -rf /var/cache/yum /var/lib/yum/yumdb /var/lib/yum/history
+    fi
 }
 
 _build_jmeter() {
