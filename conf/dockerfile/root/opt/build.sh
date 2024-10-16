@@ -285,14 +285,14 @@ _build_maven() {
     # mvn -T 1C install -pl $moduleName -am --offline
     mvn_opt="mvn --threads 1C --update-snapshots --define skipTests --define maven.compile.fork=true --define user.home=/var/maven"
     if [ "$MVN_DEBUG" = off ]; then
-        mvn_opt="$mvn_opt --quiet"
+        mvn_opt+=" --quiet"
     fi
     if [ -f /root/.m2/settings.xml ]; then
-        mvn_opt="$mvn_opt --settings=/root/.m2/settings.xml"
+        mvn_opt+=" --settings=/root/.m2/settings.xml"
     fi
     $mvn_opt clean package
     jars_dir=/jars
-    mkdir $jars_dir
+    mkdir -p $jars_dir
     while read -r jar; do
         [ -f "$jar" ] || continue
         case "$jar" in
