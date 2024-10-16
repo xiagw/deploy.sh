@@ -19,6 +19,10 @@ _log() {
         ;;
     "$LOG_LEVEL_INFO")
         level_name="INFO"
+        color="$COLOR_RESET"
+        ;;
+    "$LOG_LEVEL_SUCCESS")
+        level_name="SUCCESS"
         color="$COLOR_GREEN"
         ;;
     *)
@@ -62,6 +66,7 @@ _load_config() {
         --redis-password=*) REDIS_PASSWORD="${1#*=}" ;;
         --redis-db-numbers=*) IFS=',' read -ra REDIS_DB_NUMBERS <<<"${1#*=}" ;;
         --log-level=*) LOG_LEVEL="${1#*=}" ;;
+        --debug) DEBUG=true ;;
         *)
             _log $LOG_LEVEL_ERROR "$me_log" "Unknown option: $1"
             exit 1
@@ -104,7 +109,7 @@ _load_config() {
     # If HOSTS is not specified, use localhost
     if [[ -z "${HOSTS[*]}" ]]; then
         HOSTS=("localhost")
-        _log $LOG_LEVEL_INFO "$me_log" "HOSTS not specified, using localhost"
+        _log $LOG_LEVEL_WARNING "$me_log" "HOSTS not specified, using localhost"
     fi
 
     # Use a more secure method to store MySQL credentials
@@ -113,6 +118,13 @@ _load_config() {
         trap 'rm -f "$MYSQL_CREDENTIALS"' EXIT
         printf '[client]\nhost=%s\nuser=%s\npassword=%s\n' "$MYSQL_HOST" "$MYSQL_USER" "$MYSQL_PASSWORD" >"$MYSQL_CREDENTIALS"
         chmod 600 "$MYSQL_CREDENTIALS"
+    fi
+
+    # Set debug mode if DEBUG is true
+    if [[ "${DEBUG:-}" == "true" ]]; then
+        set -x
+        CURRENT_LOG_LEVEL=$LOG_LEVEL_INFO
+        _log $LOG_LEVEL_INFO "$me_log" "Debug mode enabled"
     fi
 }
 
@@ -159,7 +171,7 @@ _dump_redis() {
         fi
 
         if [ $? -eq 0 ]; then
-            _log $LOG_LEVEL_INFO "$me_log" "Redis database $db backup completed successfully"
+            _log $LOG_LEVEL_SUCCESS "$me_log" "Redis database $db backup completed successfully"
         else
             _log $LOG_LEVEL_ERROR "$me_log" "Error: Redis database $db backup failed"
         fi
@@ -188,7 +200,7 @@ _dump_mysql() {
         _log $LOG_LEVEL_INFO "$me_log" "Backing up MySQL database $db to $backup_file"
 
         if mysqldump --defaults-extra-file="$MYSQL_CREDENTIALS" --single-transaction --quick --lock-tables=false --set-gtid-purged=OFF --triggers --routines --events --databases "$db" --result-file="$backup_file"; then
-            _log $LOG_LEVEL_INFO "$me_log" "MySQL database $db backup completed successfully"
+            _log $LOG_LEVEL_SUCCESS "$me_log" "MySQL database $db backup completed successfully"
         else
             _log $LOG_LEVEL_ERROR "$me_log" "MySQL database $db backup failed"
             return
@@ -211,11 +223,12 @@ _backup_directories() {
 
             if [[ $host == "localhost" ]]; then
                 tar -C "${path_left}" -czf "${host_path}/${path_right}_${file}" "${path_right}"
+                _log $LOG_LEVEL_SUCCESS "$me_log" "Backup successful localhost:$dir to $host_path/${path_right}_${file}"
                 continue
             fi
 
             if ssh -o StrictHostKeyChecking=no "$host" "tar -C ${path_left} -czf - ${path_right}" >"$host_path/${path_right}_${file}"; then
-                _log $LOG_LEVEL_INFO "$me_log" "Backup successful $host:$dir to $host_path/${path_right}_${file}"
+                _log $LOG_LEVEL_SUCCESS "$me_log" "Backup successful $host:$dir to $host_path/${path_right}_${file}"
             else
                 _log $LOG_LEVEL_ERROR "$me_log" "Backup failed $host:$dir to $host_path/${path_right}_${file}"
                 return 1
@@ -258,13 +271,15 @@ _encrypt_file() {
 _configure_aliyun_cli() {
     _check_commands aliyun || return 1
     if [[ -n "$ALIYUN_ACCESS_KEY_ID" && -n "$ALIYUN_ACCESS_KEY_SECRET" ]]; then
-        _log $LOG_LEVEL_INFO "$me_log" "Configuring Aliyun CLI with profile: $ALIYUN_PROFILE"
-        aliyun configure set \
-            --profile "$ALIYUN_PROFILE" \
-            --mode AK \
-            --region "$ALIYUN_REGION" \
-            --access-key-id "$ALIYUN_ACCESS_KEY_ID" \
-            --access-key-secret "$ALIYUN_ACCESS_KEY_SECRET"
+        if ! aliyun sts GetCallerIdentity --profile "$ALIYUN_PROFILE"; then
+            _log $LOG_LEVEL_INFO "$me_log" "Configuring Aliyun CLI with profile: $ALIYUN_PROFILE"
+            aliyun configure set \
+                --profile "$ALIYUN_PROFILE" \
+                --mode AK \
+                --region "$ALIYUN_REGION" \
+                --access-key-id "$ALIYUN_ACCESS_KEY_ID" \
+                --access-key-secret "$ALIYUN_ACCESS_KEY_SECRET"
+        fi
     else
         _log $LOG_LEVEL_INFO "$me_log" "Using existing Aliyun CLI profile: $ALIYUN_PROFILE"
     fi
@@ -291,7 +306,7 @@ _upload_file() {
             _configure_aliyun_cli
             _log $LOG_LEVEL_INFO "$me_log" "Uploading ${file} to OSS bucket oss://${ALIYUN_OSS_BUCKET}/${file}"
             if aliyun oss cp "${path}/${file}" "oss://${ALIYUN_OSS_BUCKET}/${file}" --profile "$ALIYUN_PROFILE"; then
-                _log $LOG_LEVEL_INFO "$me_log" "Upload successful ${file} to OSS bucket oss://${ALIYUN_OSS_BUCKET}/${file}"
+                _log $LOG_LEVEL_SUCCESS "$me_log" "Upload successful ${file} to OSS bucket oss://${ALIYUN_OSS_BUCKET}/${file}"
             else
                 _log $LOG_LEVEL_ERROR "$me_log" "Failed to upload ${file} to OSS bucket oss://${ALIYUN_OSS_BUCKET}/${file}"
                 return 1
@@ -301,9 +316,10 @@ _upload_file() {
             _log $LOG_LEVEL_INFO "$me_log" "upload to ${HOSTS[0]}:$HOME/docker/html/${file}"
             if [[ "${HOSTS[0]}" == "localhost" ]]; then
                 cp "${path}/${file}" "$HOME/docker/html/${file}"
+                _log $LOG_LEVEL_SUCCESS "$me_log" "Upload successful ${file} to localhost:$HOME/docker/html/${file}"
             else
                 if scp "${path}/${file}" "${HOSTS[0]}:$HOME/docker/html/${file}"; then
-                    _log $LOG_LEVEL_INFO "$me_log" "Upload successful ${file} to ${HOSTS[0]}:$HOME/docker/html/${file}"
+                    _log $LOG_LEVEL_SUCCESS "$me_log" "Upload successful ${file} to ${HOSTS[0]}:$HOME/docker/html/${file}"
                 else
                     _log $LOG_LEVEL_ERROR "$me_log" "Failed to upload ${file} to ${HOSTS[0]}:$HOME/docker/html/${file}"
                     return 1
@@ -370,7 +386,7 @@ _notify_wechat_work() {
         return
     fi
 
-    # Send message to weixin_work 企业微信
+    # Notify to weixin_work 企业微信
     local wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$WECHAT_KEY"
     local response
     response=$(curl -fsS -X POST -H 'Content-Type: application/json' \
@@ -441,6 +457,7 @@ main() {
     readonly LOG_LEVEL_ERROR=0
     readonly LOG_LEVEL_WARNING=1
     readonly LOG_LEVEL_INFO=2
+    readonly LOG_LEVEL_SUCCESS=3
 
     # 定义颜色代码
     readonly COLOR_RED='\033[0;31m'
@@ -507,7 +524,7 @@ main() {
     # 删除文件
     _securely_remove_files "$me_path" "${timestamp}"
 
-    _log $LOG_LEVEL_INFO "$me_log" "Backup completed."
+    _log $LOG_LEVEL_SUCCESS "$me_log" "Backup completed."
 }
 
 # while true; do [[ $(date +%H%M) == 0858 ]] && bash y.sh; sleep 30; done
