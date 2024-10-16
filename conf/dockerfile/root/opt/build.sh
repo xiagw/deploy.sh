@@ -364,12 +364,12 @@ _build_jdk_runtime() {
     done
 
     _check_run_sh
-    [ -d /app ] || mkdir /app
+    mkdir -p /app
+    chown -R 1000:1000 /app
     [ -f /src/.java_opts ] && cp -avf /src/.java_opts /app/
     command -v su || $cmd_pkg install -y util-linux
-    command -v useradd || yum install -y shadow-utils
-    useradd -u 1000 -s /bin/bash -m spring
-    chown -R 1000:1000 /app
+    command -v useradd || $cmd_pkg install -y shadow-utils
+    id spring || useradd -u 1000 -s /bin/bash -m spring
     for file in /app/*.{yml,yaml}; do
         if [ -f "$file" ]; then
             break
