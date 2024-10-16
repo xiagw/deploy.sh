@@ -1498,7 +1498,6 @@ _setup_kubernetes_cluster() {
         return 1
     fi
 }
-
 _usage() {
     cat <<EOF
 Usage: $0 [parameters ...]
@@ -1506,14 +1505,24 @@ Usage: $0 [parameters ...]
 Parameters:
     -h, --help               Show this help message.
     -v, --version            Show version info.
-    -r, --renew-cert         Renew all the certs.
+    -d, --debug              Run in debug mode.
+    --cron                   Run as a cron job.
+    --github-action          Run as a GitHub Action.
+    --in-china               Set ENV_IN_CHINA to true.
+    --svn-checkout URL       Checkout SVN repository.
+    --git-clone URL          Clone git repo URL to builds/REPO_NAME.
+    --git-clone-branch NAME  Specify git branch (default: main).
     --get-balance            Get balance from Aliyun.
+    --disable-inject         Disable file injection.
+    -r, --renew-cert         Renew all the certs.
     --code-style             Check code style.
     --code-quality           Check code quality.
     --build-langs            Build all languages.
     --build-docker           Build image with Docker.
     --build-podman           Build image with Podman.
-    --push-image             Push image with Docker.
+    --push-image             Push image.
+    --deploy-functions       Deploy to Aliyun Functions.
+    --create-helm DIR        Create Helm chart in specified directory.
     --deploy-k8s             Deploy to Kubernetes.
     --deploy-flyway          Deploy database with Flyway.
     --deploy-rsync-ssh       Deploy using rsync over SSH.
@@ -1522,134 +1531,44 @@ Parameters:
     --deploy-sftp            Deploy to SFTP server.
     --test-unit              Run unit tests.
     --test-function          Run functional tests.
-    --debug                  Run in debug mode.
-    --cron                   Run as a cron job.
     --create-k8s             Create K8s cluster with Terraform.
-    --git-clone URL          Clone git repo URL(https://xxx.com/yyy/zzz.git) to builds/REPO_NAME(zzz.git)
-    --git-clone-branch NAME  Specify git branch (default: main)
 EOF
 }
 
 _parse_args() {
-    ## All tasks are performed by default / 默认执行所有任务
-    ## if you want to exec some tasks, use --task1 --task2 / 如果需要执行某些任务，使用 --task1 --task2， 适用于单独的 gitlab job，（一个 pipeline 多个独立的 job）
     [[ ${CI_DEBUG_TRACE:-false} == true ]] && debug_on=true
     build_cmd=$(command -v podman || command -v docker || echo docker)
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
-        --debug | -d)
-            set -x
-            debug_on=true
-            ;;
-        --cron | --loop)
-            run_with_crontab=true
-            ;;
-        --create-k8s)
-            create_k8s_with_terraform=true
-            ;;
-        --github-action)
-            set -x
-            debug_on=true
-            github_action=true
-            ;;
-        --in-china)
-            sed -i -e '/ENV_IN_CHINA=/s/false/true/' $g_me_env
-            ;;
-        --svn-checkout)
-            checkout_with_svn=true
-            svn_url="${2:?empty svn url}"
-            shift
-            ;;
-        --git-clone)
-            arg_git_clone=true
-            arg_git_clone_url="${2:?empty git clone url}"
-            shift
-            ;;
-        --git-clone-branch)
-            arg_git_clone_branch="${2:?empty git clone branch}"
-            shift
-            ;;
-        --get-balance)
-            arg_get_balance=true
-            exec_single_job=true
-            ;;
-        --disable-inject)
-            arg_disable_inject=true
-            ;;
-        --renew-cert | -r)
-            arg_renew_cert=true
-            exec_single_job=true
-            ;;
-        --code-style)
-            arg_code_style=true
-            exec_single_job=true
-            ;;
-        --code-quality)
-            arg_code_quality=true
-            exec_single_job=true
-            ;;
-        --build-langs)
-            arg_build_langs=true
-            exec_single_job=true
-            ;;
-        --build-docker)
-            arg_build_image=true
-            exec_single_job=true
-            build_cmd=docker
-            ;;
-        --build-podman)
-            arg_build_image=true
-            exec_single_job=true
-            build_cmd=podman
-            build_cmd_opt='--force-rm --format=docker'
-            ;;
-        --push-image)
-            arg_push_image=true
-            exec_single_job=true
-            ;;
-        --deploy-functions)
-            arg_deploy_functions=true
-            exec_single_job=true
-            ;;
-        --create-helm)
-            arg_create_helm=true
-            exec_single_job=true
-            exec_inject_files=false
-            helm_dir="$2"
-            shift
-            ;;
-        --deploy-k8s)
-            arg_deploy_k8s=true
-            exec_single_job=true
-            ;;
-        --deploy-flyway)
-            arg_deploy_flyway=true
-            exec_single_job=true
-            ;;
-        --deploy-rsync-ssh)
-            arg_deploy_rsync_ssh=true
-            exec_single_job=true
-            ;;
-        --deploy-rsync)
-            arg_deploy_rsync=true
-            exec_single_job=true
-            ;;
-        --deploy-ftp)
-            arg_deploy_ftp=true
-            exec_single_job=true
-            ;;
-        --deploy-sftp)
-            arg_deploy_sftp=true
-            exec_single_job=true
-            ;;
-        --test-unit)
-            arg_test_unit=true
-            exec_single_job=true
-            ;;
-        --test-function)
-            arg_test_function=true
-            exec_single_job=true
-            ;;
+        -h | --help) _usage && exit 0 ;;
+        -v | --version) echo "Version: 1.0" && exit 0 ;;
+        -d | --debug) set -x && debug_on=true ;;
+        --cron | --loop) run_with_crontab=true ;;
+        --github-action) set -x && debug_on=true && github_action=true ;;
+        --in-china) sed -i -e '/ENV_IN_CHINA=/s/false/true/' $g_me_env ;;
+        --svn-checkout) checkout_with_svn=true && svn_url="${2:?empty svn url}" && shift ;;
+        --git-clone) arg_git_clone=true && arg_git_clone_url="${2:?empty git clone url}" && shift ;;
+        --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
+        --get-balance) arg_get_balance=true && exec_single_job=true ;;
+        --disable-inject) arg_disable_inject=true ;;
+        -r | --renew-cert) arg_renew_cert=true && exec_single_job=true ;;
+        --code-style) arg_code_style=true && exec_single_job=true ;;
+        --code-quality) arg_code_quality=true && exec_single_job=true ;;
+        --build-langs) arg_build_langs=true && exec_single_job=true ;;
+        --build-docker) arg_build_image=true && exec_single_job=true && build_cmd=docker ;;
+        --build-podman) arg_build_image=true && exec_single_job=true && build_cmd=podman && build_cmd_opt='--force-rm --format=docker' ;;
+        --push-image) arg_push_image=true && exec_single_job=true ;;
+        --deploy-functions) arg_deploy_functions=true && exec_single_job=true ;;
+        --create-helm) arg_create_helm=true && exec_single_job=true && exec_inject_files=false && helm_dir="$2" && shift ;;
+        --deploy-k8s) arg_deploy_k8s=true && exec_single_job=true ;;
+        --deploy-flyway) arg_deploy_flyway=true && exec_single_job=true ;;
+        --deploy-rsync-ssh) arg_deploy_rsync_ssh=true && exec_single_job=true ;;
+        --deploy-rsync) arg_deploy_rsync=true && exec_single_job=true ;;
+        --deploy-ftp) arg_deploy_ftp=true && exec_single_job=true ;;
+        --deploy-sftp) arg_deploy_sftp=true && exec_single_job=true ;;
+        --test-unit) arg_test_unit=true && exec_single_job=true ;;
+        --test-function) arg_test_function=true && exec_single_job=true ;;
+        --create-k8s) create_k8s_with_terraform=true ;;
         *)
             _usage
             exit 1
@@ -1659,7 +1578,6 @@ _parse_args() {
     done
     ${debug_on:-false} && unset quiet_flag || quiet_flag='--quiet'
 }
-
 main() {
     set -e ## 出现错误自动退出
     # set -u ## 变量未定义报错 # set -Eeuo pipefail
