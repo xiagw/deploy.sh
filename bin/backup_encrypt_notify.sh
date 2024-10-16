@@ -165,16 +165,20 @@ _dump_redis() {
         _log $LOG_LEVEL_INFO "$me_log" "Backing up Redis database $db to $backup_file"
 
         if [ -n "$REDIS_PASSWORD" ]; then
-            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" --rdb "$backup_file" --db "$db"
+            if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" --rdb "$backup_file" --db "$db"; then
+                local result=true
+            else
+                local result=false
+            fi
         else
-            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" --rdb "$backup_file" --db "$db"
+            if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" --rdb "$backup_file" --db "$db"; then
+                local result=true
+            else
+                local result=false
+            fi
         fi
-
-        if [ $? -eq 0 ]; then
-            _log $LOG_LEVEL_SUCCESS "$me_log" "Redis database $db backup completed successfully"
-        else
-            _log $LOG_LEVEL_ERROR "$me_log" "Error: Redis database $db backup failed"
-        fi
+        ${result:-false} && _log $LOG_LEVEL_SUCCESS "$me_log" "Redis database $db backup completed successfully"
+        ${result:-false} || _log $LOG_LEVEL_ERROR "$me_log" "Error: Redis database $db backup failed"
     done
 }
 
