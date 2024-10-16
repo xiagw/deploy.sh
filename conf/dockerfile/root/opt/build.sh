@@ -122,93 +122,72 @@ _check_run_sh() {
 }
 
 _build_nginx() {
-    echo "build nginx:alpine..."
-    $cmd_pkg update
-    $cmd_pkg upgrade
+    echo "Building nginx:alpine..."
+    $cmd_pkg update && $cmd_pkg upgrade
     $cmd_pkg_opt openssl bash curl shadow
+
     touch /var/log/messages
 
     groupmod -g 1000 nginx
-    usermod -u 1000 nginx
+    usermod -u 1000 -g 1000 nginx
 }
 
 _build_php() {
-    echo "build php ..."
+    echo "Building PHP environment..."
     _set_mirror shanghai
-    if ${update_cache:-false}; then
-        $cmd_pkg update -yqq
-    fi
-    # $cmd_pkg_opt libjemalloc2
-    $cmd_pkg_opt apt-utils
-    # $cmd_pkg_opt libterm-readkey-perl
-    $cmd_pkg_opt vim curl ca-certificates
-    # $cmd_pkg_opt language-pack-en-base
 
-    ## preesed tzdata, update package index, upgrade packages and install needed software
-    (
-        echo "tzdata tzdata/Areas select Asia"
-        echo "tzdata tzdata/Zones/Asia select Shanghai"
-    ) >/tmp/preseed.cfg
+    # Update package cache if needed
+    ${update_cache:-false} && $cmd_pkg update -yqq
+
+    # Install essential packages
+    $cmd_pkg_opt apt-utils
+    $cmd_pkg_opt apt-utils vim curl ca-certificates
+
+    # Configure timezone
+    echo "tzdata tzdata/Areas select Asia" >/tmp/preseed.cfg
+    echo "tzdata tzdata/Zones/Asia select Shanghai" >>/tmp/preseed.cfg
     debconf-set-selections /tmp/preseed.cfg
     rm -f /etc/timezone /etc/localtime
 
+    # Set environment variables for non-interactive installation
     export DEBIAN_FRONTEND=noninteractive
     export DEBCONF_NONINTERACTIVE_SEEN=true
 
-    $cmd_pkg_opt tzdata
-    $cmd_pkg_opt locales
-    # $cmd_pkg_opt language-pack-en-base
-
+    # Install and configure locales
+    $cmd_pkg_opt tzdata locales
     if ! grep '^en_US.UTF-8' /etc/locale.gen; then
         echo 'en_US.UTF-8 UTF-8' >>/etc/locale.gen
     fi
     locale-gen en_US.UTF-8
 
-    echo "install PHP from ppa:ondrej/php..."
+    # Add PHP repository and install PHP
+    echo "Installing PHP ${PHP_VERSION} from ppa:ondrej/php..."
     $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
     LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
+
+    # Install PHP-specific packages based on version
     case "$PHP_VERSION" in
     8.3) $cmd_pkg_opt php"${PHP_VERSION}"-common ;;
     8.*) : ;;
     *) $cmd_pkg_opt php"${PHP_VERSION}"-mcrypt ;;
     esac
 
+    # Upgrade and install PHP packages
     $cmd_pkg upgrade -yqq
-    $cmd_pkg_opt \
-        php"${PHP_VERSION}" \
-        php"${PHP_VERSION}"-bcmath \
-        php"${PHP_VERSION}"-bz2 \
-        php"${PHP_VERSION}"-curl \
-        php"${PHP_VERSION}"-fpm \
-        php"${PHP_VERSION}"-gd \
-        php"${PHP_VERSION}"-gmp \
-        php"${PHP_VERSION}"-imagick \
-        php"${PHP_VERSION}"-intl \
-        php"${PHP_VERSION}"-mbstring \
-        php"${PHP_VERSION}"-mongodb \
-        php"${PHP_VERSION}"-msgpack \
-        php"${PHP_VERSION}"-mysql \
-        php"${PHP_VERSION}"-redis \
-        php"${PHP_VERSION}"-soap \
-        php"${PHP_VERSION}"-sqlite3 \
-        php"${PHP_VERSION}"-xml \
-        php"${PHP_VERSION}"-xmlrpc \
-        php"${PHP_VERSION}"-zip
+    $cmd_pkg_opt php"${PHP_VERSION}" php"${PHP_VERSION}"-{bcmath,bz2,curl,fpm,gd,gmp,imagick,intl,mbstring,mongodb,msgpack,mysql,redis,soap,sqlite3,xml,xmlrpc,zip}
 
-    # php"${PHP_VERSION}"-process \
-    # php"${PHP_VERSION}"-pecl-mcrypt  replace by  php"${PHP_VERSION}"-libsodium
-
+    # Install and configure web server
     case "$PHP_VERSION" in
     5.6)
         $cmd_pkg_opt apache2 libapache2-mod-fcgid libapache2-mod-php"${PHP_VERSION}"
-        sed -i -e '1 i ServerTokens Prod' -e '1 i ServerSignature Off' -e '1 i ServerName www.example.com' /etc/apache2/sites-available/000-default.conf
+        sed -i '1i ServerTokens Prod\nServerSignature Off\nServerName www.example.com' /etc/apache2/sites-available/000-default.conf
         ;;
     *)
         $cmd_pkg_opt nginx
         ;;
     esac
-    # $cmd_pkg_opt lsyncd openssh-client
 
+    # Configure PHP-FPM
     sed -i \
         -e '/fpm.sock/s/^/;/' \
         -e '/fpm.sock/a listen = 9000' \
@@ -220,6 +199,8 @@ _build_php() {
         -e '/^;slowlog.*log\//s//slowlog = \/var\/log\/php/' \
         -e '/^;request_slowlog_timeout.*/s//request_slowlog_timeout = 2/' \
         /etc/php/"${PHP_VERSION}"/fpm/pool.d/www.conf
+
+    # Configure PHP
     sed -i \
         -e "/memory_limit/s/128M/1024M/" \
         -e "/post_max_size/s/8M/1024M/" \
@@ -228,92 +209,94 @@ _build_php() {
         -e '/disable_functions/s/$/phpinfo,/' \
         -e '/max_execution_time/s/30/60/' \
         /etc/php/"${PHP_VERSION}"/fpm/php.ini
-    sed -i \
-        -e '/^;slowlog.*log\//s//slowlog = \/var\/log\/php/' \
-        -e '/^;request_slowlog_timeout.*/s//request_slowlog_timeout = 2/' \
-        /etc/php/"${PHP_VERSION}"/fpm/pool.d/www.conf
 
     _check_run_sh
 }
 
 _onbuild_php() {
-    if command -v php && [ -n "$PHP_VERSION" ]; then
-        php -v
-    else
+    # Check if PHP is installed and PHP_VERSION is set
+    if ! command -v php >/dev/null || [ -z "$PHP_VERSION" ]; then
         return
     fi
 
+    php -v
+
+    # Configure Redis session handling if enabled
     if [ "$PHP_SESSION_REDIS" = true ]; then
-        sed -i -e "/session.save_handler/s/files/redis/" \
+        sed -i \
+            -e "/session.save_handler/s/files/redis/" \
             -e "/session.save_handler/a session.save_path = \"tcp://${PHP_SESSION_REDIS_SERVER}:${PHP_SESSION_REDIS_PORT}?auth=${PHP_SESSION_REDIS_PASS}&database=${PHP_SESSION_REDIS_DB}\"" \
             /etc/php/"${PHP_VERSION}"/fpm/php.ini
     fi
 
-    ## setup nginx for ThinkPHP
-    curl -fLo /etc/nginx/sites-enabled/default "$url_laradock_raw"/php-fpm/root/opt/nginx.conf
+    # Setup nginx for ThinkPHP
+    curl -fLo /etc/nginx/sites-enabled/default "${url_laradock_raw}/php-fpm/root/opt/nginx.conf"
 
     _check_run_sh
 }
 
 _build_node() {
-    echo "build node ..."
+    echo "Building node environment..."
+
+    # Update and install packages
     $cmd_pkg update -yqq
     $cmd_pkg_opt less vim curl ca-certificates
-    [ -d /.cache ] || mkdir /.cache
-    [ -d /app ] || mkdir /app
+
+    # Create necessary directories
+    mkdir -p /.cache /app
     chown -R node:node /.cache /app
+
+    # Update npm and install cnpm if in China
     npm install -g npm
     _is_china && npm install -g cnpm
+
     _check_run_sh
-    if [ -f /src/package.json ]; then
-        cp -avf /src/package.json /app/
-    fi
+
+    # Copy package.json if it exists in /src
+    [ -f /src/package.json ] && cp -avf /src/package.json /app/
+
+    # Install dependencies if package.json exists
     if [ -f /app/package.json ]; then
-        if _is_china; then
-            su node -c "cd /app && cnpm install"
-        else
-            su node -c "cd /app && npm install"
-        fi
+        su node -c "cd /app && $(_is_china && echo 'cnpm' || echo 'npm') install"
     else
-        echo "Not found /app.package.json"
+        echo "Error: /app/package.json not found" >&2
         return 1
     fi
 }
 
 _build_maven() {
-    # --settings=settings.xml --activate-profiles=main
-    # mvn -T 1C install -pl $moduleName -am --offline
+    # Set up Maven options
     mvn_opt="mvn --threads 1C --update-snapshots --define skipTests --define maven.compile.fork=true --define user.home=/var/maven"
-    if [ "$MVN_DEBUG" = off ]; then
-        mvn_opt+=" --quiet"
-    fi
-    if [ -f /root/.m2/settings.xml ]; then
-        mvn_opt+=" --settings=/root/.m2/settings.xml"
-    fi
+    [ "$MVN_DEBUG" = off ] && mvn_opt+=" --quiet"
+    [ -f /root/.m2/settings.xml ] && mvn_opt+=" --settings=/root/.m2/settings.xml"
+
+    # Run Maven clean and package
     $mvn_opt clean package
+
+    # Set up jars directory
     jars_dir=/jars
     mkdir -p $jars_dir
-    while read -r jar; do
+
+    # Copy relevant JAR files
+    find ./target/*.jar ./*/target/*.jar ./*/*/target/*.jar 2>/dev/null | while read -r jar; do
         [ -f "$jar" ] || continue
         case "$jar" in
-        framework* | gdp-module* | sdk*.jar | *-commom-*.jar | *-dao-*.jar | lop-opensdk*.jar | core-*.jar) : ;;
+        framework* | gdp-module* | sdk*.jar | *-commom-*.jar | *-dao-*.jar | lop-opensdk*.jar | core-*.jar) continue ;;
         *) cp -vf "$jar" $jars_dir/ ;;
         esac
-    done < <(
-        find ./target/*.jar ./*/target/*.jar ./*/*/target/*.jar 2>/dev/null
-    )
-    if [ -f /src/.java_opts ]; then
-        cp -avf /src/.java_opts /jars/
-    fi
+    done
+
+    # Copy Java options file if it exists
+    [ -f /src/.java_opts ] && cp -avf /src/.java_opts $jars_dir/
+
+    # Copy YAML files if MVN_COPY_YAML is true
     if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
-        unset c
-        while read -r yml; do
+        c=0
+        find ./*/*/*/*"${MVN_PROFILE:-main}".{yml,yaml} 2>/dev/null | while read -r yml; do
             [ -f "$yml" ] || continue
             ((++c))
             cp -vf "$yml" $jars_dir/"${c}.${yml##*/}"
-        done < <(
-            find ./*/*/*/*"${MVN_PROFILE:-main}".yml ./*/*/*/*"${MVN_PROFILE:-main}".yaml 2>/dev/null
-        )
+        done
     fi
 }
 
@@ -353,30 +336,32 @@ _build_jdk_runtime() {
         cd /usr/share/fonts && unzip -o /tmp/fonts.zip
         fc-cache -fv
     fi
-    ## set ssl
-    file1=/usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security
-    file2=/usr/lib/jvm/java-1.8.0-amazon-corretto/jre/lib/security/java.security
-    file3=/usr/local/openjdk-8/jre/lib/security/java.security
-    for file in $file1 $file2 $file3; do
-        if [[ -f $file ]]; then
-            sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' "$file"
-        fi
+
+    # Set SSL configuration
+    for file in /usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security \
+        /usr/lib/jvm/java-1.8.0-amazon-corretto/jre/lib/security/java.security \
+        /usr/local/openjdk-8/jre/lib/security/java.security; do
+        [[ -f $file ]] && sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' "$file"
     done
 
     _check_run_sh
+
+    # Set up app directory and permissions
     mkdir -p /app
     chown -R 1000:1000 /app
     [ -f /src/.java_opts ] && cp -avf /src/.java_opts /app/
     command -v su || $cmd_pkg install -y util-linux
     command -v useradd || $cmd_pkg install -y shadow-utils
+
+    # Create spring user if it doesn't exist
     id spring || useradd -u 1000 -s /bin/bash -m spring
-    for file in /app/*.{yml,yaml}; do
-        if [ -f "$file" ]; then
-            break
-        else
-            touch "/app/profile.${MVN_PROFILE:-main}"
-        fi
-    done
+
+    # Create profile file if no yml/yaml files exist
+    if ! compgen -G "/app/*.{yml,yaml}" >/dev/null; then
+        touch "/app/profile.${MVN_PROFILE:-main}"
+    fi
+
+    # Clean up if yum is available
     if command -v yum; then
         yum clean all
         rm -rf /var/cache/yum /var/lib/yum/yumdb /var/lib/yum/history
