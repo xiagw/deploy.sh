@@ -450,10 +450,24 @@ main() {
         ;;
     esac
 
-    case "$(command -v nginx || command -v composer || echo "$PHP_VERSION" || command -v mvn || command -v jmeter || command -v java || command -v node || command -v mysql || command -v python || command -v redis || command -v catalina.sh || command -v memcached || command -v rabbitmq)" in
+    case "$(
+        command -v nginx ||
+            command -v composer ||
+            ([ -n "$PHP_VERSION" ] && echo /usr/bin/php) ||
+            command -v mvn ||
+            command -v jmeter ||
+            command -v java ||
+            command -v node ||
+            command -v mysql ||
+            command -v python ||
+            command -v redis ||
+            command -v catalina.sh ||
+            command -v memcached ||
+            command -v rabbitmq
+    )" in
     */nginx) _build_nginx ;;
     */composer) _build_composer ;;
-    *[0-9].[0-9]) _build_php ;;
+    */php) _build_php ;;
     */mvn) _build_maven ;;
     */jmeter) _build_jmeter ;;
     */java) _build_jdk_runtime ;;
