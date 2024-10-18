@@ -98,38 +98,39 @@ _check_cmd() {
 
 _set_package_manager() {
     for pkg_manager in apt apt-get yum dnf microdnf pacman apk brew; do
-        case $(command -v "$pkg_manager") in
-        */apt | */apt-get)
-            cmd_pkg="$use_sudo apt-get"
-            cmd_pkg_install="$cmd_pkg install -yqq"
-            apt_update=1
-            ;;
-        */yum | */dnf | */microdnf)
-            cmd_pkg="$use_sudo $pkg_manager"
-            cmd_pkg_install="$cmd_pkg install -y"
-            ;;
-        */pacman)
-            cmd_pkg="$use_sudo pacman"
-            cmd_pkg_install="$cmd_pkg -S --noconfirm"
-            ;;
-        */apk)
-            cmd_pkg="$use_sudo apk"
-            cmd_pkg_install="$cmd_pkg add --no-cache"
-            ;;
-        */brew)
-            cmd_pkg="$use_sudo brew"
-            cmd_pkg_install="$cmd_pkg install"
-            ;;
-        *)
-            _msg error "Unsupported package manager: $pkg_manager"
-            return 1
-            ;;
-        esac
-        return 0
+        if command -v "$pkg_manager" &>/dev/null; then
+            case $pkg_manager in
+            apt | apt-get)
+                cmd_pkg="$use_sudo apt-get"
+                cmd_pkg_install="$cmd_pkg install -yqq"
+                apt_update=1
+                ;;
+            yum | dnf | microdnf)
+                cmd_pkg="$use_sudo $pkg_manager"
+                cmd_pkg_install="$cmd_pkg install -y"
+                ;;
+            pacman)
+                cmd_pkg="$use_sudo pacman"
+                cmd_pkg_install="$cmd_pkg -S --noconfirm"
+                ;;
+            apk)
+                cmd_pkg="$use_sudo apk"
+                cmd_pkg_install="$cmd_pkg add --no-cache"
+                ;;
+            brew)
+                cmd_pkg="brew"
+                cmd_pkg_install="$cmd_pkg install"
+                ;;
+            esac
+            return 0
+        fi
     done
+    _msg error "No supported package manager found."
+    return 1
 }
 
 _install_packages() {
+    [ "$#" -eq 0 ] && return 0
     _is_china && _set_mirror os
     if [[ "${apt_update:-0}" -eq 1 ]]; then
         $cmd_pkg update -yqq
@@ -142,17 +143,18 @@ _check_sudo() {
     ${already_check_sudo:-false} && return 0
     if ! _check_root; then
         if ! $use_sudo -l -U "$USER" &>/dev/null; then
-            _msg time "User $USER has no permission to execute this script!"
-            _msg time "Please run visudo with root, and set sudo for ${USER}."
+            _msg error "User $USER has no sudo permissions."
+            _msg info "Please run visudo with root, and set sudo for ${USER}."
             return 1
         fi
-        _msg time "User $USER has permission to execute this script!"
+        _msg success "User $USER has sudo permissions."
     fi
 
     if _set_package_manager; then
         already_check_sudo=true
         return 0
     fi
+    return 1
 }
 
 _check_timezone() {

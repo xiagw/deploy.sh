@@ -11,7 +11,7 @@
 
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
-_is_demo_mode() {
+_is_in_demo_mode() {
     local skip_msg="$1"
     if grep -qE '=your_(password|username)' "$g_me_env"; then
         _msg purple "Found default docker credentials, skipping $skip_msg ..."
@@ -55,7 +55,7 @@ _test_function() {
     _msg purple "No functional test script found. Skipping functional tests."
 }
 
-_check_quality_sonar() {
+_run_sonarqube_analysis() {
     local sonar_url="${ENV_SONAR_URL:?empty}"
     local sonar_conf="$gitlab_project_dir/sonar-project.properties"
 
@@ -92,7 +92,7 @@ EOF
     _msg time "[quality] Code quality check with SonarQube completed"
 }
 
-_scan_zap() {
+_run_zap_scan() {
     local target_url="${ENV_TARGET_URL}"
     local zap_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
     local zap_options="${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
@@ -110,7 +110,7 @@ _scan_zap() {
 }
 # _security_scan_zap "http://example.com" "my/zap-image" "-t http://example.com -r report.html -x report.xml"
 
-_scan_vulmap() {
+_run_vulmap_scan() {
     # https://github.com/zhzyker/vulmap
     # $build_cmd run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
     local config_file="$g_me_data_path/config.cfg"
@@ -197,7 +197,7 @@ _deploy_flyway_helm_job() {
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
-_login_registry() {
+_login_docker_registry() {
     ${github_action:-false} && return 0
     local lock_login_registry="$g_me_data_path/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
     local time_last
@@ -219,7 +219,7 @@ _login_registry() {
         fi
         ;;
     *)
-        _is_demo_mode "docker-login" && return 0
+        _is_in_demo_mode "docker-login" && return 0
 
         if [[ -f "$lock_login_registry" ]]; then
             return 0
@@ -356,8 +356,8 @@ _build_image() {
 
 _push_image() {
     _msg step "[image] Pushing container image"
-    _is_demo_mode "push-image" && return 0
-    _login_registry
+    _is_in_demo_mode "push-image" && return 0
+    _login_docker_registry
 
     local push_error=false
 
@@ -560,7 +560,7 @@ _deploy_to_kubernetes() {
         return
     fi
     _msg step "[deploy] deploy k8s with helm"
-    _is_demo_mode "deploy-helm" && return 0
+    _is_in_demo_mode "deploy-helm" && return 0
     _format_release_name
 
     ## finding helm files folder / 查找 helm 文件目录
@@ -1020,10 +1020,11 @@ _is_china() {
 }
 
 _setup_environment() {
-    _check_root || true
     _check_distribution
+    _check_sudo || true
 
     pkgs=()
+
     case "${lsb_dist:-}" in
     debian | ubuntu | linuxmint)
         # RUN apt-get update && \
@@ -1032,29 +1033,22 @@ _setup_environment() {
         export DEBIAN_FRONTEND=noninteractive
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
         [[ -f "$HOME"/.bash_logout ]] && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
+
+        command -v apt-extracttemplates >/dev/null || pkgs+=(apt-utils)
         command -v git >/dev/null || pkgs+=(git)
         git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
         command -v curl >/dev/null || pkgs+=(curl)
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
         command -v pip3 >/dev/null || pkgs+=(python3-pip)
-        # command -v shc >/dev/null || $use_sudo apt-get install -qq -y shc
-
-        if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _is_china && _set_mirror os
-            ${use_sudo:-} apt-get update -qq
-            $use_sudo apt-get install -yqq apt-utils >/dev/null
-            $use_sudo apt-get install -yqq "${pkgs[@]}" >/dev/null
-        fi
+        command -v shc >/dev/null || pkgs+=(shc)
         ;;
     centos | amzn | rhel | fedora)
         rpm -q epel-release >/dev/null || {
             if [ "${lsb_dist:-}" = amzn ]; then
-                $use_sudo amazon-linux-extras install -y epel >/dev/null
+                ${use_sudo:-} amazon-linux-extras install -y epel >/dev/null
             else
-                $use_sudo yum install -y epel-release >/dev/null
-                # DNF="dnf --setopt=tsflags=nodocs -y"
-                # $DNF install epel-release
+                _install_packages epel-release >/dev/null
             fi
         }
         command -v git >/dev/null || pkgs+=(git2u)
@@ -1062,10 +1056,6 @@ _setup_environment() {
         command -v curl >/dev/null || pkgs+=(curl)
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
-        if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _is_china && _set_mirror os
-            $use_sudo yum install -y "${pkgs[@]}" >/dev/null
-        fi
         ;;
     alpine)
         command -v openssl >/dev/null || pkgs+=(openssl)
@@ -1074,10 +1064,6 @@ _setup_environment() {
         command -v curl >/dev/null || pkgs+=(curl)
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
-        if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _is_china && _set_mirror os
-            $use_sudo apk add --no-cache "${pkgs[@]}" >/dev/null
-        fi
         ;;
     macos)
         command -v openssl >/dev/null || pkgs+=(openssl)
@@ -1086,16 +1072,14 @@ _setup_environment() {
         command -v curl >/dev/null || pkgs+=(curl)
         command -v unzip >/dev/null || pkgs+=(unzip)
         command -v rsync >/dev/null || pkgs+=(rsync)
-        if (("${#pkgs[*]}")); then
-            _is_china && _set_mirror os
-            brew install "${pkgs[@]}"
-        fi
         ;;
     *)
         _msg error "Unsupported OS distribution. Exiting."
         return 1
         ;;
     esac
+
+    _install_packages "${pkgs[@]}" >/dev/null
 }
 
 _clean_up_disk_space() {
@@ -1816,7 +1800,7 @@ main() {
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
     if ${exec_single_job:-false}; then
         _msg green "exec single jobs..."
-        ${arg_code_quality:-false} && _check_quality_sonar
+        ${arg_code_quality:-false} && _run_sonarqube_analysis
         ${arg_code_style:-false} && {
             [[ -f "$code_style_sh" ]] && source "$code_style_sh"
         }
@@ -1848,7 +1832,7 @@ main() {
     _msg step "[quality] check code with sonarqube"
     echo "MAN_SONAR: ${MAN_SONAR:-false}"
     if [[ "${MAN_SONAR:-false}" == true ]]; then
-        _check_quality_sonar
+        _run_sonarqube_analysis
     else
         echo "<skip>"
     fi
@@ -1931,7 +1915,7 @@ main() {
     _msg step "[security] ZAP scan"
     echo "MAN_SCAN_ZAP: ${MAN_SCAN_ZAP:-false}"
     if [[ "${MAN_SCAN_ZAP:-false}" == true ]]; then
-        _scan_zap
+        _run_zap_scan
     else
         echo '<skip>'
     fi
@@ -1939,7 +1923,7 @@ main() {
     _msg step "[security] vulmap scan"
     echo "MAN_SCAN_VULMAP: ${MAN_SCAN_VULMAP:-false}"
     if [[ "${MAN_SCAN_VULMAP:-false}" == true ]]; then
-        _scan_vulmap
+        _run_vulmap_scan
     else
         echo '<skip>'
     fi
