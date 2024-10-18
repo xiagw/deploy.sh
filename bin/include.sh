@@ -15,7 +15,7 @@ _msg() {
     warn | warning | yellow) color_on='\033[0;33m' ;;
     error | err | red) color_on='\033[0;31m' ;;
     question | ques | purple) color_on='\033[0;35m' ;;
-    green) color_on='\033[0;32m' ;;
+    success | green) color_on='\033[0;32m' ;;
     blue) color_on='\033[0;34m' ;;
     cyan) color_on='\033[0;36m' ;;
     orange) color_on='\033[1;33m' ;;

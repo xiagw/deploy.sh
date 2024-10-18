@@ -1157,14 +1157,30 @@ _update_nginx_geoip_db() {
     _msg success "Nginx GeoIP database update completed"
 }
 
-_generate_apidoc() {
-    if [[ -f "${gitlab_project_dir}/apidoc.json" ]]; then
-        _msg step "[apidoc] generate API Docs with apidoc"
-        $run_cmd -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "apidoc -i app/ -o public/apidoc/"
+_generate_api_documentation() {
+    local apidoc_config="${gitlab_project_dir}/apidoc.json"
+    [[ ! -f "$apidoc_config" ]] && return 0
+
+    local input_dir="${ENV_APIDOC_INPUT_DIR:-app}"
+    local output_dir="${ENV_APIDOC_OUTPUT_DIR:-public/apidoc}"
+    local apidoc_cmd="apidoc -i ${input_dir} -o ${output_dir}"
+
+    _msg step "[apidoc] Generating API documentation"
+
+    _msg green "Using input directory: ${input_dir}"
+    _msg blue "Using output directory: ${output_dir}"
+
+    if $run_cmd -v "${gitlab_project_dir}":/app -w /app deploy/node bash -c "$apidoc_cmd"; then
+        _msg success "API documentation generated successfully"
+    else
+        _msg error "Failed to generate API documentation"
+        return 1
     fi
+
+    _msg time "[apidoc] API documentation generation completed"
 }
 
-_inject_files() {
+_inject_project_files() {
     # 如果禁用注入，则直接返回
     [ "${exec_inject_files:-true}" = "false" ] && return 0
     _msg step "[inject] from ${g_me_data_path}/inject/"
@@ -1358,7 +1374,6 @@ _initialize_gitlab_variables() {
     gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$default_sha}
     [[ -z "$gitlab_commit_short_sha" ]] && gitlab_commit_short_sha=1234567
 
-    # read -rp "Enter gitlab project id: " -e -i '1234' gitlab_project_id
     # Set other GitLab variables
     gitlab_project_id=${CI_PROJECT_ID:-1234}
     # read -t 5 -rp "Enter gitlab pipeline id: " -e -i '3456' gitlab_pipeline_id
@@ -1710,7 +1725,7 @@ main() {
     _detect_project_language
 
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
-    _inject_files
+    _inject_project_files
 
     ## probe deploy method / 探测文件并确定发布方式
     _determine_deployment_method
@@ -1797,7 +1812,7 @@ main() {
     fi
 
     ## generate api docs / 利用 apidoc 产生 api 文档
-    # _generate_apidoc
+    _generate_api_documentation
 
     ## build
     if ${exec_build_langs:-true}; then
