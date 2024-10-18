@@ -355,7 +355,7 @@ _build_image() {
 }
 
 _push_image() {
-    _msg step "[image] push container image"
+    _msg step "[image] Pushing container image"
     _is_demo_mode "push-image" && return 0
     _login_registry
 
@@ -376,7 +376,7 @@ _push_image() {
     # Check for errors
     $push_error && _msg error "got an error here, probably caused by network..."
 
-    _msg time "[image] push container image"
+    _msg time "[image] Image push completed"
 }
 
 _format_release_name() {
