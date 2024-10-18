@@ -1054,19 +1054,59 @@ _setup_environment() {
 }
 
 _clean_up_disk_space() {
-    # Check disk usage and exit if below the threshold
-    local disk_usage
-    disk_usage=$(df / | awk 'NR==2 {print int($5)}')
-    local clean_disk_threshold=${ENV_CLEAN_DISK:-80}
+    local disk_usage clean_disk_threshold=80 aggressive=false
+
+    # Get disk usage more reliably
+    disk_usage=$(df -P / | awk 'NR==2 {print int($5)}')
+    clean_disk_threshold=${ENV_CLEAN_DISK:-$clean_disk_threshold}
+
     if ((disk_usage < clean_disk_threshold)); then
         return 0
     fi
 
-    # Log disk usage and clean up images
-    _msg "$(df /)"
-    _msg warning "Disk space is less than ${clean_disk_threshold}%, removing images..."
-    $build_cmd images --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | xargs -t -r $build_cmd rmi >/dev/null || true
-    $build_cmd system prune -af --volumes >/dev/null || true
+    _msg warning "Disk usage (${disk_usage}%) exceeds threshold (${clean_disk_threshold}%). Starting cleanup..."
+
+    # Determine if we should use aggressive cleaning
+    if ((disk_usage >= clean_disk_threshold + 10)); then
+        aggressive=true
+        _msg warning "Disk usage is critically high. Using aggressive cleaning."
+    fi
+
+    # Clean up Docker images
+    if command -v docker >/dev/null 2>&1; then
+        _msg info "Cleaning up Docker resources..."
+        docker image prune -f
+        if $aggressive; then
+            docker system prune -af --volumes
+        else
+            docker image ls --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | xargs -r docker rmi 2>/dev/null || true
+        fi
+    fi
+
+    # Clean up temporary files
+    _msg info "Cleaning up temporary files..."
+    sudo find /tmp -type f -atime +10 -delete 2>/dev/null || true
+    sudo find /var/tmp -type f -atime +10 -delete 2>/dev/null || true
+
+    # Clean up old log files
+    _msg info "Cleaning up old log files..."
+    sudo find /var/log -type f -name "*.log" -mtime +30 -delete 2>/dev/null || true
+
+    # Clean up old core dumps if aggressive
+    if $aggressive; then
+        _msg info "Cleaning up old core dumps..."
+        sudo find /var/crash -type f -delete 2>/dev/null || true
+    fi
+
+    # Final disk usage check
+    disk_usage_after=$(df -P / | awk 'NR==2 {print int($5)}')
+    _msg info "Cleanup completed. Disk usage now: ${disk_usage_after}%"
+
+    if ((disk_usage_after >= disk_usage)); then
+        _msg error "Warning: Cleanup did not free up space. Further investigation may be needed."
+    else
+        _msg success "Successfully freed up $((disk_usage - disk_usage_after))% of disk space."
+    fi
 }
 
 # https://github.com/sherpya/geolite2legacy
