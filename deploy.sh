@@ -1525,6 +1525,7 @@ _setup_kubernetes_cluster() {
         return 1
     fi
 }
+
 _usage() {
     cat <<EOF
 Usage: $0 [parameters ...]
@@ -1536,29 +1537,41 @@ Parameters:
     --cron                   Run as a cron job.
     --github-action          Run as a GitHub Action.
     --in-china               Set ENV_IN_CHINA to true.
-    --svn-checkout URL       Checkout SVN repository.
+
+    # Repository operations
     --git-clone URL          Clone git repo URL to builds/REPO_NAME.
     --git-clone-branch NAME  Specify git branch (default: main).
-    --get-balance            Get balance from Aliyun.
-    --disable-inject         Disable file injection.
-    -r, --renew-cert         Renew all the certs.
-    --code-style             Check code style.
-    --code-quality           Check code quality.
+    --svn-checkout URL       Checkout SVN repository.
+
+    # Build and push
     --build-langs            Build all languages.
     --build-docker           Build image with Docker.
     --build-podman           Build image with Podman.
     --push-image             Push image.
-    --deploy-functions       Deploy to Aliyun Functions.
-    --create-helm DIR        Create Helm chart in specified directory.
+
+    # Deployment
     --deploy-k8s             Deploy to Kubernetes.
+    --deploy-functions       Deploy to Aliyun Functions.
     --deploy-flyway          Deploy database with Flyway.
     --deploy-rsync-ssh       Deploy using rsync over SSH.
     --deploy-rsync           Deploy to rsync server.
     --deploy-ftp             Deploy to FTP server.
     --deploy-sftp            Deploy to SFTP server.
+
+    # Testing and quality
     --test-unit              Run unit tests.
     --test-function          Run functional tests.
+    --code-style             Check code style.
+    --code-quality           Check code quality.
+
+    # Kubernetes operations
+    --create-helm DIR        Create Helm chart in specified directory.
     --create-k8s             Create K8s cluster with Terraform.
+
+    # Miscellaneous
+    --get-balance            Get balance from Aliyun.
+    --disable-inject         Disable file injection.
+    -r, --renew-cert         Renew all the certs.
 EOF
 }
 
