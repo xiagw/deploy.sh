@@ -1058,7 +1058,6 @@ _clean_up_disk_space() {
 
     # Get disk usage more reliably
     disk_usage=$(df -P / | awk 'NR==2 {print int($5)}')
-    clean_disk_threshold=${ENV_CLEAN_DISK:-$clean_disk_threshold}
 
     if ((disk_usage < clean_disk_threshold)); then
         return 0
@@ -1112,26 +1111,50 @@ _clean_up_disk_space() {
 # https://github.com/sherpya/geolite2legacy
 # https://www.miyuru.lk/geoiplegacy
 # https://github.com/leev/ngx_http_geoip2_module
-_get_maxmind_ip() {
-    local tmp_dir tmp_country tmp_city
-    tmp_dir="$(mktemp -d)"
-    tmp_country="$tmp_dir/maxmind-Country.dat"
-    tmp_city="$tmp_dir/maxmind-City.dat"
 
-    curl -LqsSf https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz | gunzip -c >"$tmp_country"
-    curl -LqsSf https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz | gunzip -c >"$tmp_city"
+_update_nginx_geoip_db() {
+    local tmp_dir country_url city_url
+    tmp_dir="$(mktemp -d)"
+    country_url="https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz"
+    city_url="https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz"
+
+    _msg step "[geoip] Updating Nginx GeoIP database"
 
     if [[ -z "${ENV_NGINX_IPS}" ]]; then
         _msg error "ENV_NGINX_IPS is not defined or is empty"
         return 1
     fi
 
+    _download_and_extract() {
+        local url="$1" output="$2"
+        if ! curl -LqsSf "$url" | gunzip -c >"$output"; then
+            _msg error "Failed to download or extract $url"
+            return 1
+        fi
+    }
+
+    _download_and_extract "$country_url" "$tmp_dir/maxmind-Country.dat" || return 1
+    _download_and_extract "$city_url" "$tmp_dir/maxmind-City.dat" || return 1
+
+    _msg info "GeoIP databases downloaded successfully"
+
+    _update_server() {
+        local ip="$1"
+        if rsync -av "${tmp_dir}/" "root@$ip:/etc/nginx/conf.d/"; then
+            _msg success "Updated GeoIP database on $ip"
+        else
+            _msg error "Failed to update GeoIP database on $ip"
+        fi
+    }
+
     for ip in ${ENV_NGINX_IPS}; do
-        echo "$ip"
-        rsync -av "${tmp_dir}/" "root@$ip":/etc/nginx/conf.d/
+        _update_server "$ip" &
     done
 
+    wait
+
     rm -rf "$tmp_dir"
+    _msg success "Nginx GeoIP database update completed"
 }
 
 _generate_apidoc() {
