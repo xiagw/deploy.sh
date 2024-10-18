@@ -96,6 +96,48 @@ _check_cmd() {
     fi
 }
 
+_set_package_manager() {
+    for pkg_manager in apt apt-get yum dnf microdnf pacman apk brew; do
+        case $(command -v "$pkg_manager") in
+        */apt | */apt-get)
+            cmd_pkg="$use_sudo apt-get"
+            cmd_pkg_install="$cmd_pkg install -yqq"
+            apt_update=1
+            ;;
+        */yum | */dnf | */microdnf)
+            cmd_pkg="$use_sudo $pkg_manager"
+            cmd_pkg_install="$cmd_pkg install -y"
+            ;;
+        */pacman)
+            cmd_pkg="$use_sudo pacman"
+            cmd_pkg_install="$cmd_pkg -S --noconfirm"
+            ;;
+        */apk)
+            cmd_pkg="$use_sudo apk"
+            cmd_pkg_install="$cmd_pkg add --no-cache"
+            ;;
+        */brew)
+            cmd_pkg="$use_sudo brew"
+            cmd_pkg_install="$cmd_pkg install"
+            ;;
+        *)
+            _msg error "Unsupported package manager: $pkg_manager"
+            return 1
+            ;;
+        esac
+        return 0
+    done
+}
+
+_install_packages() {
+    _is_china && _set_mirror os
+    if [[ "${apt_update:-0}" -eq 1 ]]; then
+        $cmd_pkg update -yqq
+        apt_update=0
+    fi
+    $cmd_pkg_install "${@}"
+}
+
 _check_sudo() {
     ${already_check_sudo:-false} && return 0
     if ! _check_root; then
@@ -107,17 +149,10 @@ _check_sudo() {
         _msg time "User $USER has permission to execute this script!"
     fi
 
-    for pkg_manager in apt yum dnf; do
-        if command -v "$pkg_manager" &>/dev/null; then
-            cmd_pkg="$use_sudo $pkg_manager"
-            [[ $pkg_manager == apt ]] && apt_update=1
-            already_check_sudo=true
-            return 0
-        fi
-    done
-
-    _msg time "Package manager (apt/yum/dnf) not found, exiting."
-    return 1
+    if _set_package_manager; then
+        already_check_sudo=true
+        return 0
+    fi
 }
 
 _check_timezone() {
