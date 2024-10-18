@@ -5,7 +5,7 @@
 # Description: deploy.sh is a CI/CD program.
 # Author: xiagw <fxiaxiaoyu@gmail.com>
 # License: GNU/GPL, see http://www.gnu.org/copyleft/gpl.html
-# Date: 2019-04-03
+# Create Date: 2019-04-03
 #
 ################################################################################
 
@@ -19,6 +19,7 @@ _is_demo_mode() {
     fi
     return 1
 }
+
 _test_unit() {
     local test_scripts=("$gitlab_project_dir/tests/unit_test.sh" "$g_me_data_path/tests/unit_test.sh")
 
@@ -35,6 +36,7 @@ _test_unit() {
 
     _msg purple "No unit test script found. Skipping unit tests."
 }
+
 _test_function() {
     local test_scripts=("$gitlab_project_dir/tests/func_test.sh" "$g_me_data_path/tests/func_test.sh")
 
@@ -943,31 +945,47 @@ _renew_ssl_certificates() {
     fi
 }
 
-_get_balance_aliyun() {
+_check_aliyun_account_balance() {
     ${github_action:-false} && return 0
-    _msg step "[balance] check balance of aliyun"
-    for p in "${ENV_ALARM_ALIYUN_PROFILE[@]}"; do
-        local amount
-        amount="$(aliyun -p "$p" bssopenapi QueryAccountBalance 2>/dev/null | jq -r .Data.AvailableAmount | sed 's/,//')"
-        [[ -z "$amount" ]] && continue
+    _msg step "[finance] Check Aliyun account balance"
+
+    local amount alarm_balance alarm_daily yesterday current_month
+
+    alarm_balance=${ENV_ALARM_ALIYUN_BALANCE:-3000}
+    alarm_daily=${ENV_ALARM_ALIYUN_DAILY:-100}
+    yesterday=$(date +%F -d yesterday)
+    current_month=$(date +%Y-%m -d yesterday)
+
+    for profile in "${ENV_ALARM_ALIYUN_PROFILE[@]}"; do
+        _msg info "Checking balance for profile: $profile"
+
+        # Check current balance
+        amount=$(aliyun -p "$profile" bssopenapi QueryAccountBalance 2>/dev/null |
+            jq -r '.Data.AvailableAmount | gsub(","; "")')
+        if [[ -z "$amount" ]]; then
+            _msg warn "Failed to retrieve balance for profile $profile"
+            continue
+        fi
+
         _msg red "Current balance: $amount"
-        if [[ $(echo "$amount < ${ENV_ALARM_ALIYUN_BALANCE:-3000}" | bc) -eq 1 ]]; then
-            msg_body="Aliyun account: $p, 余额: $amount 过低需要充值"
+        if (($(echo "$amount < $alarm_balance" | bc -l))); then
+            msg_body="Aliyun account: $profile, 余额: $amount 过低需要充值"
             _notify_wechat_work $ENV_ALARM_WECHAT_KEY
         fi
-        ## daily / 查询日账单
-        daily_cash_amount=$(
-            aliyun -p "$p" bssopenapi QueryAccountBill --BillingCycle "$(date +%Y-%m -d yesterday)" --BillingDate "$(date +%F -d yesterday)" --Granularity DAILY |
-                jq -r '.Data.Items.Item[].CashAmount' | sed 's/,//'
-        )
-        _msg red "yesterday daily cash amount: $daily_cash_amount"
-        if [[ $(echo "$daily_cash_amount > ${ENV_ALARM_ALIYUN_DAILY:-115}" | bc) -eq 1 ]]; then
-            msg_body="Aliyun account: $p, 昨日消费金额: $daily_cash_amount 偏离告警金额：${ENV_ALARM_ALIYUN_DAILY:-115}"
+
+        # Check yesterday's spending / 查询昨日账单
+        daily_cash_amount=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
+            --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
+            jq -r '.Data.Items.Item[].CashAmount | gsub(","; "")')
+
+        _msg red "Yesterday's spending: $daily_cash_amount"
+        if (($(echo "$daily_cash_amount > $alarm_daily" | bc -l))); then
+                msg_body="Aliyun account: $profile, 昨日消费金额: $amount 偏离告警金额：${ENV_ALARM_ALIYUN_DAILY:-115}"
             _notify_wechat_work $ENV_ALARM_WECHAT_KEY
         fi
     done
-    echo
-    _msg time "[balance] check balance of aliyun"
+
+    _msg time "[finance] Aliyun account balance check completed"
     if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${arg_renew_cert:-false}; then
         return 0
     fi
@@ -1193,80 +1211,36 @@ _inject_files() {
 
         case "${project_lang}" in
         java)
-            ## java settings.xml 优先查找 data/ 目录
-            if [[ -f "${inject_setting}" ]]; then
-                cp -avf "${inject_setting}" "${gitlab_project_dir}/"
+            # Copy Java settings.xml if it exists 优先查找 data/ 目录
+            [[ -f "${inject_setting}" ]] && cp -avf "${inject_setting}" "${gitlab_project_dir}/"
+
+            # Read JDK version from README files
+            jdk_version=$(grep -iE 'jdk_version=([0-9.]+)' "${gitlab_project_dir}"/{README,readme}* 2>/dev/null | sed -E 's/.*=([0-9.]+).*/\1/' | tail -n1)
+
+            # Set Maven and JDK versions based on JDK version
+            case "${jdk_version:-}" in
+            1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" ;;
+            1.8 | 8) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;;
+            11) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11" ;;
+            17) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17" ;;
+            21) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21" ;;
+            *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;; # Default
+            esac
+
+            # Adjust versions if using Docker mirror
+            if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+                MVN_VERSION="maven-${MVN_VERSION}"
+                [[ "${JDK_VERSION}" == "7" ]] && JDK_VERSION="openjdk-7" || JDK_VERSION="amazoncorretto-${JDK_VERSION}"
             fi
 
-            ## 根据 README 或 readme 文件中的 JDK 版本设置构建参数
-            for f in "${gitlab_project_dir}"/{README,readme}.{md,txt}; do
-                [[ -f "$f" ]] || continue
-                case "$(grep -i 'jdk_version=' "${f}" | tail -n1)" in
-                *=1.7 | *=7)
-                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-                        MVN_VERSION=maven-3.6-jdk-7
-                        JDK_VERSION=openjdk-7
-                    else
-                        MVN_VERSION=3.6-jdk-7
-                        JDK_VERSION=7
-                    fi
+            # Add build arguments
+            build_arg+=" --build-arg MVN_VERSION=${MVN_VERSION} --build-arg JDK_VERSION=${JDK_VERSION}"
 
-                    ;;
-                *=1.8 | *=8)
-                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-                        MVN_VERSION=maven-3.8-amazoncorretto-8
-                        JDK_VERSION=amazoncorretto-8
-                    else
-                        MVN_VERSION=3.8-amazoncorretto-8
-                        JDK_VERSION=8
-                    fi
-                    ;;
-                *=11)
-                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-                        MVN_VERSION=maven-3.9-amazoncorretto-11
-                        JDK_VERSION=amazoncorretto-11
-                    else
-                        MVN_VERSION=3.9-amazoncorretto-11
-                        JDK_VERSION=11
-                    fi
-                    ;;
-                *=17)
-                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-                        MVN_VERSION=maven-3.9-amazoncorretto-17
-                        JDK_VERSION=amazoncorretto-17
-                    else
-                        MVN_VERSION=3.9-amazoncorretto-17
-                        JDK_VERSION=17
-                    fi
-                    ;;
-                *=21)
-                    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-                        MVN_VERSION=maven-3.9-amazoncorretto-21
-                        JDK_VERSION=amazoncorretto-21
-                    else
-                        MVN_VERSION=3.9-amazoncorretto-21
-                        JDK_VERSION=21
-                    fi
-                    ;;
-                esac
-                if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=${MVN_VERSION:-maven-3.8-amazoncorretto-8} --build-arg JDK_VERSION=${JDK_VERSION:-amazoncorretto-8}"
-                else
-                    build_arg="${build_arg:+"$build_arg "}--build-arg MVN_VERSION=${MVN_VERSION:-3.8-amazoncorretto-8} --build-arg JDK_VERSION=${JDK_VERSION:-8}"
+            # Check for additional installations
+            for install in FFMPEG FONTS LIBREOFFICE; do
+                if grep -qi "INSTALL_${install}=true" "${gitlab_project_dir}"/{README,readme}* 2>/dev/null; then
+                    build_arg+=" --build-arg INSTALL_${install}=true"
                 fi
-
-                case "$(grep -i 'INSTALL_.*=' "${f}")" in
-                INSTALL_FFMPEG=true)
-                    build_arg="${build_arg:+"$build_arg "}--build-arg INSTALL_FFMPEG=true"
-                    ;;
-                INSTALL_FONTS=true)
-                    build_arg="${build_arg:+"$build_arg "}--build-arg INSTALL_FONTS=true"
-                    ;;
-                INSTALL_LIBREOFFICE=true)
-                    build_arg="${build_arg:+"$build_arg "}--build-arg INSTALL_LIBREOFFICE=true"
-                    ;;
-                esac
-                break
             done
             ;;
         esac
@@ -1283,7 +1257,7 @@ _inject_files() {
     esac
 }
 
-_set_deploy_conf() {
+_setup_deployment_environment() {
     local path_conf_base="${g_me_data_path}"
     local conf_dirs=(".ssh" ".acme.sh" ".aws" ".kube" ".aliyun")
     local file_python_gitlab="${path_conf_base}/.python-gitlab.cfg"
@@ -1291,10 +1265,10 @@ _set_deploy_conf() {
     # Create and set permissions for SSH directory
     local ssh_dir="${path_conf_base}/.ssh"
     if [[ ! -d "${ssh_dir}" ]]; then
-        mkdir -m 700 "$ssh_dir"
-        _msg warn "Generate ssh key file for gitlab-runner: $ssh_dir/id_ed25519"
+        mkdir -m 700 "${ssh_dir}"
+        _msg warn "Generate ssh key file for gitlab-runner: ${ssh_dir}/id_ed25519"
         _msg purple "Please: cat $ssh_dir/id_ed25519.pub >> [dest_server]:~/.ssh/authorized_keys"
-        ssh-keygen -t ed25519 -N '' -f "$ssh_dir/id_ed25519"
+        ssh-keygen -t ed25519 -N '' -f "${ssh_dir}/id_ed25519" || _msg error "Failed to generate SSH key"
     fi
 
     # Ensure HOME .ssh directory exists
@@ -1316,7 +1290,7 @@ _set_deploy_conf() {
     # Link python-gitlab config file
     [[ ! -f "$HOME/.python-gitlab.cfg" && -f "${file_python_gitlab}" ]] && ln -sf "${file_python_gitlab}" "$HOME/"
 
-    return 0
+    _msg green "Deployment environment setup completed"
 }
 
 _initialize_gitlab_variables() {
@@ -1379,28 +1353,30 @@ _initialize_gitlab_variables() {
 _detect_project_language() {
     _msg step "[language] probe program language"
     local lang_files=("pom.xml" "composer.json" "package.json" "requirements.txt" "README.md" "readme.md" "README.txt" "readme.txt")
+    local file
 
-    for f in "${lang_files[@]}"; do
-        [[ -f "${gitlab_project_dir}/${f}" ]] || continue
-        echo "Found $f"
-        case $f in
-        composer.json) project_lang=php ;;
-        package.json) project_lang=node ;;
+    for file in "${lang_files[@]}"; do
+        [[ -f "${gitlab_project_dir}/${file}" ]] || continue
+        _msg info "Found $file"
+        case ${file,,} in
         pom.xml | build.gradle)
-            project_lang=java
+            project_lang="java"
             build_arg+=" --build-arg MVN_PROFILE=${gitlab_project_branch}"
             ${debug_on:-false} && build_arg+=" --build-arg MVN_DEBUG=on"
             ;;
-        requirements.txt) project_lang=python ;;
+        composer.json) project_lang="php" ;;
+        package.json) project_lang="node" ;;
+        requirements.txt) project_lang="python" ;;
         *)
-            project_lang=$(awk -F= '/^project_lang/ {print tolower($2)}' "${gitlab_project_dir}/${f}" | tail -n 1)
+            project_lang=$(awk -F= '/^project_lang/ {print tolower($2)}' "${gitlab_project_dir}/${file}" | tail -n 1)
             project_lang=${project_lang// /}
             ;;
         esac
         [[ -n $project_lang ]] && break
     done
+
     project_lang=${project_lang:-unknown}
-    echo "Probe program language: ${project_lang}"
+    _msg info "Detected program language: ${project_lang}"
 }
 
 _determine_deployment_method() {
@@ -1679,12 +1655,12 @@ main() {
     _setup_kubernetes_cluster
 
     ## setup ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
-    _set_deploy_conf
+    _setup_deployment_environment
 
     ## get balance of aliyun / 获取 aliyun 账户现金余额
     # echo "MAN_GET_BALANCE: ${MAN_GET_BALANCE:-false}"
     if [[ "${MAN_GET_BALANCE:-false}" == true ]] || ${arg_get_balance:-false}; then
-        _get_balance_aliyun
+        _check_aliyun_account_balance
     fi
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
