@@ -1578,37 +1578,53 @@ EOF
 _parse_args() {
     [[ ${CI_DEBUG_TRACE:-false} == true ]] && debug_on=true
     build_cmd=$(command -v podman || command -v docker || echo docker)
+
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
+        # Basic options
         -h | --help) _usage && exit 0 ;;
         -v | --version) echo "Version: 1.0" && exit 0 ;;
         -d | --debug) set -x && debug_on=true ;;
         --cron | --loop) run_with_crontab=true ;;
         --github-action) set -x && debug_on=true && github_action=true ;;
         --in-china) sed -i -e '/ENV_IN_CHINA=/s/false/true/' $g_me_env ;;
-        --svn-checkout) checkout_with_svn=true && svn_url="${2:?empty svn url}" && shift ;;
+
+        # Repository operations
         --git-clone) arg_git_clone=true && arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
-        --get-balance) arg_get_balance=true && exec_single_job=true ;;
-        --disable-inject) arg_disable_inject=true ;;
-        -r | --renew-cert) arg_renew_cert=true && exec_single_job=true ;;
-        --code-style) arg_code_style=true && exec_single_job=true ;;
-        --code-quality) arg_code_quality=true && exec_single_job=true ;;
+        --svn-checkout) checkout_with_svn=true && svn_url="${2:?empty svn url}" && shift ;;
+
+        # Build and push
         --build-langs) arg_build_langs=true && exec_single_job=true ;;
         --build-docker) arg_build_image=true && exec_single_job=true && build_cmd=docker ;;
         --build-podman) arg_build_image=true && exec_single_job=true && build_cmd=podman && build_cmd_opt='--force-rm --format=docker' ;;
         --push-image) arg_push_image=true && exec_single_job=true ;;
-        --deploy-functions) arg_deploy_functions=true && exec_single_job=true ;;
-        --create-helm) arg_create_helm=true && exec_single_job=true && exec_inject_files=false && helm_dir="$2" && shift ;;
+
+        # Deployment
         --deploy-k8s) arg_deploy_k8s=true && exec_single_job=true ;;
+        --deploy-functions) arg_deploy_functions=true && exec_single_job=true ;;
         --deploy-flyway) arg_deploy_flyway=true && exec_single_job=true ;;
         --deploy-rsync-ssh) arg_deploy_rsync_ssh=true && exec_single_job=true ;;
         --deploy-rsync) arg_deploy_rsync=true && exec_single_job=true ;;
         --deploy-ftp) arg_deploy_ftp=true && exec_single_job=true ;;
         --deploy-sftp) arg_deploy_sftp=true && exec_single_job=true ;;
+
+        # Testing and quality
         --test-unit) arg_test_unit=true && exec_single_job=true ;;
         --test-function) arg_test_function=true && exec_single_job=true ;;
+        --code-style) arg_code_style=true && exec_single_job=true ;;
+        --code-quality) arg_code_quality=true && exec_single_job=true ;;
+
+        # Kubernetes operations
+        --create-helm) arg_create_helm=true && exec_single_job=true && exec_inject_files=false && helm_dir="$2" && shift ;;
         --create-k8s) create_k8s_with_terraform=true ;;
+
+        # Miscellaneous
+        --get-balance) arg_get_balance=true && exec_single_job=true ;;
+        --disable-inject) arg_disable_inject=true ;;
+        -r | --renew-cert) arg_renew_cert=true && exec_single_job=true ;;
+
+        # Unknown option
         *)
             _usage
             exit 1
@@ -1616,8 +1632,10 @@ _parse_args() {
         esac
         shift
     done
+
     ${debug_on:-false} && unset quiet_flag || quiet_flag='--quiet'
 }
+
 main() {
     set -e ## 出现错误自动退出
     # set -u ## 变量未定义报错 # set -Eeuo pipefail
