@@ -1005,79 +1005,52 @@ _setup_environment() {
     _check_root || true
     _check_distribution
 
-    pkgs=()
+    local common_pkgs=(git git-lfs curl unzip rsync)
+    local pkgs=()
+
+    _install_packages() {
+        local cmd="$1"
+        shift
+        _is_china && _set_mirror os
+        ${use_sudo:-} $cmd "${@}" >/dev/null
+    }
+
     case "${lsb_dist:-}" in
     debian | ubuntu | linuxmint)
-        # RUN apt-get update && \
-        #        apt-get -y install sudo dialog apt-utils
-        # RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-        export DEBIAN_FRONTEND=noninteractive
         ## fix gitlab-runner exit error / 修复 gitlab-runner 退出错误
-        [[ -f "$HOME"/.bash_logout ]] && mv -f "$HOME"/.bash_logout "$HOME"/.bash_logout.bak
-        command -v git >/dev/null || pkgs+=(git)
-        git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
-        command -v curl >/dev/null || pkgs+=(curl)
-        command -v unzip >/dev/null || pkgs+=(unzip)
-        command -v rsync >/dev/null || pkgs+=(rsync)
-        command -v pip3 >/dev/null || pkgs+=(python3-pip)
-        # command -v shc >/dev/null || $use_sudo apt-get install -qq -y shc
-
-        if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _is_china && _set_mirror os
-            ${use_sudo:-} apt-get update -qq
-            $use_sudo apt-get install -yqq apt-utils >/dev/null
-            $use_sudo apt-get install -yqq "${pkgs[@]}" >/dev/null
-        fi
+        export DEBIAN_FRONTEND=noninteractive
+        [[ -f "$HOME/.bash_logout" ]] && mv -f "$HOME/.bash_logout" "$HOME/.bash_logout.bak"
+        pkgs+=("${common_pkgs[@]}" python3-pip)
+        _install_packages "apt-get update -qq && apt-get install -yqq apt-utils" "${pkgs[@]}"
         ;;
     centos | amzn | rhel | fedora)
-        rpm -q epel-release >/dev/null || {
-            if [ "${lsb_dist:-}" = amzn ]; then
-                $use_sudo amazon-linux-extras install -y epel >/dev/null
-            else
-                $use_sudo yum install -y epel-release >/dev/null
-                # DNF="dnf --setopt=tsflags=nodocs -y"
-                # $DNF install epel-release
-            fi
-        }
-        command -v git >/dev/null || pkgs+=(git2u)
-        git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
-        command -v curl >/dev/null || pkgs+=(curl)
-        command -v unzip >/dev/null || pkgs+=(unzip)
-        command -v rsync >/dev/null || pkgs+=(rsync)
-        if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _is_china && _set_mirror os
-            $use_sudo yum install -y "${pkgs[@]}" >/dev/null
+        if [ "${lsb_dist:-}" = amzn ]; then
+            $use_sudo amazon-linux-extras install -y epel >/dev/null
+        else
+            $use_sudo yum install -y epel-release >/dev/null
         fi
+        pkgs+=("${common_pkgs[@]}" git2u)
+        _install_packages "yum install -y" "${pkgs[@]}"
         ;;
     alpine)
-        command -v openssl >/dev/null || pkgs+=(openssl)
-        command -v git >/dev/null || pkgs+=(git)
-        git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
-        command -v curl >/dev/null || pkgs+=(curl)
-        command -v unzip >/dev/null || pkgs+=(unzip)
-        command -v rsync >/dev/null || pkgs+=(rsync)
-        if [[ "${#pkgs[*]}" -ne 0 ]]; then
-            _is_china && _set_mirror os
-            $use_sudo apk add --no-cache "${pkgs[@]}" >/dev/null
-        fi
+        pkgs+=("${common_pkgs[@]}" openssl)
+        _install_packages "apk add --no-cache" "${pkgs[@]}"
         ;;
     macos)
-        command -v openssl >/dev/null || pkgs+=(openssl)
-        command -v git >/dev/null || pkgs+=(git)
-        git lfs version >/dev/null 2>&1 || pkgs+=(git-lfs)
-        command -v curl >/dev/null || pkgs+=(curl)
-        command -v unzip >/dev/null || pkgs+=(unzip)
-        command -v rsync >/dev/null || pkgs+=(rsync)
-        if (("${#pkgs[*]}")); then
-            _is_china && _set_mirror os
-            brew install "${pkgs[@]}"
-        fi
+        pkgs+=("${common_pkgs[@]}" openssl)
+        _is_china && _set_mirror os
+        brew install "${pkgs[@]}" || {
+            _msg error "Failed to install packages with Homebrew"
+            return 1
+        }
         ;;
     *)
-        _msg error "Unsupported OS distribution. Exiting."
+        _msg error "Unsupported OS distribution: ${lsb_dist:-unknown}. Exiting."
         return 1
         ;;
     esac
+
+    # _msg green "Environment setup completed successfully"
 }
 
 _clean_up_disk_space() {
