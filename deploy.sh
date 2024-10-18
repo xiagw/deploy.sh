@@ -302,35 +302,53 @@ _build_image() {
     _get_docker_context
 
     ## build from Dockerfile.base
+    local registry_base
     if [[ -z "$ENV_DOCKER_REGISTRY_BASE" ]]; then
-        _msg warn "ENV_DOCKER_REGISTRY_BASE is undefined, use $ENV_DOCKER_REGISTRY instead."
+        _msg warn "ENV_DOCKER_REGISTRY_BASE is undefined, using $ENV_DOCKER_REGISTRY instead."
         registry_base=$ENV_DOCKER_REGISTRY
     else
         registry_base=$ENV_DOCKER_REGISTRY_BASE
     fi
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
         if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
-            echo "Found ${gitlab_project_dir}/build.base.sh, run it..."
+            _msg info "Found ${gitlab_project_dir}/build.base.sh, running it..."
             bash "${gitlab_project_dir}/build.base.sh"
         else
-            base_tag="${registry_base}:${gitlab_project_name}-${gitlab_project_branch}"
-            echo "$base_tag"
-            $build_cmd build $build_cmd_opt --tag "$base_tag" $build_arg -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}"
-            $build_cmd push $quiet_flag "$base_tag"
+            local base_tag="${registry_base}:${gitlab_project_name}-${gitlab_project_branch}"
+            _msg info "Building base image: $base_tag"
+            $build_cmd build $build_cmd_opt \
+                --tag "$base_tag" $build_arg \
+                -f "${gitlab_project_dir}/Dockerfile.base" "${gitlab_project_dir}" || {
+                _msg error "Failed to build base image"
+                return 1
+            }
+            $build_cmd push $quiet_flag "$base_tag" || {
+                _msg error "Failed to push base image"
+                return 1
+            }
+
         fi
         _msg time "[image] build base image"
         exit_directly=true
         return
     fi
-    ## build container image
-    $build_cmd build $build_cmd_opt --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg "${gitlab_project_dir}"
-    ## push image to ttl.sh
+
+    $build_cmd build $build_cmd_opt \
+        --tag "${ENV_DOCKER_REGISTRY}:${image_tag}" $build_arg \
+        "${gitlab_project_dir}" || {
+        _msg error "Failed to build main image"
+        return 1
+    }
+    _msg success "Main image built successfully"
+
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
+        local image_uuid
         image_uuid="ttl.sh/$(uuidgen):1h"
-        echo "## If you want to push the image to ttl.sh, please execute the following command on gitlab-runner:"
+        _msg info "Temporary image tag for ttl.sh: $image_uuid"
+        echo "## If you want to push the image to ttl.sh, please execute the following commands on gitlab-runner:"
         echo "  $build_cmd tag ${ENV_DOCKER_REGISTRY}:${image_tag} ${image_uuid}"
         echo "  $build_cmd push $image_uuid"
-        echo "## Then execute the following command on remote server:"
+        echo "## Then execute the following commands on remote server:"
         echo "  $build_cmd pull $image_uuid"
         echo "  $build_cmd tag $image_uuid laradock_spring"
     fi
@@ -980,7 +998,7 @@ _check_aliyun_account_balance() {
 
         _msg red "Yesterday's spending: $daily_cash_amount"
         if (($(echo "$daily_cash_amount > $alarm_daily" | bc -l))); then
-                msg_body="Aliyun account: $profile, 昨日消费金额: $amount 偏离告警金额：${ENV_ALARM_ALIYUN_DAILY:-115}"
+            msg_body="Aliyun account: $profile, 昨日消费金额: $amount 偏离告警金额：${ENV_ALARM_ALIYUN_DAILY:-115}"
             _notify_wechat_work $ENV_ALARM_WECHAT_KEY
         fi
     done
@@ -1589,18 +1607,18 @@ _parse_args() {
         --github-action) set -x && debug_on=true && github_action=true ;;
         --in-china) sed -i -e '/ENV_IN_CHINA=/s/false/true/' $g_me_env ;;
 
-        # Repository operations
+            # Repository operations
         --git-clone) arg_git_clone=true && arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         --svn-checkout) checkout_with_svn=true && svn_url="${2:?empty svn url}" && shift ;;
 
-        # Build and push
+            # Build and push
         --build-langs) arg_build_langs=true && exec_single_job=true ;;
         --build-docker) arg_build_image=true && exec_single_job=true && build_cmd=docker ;;
         --build-podman) arg_build_image=true && exec_single_job=true && build_cmd=podman && build_cmd_opt='--force-rm --format=docker' ;;
         --push-image) arg_push_image=true && exec_single_job=true ;;
 
-        # Deployment
+            # Deployment
         --deploy-k8s) arg_deploy_k8s=true && exec_single_job=true ;;
         --deploy-functions) arg_deploy_functions=true && exec_single_job=true ;;
         --deploy-flyway) arg_deploy_flyway=true && exec_single_job=true ;;
@@ -1609,17 +1627,17 @@ _parse_args() {
         --deploy-ftp) arg_deploy_ftp=true && exec_single_job=true ;;
         --deploy-sftp) arg_deploy_sftp=true && exec_single_job=true ;;
 
-        # Testing and quality
+            # Testing and quality
         --test-unit) arg_test_unit=true && exec_single_job=true ;;
         --test-function) arg_test_function=true && exec_single_job=true ;;
         --code-style) arg_code_style=true && exec_single_job=true ;;
         --code-quality) arg_code_quality=true && exec_single_job=true ;;
 
-        # Kubernetes operations
+            # Kubernetes operations
         --create-helm) arg_create_helm=true && exec_single_job=true && exec_inject_files=false && helm_dir="$2" && shift ;;
         --create-k8s) create_k8s_with_terraform=true ;;
 
-        # Miscellaneous
+            # Miscellaneous
         --get-balance) arg_get_balance=true && exec_single_job=true ;;
         --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true && exec_single_job=true ;;
