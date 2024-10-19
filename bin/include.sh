@@ -228,7 +228,9 @@ _get_current_ip() {
 }
 
 _install_jmeter() {
-    command -v jmeter >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v jmeter >/dev/null; then
+        return
+    fi
     _msg green "Installing JMeter..."
     local ver_jmeter='5.4.1'
     local temp_file
@@ -265,7 +267,9 @@ _install_jmeter() {
 }
 
 _install_wg() {
-    command -v wg >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v wg >/dev/null; then
+        return
+    fi
     case "${lsb_dist-}" in
     centos | alinux | openEuler)
         ${cmd_pkg-} install -y epel-release elrepo-release
@@ -280,8 +284,9 @@ _install_wg() {
 }
 
 _install_ossutil() {
-    [ "$1" = upgrade ] || command -v ossutil >/dev/null && return
-
+    if [ "$1" != "upgrade" ] && command -v ossutil >/dev/null; then
+        return
+    fi
     _check_distribution
     local os=${lsb_dist/ubuntu/linux}
     os=${os/centos/linux}
@@ -298,23 +303,28 @@ _install_ossutil() {
 }
 
 _install_aliyun_cli() {
-    [ "$1" = upgrade ] || command -v aliyun >/dev/null && return
-
+    if [ "$1" != "upgrade" ] && command -v aliyun >/dev/null; then
+        return
+    fi
     _check_distribution
     local os=${lsb_dist/ubuntu/linux}
     os=${os/centos/linux}
     local url="https://help.aliyun.com/zh/cli/install-cli-on-${os}"
     local url_down
     url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*aliyun-cli.*${os}.*\.tgz")
-    curl -fLo aly.tgz "$url_down"
-    tar -xzf aly.tgz
-    $use_sudo install -m 0755 aliyun /usr/local/bin/aliyun
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    curl -fLo "$temp_dir/aly.tgz" "$url_down"
+    tar -xzf "$temp_dir/aly.tgz" -C "$temp_dir"
+    $use_sudo install -m 0755 "$temp_dir/aliyun" /usr/local/bin/aliyun
     aliyun --version | head -n 1
-    rm -f aly.tgz
+    rm -rf "$temp_dir"
 }
 
 _install_flarectl() {
-    command -v flarectl >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v flarectl >/dev/null; then
+        return
+    fi
     _msg green "Installing flarectl"
     local ver='0.107.0'
     local temp_file
@@ -329,11 +339,13 @@ _install_flarectl() {
         _msg error "failed to download and install flarectl"
         return 1
     fi
-    rm -f "$temp_file"
+    rm -f "$temp_file" /tmp/flarectl
 }
 
 _install_jq_cli() {
-    [ "$1" = upgrade ] || command -v jq >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v jq >/dev/null; then
+        return
+    fi
 
     _msg green "install jq cli..."
     case "$lsb_dist" in
@@ -356,7 +368,9 @@ _install_jq_cli() {
 }
 
 _install_kubectl() {
-    command -v kubectl >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v kubectl >/dev/null; then
+        return
+    fi
     _msg green "Installing kubectl..."
     local kver
     kver=$(curl -sL https://dl.k8s.io/release/stable.txt)
@@ -372,7 +386,9 @@ _install_kubectl() {
 }
 
 _install_helm() {
-    command -v helm >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v helm >/dev/null; then
+        return
+    fi
     _msg green "Installing helm..."
     local temp_file
     temp_file="$(mktemp)"
@@ -383,14 +399,18 @@ _install_helm() {
 }
 
 _install_tencent_cli() {
-    command -v tccli >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v tccli >/dev/null; then
+        return
+    fi
     _msg green "install tencent cli..."
     _is_china && _set_mirror python
     python3 -m pip install tccli
 }
 
 _install_terraform() {
-    command -v terraform >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v terraform >/dev/null; then
+        return
+    fi
     _msg green "Installing terraform..."
     $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg |
@@ -405,7 +425,9 @@ _install_terraform() {
 }
 
 _install_aws() {
-    command -v aws >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v aws >/dev/null; then
+        return
+    fi
     _msg green "Installing aws cli..."
     local temp_file
     temp_file=$(mktemp)
@@ -419,7 +441,9 @@ _install_aws() {
 }
 
 _install_python_gitlab() {
-    command -v gitlab >/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v gitlab >/dev/null; then
+        return
+    fi
     _msg green "Installing python3 gitlab api..."
     _is_china && _set_mirror python
     if python3 -m pip install --user --upgrade python-gitlab; then
@@ -430,7 +454,9 @@ _install_python_gitlab() {
 }
 
 _install_python_element() {
-    python3 -m pip list 2>/dev/null | grep -q matrix-nio && return
+    if [ "$1" != "upgrade" ] && python3 -m pip list 2>/dev/null | grep -q matrix-nio; then
+        return
+    fi
     _msg green "Installing python3 element api..."
     _is_china && _set_mirror python
     if python3 -m pip install --user --upgrade matrix-nio; then
@@ -441,7 +467,9 @@ _install_python_element() {
 }
 
 _install_docker() {
-    command -v docker &>/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v docker &>/dev/null; then
+        return
+    fi
     _msg green "Installing docker"
     local temp_file
     temp_file=$(mktemp)
@@ -451,14 +479,18 @@ _install_docker() {
 }
 
 _install_podman() {
-    command -v podman &>/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v podman &>/dev/null; then
+        return
+    fi
     _msg green "Installing podman"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq podman >/dev/null
 }
 
 _install_cron() {
-    command -v crontab &>/dev/null && return
+    if [ "$1" != "upgrade" ] && command -v crontab &>/dev/null; then
+        return
+    fi
     _msg green "Installing cron"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq cron >/dev/null
