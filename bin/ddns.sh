@@ -1,4 +1,11 @@
 #!/bin/sh
+#
+# DynV6 DDNS Update Script
+# Version: 1.0.0
+# Description: This script updates DynV6 DNS records with the current IP address.
+#
+# Usage: ./ddns.sh [OPTIONS]
+# See --help for more information.
 
 _get_config() {
     XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -38,9 +45,32 @@ _update_dynv6() {
     [ "$ip6_last" = "${ip6_current-}" ] && [ "$ip4_last" = "${ip4_current-}" ] && [ "${force_update:-0}" -ne 1 ] && return
 
     base_url="http://dynv6.com/api/update?hostname=${dynv6_host}&token=${dynv6_token}"
-    $cmd "${base_url}&ipv4=${ip4_current}" \
-        -fsSL "${base_url}&ipv6=${ip6_current}" && echo
-    _msg log "$g_me_log" "IPV4: ${ip4_current:-none} IPV6: ${ip6_current:-none}"
+    if $cmd "${base_url}&ipv4=${ip4_current}" -fsSL "${base_url}&ipv6=${ip6_current}"; then
+        echo
+        _msg log "$g_me_log" "IPV4: ${ip4_current:-none} IPV6: ${ip6_current:-none}"
+    else
+        _msg error "Failed to update DynV6"
+        return 1
+    fi
+}
+
+_print_usage() {
+    cat << EOF
+Usage: $0 [OPTIONS]
+Update DynV6 DNS records.
+
+Options:
+  -f, --force           Force update even if IP hasn't changed
+  -h, --host HOST       Set the DynV6 hostname
+  -t, --token TOKEN     Set the DynV6 token
+  -d, --device DEVICE   Set the network device (default: pppoe-wan)
+  -s, --silent          Run in silent mode
+  --help                Display this help message
+
+Environment variables:
+  ddns_host             DynV6 hostname (can be set in config file)
+  ddns_token            DynV6 token (can be set in config file)
+EOF
 }
 
 _parse_args() {
@@ -61,12 +91,13 @@ _parse_args() {
     wan_device=pppoe-wan
     while [ "$#" -gt 0 ]; do
         case "$1" in
+        -a | --auto | --silent) silent_mode=1 ;;
         -f | --force) force_update=1 ;;
-        -h | --host) ddns_host=$2 && shift ;;
+        -o | --host) ddns_host=$2 && shift ;;
         -t | --token) ddns_token=$2 && shift ;;
         -d | --device) wan_device=$2 && shift ;;
-        -s | --auto | --silent) silent_mode=1 ;;
-        *) echo "Unknown option: $1" ;;
+        -h | --help) _print_usage && exit 0 ;;
+        *) echo "Unknown option: $1" && _print_usage && exit 1 ;;
         esac
         shift
     done
@@ -86,14 +117,16 @@ _include_sh() {
     . "$include_sh"
 }
 
-main() {
+_setup_environment() {
     g_me_name="$(basename "$0")"
     g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
     g_me_env="$g_me_path/${g_me_name}.env"
     g_me_log="$g_me_path/${g_me_name}.log"
     g_me_data_path="$g_me_path/../data"
+}
 
-    ## interface name in openwrt
+main() {
+    _setup_environment
     _parse_args "$@" || return
     _include_sh || return
     _get_config || return
