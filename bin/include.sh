@@ -42,7 +42,11 @@ _msg() {
     esac
 
     [ "$#" -gt 1 ] && shift
-    [ "${silent_mode:-0}" -eq 0 ] && printf "%b%s%b\n" "${color_on}" "$*" "${color_off}"
+    if [ "${silent_mode:-0}" -eq 0 ]; then
+        printf "%b%s%b\n" "${color_on}" "$*" "${color_off}"
+    else
+        return 0
+    fi
 }
 
 _check_root() {

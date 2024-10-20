@@ -66,7 +66,7 @@ _parse_args() {
         -t | --token) ddns_token=$2 && shift ;;
         -d | --device) wan_device=$2 && shift ;;
         -s | --auto | --silent) silent_mode=1 ;;
-        *) _msg "Unknown option: $1" ;;
+        *) echo "Unknown option: $1" ;;
         esac
         shift
     done
@@ -77,8 +77,10 @@ _include_sh() {
     include_sh="$g_me_path/include.sh"
     if [ ! -f "$include_sh" ]; then
         include_sh='/tmp/include.sh'
-        include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
-        [ -f "$include_sh" ] || curl -fsSL "$include_url" >"$include_sh"
+        if [ ! -f "$include_sh" ]; then
+            include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
+            curl -fsSL "$include_url" >"$include_sh"
+        fi
     fi
     # shellcheck disable=SC1090
     . "$include_sh"
