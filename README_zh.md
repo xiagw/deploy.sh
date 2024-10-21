@@ -14,58 +14,62 @@
 # 英文 [README.md](README.md)
 
 # 描述信息
-deploy.sh 是一个通用的持续集成/持续发布系统，胜过"Buddy"。
-
-可以手动单独运行/或全自动运行。
-
-亦可以配合 GitLab/GitLab-Runner, Jenkins, crontab 等全自动运行。
+deploy.sh 是一个强大而灵活的持续集成/持续发布系统，旨在简化和自动化软件开发流程。它支持多种开发语言和部署方式，可以单独运行或与其他CI/CD工具集成，支持手动和自动发布，支持GitLab, GitLab-Runner, Jenkins, crontab, Screen/tmux 等多种运行方式，是大中小企业开发团队的理想选择。
 
 # 功能支持
-* 代码格式规范: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
-* 代码质量扫描/探测: sonarqube scan, OWASP, ZAP, vulmap...
-* 单元测试: phpunit, junit...
-* 扩展安装/编译/打包: npm build, composer install, maven build, gradle build, docker build, pip install ...
-* 发布方式: rsync+ssh, rsync,rsync + container image, rsync jar/war, ftp, sftp, kubectl, helm...
-* 功能测试: Jmeter, pytest...
-* 性能测试: stress test, jmeter, loadrunner
-* 发布结果提醒到聊天软件: 企业微信, Telegram, Element(Matrix), 钉钉...
-* 全自动更新证书: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
-* 云厂商: AWS, Aliyun, Qcloud, Huaweicloud...
+- 代码格式规范: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
+- 代码质量扫描/探测: sonarqube scan, OWASP, ZAP, vulmap...
+- 单元测试: phpunit, junit...
+- 扩展安装/编译/打包: npm build, composer install, maven build, gradle build, docker build, pip install ...
+- 发布方式: rsync+ssh, rsync,rsync + container image, rsync jar/war, ftp, sftp, kubectl, helm...
+- 功能测试: Jmeter, pytest...
+- 性能测试: stress test, jmeter, loadrunner
+- 发布结果提醒到聊天软件: 企业微信, Telegram, Element(Matrix), 钉钉...
+- 全自动更新证书: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
+- 云厂商: AWS, Aliyun, Qcloud, Huaweicloud...
 
 # 安装
-```
+## 前置条件
+- Git
+- Bash shell
+- SSH (可选，用于远程部署)
+
+```bash
 git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
 # deploy.sh 如何探测程序开发语言
-- node: git库存在`package.json`或在 README.md 包含文本 `project_lang=node`
-- php: git库存在`composer.json`或在 README.md 包含文本 `project_lang=php`
-- java: git库存在`pom.xml`或在 README.md 包含文本 `project_lang=java`
-- python: git库存在`requirements.txt`或在 README.md 包含文本 `project_lang=python`
-- [other]: git库内 README.md 包含文本 `project_lang=[other]`
+
+| 语言 | 探测方式 |
+|------|----------|
+| node | 存在`package.json`或README.md包含`project_lang=node` |
+| php | 存在`composer.json`或README.md包含`project_lang=php` |
+| java | 存在`pom.xml`或README.md包含`project_lang=java` |
+| python | 存在`requirements.txt`或README.md包含`project_lang=python` |
+| 其他 | README.md包含`project_lang=[other]` |
 
 project_lang=shell
 
 ## 快速开始
 
 ### 可选方式 [1], 手动单独运行
-```
+```bash
 ## 如果您的项目 git 仓库已预先存在，进入到仓库目录直接运行 [deploy.sh]
 cd /path/to/<your_project.git>
 $HOME/runner/deploy.sh
 ```
 
-```
+```bash
 ## 如果您的项目 git 仓库不存在，使用 [deploy.sh] 克隆 git 仓库
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
 
 ### 可选方式 [2], 通过 crontab 或 Screen/tmux 等方式自动运行
-```
+```bash
 ## crontab
 */5 * * * * for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --cron); done
 ```
-```
+```bash
 ## run in screen or tmux
 while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/deploy.sh --loop); done; sleep 300; done
 ```
@@ -123,7 +127,7 @@ cp conf/example-deploy.env data/deploy.env        ## 修改为你的自定义配
 # FAQ
 ### 如何创建 helm 项目文件
 如果你使用 helm 来部署到 k8s, 可以修改 helm-new.sh 匹配你的需求 （默认开启 8080 和 8081 端口）
-```
+```bash
 bash $HOME/runner/bin/helm-new.sh
 ## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
@@ -190,37 +194,33 @@ cache_m -- pri --> db_m[mysql cluster];
 ```
 
 # 开发和贡献
-欢迎提 Issue 或提交 PR
+我们欢迎并感谢任何形式的贡献！
 
-[deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
-
-[deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
+欢迎提 Issue 或提交 PR：
+- [deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
+- [deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
 
 # 捐赠
-假如您觉得这个项目对您有用，望不吝捐赠一下。
-支持 支付宝/微信支付/数字币支付 等方式。
+假如您觉得这个项目对您有用，望不吝捐赠一下。支持 支付宝/微信支付/数字币支付 等方式。
 
-| Alipay | WeChat Pay |
-| ---- | ---- |
-| <img src=docs/pay-alipay.jpg width="200" height="200"> | <img src=docs/pay-wechatpay.jpg width="200" height="200"> |
+<div style="display: flex; justify-content: space-around;">
+  <img src=docs/pay-alipay.jpg width="200" height="200" alt="Alipay">
+  <img src=docs/pay-wechatpay.jpg width="200" height="200" alt="WeChat Pay">
+</div>
 
 ### 数字币:
 **比特币**
-
 BTC native segwit Address: `bc1qaphg63gygfelzq5ptssv3rq6eayhwclghucf8r`
-
 BTC segwit Address: `3LzwrtqD6av77XVN68UXWLKaHEtAPEQiPt`
 
 **以太币/USDT，ETH/ERC20**
-
 ETH/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
 
 **币安，BSC/ERC20**
-
 BSC/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
 
 **波场/USDT，TRX/TRC20**
-
 TRX/TRC20 Address `TAnZ537r98Jo63aKDTfbWmBeooz29ASd73`
 
-
+# 许可证
+本项目采用 MIT 许可证。查看 [LICENSE](LICENSE) 文件了解更多信息。

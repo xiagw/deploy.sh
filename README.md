@@ -14,35 +14,37 @@
 # 中文 [README_zh.md](README_zh.md)
 
 # Introduction
-deploy.sh is a general CI/CD program, better than "Buddy".
-
-It can be executed manually/automated.
-
-It can also be executed with Gitlab/GitLab-Runner, Jenkins, etc.
+deploy.sh is a versatile CI/CD program that can be executed manually or automated. It supports various deployment scenarios and integrates with popular CI/CD tools like GitLab-Runner and Jenkins.
 
 # Features
-* Code style: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
-* Code quality: sonarqube scan, OWASP, ZAP, vulmap...
-* Unit test: phpunit, junit...
-* Build: npm build, composer install, maven build, gradle build, docker build, pip install ...
-* Deploy method: rsync+ssh, rsync, rsync + container image, rsync jar/war, ftp, sftp, kubectl, helm...
-* Function test: Jmeter, pytest...
-* Performance test: stress test, jmeter, loadrunner
-* Notify deploy result: work-weixin, Telegram, Element(Matrix), dingding...
-* Renew cert: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
-* Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
+- Code style: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
+- Code quality: sonarqube scan, OWASP, ZAP, vulmap...
+- Unit test: phpunit, junit...
+- Build: npm build, composer install, maven build, gradle build, docker build, pip install ...
+- Deploy method: rsync+ssh, rsync, rsync + container image, rsync jar/war, ftp, sftp, kubectl, helm...
+- Function test: Jmeter, pytest...
+- Performance test: stress test, jmeter, loadrunner
+- Notify deploy result: work-weixin, Telegram, Element(Matrix), dingding...
+- Renew cert: [acme.sh](https://github.com/acmesh-official/acme.sh.git) renew cert for https
+- Cloud vendors: AWS, Aliyun, Qcloud, Huaweicloud...
 
 # Installation
+Prerequisites:
+- Git
+- Bash shell environment
+
 ```
 git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
 # How to automatically detect the programming language
-- node: exist package.json or include `project_lang=node` in README.md of your project
-- php: exist composer.json or include `project_lang=php` in README.md of your project
-- java: exist pom.xml or include `project_lang=java` in README.md of your project
-- python: exist requirements.txt or include `project_lang=python` in README.md of your project
-- [other]: include `project_lang=[other]` in README.md of your project
+| Language | Detection Method |
+|----------|------------------|
+| node     | Exists package.json or include `project_lang=node` in README.md |
+| php      | Exists composer.json or include `project_lang=php` in README.md |
+| java     | Exists pom.xml or include `project_lang=java` in README.md |
+| python   | Exists requirements.txt or include `project_lang=python` in README.md |
+| other    | Include `project_lang=[other]` in README.md |
 
 project_lang=shell
 
@@ -189,16 +191,17 @@ app_m -- pri --> cache_m[redis cluster];
 cache_m -- pri --> db_m[mysql cluster];
 ```
 
-# Development and Contribution
-Welcome create Issue or create PR
+# Contributing
+We welcome contributions to deploy.sh!
+
+Please make sure to update tests as appropriate and adhere to the project's coding standards.
 
 [deploy.sh Issue](https://github.com/xiagw/deploy.sh/issues)
 
 [deploy.sh PR](https://github.com/xiagw/deploy.sh/pulls)
 
 # Donation
-It would be much appreciated if you want to make a small donation to support my work!
-Alipay, WeChat Pay, BitCoin are avaliable for donation. You can chose any of them.
+If you find this project helpful, consider making a small donation to support its development:
 
 | Alipay | WeChat Pay |
 | ---- | ---- |
