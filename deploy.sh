@@ -1021,7 +1021,7 @@ _is_china() {
 
 _setup_environment() {
     _check_distribution
-    _check_sudo || true
+    _check_sudo >/dev/null || true
 
     pkgs=()
 
@@ -1766,7 +1766,7 @@ main() {
     _setup_kubernetes_cluster
 
     ## setup ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
-    _setup_deployment_environment
+    _setup_deployment_environment >/dev/null
 
     ## get balance of aliyun / 获取 aliyun 账户现金余额
     # echo "MAN_GET_BALANCE: ${MAN_GET_BALANCE:-false}"
