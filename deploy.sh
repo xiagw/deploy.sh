@@ -339,7 +339,6 @@ _build_image() {
         _msg error "Failed to build main image"
         return 1
     }
-    _msg success "Main image built successfully"
 
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         local image_uuid
