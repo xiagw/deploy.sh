@@ -629,12 +629,13 @@ Usage: $g_me_name [options]
     -r, --rds-account      Add Aliyun RDS account database
     -u, --scale-up         K8s scale up nodepool
     -o, --scale-down       K8s scale down nodepool
-    -l, --check-overload   Check overload for PHP
-    -c, --pay-cdn-bag      Pay Aliyun CDN bag
-    -m, --add-ram-account  Add Aliyun RAM user
-    -t, --upload-ssl-cert  Upload cert to Aliyun CAS
+    -l, --auto-scaling     Check overload for PHP
+    -c, --pay-cdn          Pay Aliyun CDN bag
+    -m, --add-account      Add Aliyun RAM account
+    -r, --upload-cert      Upload cert to Aliyun CAS
     -w, --add-workorder    Add Aliyun workorder
     -f, --update-functions Update Aliyun functions
+    -i, --install-aliyun   Install Aliyun cli
 EOF
 }
 
@@ -666,8 +667,10 @@ _include_sh() {
     include_sh="$g_me_path/include.sh"
     if [ ! -f "$include_sh" ]; then
         include_sh='/tmp/include.sh'
-        include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
-        [ -f "$include_sh" ] || curl -fsSL "$include_url" >"$include_sh"
+        if [ ! -f "$include_sh" ]; then
+            include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
+            curl -fsSL "$include_url" >"$include_sh"
+        fi
     fi
     # shellcheck disable=SC1090
     . "$include_sh"
