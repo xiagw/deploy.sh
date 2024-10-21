@@ -315,64 +315,59 @@ _scale_down() {
 }
 
 _auto_scaling() {
-    # set -xe
     _get_node_pod "$1"
-    ## 单个 pod 消耗 cpu/mem 超载警戒值 1000/1500
-    pod_cpu_warn=$((pod_total * 1000))
-    pod_mem_warn=$((pod_total * 1200))
-    ## 单个 pod 消耗 cpu/mem 低载闲置值 500/500
-    pod_cpu_normal=$((pod_total * 500))
-    pod_mem_normal=$((pod_total * 500))
-    ## 对当前 pod 的 cpu/mem 求和
-    readarray -d " " -t cpu_mem < <(
-        $g_cmd_kubectl_m top pod -l app.kubernetes.io/name="$deployment" |
-            awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}'
-    )
 
-    ## 业务超载/扩容
-    if (("${cpu_mem[0]}" > pod_cpu_warn && "${cpu_mem[1]}" > pod_mem_warn)); then
-        $g_cmd_kubectl_m top pod -l app.kubernetes.io/name="$deployment" | tee -a "$g_me_log"
-        # _scale_up 2
-        $g_cmd_kubectl_m scale --replicas=$((pod_total + 2)) deploy "$deployment"
+    # 定义常量
+    local CPU_WARN_FACTOR=1000  # CPU 警告阈值因子
+    local MEM_WARN_FACTOR=1200  # 内存警告阈值因子
+    local CPU_NORMAL_FACTOR=500 # CPU 正常阈值因子
+    local MEM_NORMAL_FACTOR=500 # 内存正常阈值因子
+    local SCALE_CHANGE=2        # 每次扩缩容的节点数量
+    local COOLDOWN_MINUTES=4    # 冷却时间（分钟）
+
+    # Calculate thresholds
+    local pod_cpu_warn=$((pod_total * CPU_WARN_FACTOR))
+    local pod_mem_warn=$((pod_total * MEM_WARN_FACTOR))
+    local pod_cpu_normal=$((pod_total * CPU_NORMAL_FACTOR))
+    local pod_mem_normal=$((pod_total * MEM_NORMAL_FACTOR))
+
+    # Get current CPU and memory usage
+    read -r cpu mem <<<"$($g_cmd_kubectl_m top pod -l app.kubernetes.io/name="$deployment" |
+        awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}')"
+
+    _scale_deployment() {
+        local load_status=$1
+        local action=$2
+        local new_total=$3
+
+        $g_cmd_kubectl_m scale --replicas="$new_total" deploy "$deployment"
         if $g_cmd_kubectl_m rollout status deployment "$deployment" --timeout 120s; then
             touch "$lock_file"
-            scale_status=OK
+            local result="成功"
         else
-            scale_status=FAIL
+            local result="失败"
         fi
-        g_msg_body="${scale_status}: Overload, $deployment scale up +2"
+        g_msg_body="自动扩缩容: 应用 $deployment $load_status, $action $new_total; 结果: $result"
         _msg log "$g_me_log" "$g_msg_body"
         _notify_weixin_work "${wechat_key-}"
-    fi
+    }
 
-    ## 扩容后 5 分钟之内锁定，不做缩容检测
-    if [[ -f "$lock_file" ]]; then
-        time_lock="$(stat -t -c %Y "$lock_file" 2>/dev/null || echo 0)"
-        five_min_ago="$(date +%s -d '5 minutes ago')"
-        if ((time_lock > five_min_ago)); then
-            return
-        else
-            rm -f "$lock_file"
-        fi
-    fi
-
-    ## 业务闲置低载/缩容
-    if [[ "$pod_total" -le "$node_fixed" ]]; then
+    # Check for scale up
+    if ((cpu > pod_cpu_warn && mem > pod_mem_warn)); then
+        $g_cmd_kubectl_m top pod -l app.kubernetes.io/name="$deployment" | tee -a "$g_me_log"
+        _scale_deployment "过载" "扩容到" $((pod_total + SCALE_CHANGE))
         return
     fi
-    if (("${cpu_mem[0]}" < pod_cpu_normal && "${cpu_mem[1]}" < pod_mem_normal)); then
+
+    # Check cooldown period
+    if [[ -f "$lock_file" && $(stat -c %Y "$lock_file") -gt $(date -d "$COOLDOWN_MINUTES minutes ago" +%s) ]]; then
+        return
+    fi
+
+    # Check for scale down
+    if ((pod_total > node_fixed && cpu < pod_cpu_normal && mem < pod_mem_normal)); then
         $g_cmd_kubectl_m top pod -l app.kubernetes.io/name="$deployment" | tee -a "$g_me_log"
-        # _scale_down 2
-        $g_cmd_kubectl_m scale --replicas="$node_fixed" deploy "$deployment"
-        if $g_cmd_kubectl_m rollout status deployment "$deployment" --timeout 120s; then
-            # touch "$lock_file"
-            scale_status=OK
-        else
-            scale_status=FAIL
-        fi
-        g_msg_body="${scale_status}: Unload, $deployment scale down to $node_fixed"
-        _msg log "$g_me_log" "$g_msg_body"
-        _notify_weixin_work "${wechat_key-}"
+        _scale_deployment "空闲" "缩容到" $node_fixed
     fi
 }
 
