@@ -765,11 +765,11 @@ _notify_feishu() {
     curl -s -X POST -H "Content-Type: application/json" -d '{"text": "'"$msg_body"'"}' "$ENV_WEBHOOK_URL"
 }
 
-_notify_wechat_work() {
+_notify_wecom() {
     # Send message to weixin_work 企业微信
-    local wechat_key=$1
-    wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wechat_key"
-    curl -s -X POST -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" "$wechat_api"
+    local wecom_key=$1
+    wecom_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wecom_key"
+    curl -s -X POST -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" "$wecom_api"
 }
 
 _deploy_notify() {
@@ -787,10 +787,10 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
 "
 
     case ${ENV_NOTIFY_TYPE:-skip} in
-    wechat)
+    wecom)
         ## work chat / 发送至 企业微信
-        _msg time "notify to wechat work"
-        _notify_wechat_work ${ENV_WEIXIN_KEY}
+        _msg time "notify to wecom"
+        _notify_wecom ${ENV_WEIXIN_KEY}
         ;;
     telegram)
         ## Telegram / 发送至 Telegram
@@ -987,7 +987,7 @@ _check_aliyun_account_balance() {
         _msg red "Current balance: $amount"
         if (($(echo "$amount < $alarm_balance" | bc -l))); then
             msg_body="Aliyun account: $profile, 余额: $amount 过低需要充值"
-            _notify_wechat_work $ENV_ALARM_WECHAT_KEY
+            _notify_wecom $ENV_ALARM_WECOM_KEY
         fi
 
         # Check yesterday's spending / 查询昨日账单
@@ -998,7 +998,7 @@ _check_aliyun_account_balance() {
         _msg red "Yesterday's spending: $daily_cash_amount"
         if (($(echo "$daily_cash_amount > $alarm_daily" | bc -l))); then
             msg_body="Aliyun account: $profile, 昨日消费金额: $amount 偏离告警金额：${ENV_ALARM_ALIYUN_DAILY:-115}"
-            _notify_wechat_work $ENV_ALARM_WECHAT_KEY
+            _notify_wecom $ENV_ALARM_WECOM_KEY
         fi
     done
 
