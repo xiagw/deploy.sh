@@ -993,7 +993,7 @@ _check_aliyun_account_balance() {
         # Check yesterday's spending / 查询昨日账单
         daily_cash_amount=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
             --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
-            jq -r '.Data.Items.Item[].CashAmount | gsub(","; "")')
+            jq -r '.Data.Items.Item[].CashAmount | tostring | gsub(","; "")')
 
         _msg red "Yesterday's spending: $daily_cash_amount"
         if (($(echo "$daily_cash_amount > $alarm_daily" | bc -l))); then
