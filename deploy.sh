@@ -997,8 +997,8 @@ _check_aliyun_account_balance() {
 
         _msg red "Yesterday's spending: $daily_cash_amount"
         if (($(echo "$daily_cash_amount > $alarm_daily" | bc -l))); then
-            msg_body="Aliyun account: $profile, 昨日消费金额: $amount 偏离告警金额：${ENV_ALARM_ALIYUN_DAILY:-115}"
-            _notify_wecom $ENV_ALARM_WECOM_KEY
+            msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f 超过告警阈值：%.2f" "$profile" "$daily_cash_amount" "${ENV_ALARM_ALIYUN_DAILY:-100}")
+            _notify_wecom "$ENV_ALARM_WECOM_KEY"
         fi
     done
 
