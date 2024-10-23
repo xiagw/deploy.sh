@@ -770,7 +770,11 @@ _notify_wecom() {
     # Send message to weixin_work 企业微信
     local wecom_key=$1
     wecom_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wecom_key"
-    curl -s -X POST -H 'Content-Type: application/json' -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" "$wecom_api"
+    curl -sL -X POST \
+        -H 'Content-Type: application/json' \
+        -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" \
+        "$wecom_api"
+    echo "" ## 空行要保留，保证换行
 }
 
 _deploy_notify() {
