@@ -966,7 +966,7 @@ _check_aliyun_account_balance() {
     ${github_action:-false} && return 0
     _msg step "[finance] Check Aliyun account balance"
 
-    local amount alarm_balance alarm_daily yesterday current_month
+    local current_balance alarm_balance alarm_daily yesterday current_month daily_spending
 
     alarm_balance=${ENV_ALARM_ALIYUN_BALANCE:-3000}
     alarm_daily=${ENV_ALARM_ALIYUN_DAILY:-100}
@@ -976,28 +976,28 @@ _check_aliyun_account_balance() {
     for profile in "${ENV_ALARM_ALIYUN_PROFILE[@]}"; do
         _msg info "Checking balance for profile: $profile"
 
-        # Check current balance
-        amount=$(aliyun -p "$profile" bssopenapi QueryAccountBalance 2>/dev/null |
+        # 检查当前余额
+        current_balance=$(aliyun -p "$profile" bssopenapi QueryAccountBalance 2>/dev/null |
             jq -r '.Data.AvailableAmount | gsub(","; "")')
-        if [[ -z "$amount" ]]; then
+        if [[ -z "$current_balance" ]]; then
             _msg warn "Failed to retrieve balance for profile $profile"
             continue
         fi
 
-        _msg red "Current balance: $amount"
-        if (($(echo "$amount < $alarm_balance" | bc -l))); then
-            msg_body="Aliyun account: $profile, 余额: $amount 过低需要充值"
+        _msg red "Current balance: $current_balance"
+        if (($(echo "$current_balance < $alarm_balance" | bc -l))); then
+            msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
             _notify_wecom $ENV_ALARM_WECOM_KEY
         fi
 
-        # Check yesterday's spending / 查询昨日账单
-        daily_cash_amount=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
+        # 检查昨日消费
+        daily_spending=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
             --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
             jq -r '.Data.Items.Item[].CashAmount | tostring | gsub(","; "")')
 
-        _msg red "Yesterday's spending: $daily_cash_amount"
-        if (($(echo "$daily_cash_amount > $alarm_daily" | bc -l))); then
-            msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f 超过告警阈值：%.2f" "$profile" "$daily_cash_amount" "${ENV_ALARM_ALIYUN_DAILY:-100}")
+        _msg red "Yesterday's spending: $daily_spending"
+        if (($(echo "$daily_spending > $alarm_daily" | bc -l))); then
+            msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f 超过告警阈值：%.2f" "$profile" "$daily_spending" "${ENV_ALARM_ALIYUN_DAILY:-100}")
             _notify_wecom "$ENV_ALARM_WECOM_KEY"
         fi
     done
