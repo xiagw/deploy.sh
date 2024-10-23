@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# -*- coding: utf-8 -*-
 # shellcheck disable=1090,1091,2086
 ################################################################################
 #
@@ -984,7 +985,7 @@ _check_aliyun_account_balance() {
             continue
         fi
 
-        _msg red "Current balance: $current_balance"
+        _msg info "Current balance: $current_balance"
         if (($(echo "$current_balance < $alarm_balance" | bc -l))); then
             msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
             _notify_wecom $ENV_ALARM_WECOM_KEY
@@ -997,7 +998,7 @@ _check_aliyun_account_balance() {
 
         _msg red "Yesterday's spending: $daily_spending"
         if (($(echo "$daily_spending > $alarm_daily" | bc -l))); then
-            msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f 超过告警阈值：%.2f" "$profile" "$daily_spending" "${ENV_ALARM_ALIYUN_DAILY:-100}")
+            msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f , 超过告警阈值：%.2f" "$profile" "$daily_spending" "${alarm_daily}")
             _notify_wecom "$ENV_ALARM_WECOM_KEY"
         fi
     done
