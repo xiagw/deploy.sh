@@ -989,7 +989,7 @@ _check_aliyun_account_balance() {
             continue
         fi
 
-        _msg info "Current balance: $current_balance"
+        _msg green "Current balance: $current_balance"
         if (($(echo "$current_balance < $alarm_balance" | bc -l))); then
             msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
             _notify_wecom $ENV_ALARM_WECOM_KEY
