@@ -49,6 +49,8 @@ _new_element_user() {
 }
 
 _install_gitlab_runner() {
+    # curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | sudo bash
+
     bin_runner=$(command -v gitlab-runner || true)
     if _get_yes_no "[+] Do you want install the latest version of gitlab-runner?"; then
         if pgrep gitlab-runner; then
@@ -75,7 +77,7 @@ _install_gitlab_runner() {
         sudo "$bin_runner" start
     fi
 
-    if _get_yes_no "[+] Do you want git clone deploy.sh? "; then
+    if _get_yes_no "[+] Do you want clone repo deploy.sh.git? "; then
         if [ -d "$HOME"/runner ]; then
             echo "Found $HOME/runner, skip."
         else
@@ -87,24 +89,15 @@ _install_gitlab_runner() {
         fi
     fi
 
-    read -rp "[+] Enter your gitlab url [https://git.example.com]: " read_url_git
-    url_git="${read_url_git:? ERR read_url_git}"
     if _get_yes_no "[+] Do you want register gitlab-runner? "; then
-        read -rp "[+] Enter your gitlab-runner token: " read_token
-        reg_token="${read_token:? ERR read_token}"
-        sudo "$bin_runner" register \
-            --non-interactive \
-            --url "${url_git:?empty url}" \
-            --registration-token "${reg_token:?empty token}" \
-            --executor shell \
-            --tag-list docker,linux \
-            --run-untagged \
-            --locked \
-            --access-level=not_protected
+        echo "copy COMMAND from gitlab server"
+        echo "like this: gitlab-runner register  --url https://git.smartind.cn  --token xxxx-xx_xxxxxxxx-xxxxxxxxxxx"
     fi
 
     ## install python-gitlab (GitLab API)
     if _get_yes_no "[+] Do you want install python-gitlab? "; then
+        read -rp "[+] Enter your gitlab url [https://git.example.com]: " read_url_git
+        url_git="${read_url_git:? ERR read_url_git}"
         read -rp "[+] Enter your Access Token: " read_access_token
         access_token="${read_access_token:? ERR read_access_token}"
         sudo python3 -m pip install --upgrade pip
@@ -120,7 +113,7 @@ ssl_verify = true
 timeout = 5
 
 [example]
-url = $url_git
+url = ${url_git:-}
 private_token = $access_token
 api_version = 4
 per_page = 100
