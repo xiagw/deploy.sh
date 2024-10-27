@@ -535,28 +535,46 @@ delete_profile() {
 }
 
 query_account_balance() {
-    echo "查询账户余额："
+    local format=${1:-human}
+
     local result
     result=$(aliyun --profile "${profile:-}" bssopenapi QueryAccountBalance --region "${region:-cn-hangzhou}")
+
     if [ $? -eq 0 ]; then
-        local available_amount=$(echo "$result" | jq -r '.Data.AvailableAmount')
-        local currency=$(echo "$result" | jq -r '.Data.Currency')
-        echo "可用余额: $available_amount $currency"
+        case "$format" in
+        json)
+            # JSON 格式不显示提示信息，直接输出结果
+            echo "$result"
+            ;;
+        tsv)
+            echo "查询账户余额："
+            echo -e "可用余额\t货币单位"
+            echo "$result" | jq -r '[.Data.AvailableAmount, .Data.Currency] | @tsv'
+            ;;
+        human | *)
+            echo "查询账户余额："
+            local available_amount=$(echo "$result" | jq -r '.Data.AvailableAmount')
+            local currency=$(echo "$result" | jq -r '.Data.Currency')
+            echo "可用余额: $available_amount $currency"
+            ;;
+        esac
     else
         echo "错误：无法查询账户余额。"
         echo "$result"
     fi
-    log_result "${profile:-}" "${region:-}" "account" "balance" "$result"
+    log_result "${profile:-}" "${region:-}" "account" "balance" "$result" "$format"
 }
 
 # 在文件末尾添加以下函数
 
 show_balance_help() {
     echo "账户余额操作："
-    echo "  list                - 查询账户余额"
+    echo "  list [format]            - 查询账户余额，format 可选 human/json/tsv"
     echo
     echo "示例："
-    echo "  $0 balance list"
+    echo "  $0 balance list          # 人类可读格式"
+    echo "  $0 balance list json     # JSON 格式"
+    echo "  $0 balance list tsv      # TSV 格式"
 }
 
 handle_balance_commands() {
@@ -564,7 +582,7 @@ handle_balance_commands() {
     shift
 
     case "$operation" in
-    list) query_account_balance ;;
+    list) query_account_balance "$@" ;;
     *)
         echo "错误：未知的余额操作：$operation" >&2
         show_balance_help
@@ -653,7 +671,8 @@ list_all_services() {
 query_daily_cost() {
     local query_date=${1:-$($CMD_DATE -d "yesterday" +%Y-%m-%d)}
     local current_month=$($CMD_DATE -d "$query_date" +%Y-%m)
-    echo "查询 $query_date 的消费总额："
+    local format=${2:-human}
+
     local result
     result=$(aliyun --profile "${profile:-}" bssopenapi QueryAccountBill \
         --BillingCycle "$current_month" \
@@ -661,29 +680,43 @@ query_daily_cost() {
         --Granularity DAILY)
 
     if [ $? -eq 0 ]; then
-        local total_amount=$(echo "$result" | jq -r '.Data.Items.Item[0].CashAmount')
-        if [ -n "$total_amount" ] && [ "$total_amount" != "null" ]; then
-            echo "$query_date 消费总额: $total_amount 元"
-        else
-            echo "未找到 $query_date 的消费数据。"
-            echo "API 返回结果："
-            echo "$result" | jq '.'
-        fi
+        case "$format" in
+        json)
+            # JSON 格式不显示提示信息，直接输出结果
+            echo "$result"
+            ;;
+        tsv)
+            echo "查询 $query_date 的消费总额："
+            echo -e "日期\t消费金额\t货币单位"
+            echo "$result" | jq -r '.Data.Items.Item[] | [.BillingDate, .CashAmount, "CNY"] | @tsv'
+            ;;
+        human | *)
+            echo "查询 $query_date 的消费总额："
+            local total_amount=$(echo "$result" | jq -r '.Data.Items.Item[0].CashAmount')
+            local currency=$(echo "$result" | jq -r '.Data.Items.Item[0].Currency')
+            if [ -n "$total_amount" ] && [ "$total_amount" != "null" ]; then
+                echo "$query_date 消费总额: $total_amount $currency"
+            else
+                echo "未找到 $query_date 的消费数据。"
+            fi
+            ;;
+        esac
     else
         echo "错误：无法查询 $query_date 的消费总额。"
-        echo "API 返回结果："
-        echo "$result" | jq '.'
+        echo "$result"
     fi
-    log_result "${profile:-}" "${region:-}" "cost" "daily" "$result"
+    log_result "${profile:-}" "${region:-}" "cost" "daily" "$result" "$format"
 }
 
 show_cost_help() {
     echo "费用查询操作："
-    echo "  daily [YYYY-MM-DD]    - 查询指定日期的消费总额（默认为昨天）"
+    echo "  daily [YYYY-MM-DD] [format]  - 查询指定日期的消费总额（默认为昨天），format 可选 human/json/tsv"
     echo
     echo "示例："
-    echo "  $0 cost daily"
-    echo "  $0 cost daily 2023-05-01"
+    echo "  $0 cost daily                # 查询昨天的消费（人类可读格式）"
+    echo "  $0 cost daily 2023-05-01     # 查询指定日期的消费（人类可读格式）"
+    echo "  $0 cost daily 2023-05-01 json # 查询指定日期的消费（JSON格式）"
+    echo "  $0 cost daily 2023-05-01 tsv  # 查询指定日期的消费（TSV格式）"
 }
 
 handle_cost_commands() {
@@ -693,7 +726,8 @@ handle_cost_commands() {
     case "$operation" in
     daily)
         local date=${1:-}
-        query_daily_cost "$date"
+        local format=${2:-human}
+        query_daily_cost "$date" "$format"
         ;;
     *)
         echo "错误：未知的费用查询操作：$operation" >&2
@@ -702,3 +736,4 @@ handle_cost_commands() {
         ;;
     esac
 }
+

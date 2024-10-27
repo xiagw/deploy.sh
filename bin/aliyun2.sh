@@ -73,7 +73,7 @@ main() {
         return 1
     fi
 
-    # 如果没有指定 region，则从配置文件中读取，如果配置文件中也没有��则使用默认值 "cn-hangzhou"
+    # 如果没有指定 region，则从配置文件中读取，如果配置文件中也没有则使用默认值 "cn-hangzhou"
     region=${region:-$(read_config "$profile")}
     region=${region:-"cn-hangzhou"}
 
@@ -102,6 +102,7 @@ main() {
     eip) handle_eip_commands "${args[@]}" || show_eip_help ;;
     cas) handle_cas_commands "${args[@]}" || show_cas_help ;;
     ram) handle_ram_commands "${args[@]}" || show_ram_help ;;
+    nas) handle_nas_commands "${args[@]}" || show_nas_help ;;
     *) echo "错误：未知的服务：$service" >&2 && show_help && exit 1 ;;
     esac
 }
