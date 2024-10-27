@@ -808,7 +808,7 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
     element)
         ## element / 发送至 element
         _msg time "notify to Element"
-        python3 "$g_me_data_bin_path/element.py" "$msg_body"
+        echo "$msg_body" | python3 "$g_me_lib/element.py" ${ENV_ELM_SERVER:? } ${ENV_ELM_USERID:? } ${ENV_ELM_PASSWORD:? } ${ENV_ELM_ROOMID:? }
         ;;
     email)
         ## email / 发送至 email
