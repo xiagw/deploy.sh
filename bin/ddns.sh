@@ -15,8 +15,8 @@ _get_config() {
     g_me_env="${ddns_conf_path}/${g_me_name}.env"
     g_me_log="${ddns_conf_path}/${g_me_name}.log"
 
-    _msg "config file: $g_me_env"
-    _msg "log file: $g_me_log"
+    echo "config file: $g_me_env"
+    echo "log file: $g_me_log"
     # shellcheck disable=SC1090
     . "$g_me_env"
 
@@ -27,13 +27,13 @@ _get_config() {
         echo "Usage: $0 <your-name>.dynv6.net <token> [device]"
         return 1
     fi
-    _msg "ddns dynv6 host: $dynv6_host"
+    echo "ddns dynv6 host: $dynv6_host"
 }
 
 ## get last ip from log
 _get_saved_ip() {
-    ip4_last=$(tail -n1 "$g_me_log" | awk '{print $4}')
-    ip6_last=$(tail -n1 "$g_me_log" | awk '{print $6}')
+    ip4_last=$(awk 'END {print $4}' "$g_me_log")
+    ip6_last=$(awk 'END {print $6}' "$g_me_log")
     _msg yellow "get old IPv4 from log file: $ip4_last"
     _msg yellow "get old IPv6 from log file: $ip6_last"
 }
