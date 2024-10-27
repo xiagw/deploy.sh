@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# -*- coding: utf-8 -*-
+
+# 设置基础路径
+CLOUD_CLI_HOME=$(dirname "$(dirname "$(readlink -f "$0")")")
+export CLOUD_CLI_HOME
+
+# 导入通用库
+# shellcheck source=/dev/null
+source "${CLOUD_CLI_HOME}/lib/common/utils.sh"
+source "${CLOUD_CLI_HOME}/lib/common/logger.sh"
+source "${CLOUD_CLI_HOME}/lib/common/validator.sh"
+
+show_help() {
+    echo "Usage: cloud [--provider <provider>] <command> [options]"
+    echo
+    echo "Supported providers:"
+    echo "  aliyun   - Alibaba Cloud"
+    echo "  huawei   - Huawei Cloud"
+    echo "  tencent  - Tencent Cloud"
+    echo "  aws      - Amazon Web Services"
+    echo
+    echo "Common commands:"
+    echo "  compute  - Compute service operations"
+    echo "  network  - Network service operations"
+    echo "  storage  - Storage service operations"
+    echo "  ...more commands"
+}
+
+main() {
+    local provider="aliyun"  # 默认使用阿里云
+    local command=""
+    local args=()
+
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --provider)
+                provider="$2"
+                shift 2
+                ;;
+            *)
+                if [ -z "$command" ]; then
+                    command="$1"
+                else
+                    args+=("$1")
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # 验证提供商
+    case "$provider" in
+        aliyun|huawei|tencent|aws)
+            # 加载对应提供商的实现
+            # shellcheck source=/dev/null
+            source "${CLOUD_CLI_HOME}/lib/${provider}/main.sh"
+            ;;
+        *)
+            echo "Error: Unsupported cloud provider: $provider" >&2
+            show_help
+            exit 1
+            ;;
+    esac
+
+    # 执行命令
+    if [ -z "$command" ]; then
+        show_help
+        exit 1
+    fi
+
+    handle_command "$command" "${args[@]}"
+}
+
+main "$@"
