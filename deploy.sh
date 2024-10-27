@@ -1675,7 +1675,7 @@ main() {
     SECONDS=0
     g_me_name="$(basename "$0")"
     g_me_path="$(dirname "$(readlink -f "$0")")"
-    source "$g_me_path/bin/include.sh"
+    source "$g_me_path/lib/common.sh"
     _msg step "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _parse_args "$@"

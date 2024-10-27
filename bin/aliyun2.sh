@@ -2,25 +2,33 @@
 # shellcheck disable=SC2034
 # -*- coding: utf-8 -*-
 
-
 # 定义全局命令变量
+CMD_READLINK=$(command -v greadlink || command -v readlink)
 CMD_DATE=$(command -v gdate || command -v date)
 CMD_GREP=$(command -v ggrep || command -v grep)
 CMD_SED=$(command -v gsed || command -v sed)
-CMD_READLINK=$(command -v greadlink || command -v readlink)
 CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
 
 ## 定义全局执行所在目录
-SCRIPT_DIR=$(dirname "$($CMD_READLINK -f "${BASH_SOURCE[0]}")")
-## 定义 lib 目录
-SCRIPT_LIB="$(dirname "${SCRIPT_DIR}")/lib"
-# 定义通用数据目录
-SCRIPT_DATA_DIR="$(dirname "${SCRIPT_DIR}")/data"
+ME_DIR=$(dirname "$($CMD_READLINK -f "${BASH_SOURCE[0]}")")
+
+# 定义通用数据目录和 lib 目录
+if [ -d "${ME_DIR}/lib" ]; then
+    ME_LIB="${ME_DIR}/lib"
+elif [ -d "$(dirname "${ME_DIR}")/lib" ]; then
+    ME_LIB="$(dirname "${ME_DIR}")/lib"
+fi
+if [ -d "${ME_DIR}/data" ]; then
+    ME_DATA="${ME_DIR}/data"
+elif [ -d "$(dirname "${ME_DIR}")/data" ]; then
+    ME_DATA="$(dirname "${ME_DIR}")/data"
+fi
 
 # 主函数
 main() {
     # 导入其他脚本
-    for file in "${SCRIPT_LIB}"/aliyun/*.sh; do
+    for file in "${ME_LIB}"/aliyun/*.sh; do
+        [ -f "$file" ] || continue
         # shellcheck source=/dev/null
         source "$file"
     done
