@@ -180,6 +180,57 @@ _backup_directories() {
     done
 }
 
+_backup_zfs() {
+    local zfs_src="${1:-zfs01/share}"
+    local zfs_dest="${2:-zfs02/share}"
+    local snap start_time
+    snap="$(date +%s)"
+    start_time=$(date +%Y%m%d-%u-%T.%3N)
+
+    echo "Starting backup at $start_time"
+    zfs list -t snapshot
+
+    # Rename existing snapshots
+    for fs in "$zfs_src" "$zfs_dest"; do
+        if zfs list -t snapshot -o name -s creation -H -r "${fs}@now"; then
+            zfs list -t snapshot -o name -s creation -H -r "${fs}@last" &&
+                zfs rename "${fs}@last" "${fs}@${snap}"
+            zfs rename "${fs}@now" "${fs}@last"
+        fi
+    done
+
+    # Create new snapshot
+    zfs snapshot "${zfs_src}@now"
+
+    # Check for pv command
+    local has_pv=0
+    command -v pv >/dev/null 2>&1 && has_pv=1
+
+    # Perform incremental or full backup
+    if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last" >/dev/null 2>&1; then
+        # Incremental backup
+        if [[ "$has_pv" -eq 1 ]]; then
+            zfs send -v -i "${zfs_src}@last" "${zfs_src}@now" | pv | zfs recv "${zfs_dest}"
+        else
+            zfs send -v -i "${zfs_src}@last" "${zfs_src}@now" | zfs recv "${zfs_dest}"
+        fi
+    else
+        ## full backup
+        zfs snapshot "${zfs_src}@last"
+        if [[ "$has_pv" -eq 1 ]]; then
+            zfs send -v "${zfs_src}@last" | pv | zfs recv "${zfs_dest}"
+        else
+            zfs send -v "${zfs_src}@last" | zfs recv "${zfs_dest}"
+        fi
+    fi
+
+    # Clear snapshots
+    zfs destroy "${zfs_src}@${snap}" "${zfs_dest}@${snap}"
+
+    echo "Backup completed at $(date +%Y%m%d-%u-%T.%3N)"
+    echo "Total duration: $(($(date +%s) - snap)) seconds"
+}
+
 _compress_file() {
     local path="$1"
     local file="$2"
@@ -402,14 +453,10 @@ main() {
     set -eo pipefail
 
     # 导入通用函数
-    # shellcheck disable=SC1091
+    # shellcheck source=/dev/null
     source "$(dirname "$0")/../lib/common.sh"
 
-    local me_name
-    local me_path
-    local me_env
-    local me_log
-    local timestamp
+    local me_name me_path me_env me_log timestamp
 
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
@@ -422,6 +469,15 @@ main() {
 
     # 设置日期格式
     timestamp=$(date +%Y%m%d_%H%M%S)
+
+    case "$1" in
+    zfs*)
+        set -e
+        _backup_zfs "$@"
+        return
+        ;;
+    esac
+
     mkdir -p "${me_path}/${timestamp}"
 
     _log $LOG_LEVEL_INFO "Backup start"
