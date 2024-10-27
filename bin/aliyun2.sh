@@ -9,7 +9,7 @@ CMD_GREP=$(command -v ggrep || command -v grep)
 CMD_SED=$(command -v gsed || command -v sed)
 CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
 
-## 定义全局执行所在目录
+## 定义执行所在目录
 SCRIPT_DIR=$(dirname "$($CMD_READLINK -f "${BASH_SOURCE[0]}")")
 
 # 定义通用数据目录和 lib 目录
@@ -67,14 +67,14 @@ main() {
         shift
     done
 
-    # 如果没有指定 region，则从配置文件中读取，如果配置文件中也没有��则使用默认值 "cn-hangzhou"
-    region=${region:-$(read_config "$profile")}
-    region=${region:-"cn-hangzhou"}
-
     if [ ${#args[@]} -lt 1 ]; then
         show_help
         return 1
     fi
+
+    # 如果没有指定 region，则从配置文件中读取，如果配置文件中也没有��则使用默认值 "cn-hangzhou"
+    region=${region:-$(read_config "$profile")}
+    region=${region:-"cn-hangzhou"}
 
     local service=${args[0]}
     unset 'args[0]'
