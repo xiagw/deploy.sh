@@ -643,3 +643,30 @@ _set_mirror() {
         ;;
     esac
 }
+
+get_oom_score() {
+    while read -r proc; do
+        printf "%2d      %5d       %s\n" \
+            "$(cat "$proc"/oom_score)" \
+            "$(basename "$proc")" \
+            "$(cat "$proc"/cmdline | tr '\0' ' ' | head -c 50)"
+    done < <(find /proc -maxdepth 1 -regex '/proc/[0-9]+' 2>/dev/null | sort -nr | head -n 15)
+}
+
+clean_snap() {
+    ## Removes old revisions of snaps
+    ## CLOSE ALL SNAPS BEFORE RUNNING THIS
+    while read -r snapname revision; do
+        sudo snap remove "$snapname" --revision="$revision"
+    done < <(LANG=en_US.UTF-8 snap list --all | awk '/disabled/{print $1, $3}')
+}
+
+clean_runtime() {
+    ## clean thinkphp runtime/log
+    while read -r line; do
+        echo "$line"
+        sudo rm -rf "$line"/log/*
+        ## fix thinkphp runtime perm
+        sudo chown -R 33:33 "$line"
+    done < <(find . -type d -iname runtime)
+}

@@ -73,9 +73,10 @@ _port_forward() {
         echo >&2 "I require nc but it's not installed. Aborting."
         return 1
     fi
-    ssh_opt='ssh -qfg -o ExitOnForwardFailure=yes'
-    ssh_host='ip.mysql.server'
-    ssh_forward_port="${1:-3306}"
+
+    local ssh_host="${1:? ERR: ssh_host empty}"
+    local ssh_forward_port="${1:-3306}"
+    local ssh_opt='ssh -qfg -o ExitOnForwardFailure=yes'
     ## create ssh tunnel
     $ssh_opt -L "$ssh_forward_port":localhost:3306 $ssh_host "sleep 300" || true
     ## kill ssh tunnel timeout

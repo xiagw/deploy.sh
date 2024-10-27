@@ -7,9 +7,10 @@ proxy_port=1080
 wpad_file=/www/wpad.dat
 
 if [ -f $os_release ] && grep -i -q openwrt $os_release; then
-    echo "set $etc_hosts"
+    echo "setup $etc_hosts"
     grep -q wpad $etc_hosts || echo "$openwrt_ip wpad" >>$etc_hosts
     /etc/init.d/dnsmasq restart
+
     echo "generate $wpad_file"
     cat >$wpad_file <<EOF
 function FindProxyForURL(url, host) {
