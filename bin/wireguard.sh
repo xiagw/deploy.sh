@@ -214,15 +214,15 @@ _update_ddns() {
     $use_sudo wg show all dump | awk 'NR>1 {print $4"\t"$5"\t"$6}'
 }
 
-_include_sh() {
-    include_sh="$g_me_path/include.sh"
-    if [ ! -f "$include_sh" ]; then
-        include_sh='/tmp/include.sh'
-        include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
-        [ -f "$include_sh" ] || curl -fsSL "$include_url" >"$include_sh"
+_common_lib() {
+    common_lib="$g_me_path/../lib/common.sh"
+    if [ ! -f "$common_lib" ]; then
+        common_lib='/tmp/common.sh'
+        include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
+        [ -f "$common_lib" ] || curl -fsSL "$include_url" >"$common_lib"
     fi
-    # shellcheck disable=SC1090
-    . "$include_sh"
+    # shellcheck source=/dev/null
+    . "$common_lib"
 }
 
 main() {
@@ -231,7 +231,7 @@ main() {
     g_me_data_path="${g_me_path}/../data/wireguard"
     g_me_log="${g_me_data_path}/${g_me_name}.log"
 
-    _include_sh
+    _common_lib
 
     _msg "log file: $g_me_log"
 

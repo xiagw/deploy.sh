@@ -104,17 +104,15 @@ _parse_args() {
     echo "$wan_device $silent_mode" >/dev/null
 }
 
-_include_sh() {
-    include_sh="$g_me_path/include.sh"
-    if [ ! -f "$include_sh" ]; then
-        include_sh='/tmp/include.sh'
-        if [ ! -f "$include_sh" ]; then
-            include_url='https://gitee.com/xiagw/deploy.sh/raw/main/bin/include.sh'
-            curl -fsSL "$include_url" >"$include_sh"
-        fi
+_common_lib() {
+    common_lib="$g_me_path/common.sh"
+    if [ ! -f "$common_lib" ]; then
+        common_lib='/tmp/common.sh'
+        include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
+        [ -f "$common_lib" ] || curl -fsSL "$include_url" >"$common_lib"
     fi
-    # shellcheck disable=SC1090
-    . "$include_sh"
+    # shellcheck source=/dev/null
+    . "$common_lib"
 }
 
 _setup_environment() {
@@ -128,7 +126,7 @@ _setup_environment() {
 main() {
     _setup_environment
     _parse_args "$@" || return
-    _include_sh || return
+    _common_lib || return
     _get_config || return
     _get_saved_ip
     _get_current_ip
