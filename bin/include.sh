@@ -227,8 +227,8 @@ _get_current_ip() {
         fi
         ;;
     esac
-    _msg green "get IPv4: $ip4_current"
-    _msg green "get IPv6: $ip6_current"
+    _msg green "get current IPv4: $ip4_current"
+    _msg green "get current IPv6: $ip6_current"
 }
 
 _install_jmeter() {

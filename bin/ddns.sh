@@ -34,8 +34,8 @@ _get_config() {
 _get_saved_ip() {
     ip4_last=$(tail -n1 "$g_me_log" | awk '{print $4}')
     ip6_last=$(tail -n1 "$g_me_log" | awk '{print $6}')
-    _msg "get old IPv4 from log file: $ip4_last"
-    _msg "get old IPv6 from log file: $ip6_last"
+    _msg yellow "get old IPv4 from log file: $ip4_last"
+    _msg yellow "get old IPv6 from log file: $ip6_last"
 }
 
 # address with netmask
