@@ -4,7 +4,7 @@
 # 证书服务（Certificate Authority Service）相关函数
 
 # 使用通用数据目录
-CAS_CERT_FILE="${SCRIPT_DATA}/cas/cas_certs.json"
+CAS_CERT_FILE="${SCRIPT_DATA:? ERR: SCRIPT_DATA empty}/cas/cas_certs.json"
 
 show_cas_help() {
     echo "证书服务 (Certificate Authority Service) 操作："

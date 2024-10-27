@@ -49,7 +49,7 @@ save_data_file() {
     local data=$5
     local filename=$6
 
-    local data_dir="${SCRIPT_DATA:-}/${profile}/${region}/data/${service}"
+    local data_dir="${SCRIPT_DATA:? ERR: SCRIPT_DATA empty}/${profile}/${region}/data/${service}"
     local data_file="${data_dir}/${filename}"
 
     mkdir -p "$data_dir"
