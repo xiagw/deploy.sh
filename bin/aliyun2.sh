@@ -28,7 +28,8 @@ fi
 main() {
     # 导入其他脚本
     for file in "${SCRIPT_LIB}"/aliyun/*.sh; do
-        [ -f "$file" ] || continue
+        [[ -f "$file" ]] || continue
+        [[ "$file" == *run.sh ]] && continue
         # shellcheck source=/dev/null
         source "$file"
     done
