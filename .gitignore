@@ -4,6 +4,7 @@
 ## vim swap
 .swp
 *.log
+*.env
 
 ## gitlab runner exclude
 builds/

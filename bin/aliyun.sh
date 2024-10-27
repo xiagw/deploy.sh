@@ -579,7 +579,7 @@ _add_workorder() {
     # python3 -m pip list | grep 'alibabacloud-workorder' || python3 -m pip install alibabacloud_workorder20210610==1.0.0
     # python3 -m pip list | grep 'alibabacloud_tea_console' || python3 -m pip install alibabacloud_tea_console
     ## 列出产品列表 （没有 aliyun cli 可用，使用 python sdk）
-    call_python_file="$g_me_path/aliyun.workorder.py"
+    call_python_file="$g_me_path/../lib/aliyun/workorder.py"
     saved_json="$g_me_data_path/aliyun.product.list.json"
     command -v fzf >/dev/null 2>&1 || sudo apt install -y fzf
 

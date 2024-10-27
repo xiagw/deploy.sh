@@ -403,7 +403,7 @@ main() {
 
     # 导入通用函数
     # shellcheck disable=SC1091
-    source "$(dirname "$0")/common_functions.sh"
+    source "$(dirname "$0")/../lib/common.sh"
 
     local me_name
     local me_path
@@ -413,8 +413,8 @@ main() {
 
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
-    me_env="${me_path}/${me_name}.env"
-    me_log="${me_path}/${me_name}.log"
+    me_env="${me_path}/../data/${me_name}.env"
+    me_log="${me_path}/../data/${me_name}.log"
 
     # 初始化 CURRENT_LOG_LEVEL
     export CURRENT_LOG_LEVEL=$LOG_LEVEL_INFO
@@ -427,6 +427,7 @@ main() {
     _log $LOG_LEVEL_INFO "Backup start"
 
     # Load configuration
+    [ -f "${me_env}" ] || cp "${me_path}/../conf/${me_name}.env" "${me_env}"
     _load_config "$me_env" "$@"
 
     ## 检查必要的命令
