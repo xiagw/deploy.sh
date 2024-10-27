@@ -29,7 +29,7 @@ async def main(homeserver, user_id, password, room_id, message):
 
 if __name__ == "__main__":
     if len(sys.argv) != 5:
-        print("Usage: python script.py <homeserver> <user_id> <password> <room_id>")
+        print("Usage: echo message | python3 script.py <homeserver> <user_id> <password> <room_id>")
         sys.exit(1)
 
     homeserver = sys.argv[1]  # https://matrix.example.com
