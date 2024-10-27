@@ -55,7 +55,7 @@ _update_dynv6() {
 }
 
 _print_usage() {
-    cat << EOF
+    cat <<EOF
 Usage: $0 [OPTIONS]
 Update DynV6 DNS records.
 
@@ -76,17 +76,17 @@ EOF
 _parse_args() {
     ## disable proxy
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
-    if [ -x /usr/local/opt/curl/bin/curl ]; then
-        cmd="/usr/local/opt/curl/bin/curl -fsSL"
-    elif [ -x /usr/bin/curl ]; then
-        cmd="/usr/bin/curl -fsSL"
-    elif [ -x /usr/bin/wget ]; then
-        cmd="wget --quiet -O-"
-    else
+
+    cmd=$(command -v /usr/local/opt/curl/bin/curl || command -v curl || command -v wget)
+    case "$cmd" in
+    */curl) cmd="$cmd -fsSL" ;;
+    */wget) cmd="$cmd --quiet -O-" ;;
+    *)
         echo "Neither curl nor wget found. Please install curl."
         echo "opkg update && opkg install curl"
         return 1
-    fi
+        ;;
+    esac
 
     wan_device=pppoe-wan
     while [ "$#" -gt 0 ]; do
