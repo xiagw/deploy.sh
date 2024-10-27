@@ -225,7 +225,8 @@ _backup_zfs() {
     fi
 
     # Clear snapshots
-    zfs destroy "${zfs_src}@${snap}" "${zfs_dest}@${snap}"
+    zfs destroy "${zfs_src}@${snap}"
+    zfs destroy "${zfs_dest}@${snap}"
 
     echo "Backup completed at $(date +%Y%m%d-%u-%T.%3N)"
     echo "Total duration: $(($(date +%s) - snap)) seconds"
