@@ -10,24 +10,24 @@ CMD_SED=$(command -v gsed || command -v sed)
 CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
 
 ## 定义全局执行所在目录
-ME_DIR=$(dirname "$($CMD_READLINK -f "${BASH_SOURCE[0]}")")
+SCRIPT_DIR=$(dirname "$($CMD_READLINK -f "${BASH_SOURCE[0]}")")
 
 # 定义通用数据目录和 lib 目录
-if [ -d "${ME_DIR}/lib" ]; then
-    ME_LIB="${ME_DIR}/lib"
-elif [ -d "$(dirname "${ME_DIR}")/lib" ]; then
-    ME_LIB="$(dirname "${ME_DIR}")/lib"
+if [ -d "${SCRIPT_DIR}/lib" ]; then
+    SCRIPT_LIB="${SCRIPT_DIR}/lib"
+elif [ -d "$(dirname "${SCRIPT_DIR}")/lib" ]; then
+    SCRIPT_LIB="$(dirname "${SCRIPT_DIR}")/lib"
 fi
-if [ -d "${ME_DIR}/data" ]; then
-    ME_DATA="${ME_DIR}/data"
-elif [ -d "$(dirname "${ME_DIR}")/data" ]; then
-    ME_DATA="$(dirname "${ME_DIR}")/data"
+if [ -d "${SCRIPT_DIR}/data" ]; then
+    SCRIPT_DATA="${SCRIPT_DIR}/data"
+elif [ -d "$(dirname "${SCRIPT_DIR}")/data" ]; then
+    SCRIPT_DATA="$(dirname "${ME_DIR}")/data"
 fi
 
 # 主函数
 main() {
     # 导入其他脚本
-    for file in "${ME_LIB}"/aliyun/*.sh; do
+    for file in "${SCRIPT_LIB}"/aliyun/*.sh; do
         [ -f "$file" ] || continue
         # shellcheck source=/dev/null
         source "$file"

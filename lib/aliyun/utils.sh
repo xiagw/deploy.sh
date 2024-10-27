@@ -49,7 +49,7 @@ save_data_file() {
     local data=$5
     local filename=$6
 
-    local data_dir="${SCRIPT_DATA_DIR:-}/${profile}/${region}/data/${service}"
+    local data_dir="${SCRIPT_DATA:-}/${profile}/${region}/data/${service}"
     local data_file="${data_dir}/${filename}"
 
     mkdir -p "$data_dir"
@@ -65,7 +65,7 @@ log_result() {
     local result=$5
     local format=${6:-human}
 
-    local log_dir="${SCRIPT_DATA_DIR}/${profile}/${region}/logs"
+    local log_dir="${SCRIPT_DATA}/${profile}/${region}/logs"
     local log_file="${log_dir}/${service}.log"
     local timestamp
     timestamp=$($CMD_DATE "+%Y-%m-%d %H:%M:%S")
@@ -99,7 +99,7 @@ log_delete_operation() {
     local timestamp
     timestamp=$($CMD_DATE "+%Y-%m-%d %H:%M:%S")
 
-    local log_dir="${SCRIPT_DATA_DIR}/${profile}/${region}/logs"
+    local log_dir="${SCRIPT_DATA}/${profile}/${region}/logs"
     local log_file="${log_dir}/${service}.log"
 
     mkdir -p "$log_dir"
