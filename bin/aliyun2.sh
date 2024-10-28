@@ -11,17 +11,19 @@ CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
 
 ## 定义执行所在目录
 SCRIPT_DIR=$(dirname "$($CMD_READLINK -f "${BASH_SOURCE[0]}")")
+## 定义上一级目录
+SCRIPT_DIR_PARENT=$(dirname "${SCRIPT_DIR}")
 
 # 定义通用数据目录和 lib 目录
 if [ -d "${SCRIPT_DIR}/lib" ]; then
     SCRIPT_LIB="${SCRIPT_DIR}/lib"
-elif [ -d "$(dirname "${SCRIPT_DIR}")/lib" ]; then
-    SCRIPT_LIB="$(dirname "${SCRIPT_DIR}")/lib"
+elif [ -d "${SCRIPT_DIR_PARENT}/lib" ]; then
+    SCRIPT_LIB="${SCRIPT_DIR_PARENT}/lib"
 fi
 if [ -d "${SCRIPT_DIR}/data" ]; then
     SCRIPT_DATA="${SCRIPT_DIR}/data"
-elif [ -d "$(dirname "${SCRIPT_DIR}")/data" ]; then
-    SCRIPT_DATA="$(dirname "${ME_DIR}")/data"
+elif [ -d "${SCRIPT_DIR_PARENT}/data" ]; then
+    SCRIPT_DATA="${SCRIPT_DIR_PARENT}/data"
 fi
 
 # 主函数
