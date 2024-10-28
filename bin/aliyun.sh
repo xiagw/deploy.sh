@@ -268,7 +268,7 @@ _scale_up() {
 
     # 发消息到企业微信 / Send message to weixin_work
     g_msg_body="扩容服务器数量=$node_inc"
-    _notify_wecom "${wechat_key-}"
+    _notify_wecom "${wecom_key-}" "$g_msg_body"
 
     ## 禁止分配容器到新节点 / kubectl cordon new nodes
     _msg "kubectl cordon new nodes..."
@@ -311,7 +311,7 @@ _scale_down() {
         --body "{\"count\": -${node_inc:-2}}"
 
     g_msg_body="缩容服务器数量=$node_inc"
-    _notify_wecom "${wechat_key-}"
+    _notify_wecom "${wecom_key-}" "$g_msg_body"
 }
 
 _auto_scaling() {
@@ -349,7 +349,7 @@ _auto_scaling() {
         fi
         g_msg_body="自动扩缩容: 应用 $deployment $load_status, $action $new_total; 结果: $result"
         _msg log "$g_me_log" "$g_msg_body"
-        _notify_wecom "${wechat_key-}"
+        _notify_wecom "${wecom_key-}" "$g_msg_body"
     }
 
     # Check for scale up

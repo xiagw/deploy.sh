@@ -498,9 +498,10 @@ ack_auto_scale() {
             fi
 
             # 记录操作日志
-            local message="自动扩缩容: 应用 $deployment $load_status, $action $new_total; 结果: $result"
-            echo "$message"
-            log_result "${profile:-}" "$region" "ack" "auto-scale" "$message"
+            local g_msg_body="自动扩缩容: 应用 $deployment $load_status, $action $new_total; 结果: $result"
+            echo "$g_msg_body"
+            log_result "${profile:-}" "$region" "ack" "auto-scale" "$g_msg_body"
+            _notify_wecom "${WECOM_KEY:-}" "$g_msg_body"
         else
             echo "扩缩容操作失败" >&2
             return 1

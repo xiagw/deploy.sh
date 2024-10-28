@@ -501,10 +501,11 @@ _install_cron() {
 }
 
 _notify_wecom() {
-    local wechat_key="$1"
-    local wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wechat_key}"
+    local wecom_key="$1"
+    local g_msg_body="$2"
+    local wecom_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wecom_key}"
     curl -fsSL -X POST -H 'Content-Type: application/json' \
-        -d '{"msgtype": "text", "text": {"content": "'"${g_msg_body-}"'"}}' "$wechat_api"
+        -d '{"msgtype": "text", "text": {"content": "'"${g_msg_body:-g_msg_body undefined}"'"}}' "$wecom_api"
     echo
 }
 

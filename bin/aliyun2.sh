@@ -55,12 +55,13 @@ load_module() {
 # 主函数
 main() {
     # 导入其他脚本
-    for file in "${SCRIPT_LIB}"/aliyun/*.sh; do
-        [[ -f "$file" ]] || continue
+    for file in "${SCRIPT_LIB}"/aliyun/*.sh "${SCRIPT_LIB}"/common.sh; do
         [[ "$file" == *run.sh ]] && continue
         # shellcheck source=/dev/null
-        source "$file"
+        [[ -f "$file" ]] && source "$file"
     done
+    # shellcheck source=/dev/null
+    [ -f "${SCRIPT_DATA}/aliyun2.sh.env" ] && source "${SCRIPT_DATA}/aliyun2.sh.env"
 
     check_dependencies
 

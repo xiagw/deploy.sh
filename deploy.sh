@@ -757,30 +757,19 @@ _notify_zoom() {
     # Send message to Zoom channel
     # ENV_ZOOM_CHANNEL="https://api.zoom.us/v2/im/chat/messages"
     #
-    curl -s -X POST -H "Content-Type: application/json" -d '{"text": "'"${msg_body}"'"}' "${ENV_ZOOM_CHANNEL}"
+    curl -s -X POST -H "Content-Type: application/json" -d '{"text": "'"${g_msg_body}"'"}' "${ENV_ZOOM_CHANNEL}"
 }
 
 _notify_feishu() {
     # Send message to Feishu 飞书
     # ENV_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-url"
-    curl -s -X POST -H "Content-Type: application/json" -d '{"text": "'"$msg_body"'"}' "$ENV_WEBHOOK_URL"
-}
-
-_notify_wecom() {
-    # Send message to weixin_work 企业微信
-    local wecom_key=$1
-    wecom_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$wecom_key"
-    curl -sL -X POST \
-        -H 'Content-Type: application/json' \
-        -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$msg_body\"}}" \
-        "$wecom_api"
-    echo "" ## 空行要保留，保证换行
+    curl -s -X POST -H "Content-Type: application/json" -d '{"text": "'"$g_msg_body"'"}' "$ENV_WEBHOOK_URL"
 }
 
 _deploy_notify() {
     msg_describe="${msg_describe:-$(if [ -d .git ]; then git --no-pager log --no-merges --oneline -1; else echo 'not-git'; fi)}"
 
-    msg_body="
+    g_msg_body="
 [Gitlab Deploy]
 Project = ${gitlab_project_path}/${gitlab_project_id}
 Branche = ${gitlab_project_branch}
@@ -795,20 +784,20 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
     wecom)
         ## work chat / 发送至 企业微信
         _msg time "notify to wecom"
-        _notify_wecom ${ENV_WEIXIN_KEY}
+        _notify_wecom "${ENV_WECOM_KEY}" "$g_msg_body"
         ;;
     telegram)
         ## Telegram / 发送至 Telegram
         _msg time "notify to Telegram"
         telegram_api_msg="https://api.telegram.org/bot${ENV_TG_API_KEY}/sendMessage"
         # telegram_api_doc="https://api.telegram.org/bot${ENV_TG_API_KEY}/sendDocument"
-        msg_body="$(echo "$msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
-        curl -sSLo /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID}&text=$msg_body" "$telegram_api_msg"
+        g_msg_body="$(echo "$g_msg_body" | sed -e ':a;N;$!ba;s/\n/%0a/g' -e 's/&/%26/g')"
+        curl -sSLo /dev/null -X POST -d "chat_id=${ENV_TG_GROUP_ID}&text=$g_msg_body" "$telegram_api_msg"
         ;;
     element)
         ## element / 发送至 element
         _msg time "notify to Element"
-        echo "$msg_body" | python3 "$g_me_lib/element.py" ${ENV_ELM_SERVER:? } ${ENV_ELM_USERID:? } ${ENV_ELM_PASSWORD:? } ${ENV_ELM_ROOMID:? }
+        echo "$g_msg_body" | python3 "$g_me_lib/element.py" ${ENV_ELM_SERVER:? } ${ENV_ELM_USERID:? } ${ENV_ELM_PASSWORD:? } ${ENV_ELM_ROOMID:? }
         ;;
     email)
         ## email / 发送至 email
@@ -824,7 +813,7 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
             -o message-content-type=text/html \
             -o message-charset=utf-8 \
             -u "[Gitlab Deploy] ${gitlab_project_path} ${gitlab_project_branch} ${gitlab_pipeline_id}/${gitlab_job_id}" \
-            -m "$msg_body"
+            -m "$g_msg_body"
         ;;
     *)
         _msg "<skip>"
@@ -991,8 +980,8 @@ _check_aliyun_account_balance() {
 
         _msg green "Current balance: $current_balance"
         if (($(echo "$current_balance < $alarm_balance" | bc -l))); then
-            msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
-            _notify_wecom $ENV_ALARM_WECOM_KEY
+            g_msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
+            _notify_wecom "${ENV_ALARM_WECOM_KEY}" "$g_msg_body"
         fi
 
         # 检查昨日消费
@@ -1002,8 +991,8 @@ _check_aliyun_account_balance() {
 
         _msg red "Yesterday's spending: $daily_spending"
         if (($(echo "$daily_spending > $alarm_daily" | bc -l))); then
-            msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f , 超过告警阈值：%.2f" "$profile" "$daily_spending" "${alarm_daily}")
-            _notify_wecom "$ENV_ALARM_WECOM_KEY"
+            g_msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f , 超过告警阈值：%.2f" "$profile" "$daily_spending" "${alarm_daily}")
+            _notify_wecom "${ENV_ALARM_WECOM_KEY}" "$g_msg_body"
         fi
     done
 
