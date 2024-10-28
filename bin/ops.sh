@@ -118,6 +118,23 @@ find_and_sync_files() {
                 echo "警告: ${src##*.} 文件同步失败" >&2
                 sync_status=1
             fi
+            if [[ $sync_status -eq 1 ]]; then
+                echo "尝试通过 HOME 目录同步: " >&2
+                # 先同步到远程主机的 HOME 目录
+                if rsync -avz --progress "$src" "${target_host}:~/$(basename "$dest")"; then
+                    # SSH 到远程主机并使用 sudo cp 移动文件
+                    ssh "$target_host" "sudo cp ~/$(basename "$dest") ${target_base_path}${dest} && rm ~/$(basename "$dest")"
+                    if [[ $? -eq 0 ]]; then
+                        sync_status=0
+                        echo "通过 HOME 目录同步成功"
+                        ssh "$target_host" "cd docker/laradock && docker compose exec nginx nginx -s reload"
+                    else
+                        echo "通过 HOME 目录同步失败" >&2
+                    fi
+                else
+                    echo "同步到 HOME 目录失败" >&2
+                fi
+            fi
         fi
     done
 
