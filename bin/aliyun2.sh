@@ -103,9 +103,11 @@ main() {
     cas) handle_cas_commands "${args[@]}" || show_cas_help ;;
     ram) handle_ram_commands "${args[@]}" || show_ram_help ;;
     nas) handle_nas_commands "${args[@]}" || show_nas_help ;;
+    ack) handle_ack_commands "${args[@]}" || show_ack_help ;;
     *) echo "错误：未知的服务：$service" >&2 && show_help && exit 1 ;;
     esac
 }
 
 # 运行主函数
 main "$@"
+
