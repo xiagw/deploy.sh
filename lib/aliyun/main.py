@@ -30,7 +30,8 @@ def show_service_actions(service):
             ("delete", "删除 OSS 存储桶"),
             ("update-acl", "更新 OSS 存储桶 ACL"),
             ("set-lifecycle", "设置 OSS 存储桶生命周期规则"),
-            ("info", "获取 OSS 存储桶信息")
+            ("info", "获取 OSS 存储桶信息"),
+            ("migrate", "迁移 OSS 存储桶中的多媒体文件")  # 添加这一行
         ],
         'cdn': [
             ("create", "创建 CDN 域名"),
