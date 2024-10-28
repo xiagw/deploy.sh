@@ -117,8 +117,9 @@ def main():
     oss_migrate_parser.add_argument('--dest-bucket', required=True, help='目标存储桶名称')
     oss_migrate_parser.add_argument('--batch-size', type=int, default=100, help='每批处理的文件数量')
     oss_migrate_parser.add_argument('--max-workers', type=int, default=5, help='最大并发工作线程数')
-    oss_migrate_parser.add_argument('--delete-source', action='store_true',
-                                   help='在成功迁移后删除源文件')
+    oss_migrate_parser.add_argument('--delete-source', action='store_true', help='在成功迁移后删除源文件')
+    # 添加子目录参数
+    oss_migrate_parser.add_argument('--prefix', help='指定要迁移的子目录前缀')
 
     # CDN 子命令
     cdn_parser = subparsers.add_parser('cdn', help='CDN 相关操作')
@@ -286,7 +287,8 @@ def main():
                 args.dest_bucket,
                 batch_size=args.batch_size,
                 max_workers=args.max_workers,
-                delete_source=args.delete_source  # 添加这个参数
+                delete_source=args.delete_source,  # 添加这个参数
+                prefix=args.prefix  # 添加子目录参数
             )
     elif args.service == 'cdn':
         if args.action == 'create':

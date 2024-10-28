@@ -232,7 +232,7 @@ class OSSManager:
                                            '.wmv', '.mov', '.mkv', '.mpg', '.mpeg', '.m4v', '.3gp', '.3g2',
                                            '.asf', '.asx', '.wma', '.wmv', '.m3u8', '.ts', '.m4a', '.m4b',
                                            '.m4p', '.m4r', '.m4v'),
-                               batch_size=100, max_workers=5, delete_source=False):
+                               batch_size=100, max_workers=5, delete_source=False, prefix=None):
         """
         优化的流式同步处理方式迁移低频存储类型的多媒体文件，并可选择删除源文件
 
@@ -248,42 +248,48 @@ class OSSManager:
             source_bucket = oss2.Bucket(self.auth, self.endpoint, source_bucket_name)
             dest_bucket = oss2.Bucket(self.auth, self.endpoint, dest_bucket_name)
 
-            log_and_print(f"开始同步 {source_bucket_name} 中的低频存储多媒体文件...", self.profile, self.region)
+            # 使用集合来跟踪已处理的文件，避免重复处理
+            processed_files = set()
 
-            # 使用队列来存储待处理的文件
+            # 构建日志消息，包含前缀信息
+            start_msg = f"开始从 {source_bucket_name} 迁移多媒体文件到 {dest_bucket_name}"
+            if prefix:
+                start_msg += f" (子目录: {prefix})"
+            log_and_print(start_msg + "...", self.profile, self.region)
+
             file_queue = queue.Queue(maxsize=batch_size * 2)
             producer_done = threading.Event()
-
-            # 计数器
-            processed_count = 0
+            error_count = 0
             success_count = 0
-            skipped_count = 0
-            total_files = 0  # 添加总文件计数器
 
             def producer():
-                nonlocal skipped_count, total_files
+                nonlocal error_count
                 marker = ''
-                file_batch = []  # 用于批量检查的文件列表
 
                 try:
                     while True:
-                        objects = source_bucket.list_objects(marker=marker, max_keys=1000)
+                        # 如果指定了前缀，则在列举对象时使用该前缀
+                        objects = source_bucket.list_objects(
+                            prefix=prefix,
+                            marker=marker,
+                            max_keys=1000
+                        )
 
-                        # 批量收集需要检查的文件
                         for obj in objects.object_list:
-                            if obj.key.lower().endswith(file_types):
-                                file_batch.append(obj)
-                                total_files += 1
-
-                                # 当批次达到指定大小时进行处理
-                                if len(file_batch) >= batch_size:
-                                    process_file_batch(file_batch)
-                                    file_batch = []
+                            if obj.key.lower().endswith(file_types) and obj.key not in processed_files:
+                                try:
+                                    # 检查源文件是否存在
+                                    source_bucket.head_object(obj.key)
+                                    file_queue.put(obj)
+                                    processed_files.add(obj.key)
+                                except oss2.exceptions.NoSuchKey:
+                                    error_count += 1
+                                    log_and_print(f"源文件不存在: {obj.key}", self.profile, self.region)
+                                except Exception as e:
+                                    error_count += 1
+                                    log_and_print(f"检查文件 {obj.key} 时发生错误: {str(e)}", self.profile, self.region)
 
                         if not objects.is_truncated:
-                            # 处理最后一批文件
-                            if file_batch:
-                                process_file_batch(file_batch)
                             break
                         marker = objects.next_marker
 
@@ -292,109 +298,34 @@ class OSSManager:
                 finally:
                     producer_done.set()
 
-            def process_file_batch(file_batch):
-                """批量处理文件检查"""
-                nonlocal skipped_count
-
-                try:
-                    # 批量获取源文件的元数据
-                    source_headers = {
-                        obj.key: source_bucket.head_object(obj.key)
-                        for obj in file_batch
-                    }
-
-                    # 批量获取目标文件的元数据
-                    dest_headers = {}
-                    for obj in file_batch:
-                        try:
-                            dest_headers[obj.key] = dest_bucket.head_object(obj.key)
-                        except oss2.exceptions.NoSuchKey:
-                            pass
-
-                    # 处理每个文件
-                    for obj in file_batch:
-                        try:
-                            storage_class = source_headers[obj.key].headers.get('x-oss-storage-class', 'Standard')
-
-                            # 只处理低频存储类型的文件
-                            if storage_class == 'IA':
-                                source_etag = source_headers[obj.key].headers.get('etag', '').strip('"')
-
-                                # 检查文件是否需要迁移
-                                if obj.key in dest_headers:
-                                    dest_etag = dest_headers[obj.key].headers.get('etag', '').strip('"')
-                                    dest_storage_class = dest_headers[obj.key].headers.get('x-oss-storage-class', 'Standard')
-
-                                    if source_etag == dest_etag and storage_class == dest_storage_class:
-                                        skipped_count += 1
-                                        continue
-
-                                # 需要迁移的文件放入队列
-                                file_queue.put((obj, storage_class, source_etag))
-
-                        except Exception as e:
-                            log_and_print(f"处理文件 {obj.key} 时发生错误: {str(e)}", self.profile, self.region)
-
-                except Exception as e:
-                    log_and_print(f"批量处理文件时发生错误: {str(e)}", self.profile, self.region)
-
             def consumer():
-                nonlocal processed_count, success_count
+                nonlocal success_count
                 while not (producer_done.is_set() and file_queue.empty()):
                     try:
-                        obj_info = file_queue.get(timeout=1)
-                        obj, storage_class, source_etag = obj_info
+                        obj = file_queue.get(timeout=1)
 
-                        try:
-                            # 准备目标文件的headers
-                            object_headers = {
-                                'x-oss-storage-class': storage_class,
-                                'x-oss-metadata-directive': 'COPY',
-                            }
+                        # 执行复制操作
+                        dest_bucket.copy_object(
+                            source_bucket_name,
+                            obj.key,
+                            obj.key,
+                            headers={'x-oss-storage-class': 'Standard'}
+                        )
 
-                            # 执行复制
-                            dest_bucket.copy_object(
-                                source_bucket_name,
-                                obj.key,
-                                obj.key,
-                                headers=object_headers
-                            )
+                        success_count += 1
+                        if success_count % 10 == 0:  # 每10个文件输出一次进度
+                            log_and_print(f"已成功迁移 {success_count} 个文件", self.profile, self.region)
 
-                            # 验证复制是否成功
-                            try:
-                                dest_obj = dest_bucket.head_object(obj.key)
-                                dest_etag = dest_obj.headers.get('etag', '').strip('"')
-
-                                if dest_etag == source_etag:
-                                    success_count += 1
-
-                                    # 如果启用了删除源文件选项，则删除源文件
-                                    if delete_source:
-                                        try:
-                                            source_bucket.delete_object(obj.key)
-                                            log_and_print(f"已删除源文件: {obj.key}", self.profile, self.region)
-                                        except Exception as e:
-                                            log_and_print(f"删除源文件 {obj.key} 失败: {str(e)}", self.profile, self.region)
-                                else:
-                                    log_and_print(f"文件 {obj.key} ETag 不匹配，迁移可能不完整", self.profile, self.region)
-
-                            except Exception as e:
-                                log_and_print(f"验证目标文件 {obj.key} 失败: {str(e)}", self.profile, self.region)
-
-                        except Exception as e:
-                            log_and_print(f"迁移文件 {obj.key} 失败: {str(e)}", self.profile, self.region)
-
-                        processed_count += 1
-
-                        # 显示进度
-                        if total_files > 0:
-                            progress = (processed_count + skipped_count) / total_files * 100
-                            print(f"\r进度: {progress:.1f}% ({processed_count + skipped_count}/{total_files})", end='')
+                        # 如果需要删除源文件
+                        if delete_source:
+                            source_bucket.delete_object(obj.key)
 
                     except queue.Empty:
                         continue
                     except Exception as e:
-                        log_and_print(f"处理文件时发生错误: {str(e)}", self.profile, self.region)
+                        error_count += 1
+                        log_and_print(f"处理文件 {obj.key if 'obj' in locals() else 'unknown'} 时发生错误: {str(e)}",
+                                    self.profile, self.region)
 
             # 启动生产者线程
             producer_thread = threading.Thread(target=producer)
@@ -406,16 +337,18 @@ class OSSManager:
                 concurrent.futures.wait(consumers)
 
             producer_thread.join()
-            print()  # 换行
 
-            log_and_print(
-                f"同步完成: 成功迁移 {success_count}/{processed_count} 个文件，跳过 {skipped_count} 个已存在的文件" +
-                (f"，并删除了源文件" if delete_source else ""),
-                self.profile, self.region
-            )
+            # 构建完成消息
+            complete_msg = f"\n迁移完成: 成功迁移 {success_count} 个文件, 失败 {error_count} 个"
+            if prefix:
+                complete_msg += f" (子目录: {prefix})"
+            if delete_source:
+                complete_msg += ", 并删除了源文件"
+
+            log_and_print(complete_msg, self.profile, self.region)
 
             return success_count > 0
 
         except Exception as e:
-            log_and_print(f"同步过程中发生错误: {str(e)}", self.profile, self.region)
+            log_and_print(f"迁移过程中发生错误: {str(e)}", self.profile, self.region)
             return False
