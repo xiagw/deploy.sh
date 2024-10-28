@@ -26,6 +26,32 @@ elif [ -d "${SCRIPT_DIR_PARENT}/data" ]; then
     SCRIPT_DATA="${SCRIPT_DIR_PARENT}/data"
 fi
 
+# 在文件开头添加模块加载相关变量
+declare -A LOADED_MODULES
+DEV_MODE=${DEV_MODE:-false}
+
+# 添加模块加载函数
+load_module() {
+    local service=$1
+    local module_file="${SCRIPT_LIB}/aliyun/${service}.sh"
+
+    # 检查模块文件是否存在
+    if [[ ! -f "$module_file" ]]; then
+        echo "错误：未找到服务模块：$service" >&2
+        return 1
+    fi
+
+    # 开发模式或文件更新时重新加载
+    if [[ "${DEV_MODE}" == "true" ]] ||
+        [[ ! -v LOADED_MODULES[$service] ]] ||
+        [[ $(stat -c %Y "$module_file") -gt ${LOADED_MODULES[$service]:-0} ]]; then
+        # shellcheck source=/dev/null
+        source "$module_file"
+        LOADED_MODULES[$service]=$(date +%s)
+        [[ "${DEV_MODE}" == "true" ]] && echo "模块 $service 已重新加载"
+    fi
+}
+
 # 主函数
 main() {
     # 导入其他脚本
@@ -112,4 +138,3 @@ main() {
 
 # 运行主函数
 main "$@"
-
