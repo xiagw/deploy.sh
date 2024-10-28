@@ -112,6 +112,11 @@ def main():
     oss_set_lifecycle_parser.add_argument('--rules', required=True, help='生命周期规则 JSON 字符串')
     oss_get_info_parser = oss_subparsers.add_parser('info', help='获取 OSS 存储桶信息')
     oss_get_info_parser.add_argument('--bucket-name', required=True, help='存储桶名称')
+    oss_migrate_parser = oss_subparsers.add_parser('migrate', help='迁移 OSS 存储桶中的多媒体文件')
+    oss_migrate_parser.add_argument('--source-bucket', required=True, help='源存储桶名称')
+    oss_migrate_parser.add_argument('--dest-bucket', required=True, help='目标存储桶名称')
+    oss_migrate_parser.add_argument('--batch-size', type=int, default=100, help='每批处理的文件数量')
+    oss_migrate_parser.add_argument('--max-workers', type=int, default=5, help='最大并发工作线程数')
 
     # CDN 子命令
     cdn_parser = subparsers.add_parser('cdn', help='CDN 相关操作')
@@ -273,6 +278,13 @@ def main():
             oss_manager.set_bucket_lifecycle(args.bucket_name, rules)
         elif args.action == 'info':
             oss_manager.get_bucket_info(args.bucket_name)
+        elif args.action == 'migrate':
+            oss_manager.migrate_multimedia_files(
+                args.source_bucket,
+                args.dest_bucket,
+                batch_size=args.batch_size,
+                max_workers=args.max_workers
+            )
     elif args.service == 'cdn':
         if args.action == 'create':
             cdn_manager.create_domain(args.domain, args.origin)

@@ -6,16 +6,30 @@ import re
 from datetime import datetime
 
 def setup_logging(profile, region):
-    logging.basicConfig(filename=get_log_file_path(profile, region), level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s',
-                        encoding='utf-8')
+    """设置日志记录"""
+    log_file = get_log_file_path(profile, region)
+    log_dir = os.path.dirname(log_file)
+
+    # 确保日志目录存在
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        encoding='utf-8'
+    )
 
 def log_and_print(message, profile=None, region=None):
+    """记录日志并打印消息"""
     print(message)
     logging.info(message)
-    log_file = get_log_file_path(profile, region) if profile and region else 'aliyun_operations.log'
-    with open(log_file, 'a', encoding='utf-8') as f:
-        f.write(f"{datetime.now().isoformat()} - INFO - {message}\n")
+
+    if profile and region:
+        log_file = get_log_file_path(profile, region)
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"{datetime.now().isoformat()} - INFO - {message}\n")
 
 def read_ids(profile=None, region=None):
     if profile and region:
@@ -90,16 +104,20 @@ def remove_oss_prefix(region):
     return region.replace('oss-', '')
 
 def get_data_dir():
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    """获取数据目录路径"""
+    # 获取当前脚本所在目录的父目录的父目录（即 deploy.sh）
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     data_dir = os.path.join(base_dir, 'data')
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
     return data_dir
 
 def get_ids_file_path(profile, region):
+    """获取 ids.json 文件路径"""
     return os.path.join(get_data_dir(), f'{profile}_{region}_ids.json')
 
 def get_log_file_path(profile, region):
+    """获取日志文件路径"""
     return os.path.join(get_data_dir(), f'{profile}_{region}_operations.log')
 
 def confirm_action(message):
