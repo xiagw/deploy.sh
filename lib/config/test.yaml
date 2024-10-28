@@ -1,0 +1,8 @@
+# config/test.yaml
+test_mode: true
+mock_data:
+  source_bucket:
+    - name: test1.mp4
+      size: 1000
+    - name: test2.jpg
+      size: 500
