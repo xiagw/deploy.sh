@@ -232,9 +232,17 @@ class OSSManager:
                                            '.wmv', '.mov', '.mkv', '.mpg', '.mpeg', '.m4v', '.3gp', '.3g2',
                                            '.asf', '.asx', '.wma', '.wmv', '.m3u8', '.ts', '.m4a', '.m4b',
                                            '.m4p', '.m4r', '.m4v'),
-                               batch_size=100, max_workers=5):
+                               batch_size=100, max_workers=5, delete_source=False):
         """
-        优化的流式同步处理方式迁移低频存储类型的多媒体文件
+        优化的流式同步处理方式迁移低频存储类型的多媒体文件，并可选择删除源文件
+
+        Args:
+            source_bucket_name: 源存储桶名称
+            dest_bucket_name: 目标存储桶名称
+            file_types: 要迁移的文件类型
+            batch_size: 每批处理的文件数量
+            max_workers: 最大并发工作线程数
+            delete_source: 是否在成功迁移后删除源文件
         """
         try:
             source_bucket = oss2.Bucket(self.auth, self.endpoint, source_bucket_name)
@@ -351,7 +359,27 @@ class OSSManager:
                                 obj.key,
                                 headers=object_headers
                             )
-                            success_count += 1
+
+                            # 验证复制是否成功
+                            try:
+                                dest_obj = dest_bucket.head_object(obj.key)
+                                dest_etag = dest_obj.headers.get('etag', '').strip('"')
+
+                                if dest_etag == source_etag:
+                                    success_count += 1
+
+                                    # 如果启用了删除源文件选项，则删除源文件
+                                    if delete_source:
+                                        try:
+                                            source_bucket.delete_object(obj.key)
+                                            log_and_print(f"已删除源文件: {obj.key}", self.profile, self.region)
+                                        except Exception as e:
+                                            log_and_print(f"删除源文件 {obj.key} 失败: {str(e)}", self.profile, self.region)
+                                else:
+                                    log_and_print(f"文件 {obj.key} ETag 不匹配，迁移可能不完整", self.profile, self.region)
+
+                            except Exception as e:
+                                log_and_print(f"验证目标文件 {obj.key} 失败: {str(e)}", self.profile, self.region)
 
                         except Exception as e:
                             log_and_print(f"迁移文件 {obj.key} 失败: {str(e)}", self.profile, self.region)
@@ -380,8 +408,11 @@ class OSSManager:
             producer_thread.join()
             print()  # 换行
 
-            log_and_print(f"同步完成: 成功迁移 {success_count}/{processed_count} 个文件，跳过 {skipped_count} 个已存在的文件",
-                         self.profile, self.region)
+            log_and_print(
+                f"同步完成: 成功迁移 {success_count}/{processed_count} 个文件，跳过 {skipped_count} 个已存在的文件" +
+                (f"，并删除了源文件" if delete_source else ""),
+                self.profile, self.region
+            )
 
             return success_count > 0
 
