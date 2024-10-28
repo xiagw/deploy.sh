@@ -9,6 +9,7 @@ import concurrent.futures
 from tqdm import tqdm
 import queue
 import threading
+import logging
 
 class OSSManager:
     def __init__(self, access_key_id, access_key_secret, region, profile='default'):
@@ -249,9 +250,18 @@ class OSSManager:
             source_bucket = oss2.Bucket(self.auth, self.endpoint, source_bucket_name)
             dest_bucket = oss2.Bucket(self.auth, self.endpoint, dest_bucket_name)
 
-            log_and_print(f"开始同步 {source_bucket_name} 中的低频存储多媒体文件...", self.profile, self.region)
+            # 修改日志输出，使其更加清晰
+            start_message = (
+                f"开始同步多媒体文件\n"
+                f"源存储桶: {source_bucket_name}\n"
+                f"目标存储桶: {dest_bucket_name}"
+            )
             if prefix:
-                log_and_print(f"从子目录 {prefix} 开始迁移", self.profile, self.region)
+                start_message += f"\n子目录: {prefix}"
+
+            # 使用 logging.info 而不是 log_and_print 来避免重复
+            logging.info(start_message)
+            print(start_message)
 
             # 使用队列来存储待处理的文件
             file_queue = queue.Queue(maxsize=batch_size * 2)
@@ -424,16 +434,25 @@ class OSSManager:
             producer_thread.join()
             print()  # 换行
 
-            log_and_print(
-                f"同步完成: 成功迁移 {success_count}/{processed_count} 个文件，跳过 {skipped_count} 个已存在的文件" +
-                (f"，并删除了源文件" if delete_source else ""),
-                self.profile, self.region
+            # 修改结束日志输出
+            end_message = (
+                f"同步完成:\n"
+                f"源存储桶: {source_bucket_name}\n"
+                f"目标存储桶: {dest_bucket_name}\n"
+                f"成功迁移: {success_count}/{processed_count} 个文件\n"
+                f"跳过已存在: {skipped_count} 个文件"
+                + (f"\n已删除源文件" if delete_source else "")
             )
+
+            logging.info(end_message)
+            print(end_message)
 
             return success_count > 0
 
         except Exception as e:
-            log_and_print(f"同步过程中发生错误: {str(e)}", self.profile, self.region)
+            error_message = f"同步过程中发生错误: {str(e)}"
+            logging.error(error_message)
+            print(error_message)
             return False
 
 
