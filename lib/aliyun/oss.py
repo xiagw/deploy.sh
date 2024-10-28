@@ -324,18 +324,17 @@ class OSSManager:
                                 headers = source_bucket.head_object(obj.key)
                                 storage_class = headers.headers.get('x-oss-storage-class', 'Standard')
 
-                                # 记录检查过程到日志
-                                logging.info(f"检查文件: {obj.key} (存储类型: {storage_class})")
+                                # 使用更简洁的日志格式
+                                logging.info(f"检查文件: {obj.key} -> {storage_class}" +
+                                           (" [符合条件]" if storage_class == 'IA' else " [跳过]"))
 
                                 # 只处理低频存储类型的文件
                                 if storage_class == 'IA':
                                     source_headers[obj.key] = headers
                                     filtered_files.append(obj)
-                                    logging.info(f"文件符合迁移条件: {obj.key}")
-                                else:
-                                    logging.info(f"跳过非低频存储文件: {obj.key}")
+
                         except Exception as e:
-                            logging.error(f"获取源文件 {obj.key} 元数据时发生错误: {str(e)}")
+                            logging.error(f"获取源文件元数据失败: {obj.key} -> {str(e)}")
 
                     # 只有在有符合条件的文件时才检查目标文件
                     if filtered_files:
@@ -344,11 +343,11 @@ class OSSManager:
                         for obj in filtered_files:
                             try:
                                 dest_headers[obj.key] = dest_bucket.head_object(obj.key)
-                                logging.info(f"目标存储桶中已存在文件: {obj.key}")
+                                logging.info(f"目标检查: {obj.key} [已存在]")
                             except oss2.exceptions.NoSuchKey:
-                                logging.info(f"目标存储桶中不存在文件: {obj.key}")
+                                logging.info(f"目标检查: {obj.key} [需要迁移]")
                             except Exception as e:
-                                logging.error(f"检查目标文件 {obj.key} 时发生错误: {str(e)}")
+                                logging.error(f"目标检查失败: {obj.key} -> {str(e)}")
 
                         # 处理每个符合条件的文件
                         for obj in filtered_files:
@@ -362,18 +361,18 @@ class OSSManager:
 
                                     if source_etag == dest_etag and source_headers[obj.key].headers.get('x-oss-storage-class') == dest_storage_class:
                                         skipped_count += 1
-                                        logging.info(f"文件已存在且内容相同，跳过: {obj.key}")
+                                        logging.info(f"处理结果: {obj.key} [跳过: 内容相同]")
                                         continue
 
                                 # 需要迁移的文件放入队列
                                 file_queue.put((obj, source_headers[obj.key].headers.get('x-oss-storage-class'), source_etag))
-                                logging.info(f"将文件加入迁移队列: {obj.key}")
+                                logging.info(f"处理结果: {obj.key} [加入迁移队列]")
 
                             except Exception as e:
-                                logging.error(f"处理文件 {obj.key} 时发生错误: {str(e)}")
+                                logging.error(f"处理失败: {obj.key} -> {str(e)}")
 
                 except Exception as e:
-                    logging.error(f"批量处理文件时发生错误: {str(e)}")
+                    logging.error(f"批量处理失败: {str(e)}")
 
             def consumer():
                 nonlocal processed_count, success_count
@@ -383,7 +382,9 @@ class OSSManager:
                         obj, storage_class, source_etag = obj_info
 
                         try:
-                            logging.info(f"开始迁移文件: {obj.key}")
+                            # 合并迁移相关的日志
+                            logging.info(f"迁移文件: {obj.key} [开始]")
+
                             # 准备目标文件的headers
                             object_headers = {
                                 'x-oss-storage-class': storage_class,
@@ -405,23 +406,25 @@ class OSSManager:
 
                                 if dest_etag == source_etag:
                                     success_count += 1
-                                    logging.info(f"文件迁移成功: {obj.key}")
+                                    status = "成功"
 
                                     # 如果启用了删除源文件选项，则删除源文件
                                     if delete_source:
                                         try:
                                             source_bucket.delete_object(obj.key)
-                                            logging.info(f"已删除源文件: {obj.key}")
+                                            status += " + 源文件已删除"
                                         except Exception as e:
-                                            logging.error(f"删除源文件 {obj.key} 失败: {str(e)}")
+                                            status += f" + 源文件删除失败: {str(e)}"
+
+                                    logging.info(f"迁移完成: {obj.key} [{status}]")
                                 else:
-                                    logging.error(f"文件 {obj.key} ETag 不匹配，迁移可能不完整")
+                                    logging.error(f"迁移验证: {obj.key} [ETag不匹配]")
 
                             except Exception as e:
-                                logging.error(f"验证目标文件 {obj.key} 失败: {str(e)}")
+                                logging.error(f"迁移验证失败: {obj.key} -> {str(e)}")
 
                         except Exception as e:
-                            logging.error(f"迁移文件 {obj.key} 失败: {str(e)}")
+                            logging.error(f"迁移失败: {obj.key} -> {str(e)}")
 
                         processed_count += 1
 
@@ -434,7 +437,7 @@ class OSSManager:
                     except queue.Empty:
                         continue
                     except Exception as e:
-                        logging.error(f"处理文件时发生错误: {str(e)}")
+                        logging.error(f"处理异常: {str(e)}")
 
             # 启动生产者线程
             producer_thread = threading.Thread(target=producer)
