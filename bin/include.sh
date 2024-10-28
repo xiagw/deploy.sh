@@ -500,7 +500,7 @@ _install_cron() {
     $use_sudo apt-get install -yqq cron >/dev/null
 }
 
-_notify_weixin_work() {
+_notify_wecom() {
     local wechat_key="$1"
     local wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wechat_key}"
     curl -fsSL -X POST -H 'Content-Type: application/json' \
