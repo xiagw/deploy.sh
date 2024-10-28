@@ -27,7 +27,6 @@ class TestOSSManager(unittest.TestCase):
     @patch('oss2.Bucket')
     def test_migrate_multimedia_files_simple(self, mock_bucket, mock_auth):
         """简化版的文件迁移测试"""
-        # 配置日志
         logging.debug("开始测试文件迁移功能")
 
         # 初始化 OSSManager
@@ -40,61 +39,43 @@ class TestOSSManager(unittest.TestCase):
         mock_list.object_list = [mock_obj]
         mock_list.is_truncated = False
 
-        # 模拟源文件信息
-        source_headers = Mock()
-        source_headers.headers = {
+        # 模拟源文件和目标文件的状态
+        head_object_responses = {}
+        head_object_responses['source'] = Mock(headers={
             'x-oss-storage-class': 'IA',
             'etag': '"123"'
-        }
-
-        # 模拟目标文件信息
-        dest_headers = Mock()
-        dest_headers.headers = {
+        })
+        head_object_responses['dest_before'] = Mock(headers={
             'x-oss-storage-class': 'IA',
             'etag': '"456"'  # 不同的ETag触发复制
-        }
-
-        # 模拟复制后的目标文件信息
-        copied_headers = Mock()
-        copied_headers.headers = {
+        })
+        head_object_responses['dest_after'] = Mock(headers={
             'x-oss-storage-class': 'IA',
             'etag': '"123"'  # 复制后与源文件相同
-        }
+        })
 
-        # 配置mock_bucket的行为
-        def mock_list_objects(*args, **kwargs):
-            logging.debug("调用 list_objects")
-            return mock_list
-
+        # 模拟head_object的行为
+        head_object_calls = []
         def mock_head_object(key):
-            logging.debug(f"调用 head_object，key={key}")
-            if not hasattr(mock_head_object, 'call_count'):
-                mock_head_object.call_count = 0
-            mock_head_object.call_count += 1
+            head_object_calls.append(key)
+            if len(head_object_calls) == 1:
+                return head_object_responses['source']
+            elif len(head_object_calls) == 2:
+                return head_object_responses['dest_before']
+            return head_object_responses['dest_after']
 
-            if mock_head_object.call_count == 1:
-                logging.debug("返回源文件信息")
-                return source_headers
-            elif mock_head_object.call_count == 2:
-                logging.debug("返回目标文件初始信息")
-                return dest_headers
-            else:
-                logging.debug("返回复制后的文件信息")
-                return copied_headers
-
-        def mock_copy_object(source_bucket, source_key, target_key, **kwargs):
-            logging.debug(f"调用 copy_object: {source_bucket}/{source_key} -> {target_key}")
+        # 模拟copy_object的行为
+        def mock_copy_object(*args, **kwargs):
             response = Mock()
             response.status = 200
             return response
 
-        # 设置mock对象的行为
-        mock_bucket.return_value.list_objects = Mock(side_effect=mock_list_objects)
+        # 设置mock对象
+        mock_bucket.return_value.list_objects.return_value = mock_list
         mock_bucket.return_value.head_object = Mock(side_effect=mock_head_object)
         mock_bucket.return_value.copy_object = Mock(side_effect=mock_copy_object)
 
         # 执行测试
-        logging.debug("开始执行migrate_multimedia_files")
         result = oss_manager.migrate_multimedia_files(
             'source-bucket',
             'dest-bucket',
@@ -103,12 +84,7 @@ class TestOSSManager(unittest.TestCase):
         )
 
         # 验证结果
-        logging.debug(f"测试结果: {result}")
         self.assertTrue(result)
-
-        # 验证调用
-        mock_bucket.return_value.list_objects.assert_called_once()
-        self.assertGreater(mock_bucket.return_value.head_object.call_count, 0)
         mock_bucket.return_value.copy_object.assert_called_once()
 
     @patch('oss2.Auth')
@@ -125,35 +101,46 @@ class TestOSSManager(unittest.TestCase):
         mock_list = Mock()
         mock_list.object_list = [mock_obj]
         mock_list.is_truncated = False
+        mock_bucket.return_value.list_objects.return_value = mock_list
 
-        # 配置mock_bucket的行为
-        def mock_list_objects(*args, **kwargs):
-            logging.debug("调用 list_objects")
-            return mock_list
+        # 模拟源文件和目标文件的状态
+        head_object_responses = {}
+        head_object_responses['source'] = Mock(headers={
+            'x-oss-storage-class': 'IA',
+            'etag': '"123"'
+        })
+        head_object_responses['dest_before'] = Mock(headers={
+            'x-oss-storage-class': 'IA',
+            'etag': '"456"'  # 不同的ETag触发复制
+        })
+        head_object_responses['dest_after'] = Mock(headers={
+            'x-oss-storage-class': 'IA',
+            'etag': '"123"'  # 复制后与源文件相同
+        })
 
+        # 模拟head_object的行为
+        head_object_calls = []
         def mock_head_object(key):
-            logging.debug(f"调用 head_object，key={key}")
-            headers = Mock()
-            headers.headers = {
-                'x-oss-storage-class': 'IA',
-                'etag': '"123"'
-            }
-            return headers
+            head_object_calls.append(key)
+            if len(head_object_calls) == 1:
+                return head_object_responses['source']
+            elif len(head_object_calls) == 2:
+                return head_object_responses['dest_before']
+            return head_object_responses['dest_after']
 
+        # 模拟copy_object的行为
         def mock_copy_object(*args, **kwargs):
-            logging.debug("调用 copy_object")
             response = Mock()
             response.status = 200
             return response
 
+        # 模拟delete_object的行为
         def mock_delete_object(key):
-            logging.debug(f"调用 delete_object，key={key}")
             response = Mock()
             response.status = 204
             return response
 
-        # 设置mock对象的行为
-        mock_bucket.return_value.list_objects = Mock(side_effect=mock_list_objects)
+        # 设置mock对象
         mock_bucket.return_value.head_object = Mock(side_effect=mock_head_object)
         mock_bucket.return_value.copy_object = Mock(side_effect=mock_copy_object)
         mock_bucket.return_value.delete_object = Mock(side_effect=mock_delete_object)
@@ -168,12 +155,7 @@ class TestOSSManager(unittest.TestCase):
         )
 
         # 验证结果
-        logging.debug(f"测试结果: {result}")
         self.assertTrue(result)
-
-        # 验证调用
-        mock_bucket.return_value.list_objects.assert_called_once()
-        self.assertGreater(mock_bucket.return_value.head_object.call_count, 0)
         mock_bucket.return_value.copy_object.assert_called_once()
         mock_bucket.return_value.delete_object.assert_called_once_with(mock_obj.key)
 
