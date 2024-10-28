@@ -1,7 +1,13 @@
 import oss2
 import re
 from datetime import datetime
-from .utils import log_and_print, save_ids, read_ids, get_ids_file_path
+from .utils import (
+    log_and_print,
+    save_ids,
+    read_ids,
+    get_ids_file_path,
+    get_data_dir  # 添加这个导入
+)
 from .config import Config
 import json
 import os
@@ -10,6 +16,7 @@ from tqdm import tqdm
 import queue
 import threading
 import logging
+import time
 
 class OSSManager:
     def __init__(self, access_key_id, access_key_secret, region, profile='default'):
@@ -247,6 +254,44 @@ class OSSManager:
             prefix: 指定从哪个子目录开始迁移，默认为空字符串（根目录）
         """
         try:
+            # 获取断点续传状态文件路径
+            checkpoint_file = os.path.join(
+                get_data_dir(),
+                f'migrate_{source_bucket_name}_to_{dest_bucket_name}_{self.profile}_{self.region}.json'
+            )
+
+            # 读取断点续传状态
+            checkpoint = {}
+            if os.path.exists(checkpoint_file):
+                try:
+                    with open(checkpoint_file, 'r', encoding='utf-8') as f:
+                        checkpoint = json.load(f)
+                        if checkpoint.get('prefix') != prefix:  # 如果前缀变化，重置断点
+                            checkpoint = {}
+                except Exception as e:
+                    logging.error(f"读取断点文件失败: {str(e)}")
+                    checkpoint = {}
+
+            # 获取上次的marker和统计数据
+            marker = checkpoint.get('marker', '')
+            processed_count = checkpoint.get('processed_count', 0)
+            success_count = checkpoint.get('success_count', 0)
+            skipped_count = checkpoint.get('skipped_count', 0)
+            total_files = checkpoint.get('total_files', 0)
+            last_update_time = checkpoint.get('last_update_time', '')
+
+            if marker:
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                resume_message = (
+                    f"[{current_time}] 从断点继续迁移\n"
+                    f"上次更新时间: {last_update_time}\n"
+                    f"已处理: {processed_count} 个文件\n"
+                    f"已成功: {success_count} 个文件\n"
+                    f"已跳过: {skipped_count} 个文件"
+                )
+                logging.info(resume_message)
+                print(resume_message)
+
             # 记录开始时间
             start_time = datetime.now()
 
@@ -269,42 +314,54 @@ class OSSManager:
             file_queue = queue.Queue(maxsize=batch_size * 2)
             producer_done = threading.Event()
 
-            # 计数器
-            processed_count = 0
-            success_count = 0
-            skipped_count = 0
-            total_files = 0  # 添加总文件计数器
+            def save_checkpoint():
+                """保存断点续传状态"""
+                try:
+                    checkpoint_data = {
+                        'marker': marker,
+                        'processed_count': processed_count,
+                        'success_count': success_count,
+                        'skipped_count': skipped_count,
+                        'total_files': total_files,
+                        'prefix': prefix,
+                        'last_update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    with open(checkpoint_file, 'w', encoding='utf-8') as f:
+                        json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
+                    logging.debug(f"断点状态已保存: {checkpoint_file}")
+                except Exception as e:
+                    logging.error(f"保存断点状态失败: {str(e)}")
 
             def producer():
-                nonlocal skipped_count, total_files
-                marker = ''
-                file_batch = []  # 用于批量检查的文件列表
+                nonlocal marker, skipped_count, total_files
+                file_batch = []
 
                 try:
                     while True:
-                        # 修改这里，增加 prefix 参数
                         objects = source_bucket.list_objects(prefix=prefix, marker=marker, max_keys=1000)
 
-                        # 批量收集需要检查的文件
                         for obj in objects.object_list:
                             if obj.key.lower().endswith(file_types):
                                 file_batch.append(obj)
                                 total_files += 1
 
-                                # 当批次达到指定大小时进行处理
                                 if len(file_batch) >= batch_size:
                                     process_file_batch(file_batch)
                                     file_batch = []
+                                    # 更新marker并保存断点
+                                    marker = obj.key
+                                    save_checkpoint()
 
                         if not objects.is_truncated:
-                            # 处理最后一批文件
                             if file_batch:
                                 process_file_batch(file_batch)
                             break
                         marker = objects.next_marker
+                        save_checkpoint()  # 每次更新marker时保存断点
 
                 except Exception as e:
-                    log_and_print(f"扫描文件时发生错误: {str(e)}", self.profile, self.region)
+                    logging.error(f"扫描文件时发生错误: {str(e)}")
+                    save_checkpoint()  # 发生错误时也保存断点
                 finally:
                     producer_done.set()
 
@@ -376,6 +433,8 @@ class OSSManager:
 
             def consumer():
                 nonlocal processed_count, success_count
+                last_checkpoint_time = time.time()
+
                 while not (producer_done.is_set() and file_queue.empty()):
                     try:
                         obj_info = file_queue.get(timeout=1)
@@ -428,6 +487,12 @@ class OSSManager:
 
                         processed_count += 1
 
+                        # 每隔一定时间（比如60秒）保存一次断点
+                        current_time = time.time()
+                        if current_time - last_checkpoint_time >= 60:
+                            save_checkpoint()
+                            last_checkpoint_time = current_time
+
                         # 显示进度（只在前台显示进度条和计数）
                         if total_files > 0:
                             progress = (processed_count + skipped_count) / total_files * 100
@@ -438,6 +503,7 @@ class OSSManager:
                         continue
                     except Exception as e:
                         logging.error(f"处理异常: {str(e)}")
+                        save_checkpoint()  # 发生错误时保存断点
 
             # 启动生产者线程
             producer_thread = threading.Thread(target=producer)
@@ -479,9 +545,18 @@ class OSSManager:
             logging.info(end_message)
             print(end_message)
 
+            # 迁移完成后删除断点文件
+            if os.path.exists(checkpoint_file):
+                try:
+                    os.remove(checkpoint_file)
+                    logging.info("迁移完成，已删除断点文件")
+                except Exception as e:
+                    logging.error(f"删除断点文件失败: {str(e)}")
+
             return success_count > 0
 
         except Exception as e:
+            save_checkpoint()  # 发生异常时保存断点
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             error_message = f"[{current_time}] 同步过程中发生错误: {str(e)}"
             logging.error(error_message)
