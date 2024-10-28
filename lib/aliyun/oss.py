@@ -15,7 +15,7 @@ class OSSManager:
         self.auth = oss2.Auth(access_key_id, access_key_secret)
         self.region = region
         self.profile = profile
-        self.endpoint = f'http://oss-{region}.aliyuncs.com'
+        self.endpoint = f'http://oss-{region}-internal.aliyuncs.com'
 
     def create_bucket(self, bucket_name):
         # 验证存储桶名称
