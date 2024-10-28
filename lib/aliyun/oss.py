@@ -247,19 +247,21 @@ class OSSManager:
             prefix: 指定从哪个子目录开始迁移，默认为空字符串（根目录）
         """
         try:
+            # 记录开始时间
+            start_time = datetime.now()
+
             source_bucket = oss2.Bucket(self.auth, self.endpoint, source_bucket_name)
             dest_bucket = oss2.Bucket(self.auth, self.endpoint, dest_bucket_name)
 
-            # 修改日志输出，使其更加清晰
+            current_time = start_time.strftime('%Y-%m-%d %H:%M:%S')
             start_message = (
-                f"开始同步多媒体文件\n"
+                f"[{current_time}] 开始同步多媒体文件\n"
                 f"源存储桶: {source_bucket_name}\n"
                 f"目标存储桶: {dest_bucket_name}"
             )
             if prefix:
                 start_message += f"\n子目录: {prefix}"
 
-            # 使用 logging.info 而不是 log_and_print 来避免重复
             logging.info(start_message)
             print(start_message)
 
@@ -434,13 +436,28 @@ class OSSManager:
             producer_thread.join()
             print()  # 换行
 
-            # 修改结束日志输出
+            # 计算耗时
+            end_time = datetime.now()
+            duration = end_time - start_time
+            hours, remainder = divmod(duration.total_seconds(), 3600)
+            minutes, seconds = divmod(remainder, 60)
+
+            # 格式化耗时字符串
+            duration_str = []
+            if hours > 0:
+                duration_str.append(f"{int(hours)}小时")
+            if minutes > 0:
+                duration_str.append(f"{int(minutes)}分钟")
+            duration_str.append(f"{int(seconds)}秒")
+
+            current_time = end_time.strftime('%Y-%m-%d %H:%M:%S')
             end_message = (
-                f"同步完成:\n"
+                f"[{current_time}] 同步完成:\n"
                 f"源存储桶: {source_bucket_name}\n"
                 f"目标存储桶: {dest_bucket_name}\n"
                 f"成功迁移: {success_count}/{processed_count} 个文件\n"
-                f"跳过已存在: {skipped_count} 个文件"
+                f"跳过已存在: {skipped_count} 个文件\n"
+                f"总耗时: {' '.join(duration_str)}"
                 + (f"\n已删除源文件" if delete_source else "")
             )
 
@@ -450,9 +467,8 @@ class OSSManager:
             return success_count > 0
 
         except Exception as e:
-            error_message = f"同步过程中发生错误: {str(e)}"
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            error_message = f"[{current_time}] 同步过程中发生错误: {str(e)}"
             logging.error(error_message)
             print(error_message)
             return False
-
-
