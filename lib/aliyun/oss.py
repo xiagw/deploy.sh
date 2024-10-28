@@ -232,7 +232,7 @@ class OSSManager:
                                            '.wmv', '.mov', '.mkv', '.mpg', '.mpeg', '.m4v', '.3gp', '.3g2',
                                            '.asf', '.asx', '.wma', '.wmv', '.m3u8', '.ts', '.m4a', '.m4b',
                                            '.m4p', '.m4r', '.m4v'),
-                               batch_size=100, max_workers=5, delete_source=False):
+                               batch_size=100, max_workers=5, delete_source=False, prefix=''):
         """
         优化的流式同步处理方式迁移低频存储类型的多媒体文件，并可选择删除源文件
 
@@ -243,12 +243,15 @@ class OSSManager:
             batch_size: 每批处理的文件数量
             max_workers: 最大并发工作线程数
             delete_source: 是否在成功迁移后删除源文件
+            prefix: 指定从哪个子目录开始迁移，默认为空字符串（根目录）
         """
         try:
             source_bucket = oss2.Bucket(self.auth, self.endpoint, source_bucket_name)
             dest_bucket = oss2.Bucket(self.auth, self.endpoint, dest_bucket_name)
 
             log_and_print(f"开始同步 {source_bucket_name} 中的低频存储多媒体文件...", self.profile, self.region)
+            if prefix:
+                log_and_print(f"从子目录 {prefix} 开始迁移", self.profile, self.region)
 
             # 使用队列来存储待处理的文件
             file_queue = queue.Queue(maxsize=batch_size * 2)
@@ -267,7 +270,8 @@ class OSSManager:
 
                 try:
                     while True:
-                        objects = source_bucket.list_objects(marker=marker, max_keys=1000)
+                        # 修改这里，增加 prefix 参数
+                        objects = source_bucket.list_objects(prefix=prefix, marker=marker, max_keys=1000)
 
                         # 批量收集需要检查的文件
                         for obj in objects.object_list:
@@ -419,3 +423,4 @@ class OSSManager:
         except Exception as e:
             log_and_print(f"同步过程中发生错误: {str(e)}", self.profile, self.region)
             return False
+
