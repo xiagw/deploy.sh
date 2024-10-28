@@ -430,7 +430,9 @@ class OSSManager:
 
                 while not (producer_done.is_set() and file_queue.empty()):
                     try:
-                        obj = file_queue.get(timeout=1)
+                        # 修复这里：正确解包从队列获取的对象
+                        obj_info = file_queue.get(timeout=1)
+                        obj, storage_class, source_etag = obj_info  # 正确解包三个值
 
                         try:
                             # 执行复制
@@ -439,7 +441,7 @@ class OSSManager:
                                 obj.key,
                                 obj.key,
                                 headers={
-                                    'x-oss-storage-class': storage_class,
+                                    'x-oss-storage-class': storage_class,  # 使用从队列获取的 storage_class
                                     'x-oss-metadata-directive': 'COPY',
                                 }
                             )
@@ -450,7 +452,7 @@ class OSSManager:
                                 dest_etag = dest_obj.headers.get('etag', '').strip('"')
 
                                 status = []
-                                if dest_etag == source_etag:
+                                if dest_etag == source_etag:  # 使用从队列获取的 source_etag
                                     success_count += 1
                                     status.append("迁移成功")
 
@@ -519,6 +521,7 @@ class OSSManager:
 
             current_time = end_time.strftime('%Y-%m-%d %H:%M:%S')
             end_message = (
+                "\n"
                 f"[{current_time}] 同步完成:\n"
                 f"源存储桶: {source_bucket_name}\n"
                 f"目标存储桶: {dest_bucket_name}\n"
