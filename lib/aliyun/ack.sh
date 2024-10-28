@@ -15,6 +15,7 @@ show_ack_help() {
     echo "  node-add <集群ID> [数量]                - 添加集群节点"
     echo "  node-remove <集群ID> <节点ID>           - 移除集群节点"
     echo "  kubeconfig <集群ID>                     - 获取集群的 kubeconfig"
+    echo "  auto-scale <deployment> [namespace]      - 自动扩缩容指定部署"
     echo
     echo "示例："
     echo "  $0 ack list"
@@ -28,6 +29,7 @@ show_ack_help() {
     echo "  $0 ack node-add c-xxx 2"
     echo "  $0 ack node-remove c-xxx i-xxx"
     echo "  $0 ack kubeconfig c-xxx"
+    echo "  $0 ack auto-scale my-deployment default  # 自动扩缩容指定部署"
 }
 
 handle_ack_commands() {
@@ -44,6 +46,7 @@ handle_ack_commands() {
     node-add) ack_node_add "$@" ;;
     node-remove) ack_node_remove "$@" ;;
     kubeconfig) ack_get_kubeconfig "$@" ;;
+    auto-scale) ack_auto_scale "$@" ;;
     *)
         echo "错误：未知的 ACK 操作：$operation" >&2
         show_ack_help
@@ -431,4 +434,95 @@ ack_get_kubeconfig() {
         echo "$result"
     fi
     log_result "${profile:-}" "$region" "ack" "kubeconfig" "$result"
+}
+
+ack_auto_scale() {
+    local deployment=$1
+    local namespace=${2:-main}
+    local lock_file="/tmp/lock.scale.$deployment"
+
+    if [ -z "$deployment" ]; then
+        echo "错误：部署名称不能为空。" >&2
+        return 1
+    fi
+
+    # 定义常量
+    local CPU_WARN_FACTOR=1000  # CPU 警告阈值因子
+    local MEM_WARN_FACTOR=1200  # 内存警告阈值因子
+    local CPU_NORMAL_FACTOR=500 # CPU 正常阈值因子
+    local MEM_NORMAL_FACTOR=500 # 内存正常阈值因子
+    local SCALE_CHANGE=2        # 每次扩缩容的节点数量
+    local COOLDOWN_MINUTES=4    # 冷却时间（分钟）
+
+    # 获取节点和 Pod 信息
+    local node_names
+    readarray -t node_names < <(kubectl get nodes -o name)
+    local node_total=${#node_names[@]}
+    local node_fixed=$((node_total - 1)) # 实际节点数 = 所有节点数 - 虚拟节点 1 个
+
+    local pod_total
+    pod_total=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" | grep -c "$deployment")
+
+    # 检查锁文件
+    if [[ -f $lock_file ]]; then
+        echo "另一个扩缩容进程正在运行..." >&2
+        return 1
+    fi
+
+    # 计算阈值
+    local pod_cpu_warn=$((pod_total * CPU_WARN_FACTOR))
+    local pod_mem_warn=$((pod_total * MEM_WARN_FACTOR))
+    local pod_cpu_normal=$((pod_total * CPU_NORMAL_FACTOR))
+    local pod_mem_normal=$((pod_total * MEM_NORMAL_FACTOR))
+
+    # 获取当前 CPU 和内存使用情况
+    local cpu mem
+    read -r cpu mem < <(kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment" |
+        awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}')
+
+    # 扩缩容函数
+    scale_deployment() {
+        local load_status=$1
+        local action=$2
+        local new_total=$3
+
+        echo "执行${action}操作：当前状态 - $load_status"
+        echo "将部署 $deployment 的副本数调整为 $new_total"
+
+        if kubectl -n "$namespace" scale --replicas="$new_total" deploy "$deployment"; then
+            if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 120s; then
+                touch "$lock_file"
+                local result="成功"
+            else
+                local result="失败"
+            fi
+
+            # 记录操作日志
+            local message="自动扩缩容: 应用 $deployment $load_status, $action $new_total; 结果: $result"
+            echo "$message"
+            log_result "${profile:-}" "$region" "ack" "auto-scale" "$message"
+        else
+            echo "扩缩容操作失败" >&2
+            return 1
+        fi
+    }
+
+    # 检查是否需要扩容
+    if ((cpu > pod_cpu_warn && mem > pod_mem_warn)); then
+        kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
+        scale_deployment "过载" "扩容到" $((pod_total + SCALE_CHANGE))
+        return
+    fi
+
+    # 检查冷却期
+    if [[ -f "$lock_file" && $(stat -c %Y "$lock_file") -gt $(date -d "$COOLDOWN_MINUTES minutes ago" +%s) ]]; then
+        echo "在冷却期内，跳过扩缩容操作"
+        return
+    fi
+
+    # 检查是否需要缩容
+    if ((pod_total > node_fixed && cpu < pod_cpu_normal && mem < pod_mem_normal)); then
+        kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
+        scale_deployment "空闲" "缩容到" $node_fixed
+    fi
 }
