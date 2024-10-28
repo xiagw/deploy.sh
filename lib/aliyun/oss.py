@@ -302,26 +302,38 @@ class OSSManager:
 
                 try:
                     # 批量获取源文件的元数据
-                    source_headers = {
-                        obj.key: source_bucket.head_object(obj.key)
-                        for obj in file_batch
-                    }
+                    source_headers = {}
+                    filtered_files = []  # 用于存储符合条件的文件
 
-                    # 批量获取目标文件的元数据
-                    dest_headers = {}
+                    # 先批量获取源文件的元数据
                     for obj in file_batch:
                         try:
-                            dest_headers[obj.key] = dest_bucket.head_object(obj.key)
-                        except oss2.exceptions.NoSuchKey:
-                            pass
+                            if obj.key.lower().endswith(file_types):
+                                headers = source_bucket.head_object(obj.key)
+                                storage_class = headers.headers.get('x-oss-storage-class', 'Standard')
 
-                    # 处理每个文件
-                    for obj in file_batch:
-                        try:
-                            storage_class = source_headers[obj.key].headers.get('x-oss-storage-class', 'Standard')
+                                # 只处理低频存储类型的文件
+                                if storage_class == 'IA':
+                                    source_headers[obj.key] = headers
+                                    filtered_files.append(obj)
+                        except Exception as e:
+                            log_and_print(f"获取源文件 {obj.key} 元数据时发生错误: {str(e)}", self.profile, self.region)
 
-                            # 只处理低频存储类型的文件
-                            if storage_class == 'IA':
+                    # 只有在有符合条件的文件时才检查目标文件
+                    if filtered_files:
+                        # 批量获取目标文件的元数据
+                        dest_headers = {}
+                        for obj in filtered_files:
+                            try:
+                                dest_headers[obj.key] = dest_bucket.head_object(obj.key)
+                            except oss2.exceptions.NoSuchKey:
+                                pass
+                            except Exception as e:
+                                log_and_print(f"检查目标文件 {obj.key} 时发生错误: {str(e)}", self.profile, self.region)
+
+                        # 处理每个符合条件的文件
+                        for obj in filtered_files:
+                            try:
                                 source_etag = source_headers[obj.key].headers.get('etag', '').strip('"')
 
                                 # 检查文件是否需要迁移
@@ -329,15 +341,15 @@ class OSSManager:
                                     dest_etag = dest_headers[obj.key].headers.get('etag', '').strip('"')
                                     dest_storage_class = dest_headers[obj.key].headers.get('x-oss-storage-class', 'Standard')
 
-                                    if source_etag == dest_etag and storage_class == dest_storage_class:
+                                    if source_etag == dest_etag and source_headers[obj.key].headers.get('x-oss-storage-class') == dest_storage_class:
                                         skipped_count += 1
                                         continue
 
                                 # 需要迁移的文件放入队列
-                                file_queue.put((obj, storage_class, source_etag))
+                                file_queue.put((obj, source_headers[obj.key].headers.get('x-oss-storage-class'), source_etag))
 
-                        except Exception as e:
-                            log_and_print(f"处理文件 {obj.key} 时发生错误: {str(e)}", self.profile, self.region)
+                            except Exception as e:
+                                log_and_print(f"处理文件 {obj.key} 时发生错误: {str(e)}", self.profile, self.region)
 
                 except Exception as e:
                     log_and_print(f"批量处理文件时发生错误: {str(e)}", self.profile, self.region)
@@ -423,4 +435,5 @@ class OSSManager:
         except Exception as e:
             log_and_print(f"同步过程中发生错误: {str(e)}", self.profile, self.region)
             return False
+
 
