@@ -33,6 +33,10 @@ show_help() {
     echo "  eip      - 弹性公网IP"
     echo "  config   - 配置管理"
     echo "  cost     - 费用查询"
+    echo "  cas      - 证书服务"
+    echo "  ram      - 访问控制"
+    echo "  nas      - 文件存储"
+    echo "  ack      - 容器服务 Kubernetes 版"
     echo
     echo "每个服务的具体操作和参数，请使用 '$0 <服务>' 查看"
     echo
