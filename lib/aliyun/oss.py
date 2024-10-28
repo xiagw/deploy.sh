@@ -52,14 +52,56 @@ class OSSManager:
         bucket = oss2.Bucket(self.auth, self.endpoint, bucket_name)
 
         try:
-            # 首先删除存储桶中的所有对象
-            for obj in oss2.ObjectIterator(bucket):
-                bucket.delete_object(obj.key)
-                log_and_print(f"删除对象: {obj.key}", self.profile, self.region)
+            # 使用较小的批量大小（每批100个对象）
+            batch_size = 100
+            deleted_count = 0
+
+            while True:
+                # 列出存储桶中的对象，每次最多1000个
+                objects = list(oss2.ObjectIterator(bucket, max_keys=1000))
+                if not objects:
+                    break
+
+                # 分批处理对象
+                for i in range(0, len(objects), batch_size):
+                    batch = objects[i:i + batch_size]
+                    keys = [obj.key for obj in batch]
+
+                    try:
+                        # 批量删除对象
+                        bucket.batch_delete_objects(keys)
+                        deleted_count += len(keys)
+                        log_and_print(f"已删除 {len(keys)} 个对象（总计: {deleted_count}）", self.profile, self.region)
+                    except oss2.exceptions.ServerError as e:
+                        # 如果批量删除失败，尝试逐个删除
+                        log_and_print(f"批量删除失败，切换到单个删除模式", self.profile, self.region)
+                        for key in keys:
+                            try:
+                                bucket.delete_object(key)
+                                deleted_count += 1
+                                if deleted_count % 10 == 0:  # 每删除10个对象输出一次日志
+                                    log_and_print(f"已删除 {deleted_count} 个对象", self.profile, self.region)
+                            except Exception as e:
+                                log_and_print(f"删除对象 {key} 失败: {str(e)}", self.profile, self.region)
 
             # 删除存储桶
-            bucket.delete_bucket()
-            log_and_print(f"OSS 存储桶 '{bucket_name}' 删除成功", self.profile, self.region)
+            try:
+                bucket.delete_bucket()
+                log_and_print(f"OSS 存储桶 '{bucket_name}' 删除成功", self.profile, self.region)
+            except oss2.exceptions.BucketNotEmpty:
+                # 如果存储桶不为空，再次尝试列出和删除对象
+                log_and_print(f"存储桶仍不为空，进行最后一次清理", self.profile, self.region)
+                objects = list(oss2.ObjectIterator(bucket))
+                if objects:
+                    for obj in objects:
+                        try:
+                            bucket.delete_object(obj.key)
+                        except Exception as e:
+                            log_and_print(f"删除对象 {obj.key} 失败: {str(e)}", self.profile, self.region)
+                # 再次尝试删除存储桶
+                bucket.delete_bucket()
+                log_and_print(f"OSS 存储桶 '{bucket_name}' 删除成功", self.profile, self.region)
+
         except oss2.exceptions.NoSuchBucket:
             log_and_print(f"警告: OSS 存储桶 '{bucket_name}' 不存在，可能已被删除", self.profile, self.region)
         except Exception as e:
@@ -74,20 +116,14 @@ class OSSManager:
         service = oss2.Service(self.auth, self.endpoint)
 
         log_and_print(f"正在连接到 OSS 服务，endpoint: {self.endpoint}", self.profile, self.region)
-
         all_buckets = []
 
         try:
-            log_and_print("开始列举 OSS 存储桶...", self.profile, self.region)
             bucket_list = list(oss2.BucketIterator(service))
             log_and_print(f"找到 {len(bucket_list)} 个存储桶", self.profile, self.region)
 
             for bucket in bucket_list:
-                # 移除 'oss-' 前缀以获取实际的区域名称
                 bucket_region = bucket.location.replace('oss-', '')
-                log_and_print(f"处理存储桶：名称={bucket.name}, 位置={bucket_region}", self.profile, self.region)
-
-                # 检查存储桶是否在指定区域
                 if bucket_region == self.region:
                     creation_date = datetime.fromtimestamp(bucket.creation_date).isoformat()
                     bucket_info = {
@@ -96,17 +132,13 @@ class OSSManager:
                         'creation_date': creation_date
                     }
                     all_buckets.append(bucket_info)
-                    log_and_print(f"添加 OSS 存储桶：名称={bucket.name}, 位置={bucket_region}, 创建日期={creation_date}", self.profile, self.region)
+                    log_and_print(f"存储桶: {bucket.name} (位置: {bucket_region}, 创建时间: {creation_date})",
+                                self.profile, self.region)
 
-                    # 使用 save_ids 函数追加每个存储桶的信息
-                    save_ids(self.profile, self.region, oss_bucket=bucket_info)
-                else:
-                    log_and_print(f"跳过不在指定区域的存储桶：名称={bucket.name}, 位置={bucket_region}", self.profile, self.region)
-
-            if not all_buckets:
-                log_and_print(f"在 {self.region} 区域未找到任何 OSS 存储桶", self.profile, self.region)
+            if all_buckets:
+                save_ids(self.profile, self.region, oss_bucket=all_buckets)
             else:
-                log_and_print(f"已将 {len(all_buckets)} 个 OSS 存储桶信息保存到 ids.json", self.profile, self.region)
+                log_and_print(f"在 {self.region} 区域未找到任何 OSS 存储桶", self.profile, self.region)
 
         except Exception as e:
             log_and_print(f"查询 OSS 存储桶列表时发生错误: {str(e)}", self.profile, self.region)
@@ -333,4 +365,8 @@ class OSSManager:
         except Exception as e:
             log_and_print(f"同步过程中发生错误: {str(e)}", self.profile, self.region)
             return False
+
+
+
+
 

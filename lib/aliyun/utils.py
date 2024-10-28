@@ -43,38 +43,52 @@ def read_ids(profile=None, region=None):
     return {"ecs": [], "dns": [], "oss": [], "slb": []}
 
 def save_ids(profile, region, **kwargs):
+    """保存资源 ID 信息到文件"""
     ids_file = get_ids_file_path(profile, region)
     ids = read_ids(profile, region)
+    updated = False
+
     for key, value in kwargs.items():
         if key not in ids:
             ids[key] = []
+
         if key == 'oss_bucket':
             # 对于 OSS 存储桶，我们需要去重
             new_buckets = []
             existing_names = set(bucket['name'] for bucket in ids[key])
+
             if isinstance(value, list):
                 for bucket in value:
                     if bucket['name'] not in existing_names:
                         new_buckets.append(bucket)
                         existing_names.add(bucket['name'])
+                        updated = True
             else:
                 if value['name'] not in existing_names:
                     new_buckets.append(value)
-            ids[key].extend(new_buckets)
+                    updated = True
+
+            if new_buckets:  # 只有当有新的存储桶时才更新
+                ids[key].extend(new_buckets)
+
         elif 'overwrite' in kwargs and kwargs['overwrite']:
             ids[key] = [value]
+            updated = True
         else:
             # 对于其他类型的资源，检查是否已存在
             if not any(item.get('InstanceId') == value.get('InstanceId') for item in ids[key]):
                 ids[key].append(value)
+                updated = True
 
     # 移除 'overwrite' 键，因为它不是实际的资源信息
     if 'overwrite' in ids:
         del ids['overwrite']
 
-    with open(ids_file, 'w', encoding='utf-8') as f:
-        json.dump(ids, f, indent=2, ensure_ascii=False)
-    log_and_print(f"ID 信息已保存到 {ids_file}")
+    # 只有在有更新时才写入文件和输出日志
+    if updated:
+        with open(ids_file, 'w', encoding='utf-8') as f:
+            json.dump(ids, f, indent=2, ensure_ascii=False)
+        log_and_print(f"ID 信息已保存到 {ids_file}")
 
 def read_latest_log(profile, region, lines=20):
     log_file = get_log_file_path(profile, region)
