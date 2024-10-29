@@ -21,7 +21,7 @@ show_vpc_help() {
     echo "  sg-rule-list <安全组ID> [region]          - 列出安全组规则"
     echo "  sg-rule-add <安全组ID> <协议> <端口范围> <源IP> <描述> [region] - 添加安全组规则"
     echo "  sg-rule-update <安全组规则ID> <协议> <端口范围> <源IP> [region] - 更新安全组规则"
-    echo "  sg-rule-delete <安全组规则ID> [region]    - 删除安全组规则"
+    echo "  sg-rule-delete <规则ID> <安全组ID> [方向]    - 删除安全组规则"
     echo "  ipv6gw-list <VPC-ID> [region]            - 列出 IPv6 网关"
     echo "  ipv6gw-create <VPC-ID> <名称> [规格] [region] - 创建 IPv6 网关"
     echo "  ipv6gw-update <IPv6网关ID> <新名称> [新规格] [region] - 更新 IPv6 网关"
@@ -48,7 +48,7 @@ show_vpc_help() {
     echo "  $0 vpc sg-rule-list sg-bp1fg655nh68xyz****"
     echo "  $0 vpc sg-rule-add sg-bp1fg655nh68xyz**** tcp 22/22 0.0.0.0/0 'Allow SSH'"
     echo "  $0 vpc sg-rule-update sgr-bp18kz9axq4xt5ek**** tcp 80/80 10.0.0.0/8"
-    echo "  $0 vpc sg-rule-delete sgr-bp18kz9axq4xt5ek****"
+    echo "  $0 vpc sg-rule-delete sgr-bp18kz9axq4xt5ek**** sg-bp1fg655nh68xyz**** ingress"
     echo "  $0 vpc ipv6gw-list vpc-bp1qpo0kug3a20qqe****"
     echo "  $0 vpc ipv6gw-create vpc-bp1qpo0kug3a20qqe**** my-ipv6gw Small"
     echo "  $0 vpc ipv6gw-update ipv6gw-bp1g8i5h7yaa******** new-name Medium"
@@ -713,7 +713,19 @@ vpc_sg_rule_update() {
 
 vpc_sg_rule_delete() {
     local rule_id=$1
-    echo "警告：您即将删除安全组规则：$rule_id"
+    local sg_id=$2
+    local direction=${3:-ingress}  # 默认为入方向规则
+
+    if [ -z "$rule_id" ] || [ -z "$sg_id" ]; then
+        echo "错误：安全组规则ID和安全组ID不能为空。" >&2
+        echo "用法：vpc sg-rule-delete <规则ID> <安全组ID> [方向]" >&2
+        return 1
+    fi
+
+    echo "警告：您即将删除安全组规则："
+    echo "规则ID: $rule_id"
+    echo "安全组ID: $sg_id"
+    echo "方向: $direction"
     read -r -p "请输入 'YES' 以确认删除操作: " confirm
 
     if [ "$confirm" != "YES" ]; then
@@ -722,8 +734,20 @@ vpc_sg_rule_delete() {
     fi
 
     echo "删除安全组规则："
+    # aliyun ecs RevokeSecurityGroup --region cn-beijing --RegionId 'cn-beijing' \
+    # --SecurityGroupId 'sg-2zegkxe7j1cgz2nb0bwq' --SecurityGroupRuleId.1 sgr-2zeh4twm100nruazjfnv -p ynvip
     local result
-    result=$(aliyun --profile "${profile:-}" ecs RevokeSecurityGroup --SecurityGroupRuleId "$rule_id" --RegionId "$region")
+    if [ "$direction" = "ingress" ]; then
+        result=$(aliyun --profile "${profile:-}" ecs RevokeSecurityGroup \
+            --RegionId "$region" \
+            --SecurityGroupId "$sg_id" \
+            --SecurityGroupRuleId.1 "$rule_id")
+    else
+        result=$(aliyun --profile "${profile:-}" ecs RevokeSecurityGroupEgress \
+            --RegionId "$region" \
+            --SecurityGroupId "$sg_id" \
+            --SecurityGroupRuleId.1 "$rule_id")
+    fi
     local status=$?
 
     if [ $status -eq 0 ]; then
