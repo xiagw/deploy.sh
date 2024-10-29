@@ -270,7 +270,7 @@ class OSSManager:
 
         try:
             # 记录开始时间
-            start_message = f"开始同步多媒体文件, oss://{source_bucket_name} ==> oss://{dest_bucket_name}"
+            start_message = f"\n开始同步多媒体文件, oss://{source_bucket_name} ==> oss://{dest_bucket_name}"
             if prefix:
                 start_message += f", 子目录: {prefix}"
 
@@ -421,7 +421,7 @@ class OSSManager:
 
                                     # 直接放入队列进行复制，不再检查目标
                                     file_queue.put((obj, storage_class, headers.headers.get('etag', '').strip('"')))
-                                    logging.info(f"文件已加入队列: oss://{source_bucket_name}/{obj.key}")
+                                    # logging.info(f"文件已加入队列: oss://{source_bucket_name}/{obj.key}")
                         except Exception as e:
                             logging.error(f"文件: {obj.key} -> 获取元数据失败: {str(e)}")
 
