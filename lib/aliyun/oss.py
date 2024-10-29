@@ -235,11 +235,27 @@ class OSSManager:
             log_and_print(f"获取存储桶信息失败: {str(e)}")
             return False
 
+    # 常见的压缩包和多媒体文件类型
+    COMMON_FILE_TYPES = (
+        # 压缩文件
+        '.zip', '.tar', '.gz', '.bz2', '.xz', '.tar.gz', '.tar.bz2', '.tar.xz',
+        # 音频文件
+        '.amr', '.mp3', '.wma', '.m4a', '.m4b', '.m4p', '.m4r',
+        # 视频文件
+        '.mp4', '.avi', '.flv', '.wmv', '.mov', '.mkv', '.mpg', '.mpeg',
+        '.m4v', '.3gp', '.3g2', '.asf', '.asx', '.m3u8', '.ts',
+        # 图片文件
+        '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.svg',
+        # 其他多媒体
+        '.swf', '.ttf'
+    )
+
+    def _check_file_type(self, filename, file_types):
+        """检查文件类型，忽略大小写"""
+        return any(filename.lower().endswith(ext.lower()) for ext in file_types)
+
     def migrate_multimedia_files(self, source_bucket_name, dest_bucket_name,
-                               file_types=('.mp4', '.mp3', '.avi', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.flv',
-                                           '.wmv', '.mov', '.mkv', '.mpg', '.mpeg', '.m4v', '.3gp', '.3g2',
-                                           '.asf', '.asx', '.wma', '.wmv', '.m3u8', '.ts', '.m4a', '.m4b',
-                                           '.m4p', '.m4r', '.m4v', '.bmp', '.tiff', '.tif'),
+                               file_types=COMMON_FILE_TYPES,  # 使用类变量作为默认值
                                batch_size=100, max_workers=5, delete_source=False, prefix=''):
         """
         优化的流式同步处理方式迁移低频存储类型的多媒体文件，并可选择删除源文件
@@ -247,7 +263,7 @@ class OSSManager:
         Args:
             source_bucket_name: 源存储桶名称
             dest_bucket_name: 目标存储桶名称
-            file_types: 要迁移的文件类型
+            file_types: 要迁移的文件类型，默认使用 COMMON_FILE_TYPES
             batch_size: 每批处理的文件数量
             max_workers: 最大并发工作线程数
             delete_source: 是否在成功迁移后删除源文件
@@ -336,7 +352,7 @@ class OSSManager:
                         objects = source_bucket.list_objects(prefix=prefix, marker=marker, max_keys=1000)
 
                         for obj in objects.object_list:
-                            if obj.key.lower().endswith(file_types):
+                            if self._check_file_type(obj.key, file_types):
                                 file_batch.append(obj)
                                 total_files += 1
 
@@ -372,7 +388,7 @@ class OSSManager:
                     # 先批量获取源文件的元数据
                     for obj in file_batch:
                         try:
-                            if obj.key.lower().endswith(file_types):
+                            if self._check_file_type(obj.key, file_types):
                                 headers = source_bucket.head_object(obj.key)
                                 storage_class = headers.headers.get('x-oss-storage-class', 'Standard')
 
