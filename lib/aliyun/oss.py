@@ -23,7 +23,7 @@ class OSSManager:
         self.auth = oss2.Auth(access_key_id, access_key_secret)
         self.region = region
         self.profile = profile
-        self.endpoint = f'http://oss-{region}-internal.aliyuncs.com'
+        self.endpoint = f'http://oss-{region}.aliyuncs.com'
 
     def create_bucket(self, bucket_name):
         # 验证存储桶名称
@@ -236,10 +236,10 @@ class OSSManager:
             return False
 
     def migrate_multimedia_files(self, source_bucket_name, dest_bucket_name,
-                               file_types=('.mp4', '.mp3', '.avi', '.jpg', '.png', '.gif', '.webp', '.flv',
+                               file_types=('.mp4', '.mp3', '.avi', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.flv',
                                            '.wmv', '.mov', '.mkv', '.mpg', '.mpeg', '.m4v', '.3gp', '.3g2',
                                            '.asf', '.asx', '.wma', '.wmv', '.m3u8', '.ts', '.m4a', '.m4b',
-                                           '.m4p', '.m4r', '.m4v'),
+                                           '.m4p', '.m4r', '.m4v', '.bmp', '.tiff', '.tif'),
                                batch_size=100, max_workers=5, delete_source=False, prefix=''):
         """
         优化的流式同步处理方式迁移低频存储类型的多媒体文件，并可选择删除源文件
@@ -253,7 +253,16 @@ class OSSManager:
             delete_source: 是否在成功迁移后删除源文件
             prefix: 指定从哪个子目录开始迁移，默认为空字符串（根目录）
         """
+        deleted_files_file = os.path.join(get_data_dir(), f'deleted_files_{source_bucket_name}.json')
         try:
+            # 记录开始时间
+            start_message = f"开始同步多媒体文件, 源存储桶: {source_bucket_name} ==> 目标存储桶: {dest_bucket_name} , "
+            if prefix:
+                start_message += f"子目录: {prefix}"
+
+            logging.info(start_message)
+            print(start_message)
+
             # 获取断点续传状态文件路径
             checkpoint_file = os.path.join(
                 get_data_dir(),
@@ -281,9 +290,8 @@ class OSSManager:
             last_update_time = checkpoint.get('last_update_time', '')
 
             if marker:
-                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 resume_message = (
-                    f"[{current_time}] 从断点继续迁移\n"
+                    f"从断点继续迁移\n"
                     f"上次更新时间: {last_update_time}\n"
                     f"已处理: {processed_count} 个文件\n"
                     f"已成功: {success_count} 个文件\n"
@@ -297,18 +305,6 @@ class OSSManager:
 
             source_bucket = oss2.Bucket(self.auth, self.endpoint, source_bucket_name)
             dest_bucket = oss2.Bucket(self.auth, self.endpoint, dest_bucket_name)
-
-            current_time = start_time.strftime('%Y-%m-%d %H:%M:%S')
-            start_message = (
-                f"[{current_time}] 开始同步多媒体文件\n"
-                f"源存储桶: {source_bucket_name}\n"
-                f"目标存储桶: {dest_bucket_name}"
-            )
-            if prefix:
-                start_message += f"\n子目录: {prefix}"
-
-            logging.info(start_message)
-            print(start_message)
 
             file_queue = queue.Queue(maxsize=batch_size * 2)
             producer_done = threading.Event()
@@ -380,16 +376,11 @@ class OSSManager:
                                 headers = source_bucket.head_object(obj.key)
                                 storage_class = headers.headers.get('x-oss-storage-class', 'Standard')
 
-                                # 使用更简洁的日志格式，只记录一次文件信息
-                                status = []
+                                # 只记录IA存储类的文件
                                 if storage_class == 'IA':
                                     source_headers[obj.key] = headers
                                     filtered_files.append(obj)
-                                    status.append("IA存储")
-                                else:
-                                    status.append(f"跳过({storage_class}存储)")
-
-                                logging.info(f"文件: {obj.key} -> {', '.join(status)}")
+                                    logging.info(f"文件: {obj.key} -> IA存储")
 
                         except Exception as e:
                             logging.error(f"文件: {obj.key} -> 获取元数据失败: {str(e)}")
@@ -400,24 +391,30 @@ class OSSManager:
                         dest_headers = {}
                         for obj in filtered_files:
                             try:
-                                dest_headers[obj.key] = dest_bucket.head_object(obj.key)
-                                source_etag = source_headers[obj.key].headers.get('etag', '').strip('"')
-                                dest_etag = dest_headers[obj.key].headers.get('etag', '').strip('"')
+                                try:
+                                    dest_headers[obj.key] = dest_bucket.head_object(obj.key)
+                                    source_etag = source_headers[obj.key].headers.get('etag', '').strip('"')
+                                    dest_etag = dest_headers[obj.key].headers.get('etag', '').strip('"')
 
-                                status = []
-                                if source_etag == dest_etag:
-                                    status.append("目标已存在且内容相同")
-                                    skipped_count += 1
-                                else:
-                                    status.append("目标需要更新")
-                                    file_queue.put((obj, source_headers[obj.key].headers.get('x-oss-storage-class'), source_etag))
+                                    status = []
+                                    if source_etag == dest_etag:
+                                        status.append("目标已存在且内容相同")
+                                        # 即使文件相同，如果指定了删除，也要将文件加入队列
+                                        if delete_source:
+                                            file_queue.put((obj, source_headers[obj.key].headers.get('x-oss-storage-class'), source_etag))
+                                            status.append("已加入删除队列")
+                                        else:
+                                            skipped_count += 1
+                                    else:
+                                        status.append("目标需要更新")
+                                        file_queue.put((obj, source_headers[obj.key].headers.get('x-oss-storage-class'), source_etag))
 
-                                logging.info(f"文件: {obj.key} -> {', '.join(status)}")
+                                    logging.info(f"文件: {obj.key} -> {', '.join(status)}")
 
-                            except oss2.exceptions.NoSuchKey:
-                                file_queue.put((obj, source_headers[obj.key].headers.get('x-oss-storage-class'),
-                                              source_headers[obj.key].headers.get('etag', '').strip('"')))
-                                logging.info(f"文件: {obj.key} -> 目标不存在，加入迁移队列")
+                                except oss2.exceptions.NoSuchKey:
+                                    file_queue.put((obj, source_headers[obj.key].headers.get('x-oss-storage-class'),
+                                                  source_headers[obj.key].headers.get('etag', '').strip('"')))
+                                    logging.info(f"文件: {obj.key} -> 目标不存在，加入迁移队列")
                             except Exception as e:
                                 logging.error(f"文件: {obj.key} -> 检查目标失败: {str(e)}")
 
@@ -426,6 +423,14 @@ class OSSManager:
 
             def consumer():
                 nonlocal processed_count, success_count
+                # 在这里定义 deleted_files 列表
+                deleted_files = []
+
+                # 打开文件以追加模式写入已删除文件的信息
+                # deleted_files_file = os.path.join(get_data_dir(), f'deleted_files_{source_bucket_name}.json')
+
+                # 在闭包中声明对外部 deleted_files 的访问
+                # nonlocal deleted_files
                 last_checkpoint_time = time.time()
 
                 while not (producer_done.is_set() and file_queue.empty()):
@@ -435,41 +440,69 @@ class OSSManager:
                         obj, storage_class, source_etag = obj_info  # 正确解包三个值
 
                         try:
-                            # 执行复制
-                            dest_bucket.copy_object(
-                                source_bucket_name,
-                                obj.key,
-                                obj.key,
-                                headers={
-                                    'x-oss-storage-class': storage_class,  # 使用从队列获取的 storage_class
-                                    'x-oss-metadata-directive': 'COPY',
-                                }
-                            )
+                            status = []
+                            dest_obj = None
 
-                            # 验证复制是否成功
+                            # 检查目标文件是否存在且内容相同
                             try:
                                 dest_obj = dest_bucket.head_object(obj.key)
                                 dest_etag = dest_obj.headers.get('etag', '').strip('"')
-
-                                status = []
-                                if dest_etag == source_etag:  # 使用从队列获取的 source_etag
-                                    success_count += 1
-                                    status.append("迁移成功")
-
-                                    # 如果启用了删除源文件选项，则删除源文件
-                                    if delete_source:
-                                        try:
-                                            source_bucket.delete_object(obj.key)
-                                            status.append("源文件已删除")
-                                        except Exception as e:
-                                            status.append(f"源文件删除失败: {str(e)}")
+                                if dest_etag == source_etag:
+                                    status.append("目标已存在且内容相同")
                                 else:
-                                    status.append("ETag不匹配")
+                                    # 执行复制
+                                    dest_bucket.copy_object(
+                                        source_bucket_name,
+                                        obj.key,
+                                        obj.key,
+                                        headers={
+                                            'x-oss-storage-class': storage_class,
+                                            'x-oss-metadata-directive': 'COPY',
+                                        }
+                                    )
+                                    status.append("迁移成功")
+                            except oss2.exceptions.NoSuchKey:
+                                # 目标不存在，执行复制
+                                dest_bucket.copy_object(
+                                    source_bucket_name,
+                                    obj.key,
+                                    obj.key,
+                                    headers={
+                                        'x-oss-storage-class': storage_class,
+                                        'x-oss-metadata-directive': 'COPY',
+                                    }
+                                )
+                                status.append("迁移成功")
 
-                                logging.info(f"文件: {obj.key} -> {', '.join(status)}")
+                            success_count += 1
 
-                            except Exception as e:
-                                logging.error(f"文件: {obj.key} -> 验证失败: {str(e)}")
+                            # 如果启用了删除源文件选项，则删除源文件
+                            if delete_source:
+                                try:
+                                    # 先读取现有的删除记录
+                                    deleted_files = []
+                                    if os.path.exists(deleted_files_file):
+                                        with open(deleted_files_file, 'r', encoding='utf-8') as f:
+                                            try:
+                                                deleted_files = json.load(f)
+                                            except json.JSONDecodeError:
+                                                deleted_files = []
+
+                                    # 删除源文件
+                                    source_bucket.delete_object(obj.key)
+                                    status.append("源文件已删除")
+
+                                    # 将新删除的文件添加到列表中
+                                    if obj.key not in deleted_files:
+                                        deleted_files.append(obj.key)
+                                        # 写入更新后的完整列表
+                                        with open(deleted_files_file, 'w', encoding='utf-8') as f:
+                                            json.dump(deleted_files, f, ensure_ascii=False, indent=2)
+
+                                except Exception as e:
+                                    status.append(f"源文件删除失败: {str(e)}")
+
+                            logging.info(f"文件: {obj.key} -> {', '.join(status)}")
 
                         except Exception as e:
                             logging.error(f"文件: {obj.key} -> 迁移失败: {str(e)}")
@@ -519,12 +552,8 @@ class OSSManager:
                 duration_str.append(f"{int(minutes)}分钟")
             duration_str.append(f"{int(seconds)}秒")
 
-            current_time = end_time.strftime('%Y-%m-%d %H:%M:%S')
             end_message = (
-                "\n"
-                f"[{current_time}] 同步完成:\n"
-                f"源存储桶: {source_bucket_name}\n"
-                f"目标存储桶: {dest_bucket_name}\n"
+                f"\n同步完成: 源存储桶: {source_bucket_name} ==> 目标存储桶: {dest_bucket_name}\n"
                 f"成功迁移: {success_count}/{processed_count} 个文件\n"
                 f"跳过已存在: {skipped_count} 个文件\n"
                 f"总耗时: {' '.join(duration_str)}"
@@ -542,6 +571,10 @@ class OSSManager:
                 except Exception as e:
                     logging.error(f"删除断点文件失败: {str(e)}")
 
+            # 迁移完成后，不需要再次写入文件，因为已经在删除时写入了
+            if delete_source:
+                logging.info(f"已删除文件信息已保存到 {deleted_files_file}")
+
             return success_count > 0
 
         except Exception as e:
@@ -550,5 +583,32 @@ class OSSManager:
             error_message = f"[{current_time}] 同步过程中发生错误: {str(e)}"
             logging.error(error_message)
             print(error_message)
+            return False
+
+    def restore_files(self, source_bucket_name, dest_bucket_name):
+        """从目标存储桶恢复已删除的文件到源存储桶"""
+        deleted_files_file = os.path.join(get_data_dir(), f'deleted_files_{source_bucket_name}.json')
+        if not os.path.exists(deleted_files_file):
+            logging.error(f"未找到已删除文件信息文件: {deleted_files_file}")
+            return False
+
+        try:
+            with open(deleted_files_file, 'r', encoding='utf-8') as f:
+                deleted_files = json.load(f)
+
+            source_bucket = oss2.Bucket(self.auth, self.endpoint, source_bucket_name)
+            dest_bucket = oss2.Bucket(self.auth, self.endpoint, dest_bucket_name)
+
+            for file_key in deleted_files:
+                try:
+                    # 从目标存储桶复制回源存储桶
+                    source_bucket.copy_object(dest_bucket_name, file_key, file_key)
+                    logging.info(f"文件: {file_key} 已从目标存储桶恢复到源存储桶")
+                except Exception as e:
+                    logging.error(f"文件: {file_key} 恢复失败: {str(e)}")
+
+            return True
+        except Exception as e:
+            logging.error(f"恢复文件时发生错误: {str(e)}")
             return False
 
