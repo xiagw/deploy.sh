@@ -270,7 +270,7 @@ class OSSManager:
 
         try:
             # 记录开始时间
-            start_message = f"\n开始同步多媒体文件, oss://{source_bucket_name} ==> oss://{dest_bucket_name}"
+            start_message = f"开始同步多媒体文件, oss://{source_bucket_name} ==> oss://{dest_bucket_name}"
             if prefix:
                 start_message += f", 子目录: {prefix}"
 
@@ -522,7 +522,7 @@ class OSSManager:
             duration_str.append(f"{int(seconds)}秒")
 
             end_message = (
-                f"\n同步完成: oss://{source_bucket_name} ==> oss://{dest_bucket_name}\n"
+                f"同步完成: oss://{source_bucket_name} ==> oss://{dest_bucket_name}\n"
                 f"成功迁移: {success_count}/{processed_count} 个文件\n"
                 f"跳过已存在: {skipped_count} 个文件\n"
                 f"总耗时: {' '.join(duration_str)}"
