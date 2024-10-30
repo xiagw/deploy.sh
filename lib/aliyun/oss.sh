@@ -176,7 +176,8 @@ get_cname_token() {
     local result
     result=$(aliyun --profile "${profile:-}" oss bucket-cname --method get --item token oss://"$bucket_name" "$domain" --region "$region")
     echo "$result"
-    local token=$(echo "$result" | $CMD_GREP -oP '(?<=<Token>)[^<]+')
+    local token
+    token=$(echo "$result" | "${CMD_GREP}" -oP '(?<=<Token>)[^<]+')
     echo "成功获取 CNAME 令牌：$token"
 
     echo "请在您的 DNS 服务商处添加以下 TXT 记录："
@@ -200,8 +201,8 @@ oss_bind_domain() {
     echo "$result"
     log_result "$profile" "$region" "oss" "bind-domain" "$result"
 
-    # 使用 grep 和 sed 来解析 XML 并提取 Token
-    local token=$(echo "$result" | $CMD_GREP -oP '(?<=<Token>)[^<]+')
+    local token
+    token=$(echo "$result" | "${CMD_GREP}" -oP '(?<=<Token>)[^<]+')
     if [ -z "$token" ]; then
         echo "错误：无法获取 CNAME 令牌。响应内容：" >&2
         echo "$result" >&2
@@ -266,7 +267,8 @@ generate_oss_signature() {
     local resource=$3
     local access_key_id=$4
     local access_key_secret=$5
-    local date=$($CMD_DATE -u "+%Y-%m-%dT%H:%M:%SZ")
+    local date
+    date=$("${CMD_DATE}" -u "+%Y-%m-%dT%H:%M:%SZ")
     local host="${bucket}.oss-${region}.aliyuncs.com"
 
     # Construct the canonical request
