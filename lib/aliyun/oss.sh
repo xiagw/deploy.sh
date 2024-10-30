@@ -12,6 +12,7 @@ show_oss_help() {
     echo "  upload-cert <证书名称> <证书文件> <私钥文件> [region] - 上传SSL证书"
     echo "  delete-cert <证书ID> [region] - 删除SSL证书"
     echo "  deploy-cert <存储桶名称> <域名> <证书ID> [region] - 部署证书到OSS域名"
+    echo "  batch-copy <源存储桶> <目标存储桶> <包含文件列表的文件> [存储类型] - 批量复制对象并设置存储类型"
     echo
     echo "示例："
     echo "  $0 oss list"
@@ -21,6 +22,7 @@ show_oss_help() {
     echo "  $0 oss upload-cert my-cert path/to/cert.pem path/to/key.pem"
     echo "  $0 oss delete-cert cert-1234567890abcdef"
     echo "  $0 oss deploy-cert my-bucket example.com cert-1234567890abcdef"
+    echo "  $0 oss batch-copy source-bucket dest-bucket file-list.txt IA"
 }
 
 handle_oss_commands() {
@@ -35,6 +37,7 @@ handle_oss_commands() {
     upload-cert) oss_upload_cert "$@" ;;
     delete-cert) oss_delete_cert "$@" ;;
     deploy-cert) oss_deploy_cert "$@" ;;
+    batch-copy) oss_batch_copy "$@" ;;
     *)
         echo "错误：未知的 OSS 操作：$operation" >&2
         show_oss_help
@@ -316,4 +319,49 @@ verify_domain_ownership() {
     local result
     result=$(aliyun --profile "${profile:-}" oss PutCnameToken --bucket "$bucket_name" --domain "$domain" --token "$token" --region "$region")
     echo "$result"
+}
+
+oss_batch_copy() {
+    local source_bucket=$1
+    local dest_bucket=$2
+    local file_list=$3
+    local storage_class=${4:-IA}  # 默认使用 IA 存储类型
+
+    if [ -z "$source_bucket" ] || [ -z "$dest_bucket" ] || [ -z "$file_list" ]; then
+        echo "错误：缺少必要参数" >&2
+        echo "用法：$0 oss batch-copy <源存储桶> <目标存储桶> <包含文件列表的文件> [存储类型]" >&2
+        return 1
+    fi
+
+    if [ ! -f "$file_list" ]; then
+        echo "错误：文件列表文件不存在：$file_list" >&2
+        return 1
+    fi
+
+    echo "开始批量复制对象："
+    echo "源存储桶：$source_bucket"
+    echo "目标存储桶：$dest_bucket"
+    echo "文件列表：$file_list"
+    echo "存储类型：$storage_class"
+
+    local result
+    result=$(ossutil --profile "${profile:-}" \
+        --endpoint "http://oss-${region:-cn-hangzhou}.aliyuncs.com" \
+        cp "oss://$source_bucket/" "oss://$dest_bucket/" \
+        -r -f --update \
+        --include-from "$file_list" \
+        --metadata-include "x-oss-storage-class=$storage_class" \
+        --storage-class "$storage_class")
+
+    local status=$?
+    echo "$result"
+
+    if [ $status -eq 0 ]; then
+        echo "批量复制操作完成"
+        log_result "$profile" "$region" "oss" "batch-copy" "成功：$result"
+    else
+        echo "批量复制操作失败"
+        log_result "$profile" "$region" "oss" "batch-copy" "失败：$result"
+        return 1
+    fi
 }
