@@ -388,8 +388,8 @@ _install_ossutil() {
     unzip -o -j ossu.zip
     $use_sudo install -m 0755 ossutil /usr/local/bin/ossutil"$([[ $ver == 1 || $ver == v1 ]] && echo 1)"
     rm -f ossu.zip
-    if [[ $ver == 1 || $ver == v1 ]]; then
-        ossutil1 -version
+    if [ "$ver" = 1 ] || [ "$ver" = v1 ]; then
+        ossutil1 --version
     else
         ossutil version
     fi
