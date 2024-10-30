@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -xe
-
 _base_to_template() {
     base_vm=win10
     virsh shutdown $base_vm || true
@@ -26,6 +24,8 @@ _template_to_new() {
         --file /var/lib/libvirt/images/"$read_vm_name".qcow2 \
         --name "$read_vm_name"
 }
+
+set -xe
 
 case $1 in
 b)
