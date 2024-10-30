@@ -337,7 +337,7 @@ generate_large_files_list() {
     temp_file=$(mktemp)
 
     # 常见的大文件类型
-    for ext in mp4 avi mov wmv flv mkv webm jpg jpeg png gif bmp tiff webp psd ai zip rar 7z tar gz iso dmg pdf doc docx ppt pptx xls xlsx; do
+    for ext in mp3 mp4 avi mov wmv flv mkv webm jpg jpeg png gif bmp tiff webp psd ai zip rar 7z tar gz iso dmg pdf doc docx ppt pptx xls xlsx; do
         echo "*.$ext"
         echo "*.${ext^^}"
     done >"$temp_file"
