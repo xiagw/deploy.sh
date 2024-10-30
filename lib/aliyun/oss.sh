@@ -403,7 +403,7 @@ oss_batch_delete() {
     result=$(ossutil --profile "${profile:-}" \
         --endpoint "http://oss-${region:-cn-hangzhou}.aliyuncs.com" \
         rm "oss://$bucket_path" \
-        -r -f \
+        --all-versions -r -f \
         --include-from "$file_list" \
         --metadata-include "x-oss-storage-class=$storage_class")
 
