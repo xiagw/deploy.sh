@@ -370,8 +370,10 @@ _install_wg() {
 
 _install_ossutil() {
     if [ "$1" != "upgrade" ] && command -v ossutil >/dev/null; then
-        shift
         return
+    fi
+    if [ "$1" == "upgrade" ]; then
+        shift
     fi
     local ver=$1
     _check_distribution
@@ -387,7 +389,7 @@ _install_ossutil() {
     $use_sudo install -m 0755 ossutil /usr/local/bin/ossutil"$([[ $ver == 1 || $ver == v1 ]] && echo 1)"
     rm -f ossu.zip
     if [[ $ver == 1 || $ver == v1 ]]; then
-        ossutil -version
+        ossutil1 -version
     else
         ossutil version
     fi
