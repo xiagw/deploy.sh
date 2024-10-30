@@ -387,7 +387,7 @@ _install_ossutil() {
     curl -fLo ossu.zip "$url_down"
     unzip -o -j ossu.zip
     $use_sudo install -m 0755 ossutil /usr/local/bin/ossutil"$([[ $ver == 1 || $ver == v1 ]] && echo 1)"
-    rm -f ossu.zip
+    rm -f ossu.zip ossutil ossutil64
     if [ "$ver" = 1 ] || [ "$ver" = v1 ]; then
         ossutil1 --version
     else
