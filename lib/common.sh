@@ -5,17 +5,17 @@
 cmd_date="$(command -v gdate || command -v date)"
 
 # 定义日志级别常量
-readonly LOG_LEVEL_ERROR=0
-readonly LOG_LEVEL_WARNING=1
-readonly LOG_LEVEL_INFO=2
-readonly LOG_LEVEL_SUCCESS=3
-readonly LOG_LEVEL_FILE=4
+LOG_LEVEL_ERROR=0
+LOG_LEVEL_WARNING=1
+LOG_LEVEL_INFO=2
+LOG_LEVEL_SUCCESS=3
+LOG_LEVEL_FILE=4
 
 # 定义颜色代码
-readonly COLOR_RED='\033[0;31m'
-readonly COLOR_YELLOW='\033[0;33m'
-readonly COLOR_GREEN='\033[0;32m'
-readonly COLOR_RESET='\033[0m'
+COLOR_RED='\033[0;31m'
+COLOR_YELLOW='\033[0;33m'
+COLOR_GREEN='\033[0;32m'
+COLOR_RESET='\033[0m'
 
 _log() {
     local level=$1
@@ -370,21 +370,27 @@ _install_wg() {
 
 _install_ossutil() {
     if [ "$1" != "upgrade" ] && command -v ossutil >/dev/null; then
+        shift
         return
     fi
+    local ver=$1
     _check_distribution
     local os=${lsb_dist/ubuntu/linux}
     os=${os/centos/linux}
     os=${os/macos/mac}
     local url
-    url="https://help.aliyun.com/zh/oss/developer-reference/install-ossutil$([[ $1 == 1 || $1 == v1 ]] && echo '' || echo '2')"
+    url="https://help.aliyun.com/zh/oss/developer-reference/install-ossutil$([[ $ver == 1 || $ver == v1 ]] && echo '' || echo '2')"
     local url_down
     url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${os}-amd64\.zip")
     curl -fLo ossu.zip "$url_down"
     unzip -o -j ossu.zip
-    $use_sudo install -m 0755 ossutil /usr/local/bin/ossutil
-    ossutil version
+    $use_sudo install -m 0755 ossutil /usr/local/bin/ossutil"$([[ $ver == 1 || $ver == v1 ]] && echo 1)"
     rm -f ossu.zip
+    if [[ $ver == 1 || $ver == v1 ]]; then
+        ossutil -version
+    else
+        ossutil version
+    fi
 }
 
 _install_aliyun_cli() {
