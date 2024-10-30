@@ -1097,6 +1097,7 @@ _clean_up_disk_space() {
     if command -v docker >/dev/null 2>&1; then
         _msg info "Cleaning up Docker resources..."
         docker image prune -f
+        docker builder prune -f
         if $aggressive; then
             docker system prune -af --volumes
         else
