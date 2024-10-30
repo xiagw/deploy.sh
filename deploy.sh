@@ -1098,10 +1098,9 @@ _clean_up_disk_space() {
         _msg info "Cleaning up Docker resources..."
         docker image prune -f
         docker builder prune -f
+        docker image ls --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | xargs -r docker rmi 2>/dev/null || true
         if $aggressive; then
             docker system prune -af --volumes
-        else
-            docker image ls --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | xargs -r docker rmi 2>/dev/null || true
         fi
     fi
 
