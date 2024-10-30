@@ -106,8 +106,7 @@ eip_delete() {
 
     # 检查 EIP 状态
     if [[ "$eip_status" != "Available" ]]; then
-        echo "错误：当前 EIP 状态为 '$eip_status'，不支持删除操作。" >&2
-        return 1
+        echo "警告：当前 EIP 状态为 '$eip_status'，不支持删除操作。" >&2
     fi
 
     echo "警告：您即将删除以下 EIP："

@@ -115,24 +115,24 @@ main() {
 
     case "$service" in
     list-all) list_all_services ;;
-    config) handle_config_commands "${args[@]}" || show_config_help ;;
-    balance) handle_balance_commands "${args[@]}" || show_balance_help ;;
-    cost) handle_cost_commands "${args[@]}" || show_cost_help ;;
-    ecs) handle_ecs_commands "${args[@]}" || show_ecs_help ;;
-    dns) handle_dns_commands "${args[@]}" || show_dns_help ;;
-    domain) handle_domain_commands "${args[@]}" || show_domain_help ;;
-    cdn) handle_cdn_commands "${args[@]}" || show_cdn_help ;;
-    oss) handle_oss_commands "${args[@]}" || show_oss_help ;;
-    lbs) handle_lbs_commands "${args[@]}" || show_lbs_help ;;
-    rds) handle_rds_commands "${args[@]}" || show_rds_help ;;
-    kvstore) handle_kvstore_commands "${args[@]}" || show_kvstore_help ;;
-    vpc) handle_vpc_commands "${args[@]}" || show_vpc_help ;;
-    nat) handle_nat_commands "${args[@]}" || show_nat_help ;;
-    eip) handle_eip_commands "${args[@]}" || show_eip_help ;;
-    cas) handle_cas_commands "${args[@]}" || show_cas_help ;;
-    ram) handle_ram_commands "${args[@]}" || show_ram_help ;;
-    nas) handle_nas_commands "${args[@]}" || show_nas_help ;;
-    ack) handle_ack_commands "${args[@]}" || show_ack_help ;;
+    config) handle_config_commands "${args[@]}" ;;
+    balance) handle_balance_commands "${args[@]}" ;;
+    cost) handle_cost_commands "${args[@]}" ;;
+    ecs) handle_ecs_commands "${args[@]}" ;;
+    dns) handle_dns_commands "${args[@]}" ;;
+    domain) handle_domain_commands "${args[@]}" ;;
+    cdn) handle_cdn_commands "${args[@]}" ;;
+    oss) handle_oss_commands "${args[@]}" ;;
+    lbs) handle_lbs_commands "${args[@]}" ;;
+    rds) handle_rds_commands "${args[@]}" ;;
+    kvstore) handle_kvstore_commands "${args[@]}" ;;
+    vpc) handle_vpc_commands "${args[@]}" ;;
+    nat) handle_nat_commands "${args[@]}" ;;
+    eip) handle_eip_commands "${args[@]}" ;;
+    cas) handle_cas_commands "${args[@]}" ;;
+    ram) handle_ram_commands "${args[@]}" ;;
+    nas) handle_nas_commands "${args[@]}" ;;
+    ack) handle_ack_commands "${args[@]}" ;;
     *) echo "错误：未知的服务：$service" >&2 && show_help && exit 1 ;;
     esac
 }
