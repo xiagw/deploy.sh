@@ -12,8 +12,11 @@ show_oss_help() {
     echo "  upload-cert <证书名称> <证书文件> <私钥文件> [region] - 上传SSL证书"
     echo "  delete-cert <证书ID> [region] - 删除SSL证书"
     echo "  deploy-cert <存储桶名称> <域名> <证书ID> [region] - 部署证书到OSS域名"
-    echo "  batch-copy <源存储桶/路径> <目标存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量复制对象并设置存储类型"
-    echo "  batch-delete <存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量删除指定存储类型的对象"
+    echo "  batch-copy [-in | --internal] <源存储桶/路径> <目标存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量复制对象并设置存储类型"
+    echo "  batch-delete [-in | --internal] <存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量删除指定存储类型的对象"
+    echo
+    echo "选项："
+    echo "  -in | --internal    使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）"
     echo
     echo "示例："
     echo "  $0 oss list"
@@ -27,6 +30,8 @@ show_oss_help() {
     echo "  $0 oss batch-copy flynew/e/ flyh5/e/ file-list.txt IA   # 使用自定义文件类型列表"
     echo "  $0 oss batch-delete flyh5/e/                           # 使用默认文件类型列表和IA存储类型"
     echo "  $0 oss batch-delete flyh5/e/ file-list.txt IA          # 使用自定义文件类型列表"
+    echo "  $0 oss batch-copy -in flynew/e/ flyh5/e/                 # 使用内网进行复制"
+    echo "  $0 oss batch-delete -in flyh5/e/                        # 使用内网进行删除"
 }
 
 handle_oss_commands() {
@@ -326,7 +331,7 @@ verify_domain_ownership() {
     echo "$result"
 }
 
-# 添加一个新的函数用于生成大���件类型列表
+# 添加一个新的函数用于生成大件类型列表
 generate_large_files_list() {
     local temp_file
     temp_file=$(mktemp)
@@ -340,18 +345,48 @@ generate_large_files_list() {
     echo "$temp_file"
 }
 
-# 修改 oss_batch_copy 函数
+# 修改 oss_batch_copy 函数，添加内网支持
 oss_batch_copy() {
-    local source=$1
-    local dest=$2
-    local file_list=$3
-    local storage_class=${4:-IA} # 默认使用 IA 存储类型
-    local temp_list_file=""
+    local use_internal=false
+    local source=""
+    local dest=""
+    local file_list=""
+    local storage_class="IA"
+    local endpoint_url
+
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        -in | --internal)
+            use_internal=true
+            ;;
+        *)
+            if [ -z "$source" ]; then
+                source=$1
+            elif [ -z "$dest" ]; then
+                dest=$1
+            elif [ -z "$file_list" ]; then
+                file_list=$1
+            else
+                storage_class=$1
+            fi
+            ;;
+        esac
+        shift
+    done
 
     if [ -z "$source" ] || [ -z "$dest" ]; then
         echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-copy <源存储桶/路径> <目标存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
+        echo "用法：$0 oss batch-copy [-in | --internal] <源存储桶/路径> <目标存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
         return 1
+    fi
+
+    # 根据是否使用内网设置 endpoint
+    if [ "$use_internal" = true ]; then
+        endpoint_url="http://oss-${region:-cn-hangzhou}-internal.aliyuncs.com"
+        echo "使用内网 endpoint: $endpoint_url"
+    else
+        endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     fi
 
     # 如果没有提供文件列表，则自动生成
@@ -378,7 +413,7 @@ oss_batch_copy() {
 
     local result
     result=$(ossutil --profile "${profile:-}" \
-        --endpoint "http://oss-${region:-cn-hangzhou}.aliyuncs.com" \
+        --endpoint "$endpoint_url" \
         cp "oss://$source" "oss://$dest" \
         -r -f --update \
         --include-from "$file_list" \
@@ -403,17 +438,46 @@ oss_batch_copy() {
     fi
 }
 
-# 同样修改 oss_batch_delete 函数
+# 修改 oss_batch_delete 函数，添加内网支持
 oss_batch_delete() {
-    local bucket_path=$1
-    local file_list=$2
-    local storage_class=${3:-IA} # 默认使用 IA 存储类型
+    local use_internal=false
+    local bucket_path=""
+    local file_list=""
+    local storage_class="IA"
+    local endpoint_url
     local temp_list_file=""
+
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        -in | --internal)
+            use_internal=true
+            ;;
+        *)
+            if [ -z "$bucket_path" ]; then
+                bucket_path=$1
+            elif [ -z "$file_list" ]; then
+                file_list=$1
+            else
+                storage_class=$1
+            fi
+            ;;
+        esac
+        shift
+    done
 
     if [ -z "$bucket_path" ]; then
         echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-delete <存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
+        echo "用法：$0 oss batch-delete [-in | --internal] <存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
         return 1
+    fi
+
+    # 根据是否使用内网设置 endpoint
+    if [ "$use_internal" = true ]; then
+        endpoint_url="http://oss-${region:-cn-hangzhou}-internal.aliyuncs.com"
+        echo "使用内网 endpoint: $endpoint_url"
+    else
+        endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     fi
 
     # 如果没有提供文件列表，则自动生成
@@ -446,7 +510,7 @@ oss_batch_delete() {
 
     local result
     result=$(ossutil --profile "${profile:-}" \
-        --endpoint "http://oss-${region:-cn-hangzhou}.aliyuncs.com" \
+        --endpoint "$endpoint_url" \
         rm "oss://$bucket_path" \
         --all-versions -r -f \
         --include-from "$file_list" \
