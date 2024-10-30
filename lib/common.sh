@@ -372,7 +372,7 @@ _install_ossutil() {
     if [ "$1" != "upgrade" ] && command -v ossutil >/dev/null; then
         return
     fi
-    if [ "$1" == "upgrade" ]; then
+    if [ "$1" = "upgrade" ]; then
         shift
     fi
     local ver=$1
