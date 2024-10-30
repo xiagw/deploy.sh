@@ -21,6 +21,8 @@ import time
 class OSSManager:
     def __init__(self, access_key_id, access_key_secret, region, profile='default'):
         self.auth = oss2.Auth(access_key_id, access_key_secret)
+        self._access_key_id = access_key_id
+        self._access_key_secret = access_key_secret
         self.region = region
         self.profile = profile
         self.endpoint = f'http://oss-{region}-internal.aliyuncs.com'
