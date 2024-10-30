@@ -332,38 +332,11 @@ generate_large_files_list() {
     temp_file=$(mktemp)
 
     # 常见的大文件类型
-    cat >"$temp_file" <<'EOF'
-*.mp4
-*.avi
-*.mov
-*.wmv
-*.flv
-*.mkv
-*.webm
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.bmp
-*.tiff
-*.webp
-*.psd
-*.ai
-*.zip
-*.rar
-*.7z
-*.tar
-*.gz
-*.iso
-*.dmg
-*.pdf
-*.doc
-*.docx
-*.ppt
-*.pptx
-*.xls
-*.xlsx
-EOF
+    for ext in mp4 avi mov wmv flv mkv webm jpg jpeg png gif bmp tiff webp psd ai zip rar 7z tar gz iso dmg pdf doc docx ppt pptx xls xlsx; do
+        echo "*.$ext"
+        echo "*.${ext^^}"
+    done >"$temp_file"
+
     echo "$temp_file"
 }
 
@@ -400,7 +373,7 @@ oss_batch_copy() {
 
     # 显示将要处理的文件类型
     echo "将要处理的文件类型："
-    cat "$file_list"
+    tr '\n' ' ' <"$file_list"
     echo
 
     local result
@@ -460,7 +433,7 @@ oss_batch_delete() {
     echo "存储类型：$storage_class"
 
     echo "将要处理的文件类型："
-    cat "$file_list"
+    tr '\n' ' ' <"$file_list"
     echo
 
     read -r -p "请输入 'YES' 以确认删除操作: " confirm
