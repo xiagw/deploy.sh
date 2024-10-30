@@ -12,8 +12,8 @@ show_oss_help() {
     echo "  upload-cert <证书名称> <证书文件> <私钥文件> [region] - 上传SSL证书"
     echo "  delete-cert <证书ID> [region] - 删除SSL证书"
     echo "  deploy-cert <存储桶名称> <域名> <证书ID> [region] - 部署证书到OSS域名"
-    echo "  batch-copy <源存储桶/路径> <目标存储桶/路径> <包含文件类型列表的文件> [存储类型] - 批量复制对象并设置存储类型"
-    echo "  batch-delete <存储桶/路径> <包含文件类型列表的文件> [存储类型] - 批量删除指定存储类型的对象"
+    echo "  batch-copy <源存储桶/路径> <目标存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量复制对象并设置存储类型"
+    echo "  batch-delete <存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量删除指定存储类型的对象"
     echo
     echo "示例："
     echo "  $0 oss list"
@@ -23,8 +23,10 @@ show_oss_help() {
     echo "  $0 oss upload-cert my-cert path/to/cert.pem path/to/key.pem"
     echo "  $0 oss delete-cert cert-1234567890abcdef"
     echo "  $0 oss deploy-cert my-bucket example.com cert-1234567890abcdef"
-    echo "  $0 oss batch-copy flynew/e/ flyh5/e/ file-list.txt IA"
-    echo "  $0 oss batch-delete flyh5/e/ file-list.txt IA"
+    echo "  $0 oss batch-copy flynew/e/ flyh5/e/                    # 使用默认文件类型列表和IA存储类型"
+    echo "  $0 oss batch-copy flynew/e/ flyh5/e/ file-list.txt IA   # 使用自定义文件类型列表"
+    echo "  $0 oss batch-delete flyh5/e/                           # 使用默认文件类型列表和IA存储类型"
+    echo "  $0 oss batch-delete flyh5/e/ file-list.txt IA          # 使用自定义文件类型列表"
 }
 
 handle_oss_commands() {
@@ -324,36 +326,87 @@ verify_domain_ownership() {
     echo "$result"
 }
 
+# 添加一个新的函数用于生成大���件类型列表
+generate_large_files_list() {
+    local temp_file
+    temp_file=$(mktemp)
+
+    # 常见的大文件类型
+    cat >"$temp_file" <<'EOF'
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.mkv
+*.webm
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
+*.psd
+*.ai
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.iso
+*.dmg
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+EOF
+    echo "$temp_file"
+}
+
+# 修改 oss_batch_copy 函数
 oss_batch_copy() {
     local source=$1
     local dest=$2
     local file_list=$3
     local storage_class=${4:-IA} # 默认使用 IA 存储类型
+    local temp_list_file=""
 
-    if [ -z "$source" ] || [ -z "$dest" ] || [ -z "$file_list" ]; then
+    if [ -z "$source" ] || [ -z "$dest" ]; then
         echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-copy <源存储桶/路径> <目标存储桶/路径> <包含文件列表的文件> [存储类型]" >&2
+        echo "用法：$0 oss batch-copy <源存储桶/路径> <目标存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
         return 1
     fi
 
-    if [ ! -f "$file_list" ]; then
-        echo "错误：文件列表文件不存在：$file_list" >&2
+    # 如果没有提供文件列表，则自动生成
+    if [ -z "$file_list" ]; then
+        echo "未指定文件类型列表，将自动生成包含常见大文件类型的列表..."
+        temp_list_file=$(generate_large_files_list)
+        file_list="$temp_list_file"
+        echo "已生成临时文件类型列表：$file_list"
+    elif [ ! -f "$file_list" ]; then
+        echo "错误：指定的文件列表文件不存在：$file_list" >&2
         return 1
     fi
-
-    local source_url="oss://$source"
-    local dest_url="oss://$dest"
 
     echo "开始批量复制对象："
-    echo "源路径：$source_url"
-    echo "目标路径：$dest_url"
+    echo "源路径： oss://$source"
+    echo "目标路径： oss://$dest"
     echo "文件类型列表：$file_list"
     echo "存储类型：$storage_class"
+
+    # 显示将要处理的文件类型
+    echo "将要处理的文件类型："
+    cat "$file_list"
+    echo
 
     local result
     result=$(ossutil --profile "${profile:-}" \
         --endpoint "http://oss-${region:-cn-hangzhou}.aliyuncs.com" \
-        cp "$source_url" "$dest_url" \
+        cp "oss://$source" "oss://$dest" \
         -r -f --update \
         --include-from "$file_list" \
         --metadata-include "x-oss-storage-class=$storage_class" \
@@ -361,6 +414,11 @@ oss_batch_copy() {
 
     local status=$?
     echo "$result"
+
+    # 如果使用了临时文件，则删除它
+    if [ -n "$temp_list_file" ]; then
+        rm -f "$temp_list_file"
+    fi
 
     if [ $status -eq 0 ]; then
         echo "批量复制操作完成"
@@ -372,19 +430,27 @@ oss_batch_copy() {
     fi
 }
 
+# 同样修改 oss_batch_delete 函数
 oss_batch_delete() {
     local bucket_path=$1
     local file_list=$2
     local storage_class=${3:-IA} # 默认使用 IA 存储类型
+    local temp_list_file=""
 
-    if [ -z "$bucket_path" ] || [ -z "$file_list" ]; then
+    if [ -z "$bucket_path" ]; then
         echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-delete <存储桶/路径> <包含文件列表的文件> [存储类型]" >&2
+        echo "用法：$0 oss batch-delete <存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
         return 1
     fi
 
-    if [ ! -f "$file_list" ]; then
-        echo "错误：文件列表文件不存在：$file_list" >&2
+    # 如果没有提供文件列表，则自动生成
+    if [ -z "$file_list" ]; then
+        echo "未指定文件类型列表，将自动生成包含常见大文件类型的列表..."
+        temp_list_file=$(generate_large_files_list)
+        file_list="$temp_list_file"
+        echo "已生成临时文件类型列表：$file_list"
+    elif [ ! -f "$file_list" ]; then
+        echo "错误：指定的文件列表文件不存在：$file_list" >&2
         return 1
     fi
 
@@ -392,10 +458,16 @@ oss_batch_delete() {
     echo "存储桶/路径：$bucket_path"
     echo "文件类型列表：$file_list"
     echo "存储类型：$storage_class"
+
+    echo "将要处理的文件类型："
+    cat "$file_list"
+    echo
+
     read -r -p "请输入 'YES' 以确认删除操作: " confirm
 
     if [ "$confirm" != "YES" ]; then
         echo "操作已取消。"
+        [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
         return 1
     fi
 
@@ -409,6 +481,11 @@ oss_batch_delete() {
 
     local status=$?
     echo "$result"
+
+    # 如果使用了临时文件，则删除它
+    if [ -n "$temp_list_file" ]; then
+        rm -f "$temp_list_file"
+    fi
 
     if [ $status -eq 0 ]; then
         echo "批量删除操作完成"
