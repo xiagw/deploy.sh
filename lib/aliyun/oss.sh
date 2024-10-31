@@ -720,7 +720,7 @@ analyze_logs_for_status() {
     # 构建状态码的grep模式
     local status_pattern
     status_pattern=$(echo "$status_codes" | tr ',' '|')
-    status_pattern=" (${status_pattern}) "
+    status_pattern="\" (${status_pattern}) "
 
     # 定义要排除的文件模式
     local exclude_patterns=(
@@ -751,26 +751,45 @@ analyze_logs_for_status() {
     # 分析日志文件中的指定状态码记录
     echo "正在分析HTTP状态码 $status_codes 的记录..."
     local filtered_records
-    filtered_records=$(
+   filtered_records=$(
         "$CMD_GREP" -vE "$exclude_grep" "$local_txt_file" |
             "$CMD_GREP" -E "$status_pattern" |
             "$CMD_GREP" -iE "$file_types_regex" || echo ""
     )
     local count_records
-    count_records=$(echo "$filtered_records" | "$CMD_GREP" -c '^' || echo "0")
+    count_records=$(echo -n "$filtered_records" | "$CMD_GREP" -c '^')
 
-    if [ "$count_records" -gt 0 ]; then
-        echo "发现 $count_records 条指定类型文件的状态码 $status_codes 记录："
-        echo "原始日志内容："
+    # 生成输出文件名
+    local output_dir="${SCRIPT_DATA:-/tmp}/oss_logs"
+    local date_str
+    date_str=$("$CMD_DATE" +%Y%m%d_%H%M%S)
+    local output_file="${output_dir}/status_${status_codes//,/_}_${date_str}.log"
+
+    # 创建输出目录
+    mkdir -p "$output_dir"
+
+    # 保存分析结果
+    {
+        echo "分析时间: $("$CMD_DATE" '+%Y-%m-%d %H:%M:%S')"
+        echo "状态码: $status_codes"
+        echo "文件类型: $file_types"
         echo "----------------------------------------"
-        echo "$filtered_records"
-    else
-        echo "未发现指定类型文件的状态码 $status_codes 记录"
-    fi
+        if [ "$count_records" -gt 0 ]; then
+            echo "发现 $count_records 条指定类型文件的状态码 $status_codes 记录："
+            echo "原始日志内容："
+            echo "----------------------------------------"
+            echo "$filtered_records"
+        else
+            echo "未发现指定类型文件的状态码 $status_codes 记录"
+        fi
+    } | tee "$output_file"
+
+    echo "----------------------------------------"
+    echo "分析结果已保存到: $output_file"
 
     # 清理临时文件
+    # sleep 15 ## for debug
     rm -rf "$temp_dir"
-    sleep 30 ## for debug
 }
 
 # 修改 oss_get_logs 函数，添加 404 分析功能
