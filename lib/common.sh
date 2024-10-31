@@ -1,8 +1,13 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034,SC1090,SC1091
 
-# Use gdate if available, otherwise fallback to date command
-cmd_date="$(command -v gdate || command -v date)"
+# 定义全局命令变量
+CMD_READLINK=$(command -v greadlink || command -v readlink)
+CMD_DATE=$(command -v gdate || command -v date)
+CMD_GREP=$(command -v ggrep || command -v grep)
+CMD_SED=$(command -v gsed || command -v sed)
+CMD_AWK=$(command -v gawk || command -v awk)
+CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
 
 # 定义日志级别常量
 LOG_LEVEL_ERROR=0
@@ -89,7 +94,7 @@ _msg() {
     local color_on color_off='\033[0m'
     local time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
     local timestamp
-    timestamp="$($cmd_date +%Y%m%d-%u-%T.%3N)"
+    timestamp="$($CMD_DATE +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
     info) color_on='' ;;
@@ -270,7 +275,7 @@ _get_random_password() {
         2) password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
         3) password_rand="$(dd if=/dev/urandom bs=1 count=15 | base64 | head -c"$bits" 2>/dev/null)" ;;
         4) password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null) ;;
-        5) password_rand="$(echo "$RANDOM$($cmd_date)$RANDOM" | $cmd_hash | base64 | head -c"$bits" 2>/dev/null)" ;;
+        5) password_rand="$(echo "$RANDOM$($CMD_DATE)$RANDOM" | $cmd_hash | base64 | head -c"$bits" 2>/dev/null)" ;;
         *) echo "${password_rand:?Failed-to-generate-password}" && return 1 ;;
         esac
     done

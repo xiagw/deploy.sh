@@ -210,7 +210,7 @@ _update_ddns() {
             sudo wg set "$wg_interface" peer "${wg_peer}" endpoint "${wg_endpoint}"
         done < <($use_sudo wg show "$wg_interface" endpoints)
     done
-    ${cmd_date-} +%s
+    ${CMD_DATE} +%s
     $use_sudo wg show all dump | awk 'NR>1 {print $4"\t"$5"\t"$6}'
 }
 

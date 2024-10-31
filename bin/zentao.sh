@@ -10,7 +10,7 @@ _get_token() {
             done
         fi
         source "$g_me_env" "${zen_domain:?empty}"
-        token_time=$(${cmd_date:?empty date cmd} +%s -d '3600 seconds ago')
+        token_time=$(${CMD_DATE} +%s -d '3600 seconds ago')
         if ((token_time > ${zen_token_time_save:-0})); then
             unset zen_token
         fi
@@ -24,7 +24,7 @@ _get_token() {
             $curl_opt "${zen_api:?empty}"/tokens -d '{"account": "'"${zen_account:-root}"'", "password": "'"$zen_root_password"'"}' |
                 jq -r '.token'
         )"
-        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($cmd_date +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$g_me_env"
+        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($CMD_DATE +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$g_me_env"
     fi
 }
 
