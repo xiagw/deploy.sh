@@ -15,7 +15,14 @@ show_oss_help() {
     echo "  deploy-cert <存储桶名称> <域名> <证书ID> [region] - 部署证书到OSS域名"
     echo "  batch-copy [-in | --internal] <源存储桶/路径> <目标存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量复制对象并设置存储类型"
     echo "  batch-delete [-in | --internal] <存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量删除指定存储类型的对象"
-    echo "  logs <存储桶名称/日志目录> [开始时间] [结束时间] [格式] - 查询存储桶访问日志"
+    echo "  logs <存储桶路径> [选项...]    - 查询存储桶访问日志"
+    echo "    选项："
+    echo "      -s, --start-date DATE    开始日期 (YYYY-MM-DD)"
+    echo "      -e, --end-date DATE      结束日期 (YYYY-MM-DD)"
+    echo "      -f, --format FORMAT      输出格式 (human/json/tsv)"
+    echo "      -d, --domain DOMAIN      指定要查询的域名"
+    echo "      --404                    分析404记录"
+    echo "      --file-types TYPES    指定要分析的文件类型（用逗号分隔，如：jpg,png,pdf）"
     echo
     echo "选项："
     echo "  -in | --internal    使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）"
@@ -34,9 +41,11 @@ show_oss_help() {
     echo "  $0 oss batch-delete flyh5/e/ file-list.txt IA          # 使用自定义文件类型列表"
     echo "  $0 oss batch-copy -in flynew/e/ flyh5/e/                 # 使用内网进行复制"
     echo "  $0 oss batch-delete -in flyh5/e/                        # 使用内网进行删除"
-    echo "  $0 oss logs my-bucket/logs/                     # 查询今天的访问日志"
-    echo "  $0 oss logs my-bucket/cdn_log/ 2024-03-01      # 查询指定日期的CDN访问日志"
-    echo "  $0 oss logs my-bucket/access_log/ 2024-03-01 2024-03-10 json  # 查询日期范围内的访问日志并以JSON格式输出"
+    echo "  $0 oss logs my-bucket/cdn_log/"
+    echo "  $0 oss logs my-bucket/cdn_log/ -s 2024-03-01 -e 2024-03-10 -f json"
+    echo "  $0 oss logs my-bucket/cdn_log/ --start-date 2024-03-01 --404"
+    echo "  $0 oss logs my-bucket/cdn_log/ --404 --file-types jpg,png,pdf  # 只分析图片和PDF文件的404记录"
+    echo "  $0 oss logs my-bucket/cdn_log/ --domain flyh5.cn --404  # 分析指定域名的404记录"
 }
 
 handle_oss_commands() {
@@ -53,13 +62,113 @@ handle_oss_commands() {
     deploy-cert) oss_deploy_cert "$@" ;;
     batch-copy) oss_batch_copy "$@" ;;
     batch-delete) oss_batch_delete "$@" ;;
-    logs) oss_get_logs "$@" ;;
+    logs) handle_oss_logs_commands "$@" ;;
     *)
         echo "错误：未知的 OSS 操作：$operation" >&2
         show_oss_help
         exit 1
         ;;
     esac
+}
+
+# 添加新的函数处理日志相关命令
+handle_oss_logs_commands() {
+    local bucket_path=""
+    local start_date=""
+    local end_date=""
+    local format="human"
+    local analyze_404=false
+    local file_types=""
+    local domain=""
+
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        -s | --start-date)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "错误：--start-date 选项需要指定日期" >&2
+                return 1
+            fi
+            start_date="$2"
+            shift
+            ;;
+        -e | --end-date)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "错误：--end-date 选项需要指定日期" >&2
+                return 1
+            fi
+            end_date="$2"
+            shift
+            ;;
+        -f | --format)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "错误：--format 选项需要指定格式(human/json/tsv)" >&2
+                return 1
+            fi
+            format="$2"
+            shift
+            ;;
+        --404)
+            analyze_404=true
+            ;;
+        -t | --file-types)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "错误：--file-types 选项需要指定文件类型列表（用逗号分隔）" >&2
+                return 1
+            fi
+            file_types="$2"
+            shift
+            ;;
+        -d | --domain)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "错误：--domain 选项需要指定域名" >&2
+                return 1
+            fi
+            domain="$2"
+            shift
+            ;;
+        -*)
+            echo "错误：未知的选项：$1" >&2
+            return 1
+            ;;
+        *)
+            if [ -z "$bucket_path" ]; then
+                bucket_path="$1"
+            else
+                echo "错误：多余的参数：$1" >&2
+                return 1
+            fi
+            ;;
+        esac
+        shift
+    done
+
+    # 检查必需参数
+    if [ -z "$bucket_path" ]; then
+        echo "错误：请指定存储桶路径" >&2
+        echo "用法：$0 oss logs <存储桶路径> [选项...]" >&2
+        echo "选项："
+        echo "  -s, --start-date DATE    开始日期 (YYYY-MM-DD)"
+        echo "  -e, --end-date DATE      结束日期 (YYYY-MM-DD)"
+        echo "  -f, --format FORMAT      输出格式 (human/json/tsv)"
+        echo "  -d, --domain DOMAIN      指定要查询的域名"
+        echo "  --404                    分析404记录"
+        echo "  --file-types TYPES       指定要分析的文件类型（用逗号分隔，如：jpg,png,pdf）"
+        echo
+        echo "示例："
+        echo "  $0 oss logs my-bucket/cdn_log/"
+        echo "  $0 oss logs my-bucket/cdn_log/ -s 2024-03-01 -e 2024-03-10 -f json"
+        echo "  $0 oss logs my-bucket/cdn_log/ --domain flyh5.cn --404"
+        echo "  $0 oss logs my-bucket/cdn_log/ --404 --file-types jpg,png,pdf  # 只分析图片和PDF文件的404记录"
+        return 1
+    fi
+
+    # 设置默认日期为今天
+    start_date=${start_date:-$("$CMD_DATE" +%Y-%m-%d)}
+    end_date=${end_date:-$start_date}
+
+    # 调用日志查询函数
+    oss_get_logs "$bucket_path" "$start_date" "$end_date" "$format" "$analyze_404" "$file_types" "$domain"
 }
 
 oss_list() {
@@ -224,7 +333,8 @@ oss_bind_domain() {
     echo "请等待 DNS 记录生效，这可能需要几分钟时间..."
     echo "生效后，请按回车键继续..."
     local max_wait_time=600 # 10 minutes in seconds
-    local start_time=$(date +%s)
+    local start_time
+    start_time=$("$CMD_DATE" +%s)
     local current_time
     local elapsed_time
 
@@ -238,7 +348,8 @@ oss_bind_domain() {
         fi
 
         echo "正在检查DNS记录..."
-        local dig_result=$(dig +short TXT "$domain")
+        local dig_result
+        dig_result=$(dig +short TXT "$domain")
 
         if [ "$dig_result" = "\"$token\"" ]; then
             echo "DNS记录已生效！"
@@ -284,7 +395,8 @@ generate_oss_signature() {
     local canonical_request="${method}\n${canonical_resource}\n\n${canonical_headers}\n${signed_headers}\n"
 
     # Calculate the hash of the canonical request
-    local hashed_canonical_request=$(echo -n "$canonical_request" | openssl dgst -sha256 -hex | sed 's/^.* //')
+    local hashed_canonical_request
+    hashed_canonical_request=$(echo -n "$canonical_request" | openssl dgst -sha256 -hex | "$CMD_SED" 's/^.* //')
 
     # Construct the string to sign
     local string_to_sign="OSS4-HMAC-SHA256\n${date}\n${hashed_canonical_request}"
@@ -292,7 +404,8 @@ generate_oss_signature() {
     echo "Debug: String to sign: $string_to_sign" >&2
 
     # Generate the signature
-    local signature=$(echo -n "$string_to_sign" | openssl dgst -sha256 -hmac "$access_key_secret" -binary | base64)
+    local signature
+    signature=$(echo -n "$string_to_sign" | openssl dgst -sha256 -hmac "$access_key_secret" -binary | base64)
 
     echo "Debug: Generated signature: $signature" >&2
     echo "$signature"
@@ -561,12 +674,98 @@ generate_date_list() {
     echo "$temp_file"
 }
 
-# 修改 oss_get_logs 函数
+# 添加新函数用于下载和分析日志文件
+analyze_logs_for_404() {
+    local bucket_path=$1
+    local log_file=$2
+    local file_types=${3:-"mp3,mp4,avi,mov,wmv,flv,mkv,webm,jpg,jpeg,png,gif,bmp,tiff,webp,psd,ai,zip,rar,7z,tar,gz,iso,dmg,pdf,doc,docx,ppt,pptx,xls,xlsx"}
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    local log_filename
+    log_filename=$(basename "$log_file")
+    local local_gz_file="${temp_dir}/${log_filename}"
+    local local_txt_file="${temp_dir}/${log_filename%.gz}"
+
+    # 下载日志文件
+    echo "正在下载日志文件: $log_file ..."
+    if ! ossutil --profile "${profile:-}" cp "$log_file" "$local_gz_file"; then
+        echo "错误：下载日志文件失败: $log_file" >&2
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    # 解压日志文件
+    echo "正在解压日志文件..."
+    if ! gunzip -f "$local_gz_file"; then
+        echo "错误：解压日志文件失败: $local_gz_file" >&2
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    # 构建文件类型的正则表达式
+    local file_types_regex
+    file_types_regex=$(echo "$file_types" | tr ',' '|')
+    file_types_regex="\.(${file_types_regex})[\"' ]"
+
+    # 分析日志文件中的 404 记录，排除 favicon.ico，只包含指定文件类型
+    echo "正在分析 404 记录..."
+    local filtered_404
+    filtered_404=$("$CMD_GREP" -v 'favicon.ico' |
+        "$CMD_GREP" ' 404 ' "$local_txt_file" |
+        "$CMD_GREP" -iE "$file_types_regex" || echo "")
+    local count_404
+    count_404=$(echo "$filtered_404" | "$CMD_GREP" -c '^' || echo "0")
+
+    if [ "$count_404" -gt 0 ]; then
+        echo "发现 $count_404 条指定类型文件的 404 记录："
+        echo "原始日志内容："
+        echo "----------------------------------------"
+        echo "$filtered_404"
+        # echo "----------------------------------------"
+        # echo "分析结果："
+        # echo "$filtered_404" | "$CMD_AWK" '
+        # {
+        #     # 提取时间戳
+        #     timestamp = $1 " " $2
+        #     # 提取客户端IP
+        #     ip = $3
+
+        #     # 提取请求方法和URL
+        #     method = ""
+        #     url = ""
+        #     for(i=1; i<=NF; i++) {
+        #         if ($i == "\"GET" || $i == "\"POST" || $i == "\"PUT" || $i == "\"DELETE" || $i == "\"HEAD") {
+        #             method = substr($i, 2)  # 去掉开头的引号
+        #             if ($(i+1) !~ /^"/) {   # 如果下一个字段不是以引号开头
+        #                 url = $(i+1)
+        #             }
+        #             break
+        #         }
+        #     }
+
+        #     # 只输出有效的记录
+        #     if (method != "" && url != "") {
+        #         printf "时间: %s, IP: %s, 方法: %s, URL: %s\n", timestamp, ip, method, url
+        #     }
+        # }'
+    else
+        echo "未发现指定类型文件的 404 记录"
+    fi
+
+    # 清理临时文件
+    rm -rf "$temp_dir"
+    # sleep 30 ## for debug
+}
+
+# 修改 oss_get_logs 函数，添加 404 分析功能
 oss_get_logs() {
     local bucket_path="${1%/}/"
     local start_date=${2:-$("$CMD_DATE" +%Y-%m-%d)}
     local end_date=${3:-$start_date}
     local format=${4:-human}
+    local analyze_404=${5:-false}
+    local file_types=${6:-""}
+    local domain=${7:-""}
 
     if [ -z "$bucket_path" ]; then
         echo "错误：请指定存储桶路径" >&2
@@ -590,9 +789,15 @@ oss_get_logs() {
 
     # 使用日期列表文件查询日志
     local result
-    result=$(ossutil --profile "${profile:-}" ls "oss://${bucket_path}" \
+    result=$(ossutil --profile "${profile:-}" \
+        ls "oss://${bucket_path}" \
         -r \
         --include-from "$date_list_file")
+
+    # 如果指定了域名，则过滤指定域名的日志
+    if [ -n "$domain" ]; then
+        result=$(echo "$result" | "$CMD_GREP" "$domain" || echo "")
+    fi
 
     # 删除临时文件
     rm -f "$date_list_file"
@@ -664,6 +869,18 @@ oss_get_logs() {
             echo "$filtered_result" | "$CMD_AWK" -F'\t' '{
                 printf "%-30s %-10s %-10s %s\n", $1, $2, $3, $5
             }'
+
+            # 如果需要分析 404 记录
+            if [ "$analyze_404" = true ]; then
+                echo
+                echo "正在分析日志文件中的 404 记录..."
+                echo "--------------------------------------------------------------------------------"
+                echo "$filtered_result" | while IFS=$'\t' read -r _ _ _ _ path; do
+                    echo "分析文件: $path"
+                    analyze_logs_for_404 "$bucket_path" "$path" "$file_types"
+                    echo "--------------------------------------------------------------------------------"
+                done
+            fi
         fi
         ;;
     esac
