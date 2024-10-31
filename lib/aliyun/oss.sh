@@ -542,7 +542,26 @@ oss_batch_delete() {
     fi
 }
 
-# 添加新的函数用于处理访问日志
+# 添加一个新的函数用于生成日期列表
+generate_date_list() {
+    local start_date=$1
+    local end_date=$2
+    local temp_file
+    temp_file=$(mktemp)
+
+    # 生成日期序列
+    local current_date=$start_date
+    while [ "$("$CMD_DATE" -d "$current_date" +%s)" -le "$("$CMD_DATE" -d "$end_date" +%s)" ]; do
+        # 添加两种日期格式的匹配模式
+        echo "*$("$CMD_DATE" -d "$current_date" +%Y-%m-%d)*"
+        echo "*$("$CMD_DATE" -d "$current_date" +%Y_%m_%d)*"
+        current_date=$("$CMD_DATE" -d "$current_date +1 day" +%Y-%m-%d)
+    done >"$temp_file"
+
+    echo "$temp_file"
+}
+
+# 修改 oss_get_logs 函数
 oss_get_logs() {
     local bucket_path="${1%/}/"
     local start_date=${2:-$("$CMD_DATE" +%Y-%m-%d)}
@@ -565,15 +584,18 @@ oss_get_logs() {
         return 1
     fi
 
+    # 生成日期列表文件
+    local date_list_file
+    date_list_file=$(generate_date_list "$start_date" "$end_date")
+
+    # 使用日期列表文件查询日志
     local result
-    result=$(
-        ossutil --profile "${profile:-}" ls "oss://${bucket_path}" \
-            -r \
-            --include "*${start_date}*" \
-            --include "*${end_date}*" \
-            --include "*${start_date//-/_}*" \
-            --include "*${end_date//-/_}*"
-    )
+    result=$(ossutil --profile "${profile:-}" ls "oss://${bucket_path}" \
+        -r \
+        --include-from "$date_list_file")
+
+    # 删除临时文件
+    rm -f "$date_list_file"
 
     # 过滤指定日期范围内的日志
     local filtered_result
@@ -597,9 +619,9 @@ oss_get_logs() {
             path = $8
 
             # 从文件路径中提取日期
-            if (path ~ /[0-9]{4}_[0-9]{2}_[0-9]{2}/) {
-                # 将文件名中的日期格式从 YYYY_MM_DD 转换为 YYYY-MM-DD
-                log_date = gensub(/.*([0-9]{4})_([0-9]{2})_([0-9]{2}).*/, "\\1-\\2-\\3", 1, path)
+            if (path ~ /[0-9]{4}[-_][0-9]{2}[-_][0-9]{2}/) {
+                # 将文件名中的日期格式从 YYYY_MM_DD 或 YYYY-MM-DD 转换为 YYYY-MM-DD
+                log_date = gensub(/.*([0-9]{4})[-_]([0-9]{2})[-_]([0-9]{2}).*/, "\\1-\\2-\\3", 1, path)
                 log_ts = to_epoch(log_date)
                 if (log_ts >= start_ts && log_ts <= end_ts) {
                     printf "%s\t%s\t%s\t%s\t%s\n", timestamp, size, storage_class, etag, path
