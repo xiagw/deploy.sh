@@ -12,12 +12,15 @@ show_cas_help() {
     echo "  create <证书名称> <证书文件> <私钥文件>    - 上传并创建新证书"
     echo "  delete <证书ID>                          - 删除指定证书"
     echo "  detail <证书ID>                          - 获取证书详情"
+    echo "  batch-upload [domain...]           - 批量上传证书并部署到CDN"
     echo
     echo "示例："
     echo "  $0 cas list"
     echo "  $0 cas create my-cert /path/to/cert.pem /path/to/key.pem"
     echo "  $0 cas delete 15246052"
     echo "  $0 cas detail 15246052"
+    echo "  $0 cas batch-upload                # 自动处理所有CDN域名的证书"
+    echo "  $0 cas batch-upload example.com    # 处理指定域名的证书"
 }
 
 handle_cas_commands() {
@@ -27,8 +30,9 @@ handle_cas_commands() {
     case "$operation" in
     list) cas_list "$@" ;;
     create) cas_create "$@" ;;
+    update) cas_update "$@" ;;
     delete) cas_delete "$@" ;;
-    detail) cas_detail "$@" ;;
+    batch-upload) cas_batch_upload_deploy "$@" ;;
     *)
         echo "错误：未知的证书服务操作：$operation" >&2
         show_cas_help
@@ -185,4 +189,84 @@ cas_detail() {
         echo "$result"
     fi
     log_result "${profile:-}" "${region:-}" "cas" "detail" "$result"
+}
+
+# 添加新函数用于批量上传和部署证书
+cas_batch_upload_deploy() {
+    local domains=("$@")
+    local today
+    today="$($CMD_DATE +%m%d)"
+
+    # 如果没有提供域名参数,则从CDN域名列表获取
+    if [ ${#domains[@]} -eq 0 ]; then
+        readarray -t domains < <(aliyun --profile "${profile:-}" cdn DescribeUserDomains |
+            jq -r '.Domains.PageData[].DomainName' |
+            awk -F. '{$1=""; print $0}' | sort | uniq)
+    fi
+
+    # 遍历处理每个域名
+    for domain in "${domains[@]}"; do
+        domain="${domain// /.}"
+        local upload_name="${domain//./-}-$today"
+        local file_key="$HOME/.acme.sh/dest/${domain}.key"
+        local file_pem="$HOME/.acme.sh/dest/${domain}.pem"
+        local upload_log="${SCRIPT_DATA}/cas/cert_${domain}.log"
+
+        echo "处理域名: ${domain}"
+        echo "证书名称: ${upload_name}"
+        echo "密钥文件: $file_key"
+        echo "证书文件: $file_pem"
+
+        # 检查证书文件是否存在
+        if [ ! -f "$file_key" ] || [ ! -f "$file_pem" ]; then
+            echo "错误：证书文件不存在: $file_key 或 $file_pem" >&2
+            continue
+        fi
+
+        # 删除旧证书
+        if [ -f "$upload_log" ]; then
+            echo "找到历史证书记录: ${upload_log}"
+            local remove_cert_id
+            remove_cert_id=$(jq -r '.CertId' "$upload_log")
+            if [ -n "$remove_cert_id" ] && [ "$remove_cert_id" != "null" ]; then
+                echo "删除旧证书 ID: $remove_cert_id"
+                cas_delete_cert "$remove_cert_id" || true
+            fi
+        fi
+
+        # 上传新证书
+        local result
+        result=$(cas_upload_cert "$upload_name" "$file_key" "$file_pem")
+        local status=$?
+
+        # 创建日志目录
+        mkdir -p "$(dirname "$upload_log")"
+        echo "$result" > "$upload_log"
+
+        if [ $status -eq 0 ]; then
+            echo "证书上传成功"
+        else
+            echo "错误：证书上传失败" >&2
+            continue
+        fi
+    done
+
+    # 为CDN域名部署证书
+    echo "正在为CDN域名部署证书..."
+    local cdn_domains
+    readarray -t cdn_domains < <(aliyun --profile "${profile:-}" cdn DescribeUserDomains |
+        jq -r '.Domains.PageData[].DomainName')
+
+    for domain_cdn in "${cdn_domains[@]}"; do
+        local domain="${domain_cdn#*.}"
+        local upload_name="${domain//./-}-$today"
+        echo "CDN域名: ${domain_cdn}"
+        echo "设置证书: ${upload_name}"
+
+        aliyun --profile "${profile:-}" cdn BatchSetCdnDomainServerCertificate \
+            --SSLProtocol on \
+            --CertType cas \
+            --DomainName "${domain_cdn}" \
+            --CertName "${upload_name}"
+    done
 }
