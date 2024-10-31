@@ -20,20 +20,30 @@ if [ -n "$CMD_BAT" ]; then
         --wrap=auto \
         --tabs=2"
 fi
-CMD_FZF=$(command -v fzf || { echo "Error: fzf is required" >&2; exit 1; })
+CMD_FZF=$(command -v fzf || {
+    echo "Error: fzf is required" >&2
+    exit 1
+})
 CMD_OSS=$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")
 
 # SSL deployment functions
 select_file() {
-    if [[ ! -d "$HOME/Downloads" ]]; then
-        echo "错误: Downloads 目录不存在" >&2
+    local search_dir="$1"
+
+    if [[ -z "$search_dir" ]]; then
+        echo "错误: 未提供搜索目录" >&2
+        return 1
+    fi
+
+    if [[ ! -d "$search_dir" ]]; then
+        echo "错误: 目录 '$search_dir' 不存在" >&2
         return 1
     fi
 
     local selected_file
-    selected_file=$(find "$HOME/Downloads" -maxdepth 1 \
+    selected_file=$(find "$search_dir" -maxdepth 1 \
         \( -name "*.zip" -o -name "*nginx*" -o -name "*.key" -o -name "*.pem" -o -name "*.crt" \) \
-        -type f | fzf --height 50% --prompt="选择要同步的文件: ")
+        -type f | $CMD_FZF --height 50% --prompt="选择要同步的文件: ")
 
     if [[ -z "$selected_file" ]]; then
         echo "错误: 未选择文件" >&2
@@ -52,7 +62,7 @@ select_ssh_host() {
         return 1
     fi
 
-    echo "$hosts" | fzf --height 50% --prompt="选择目标SSH主机: "
+    echo "$hosts" | $CMD_FZF --height 50% --prompt="选择目标SSH主机: "
 }
 
 cleanup() {
@@ -113,17 +123,18 @@ find_and_sync_files() {
     for file in {"$key_file:default.key","$pem_file:default.pem","$crt_file:default.pem"}; do
         IFS=: read -r src dest <<<"$file"
         if [[ -n "$src" ]]; then
-            echo "同步 ${src##*.} 文件..."
-            if ! rsync -avz --progress "$src" "${target_host}:${target_base_path}${dest}"; then
+            echo "同步 ${src##*.} 文件到 ${target_host}:${target_base_path}${dest}..."
+            if ! scp "$src" "${target_host}:${target_base_path}${dest}"; then
                 echo "警告: ${src##*.} 文件同步失败" >&2
                 sync_status=1
             fi
             if [[ $sync_status -eq 1 ]]; then
                 echo "尝试通过 HOME 目录同步: " >&2
                 # 先同步到远程主机的 HOME 目录
-                if rsync -avz --progress "$src" "${target_host}:~/$(basename "$dest")"; then
+                remote_dest="$(basename "$dest")"
+                if scp "$src" "${target_host}:~/${remote_dest}"; then
                     # SSH 到远程主机并使用 sudo cp 移动文件
-                    ssh "$target_host" "sudo cp ~/$(basename "$dest") ${target_base_path}${dest} && rm ~/$(basename "$dest")"
+                    ssh "$target_host" "sudo cp ~/${remote_dest} ${target_base_path}${dest} && rm ~/${remote_dest}"
                     if [[ $? -eq 0 ]]; then
                         sync_status=0
                         echo "通过 HOME 目录同步成功"
@@ -221,12 +232,13 @@ search_project_files() {
 deploy_ssl() {
     trap cleanup EXIT INT TERM HUP QUIT
 
+    local source_dir="${1:-$HOME/Downloads}" # 默认使用 Downloads 目录
     local source_file
     local extracted_path
     local target_host
     local target_path="docker/laradock/nginx/sites/ssl/"
 
-    source_file=$(select_file) || return 1
+    source_file=$(select_file "$source_dir") || return 1
     echo "选择的源文件: $source_file"
 
     extracted_path=$(extract_file "$source_file") || return 1
@@ -255,10 +267,10 @@ display_usage() {
 Usage: ${script_name} COMMAND [ARGS]
 
 Commands:
-    ssl                 Deploy SSL certificates
-    keys FILE BUCKET/PATH  Sync SSH public keys to OSS storage
-    search DIR [PATTERN]    Search project files
-    help                Display this help message
+    ssl [DIR]                   Deploy SSL certificates (default dir: ~/Downloads)
+    search DIR [PATTERN]        Search project files
+    keys FILE BUCKET/PATH       Sync SSH public keys to OSS storage
+    help                        Display this help message
 
 Options for search command:
     -c, --cat          Use cat instead of bat for viewing
@@ -266,6 +278,7 @@ Options for search command:
 
 Examples:
     ${script_name} ssl
+    ${script_name} ssl /path/to/certificates
     ${script_name} search /path/to/active
     ${script_name} search /path/to/active search_pattern
     ${script_name} search ~/a-nas-smb/projects/02-进行中 search_pattern
@@ -281,15 +294,16 @@ main() {
     # Command processing
     case "${1:-search}" in
     ssl)
-        deploy_ssl
-        ;;
-    keys)
         shift
-        sync_ssh_keys "$@"
+        deploy_ssl "$@"
         ;;
     search)
         shift
         search_project_files "${@}"
+        ;;
+    keys)
+        shift
+        sync_ssh_keys "$@"
         ;;
     *)
         echo "Unknown command: $1" >&2
