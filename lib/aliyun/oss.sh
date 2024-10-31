@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
+# shellcheck disable=SC2016
 
 # OSS (对象存储服务) 相关函数
 
@@ -14,6 +15,7 @@ show_oss_help() {
     echo "  deploy-cert <存储桶名称> <域名> <证书ID> [region] - 部署证书到OSS域名"
     echo "  batch-copy [-in | --internal] <源存储桶/路径> <目标存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量复制对象并设置存储类型"
     echo "  batch-delete [-in | --internal] <存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量删除指定存储类型的对象"
+    echo "  logs <存储桶名称/日志目录> [开始时间] [结束时间] [格式] - 查询存储桶访问日志"
     echo
     echo "选项："
     echo "  -in | --internal    使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）"
@@ -32,6 +34,9 @@ show_oss_help() {
     echo "  $0 oss batch-delete flyh5/e/ file-list.txt IA          # 使用自定义文件类型列表"
     echo "  $0 oss batch-copy -in flynew/e/ flyh5/e/                 # 使用内网进行复制"
     echo "  $0 oss batch-delete -in flyh5/e/                        # 使用内网进行删除"
+    echo "  $0 oss logs my-bucket/logs/                     # 查询今天的访问日志"
+    echo "  $0 oss logs my-bucket/cdn_log/ 2024-03-01      # 查询指定日期的CDN访问日志"
+    echo "  $0 oss logs my-bucket/access_log/ 2024-03-01 2024-03-10 json  # 查询日期范围内的访问日志并以JSON格式输出"
 }
 
 handle_oss_commands() {
@@ -48,6 +53,7 @@ handle_oss_commands() {
     deploy-cert) oss_deploy_cert "$@" ;;
     batch-copy) oss_batch_copy "$@" ;;
     batch-delete) oss_batch_delete "$@" ;;
+    logs) oss_get_logs "$@" ;;
     *)
         echo "错误：未知的 OSS 操作：$operation" >&2
         show_oss_help
@@ -534,4 +540,111 @@ oss_batch_delete() {
         log_result "$profile" "$region" "oss" "batch-delete" "失败：$result"
         return 1
     fi
+}
+
+# 添加新的函数用于处理访问日志
+oss_get_logs() {
+    local bucket_path="${1%/}/"
+    local start_date=${2:-$("$CMD_DATE" +%Y-%m-%d)}
+    local end_date=${3:-$start_date}
+    local format=${4:-human}
+
+    if [ -z "$bucket_path" ]; then
+        echo "错误：请指定存储桶路径" >&2
+        return 1
+    fi
+
+    # 验证日期格式
+    if ! "$CMD_DATE" -d "$start_date" >/dev/null 2>&1; then
+        echo "错误：开始日期格式无效，请使用 YYYY-MM-DD 格式" >&2
+        return 1
+    fi
+
+    if ! "$CMD_DATE" -d "$end_date" >/dev/null 2>&1; then
+        echo "错误：结束日期格式无效，请使用 YYYY-MM-DD 格式" >&2
+        return 1
+    fi
+
+    local result
+    result=$(
+        ossutil --profile "${profile:-}" ls "oss://${bucket_path}" \
+            -r \
+            --include "*${start_date}*" \
+            --include "*${end_date}*" \
+            --include "*${start_date//-/_}*" \
+            --include "*${end_date//-/_}*"
+    )
+
+    # 过滤指定日期范围内的日志
+    local filtered_result
+    filtered_result=$(echo "$result" | "$CMD_AWK" -v start="$start_date" -v end="$end_date" -v cmd_date="$CMD_DATE" '
+        function to_epoch(date) {
+            cmd = cmd_date " -d \"" date "\" +%s"
+            cmd | getline ts
+            close(cmd)
+            return ts
+        }
+        BEGIN {
+            start_ts = to_epoch(start)
+            end_ts = to_epoch(end) + 86400  # 加上一天的秒数以包含结束日期
+        }
+        /^[0-9]{4}-[0-9]{2}-[0-9]{2}/ {
+            # 提取文件信息
+            timestamp = $1 " " $2 " " $3 " " $4
+            size = $5
+            storage_class = $6
+            etag = $7
+            path = $8
+
+            # 从文件路径中提取日期
+            if (path ~ /[0-9]{4}_[0-9]{2}_[0-9]{2}/) {
+                # 将文件名中的日期格式从 YYYY_MM_DD 转换为 YYYY-MM-DD
+                log_date = gensub(/.*([0-9]{4})_([0-9]{2})_([0-9]{2}).*/, "\\1-\\2-\\3", 1, path)
+                log_ts = to_epoch(log_date)
+                if (log_ts >= start_ts && log_ts <= end_ts) {
+                    printf "%s\t%s\t%s\t%s\t%s\n", timestamp, size, storage_class, etag, path
+                }
+            }
+        }
+    ')
+
+    case "$format" in
+    json)
+        if [ -n "$filtered_result" ]; then
+            echo "$filtered_result" | "$CMD_AWK" -F'\t' '{
+                print "{"
+                print "  \"timestamp\": \"" $1 "\","
+                print "  \"size\": \"" $2 "\","
+                print "  \"storageClass\": \"" $3 "\","
+                print "  \"etag\": \"" $4 "\","
+                print "  \"path\": \"" $5 "\""
+                print "}"
+            }' | jq -s '.'
+        else
+            echo "[]"
+        fi
+        ;;
+    tsv)
+        echo -e "Timestamp\tSize\tStorageClass\tETag\tPath"
+        if [ -n "$filtered_result" ]; then
+            echo "$filtered_result"
+        fi
+        ;;
+    human | *)
+        echo "访问日志查询结果："
+        if [ -z "$filtered_result" ]; then
+            echo "未找到访问日志。"
+        else
+            echo "日志文件列表："
+            echo "--------------------------------------------------------------------------------"
+            echo "时间戳                        大小      存储类型    文件路径"
+            echo "--------------------------------------------------------------------------------"
+            echo "$filtered_result" | "$CMD_AWK" -F'\t' '{
+                printf "%-30s %-10s %-10s %s\n", $1, $2, $3, $5
+            }'
+        fi
+        ;;
+    esac
+
+    log_result "${profile:-}" "${region:-}" "oss" "logs" "$filtered_result" "$format"
 }
