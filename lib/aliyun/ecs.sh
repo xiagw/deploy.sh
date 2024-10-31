@@ -65,7 +65,9 @@ ecs_list() {
     local format=${1:-human}
     local result eip_result
     result=$(aliyun --profile "${profile:-}" ecs DescribeInstances --RegionId "${region:-}")
-    # eip_result=$(aliyun --profile "${profile:-}" vpc DescribeEipAddresses --RegionId "${region:-}")
+
+    # 获取 EIP 列表
+    eip_result=$(aliyun --profile "${profile:-}" vpc DescribeEipAddresses --RegionId "${region:-}")
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
@@ -79,7 +81,23 @@ ecs_list() {
         ;;
     tsv)
         echo -e "InstanceId\tInstanceName\tStatus\tImageId\tPublicIpAddress\tPrivateIpAddress\tExpiredTime\tInstanceChargeType"
-        echo "$result" | jq -r '.Instances.Instance[] | [.InstanceId, .InstanceName, .Status, .ImageId, (.EipAddress.IpAddress // "-"), (.VpcAttributes.PrivateIpAddress.IpAddress[0] // "-"), .ExpiredTime, .InstanceChargeType] | @tsv'
+        echo "$result" | jq -r --argjson eips "$eip_result" '
+            .Instances.Instance[] |
+            . as $instance |
+            ($eips.EipAddresses.EipAddress[] | select(.InstanceId == $instance.InstanceId and .InstanceType == "EcsInstance") | .IpAddress) as $eip |
+            [
+                .InstanceId,
+                .InstanceName,
+                .Status,
+                .ImageId,
+                (if (.PublicIpAddress.IpAddress | length > 0) then .PublicIpAddress.IpAddress[0]
+                 elif $eip then $eip
+                 else "-"
+                 end),
+                (.VpcAttributes.PrivateIpAddress.IpAddress[0] // "-"),
+                .ExpiredTime,
+                .InstanceChargeType
+            ] | @tsv'
         ;;
     human | *)
         echo "列出 ECS 实例："
@@ -88,7 +106,27 @@ ecs_list() {
         else
             echo "实例ID                  名称               状态    镜像ID              公网IP         私网IP         到期时间               计费方式"
             echo "---------------------- ------------------ ------ ------------------ ------------- -------------  ---------------------  ----------"
-            echo "$result" | jq -r '.Instances.Instance[] | [.InstanceId, .InstanceName, .Status, .ImageId, .PublicIpAddress.IpAddress[], (.VpcAttributes.PrivateIpAddress.IpAddress[0] // "-"), .ExpiredTime, .InstanceChargeType] | @tsv' |
+            # 调试输出
+            echo "DEBUG: 总实例数: $(echo "$result" | jq '.Instances.Instance | length')" >&2
+            echo "DEBUG: EIP数量: $(echo "$eip_result" | jq '.EipAddresses.EipAddress | length')" >&2
+
+            echo "$result" | jq -r --argjson eips "$eip_result" '
+                .Instances.Instance[] |
+                . as $instance |
+                ($eips.EipAddresses.EipAddress // [] | map(select(.InstanceId == $instance.InstanceId and .InstanceType == "EcsInstance")) | first | .IpAddress) as $eip |
+                [
+                    .InstanceId,
+                    .InstanceName,
+                    .Status,
+                    .ImageId,
+                    (if (.PublicIpAddress.IpAddress | length > 0) then .PublicIpAddress.IpAddress[0]
+                     elif $eip then $eip
+                     else "-"
+                     end),
+                    (.VpcAttributes.PrivateIpAddress.IpAddress[0] // "-"),
+                    .ExpiredTime,
+                    .InstanceChargeType
+                ] | @tsv' |
                 awk 'BEGIN {FS="\t"; OFS="\t"}
                 {
                     printf "%-22s  %-16s  %-6s  %-18s  %-13s  %-13s  %-21s  %s\n", $1, substr($2, 1, 14), $3, substr($4, 1, 12), $5, $6, $7, $8
@@ -115,7 +153,7 @@ ecs_create() {
     vpc_list=$(vpc_list json | jq -r '.Vpcs.Vpc[] | select(.VpcId != null) | "\(.VpcId) (\(.VpcName))"')
 
     if [ -z "$vpc_list" ]; then
-        echo "错误：没有找到 VPC，请先创建 VPC。"
+        echo "错误：没有找到 VPC， 请先创建 VPC。"
         return 1
     elif [ "$(echo "$vpc_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
         vpc_id=$(echo "$vpc_list" | awk '{print $1}')
@@ -173,7 +211,8 @@ ecs_create() {
     local key_pair_name
     local key_pair_list
     key_pair_list=$(aliyun --profile "${profile:-}" ecs DescribeKeyPairs --RegionId "$region" | jq -r '.KeyPairs.KeyPair[] | .KeyPairName')
-    local key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]')
+    local key_count
+    key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]')
 
     if [ "$key_count" -eq 0 ]; then
         echo "错误：没有找到 SSH 密钥对，请先创建 SSH 密钥对。"
@@ -238,7 +277,8 @@ ecs_create() {
         echo "ECS 实例创建并启动成功。"
 
         # 获取实例ID
-        local instance_id=$(echo "$result" | jq -r '.InstanceIdSets.InstanceIdSet[0]')
+        local instance_id
+        instance_id=$(echo "$result" | jq -r '.InstanceIdSets.InstanceIdSet[0]')
 
         # 等待并显示公网IP
         echo "等待分配公网IP..."
@@ -252,10 +292,10 @@ ecs_create() {
             fi
         done
         if [ -z "$public_ip" ] || [ "$public_ip" == "null" ]; then
-            echo "未能获取公网IP，请稍后在控制台查看。"
+            echo "未能获取公网IP， 请稍后在控制台查看。"
         fi
     else
-        echo "错误：ECS 实例创建失败。"
+        echo "错误： ECS 实例创建失败。"
         echo "$result"
     fi
     log_result "${profile:-}" "$region" "ecs" "create" "$result"
@@ -346,7 +386,7 @@ ecs_key_create() {
         echo "请保存私钥内容，它只会显示一次！"
         echo "$result" | jq -r '.PrivateKeyBody'
     else
-        echo "错误：SSH 密钥对创建失败。"
+        echo "错误： SSH 密钥对创建失败。"
         echo "$result"
     fi
     log_result "$profile" "$region" "ecs" "key-create" "$result"
@@ -428,7 +468,7 @@ get_supported_disk_categories() {
         --DestinationResource SystemDisk \
         --InstanceType "${instance_type:-}")
 
-    if [ $? -ne 0 ]; then
+    if [ "$?" -ne 0 ]; then
         echo "错误：调用 DescribeAvailableResource API 失败。" >&2
         echo "$result" >&2
         return 1
@@ -438,9 +478,12 @@ get_supported_disk_categories() {
     echo "$result" | jq '.'
 
     local disk_categories
-    disk_categories=$(echo "$result" | jq -r '.AvailableZones.AvailableZone[].AvailableResources.AvailableResource[].SupportedResources.SupportedResource[] | select(.Code == "SystemDisk") | .SupportedSystemDiskCategories.SupportedSystemDiskCategory[]' 2>/dev/null)
+    disk_categories=$(
+        echo "$result" |
+            jq -r '.AvailableZones.AvailableZone[].AvailableResources.AvailableResource[].SupportedResources.SupportedResource[] | select(.Code == "SystemDisk") | .SupportedSystemDiskCategories.SupportedSystemDiskCategory[]' 2>/dev/null
+    )
 
-    if [ $? -ne 0 ] || [ -z "$disk_categories" ]; then
+    if [ -z "$disk_categories" ]; then
         echo "警告：无法从 API 响应中提取磁盘类型。使用默认磁盘类型列表。" >&2
         disk_categories="cloud_efficiency cloud_ssd cloud_essd"
     fi
@@ -499,7 +542,7 @@ ecs_stop() {
         return 1
     fi
 
-    echo "停止 ECS 实例：$instance_id（使用节省停机模式）"
+    echo "停止 ECS 实例：$instance_id (使用节省停机模式)"
     local result
     result=$(aliyun --profile "${profile:-}" ecs StopInstance \
         --RegionId "$region" \
@@ -514,7 +557,7 @@ ecs_stop() {
         # 等待实例状态变为 Stopped
         echo "等待实例停止..."
         local status
-        for i in {1..30}; do
+        for ((i = 1; i <= 30; i++)); do
             sleep 5
             status=$(aliyun --profile "${profile:-}" ecs DescribeInstanceAttribute \
                 --InstanceId "$instance_id" \
@@ -526,7 +569,7 @@ ecs_stop() {
             echo "实例状态: $status"
         done
     else
-        echo "错误：ECS 实例停止失败。"
+        echo "错误： ECS 实例停止失败。"
         echo "$result"
     fi
     log_result "${profile:-}" "$region" "ecs" "stop" "$result"
