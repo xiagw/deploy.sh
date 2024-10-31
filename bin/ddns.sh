@@ -1,8 +1,10 @@
 #!/bin/sh
-#
+# shellcheck disable=SC2016,SC1090
 # DynV6 DDNS Update Script
 # Version: 1.0.0
 # Description: This script updates DynV6 DNS records with the current IP address.
+#  support ipv4 and ipv6
+#  support macos/openwrt/linux
 #
 # Usage: ./ddns.sh [OPTIONS]
 # See --help for more information.
@@ -17,7 +19,6 @@ _get_config() {
 
     echo "config file: $g_me_env"
     echo "log file: $g_me_log"
-    # shellcheck disable=SC1090
     . "$g_me_env"
 
     dynv6_host="${dynv6_host:-$ddns_host}"
@@ -32,8 +33,8 @@ _get_config() {
 
 ## get last ip from log
 _get_saved_ip() {
-    ip4_last=$(awk 'END {print $4}' "$g_me_log")
-    ip6_last=$(awk 'END {print $6}' "$g_me_log")
+    ip4_last=$($CMD_AWK 'END {print $4}' "$g_me_log")
+    ip6_last=$($CMD_AWK 'END {print $6}' "$g_me_log")
     _msg yellow "get old IPv4 from log file: $ip4_last"
     _msg yellow "get old IPv6 from log file: $ip6_last"
 }
@@ -45,7 +46,7 @@ _update_dynv6() {
     [ "$ip6_last" = "${ip6_current-}" ] && [ "$ip4_last" = "${ip4_current-}" ] && [ "${force_update:-0}" -ne 1 ] && return
 
     base_url="http://dynv6.com/api/update?hostname=${dynv6_host}&token=${dynv6_token}"
-    if $cmd "${base_url}&ipv4=${ip4_current}" -fsSL "${base_url}&ipv6=${ip6_current}"; then
+    if $CMD_CURL "${base_url}&ipv4=${ip4_current}" -fsSL "${base_url}&ipv6=${ip6_current}"; then
         echo
         _msg log "$g_me_log" "IPV4: ${ip4_current:-none} IPV6: ${ip6_current:-none}"
     else
@@ -64,29 +65,18 @@ Options:
   -h, --host HOST       Set the DynV6 hostname
   -t, --token TOKEN     Set the DynV6 token
   -d, --device DEVICE   Set the network device (default: pppoe-wan)
-  -s, --silent          Run in silent mode
-  --help                Display this help message
+  -s, --silent         Run in silent mode
+  --help               Display this help message
 
 Environment variables:
-  ddns_host             DynV6 hostname (can be set in config file)
-  ddns_token            DynV6 token (can be set in config file)
+  ddns_host            DynV6 hostname (can be set in config file)
+  ddns_token           DynV6 token (can be set in config file)
 EOF
 }
 
 _parse_args() {
     ## disable proxy
     unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
-
-    cmd=$(command -v /usr/local/opt/curl/bin/curl || command -v curl || command -v wget)
-    case "$cmd" in
-    */curl) cmd="$cmd -fsSL" ;;
-    */wget) cmd="$cmd --quiet -O-" ;;
-    *)
-        echo "Neither curl nor wget found. Please install curl."
-        echo "opkg update && opkg install curl"
-        return 1
-        ;;
-    esac
 
     wan_device=pppoe-wan
     while [ "$#" -gt 0 ]; do
@@ -105,28 +95,29 @@ _parse_args() {
 }
 
 _common_lib() {
-    common_lib="$g_me_path/common.sh"
+    common_lib="$g_me_lib_path/common.sh"
     if [ ! -f "$common_lib" ]; then
         common_lib='/tmp/common.sh'
         include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
-        [ -f "$common_lib" ] || curl -fsSL "$include_url" >"$common_lib"
+        [ -f "$common_lib" ] || $CMD_CURL -fsSL "$include_url" >"$common_lib"
     fi
-    # shellcheck source=/dev/null
     . "$common_lib"
 }
 
 _setup_environment() {
     g_me_name="$(basename "$0")"
     g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
+    g_me_path_parent="$(dirname "$g_me_path")"
+    g_me_lib_path="$g_me_path_parent/lib"
+    g_me_data_path="$g_me_path_parent/data"
     g_me_env="$g_me_path/${g_me_name}.env"
     g_me_log="$g_me_path/${g_me_name}.log"
-    g_me_data_path="$g_me_path/../data"
 }
 
 main() {
     _setup_environment
-    _parse_args "$@" || return
     _common_lib || return
+    _parse_args "$@" || return
     _get_config || return
     _get_saved_ip
     _get_current_ip
