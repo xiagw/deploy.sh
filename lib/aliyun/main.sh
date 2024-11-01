@@ -110,6 +110,7 @@ main() {
     # 显示当前配置
     # echo "当前配置： Profile==$profile , Region==$region"
 
+    # 根据服务类型加载对应模块 (待完成)
     case "$service" in
     list-all) list_all_services ;;
     config) handle_config_commands "${args[@]}" ;;
