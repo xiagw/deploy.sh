@@ -374,30 +374,38 @@ _install_wg() {
 }
 
 _install_ossutil() {
+    # 如果已安装且不是升级则直接返回
     if [ "$1" != "upgrade" ] && command -v ossutil >/dev/null; then
         return
     fi
-    if [ "$1" = "upgrade" ]; then
-        shift
+
+    # 确定版本和命令
+    local ver=2 cmd=/usr/local/bin/ossutil
+    local cmd_get_ver="$cmd version"
+    if [[ "${2:-2}" = 1 || "${2:-2}" = v1 ]]; then
+        local ver='' cmd=/usr/local/bin/ossutil1
+        local cmd_get_ver="$cmd --version"
     fi
-    local ver=$1
+
+    # 获取系统类型
     _check_distribution
     local os=${lsb_dist/ubuntu/linux}
     os=${os/centos/linux}
     os=${os/macos/mac}
-    local url
-    url="https://help.aliyun.com/zh/oss/developer-reference/install-ossutil$([[ $ver == 1 || $ver == v1 ]] && echo '' || echo '2')"
+
+    # 下载安装
+    local url_doc="https://help.aliyun.com/zh/oss/developer-reference/install-ossutil$ver"
     local url_down
-    url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${os}-amd64\.zip")
-    curl -fLo ossu.zip "$url_down"
-    unzip -o -j ossu.zip
-    $use_sudo install -m 0755 ossutil /usr/local/bin/ossutil"$([[ $ver == 1 || $ver == v1 ]] && echo 1)"
-    rm -f ossu.zip ossutil ossutil64
-    if [ "$ver" = 1 ] || [ "$ver" = v1 ]; then
-        ossutil1 --version
-    else
-        ossutil version
-    fi
+    url_down=$(curl -fsSL "$url_doc" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${os}-amd64\.zip")
+    curl -fLo ossu.zip "$url_down" && unzip -o -j ossu.zip
+    $use_sudo install -m 0755 ossutil "$cmd"
+
+    # 创建版本软链接
+    $use_sudo ln -sf "$cmd" "/usr/local/bin/oss${ver:-1}"
+
+    # 清理并显示版本
+    $cmd_get_ver
+    rm -f ossu.zip ossutil ossutil64 ossutilmac64
 }
 
 _install_aliyun_cli() {
