@@ -381,10 +381,10 @@ _install_ossutil() {
 
     # 确定版本和命令
     local ver=2 cmd=/usr/local/bin/ossutil
-    local cmd_get_ver="$cmd version"
+    local cmd_get_ver=("$cmd" version)
     if [[ "${2:-2}" = 1 || "${2:-2}" = v1 ]]; then
         local ver='' cmd=/usr/local/bin/ossutil1
-        local cmd_get_ver="$cmd --version"
+        local cmd_get_ver=("$cmd" --version)
     fi
 
     # 获取系统类型
@@ -397,14 +397,17 @@ _install_ossutil() {
     local url_doc="https://help.aliyun.com/zh/oss/developer-reference/install-ossutil$ver"
     local url_down
     url_down=$(curl -fsSL "$url_doc" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${os}-amd64\.zip")
-    curl -fLo ossu.zip "$url_down" && unzip -o -j ossu.zip
+    curl -fLo ossu.zip "$url_down" && unzip -qq -o -j ossu.zip
+    _msg green "Installing to $cmd"
     $use_sudo install -m 0755 ossutil "$cmd"
 
     # 创建版本软链接
+    _msg green "Creating symlink /usr/local/bin/oss${ver:-1} to $cmd"
     $use_sudo ln -sf "$cmd" "/usr/local/bin/oss${ver:-1}"
 
     # 清理并显示版本
-    $cmd_get_ver
+    _msg green "Showing version"
+    "${cmd_get_ver[@]}"
     rm -f ossu.zip ossutil ossutil64 ossutilmac64
 }
 
@@ -422,8 +425,11 @@ _install_aliyun_cli() {
     temp_dir=$(mktemp -d)
     curl -fLo "$temp_dir/aly.tgz" "$url_down"
     tar -xzf "$temp_dir/aly.tgz" -C "$temp_dir"
-    $use_sudo install -m 0755 "$temp_dir/aliyun" /usr/local/bin/aliyun
-    aliyun --version | head -n 1
+    local cmd=/usr/local/bin/aliyun
+    _msg green "Installing to $cmd"
+    $use_sudo install -m 0755 "$temp_dir/aliyun" "$cmd"
+    _msg green "Showing version"
+    "$cmd" version | head -n 1
     rm -rf "$temp_dir"
 }
 
@@ -438,7 +444,9 @@ _install_flarectl() {
     local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.gz"
 
     if curl -fsSLo "$temp_file" $url; then
+        _msg green "Extracting flarectl to /tmp"
         tar -C /tmp -xzf "$temp_file" flarectl
+        _msg green "Installing to /usr/local/bin/flarectl"
         $use_sudo install -m 0755 /tmp/flarectl /usr/local/bin/flarectl
         _msg success "flarectl installed successfully"
     else
@@ -453,7 +461,7 @@ _install_jq_cli() {
         return
     fi
 
-    _msg green "install jq cli..."
+    _msg green "Installing jq cli..."
     case "$lsb_dist" in
     debian | ubuntu | linuxmint | linux)
         $use_sudo apt-get update -qq
@@ -478,12 +486,16 @@ _install_kubectl() {
         return
     fi
     _msg green "Installing kubectl..."
-    local kver
-    kver=$(curl -sL https://dl.k8s.io/release/stable.txt)
-    curl -fsSLO "https://dl.k8s.io/release/${kver}/bin/linux/amd64/kubectl" \
-        -fsSLO "https://dl.k8s.io/${kver}/bin/linux/amd64/kubectl.sha256"
+    local ver
+    ver=$(curl -sL https://dl.k8s.io/release/stable.txt)
+    local cmd=/usr/local/bin/kubectl
+    curl -fsSLO "https://dl.k8s.io/release/${ver}/bin/linux/amd64/kubectl" \
+        -fsSLO "https://dl.k8s.io/${ver}/bin/linux/amd64/kubectl.sha256"
     if echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check; then
-        $use_sudo install -m 0755 kubectl /usr/local/bin/kubectl
+        _msg green "Installing to $cmd"
+        $use_sudo install -m 0755 kubectl "$cmd"
+        _msg green "Showing version"
+        "$cmd" version --client
         rm -f kubectl kubectl.sha256
     else
         _msg error "failed to install kubectl"
@@ -498,10 +510,13 @@ _install_helm() {
     _msg green "Installing helm..."
     local temp_file
     temp_file="$(mktemp)"
+    local cmd=/usr/local/bin/helm
     curl -fsSLo "$temp_file" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
     export HELM_INSTALL_DIR=/usr/local/bin
     $use_sudo bash "$temp_file"
     rm -f "$temp_file"
+    _msg green "Showing version"
+    "$cmd" version
 }
 
 _install_tencent_cli() {
@@ -511,6 +526,8 @@ _install_tencent_cli() {
     _msg green "install tencent cli..."
     _is_china && _set_mirror python
     python3 -m pip install tccli
+    _msg green "Showing version"
+    tccli --version
 }
 
 _install_terraform() {
@@ -528,6 +545,8 @@ _install_terraform() {
     $use_sudo apt-get install -yqq terraform >/dev/null
     # terraform version
     _msg green "terraform installed successfully!"
+    _msg green "Showing version"
+    terraform version
 }
 
 _install_aws() {
@@ -542,8 +561,12 @@ _install_aws() {
     $use_sudo /tmp/aws/install --bin-dir /usr/local/bin/ --install-dir /usr/local/ --update
     rm -rf /tmp/aws "$temp_file"
     ## install eksctl / 安装 eksctl
+    local cmd=/usr/local/bin/eksctl
     curl -fsSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    $use_sudo install -m 0755 /tmp/eksctl /usr/local/bin/
+    _msg green "Installing to $cmd"
+    $use_sudo install -m 0755 /tmp/eksctl "$cmd"
+    _msg green "Showing version"
+    "$cmd" version
 }
 
 _install_python_gitlab() {
@@ -554,6 +577,8 @@ _install_python_gitlab() {
     _is_china && _set_mirror python
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg green "python-gitlab is installed successfully"
+        _msg green "Showing version"
+        gitlab --version
     else
         _msg error "failed to install python-gitlab"
     fi
@@ -581,6 +606,8 @@ _install_docker() {
     temp_file=$(mktemp)
     curl -fsSLo "$temp_file" https://get.docker.com
     $use_sudo bash "$temp_file" "$@"
+    _msg green "Showing version"
+    docker --version
     rm -f "$temp_file"
 }
 
@@ -591,6 +618,8 @@ _install_podman() {
     _msg green "Installing podman"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq podman >/dev/null
+    _msg green "Showing version"
+    podman --version
 }
 
 _install_cron() {
