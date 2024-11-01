@@ -136,6 +136,7 @@ cdn_refresh() {
     local result
     result=$(aliyun --profile "${profile:-}" cdn RefreshObjectCaches \
         --region "$region" \
+        --Force true \
         --ObjectPath "$path" \
         --ObjectType "$object_type")
 

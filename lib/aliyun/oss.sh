@@ -4,56 +4,79 @@
 
 # OSS (对象存储服务) 相关函数
 
+# 在文件开头添加全局变量
+endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
+
 show_oss_help() {
-    echo "OSS (对象存储服务) 操作："
-    echo "  list   [region]             - 列出 OSS 存储桶"
-    echo "  create <存储桶名称> [region] - 创建 OSS 存储桶"
-    echo "  delete <存储桶名称> [region] - 删除 OSS 存储桶"
-    echo "  bind-domain <存储桶名称> <域名> - 为存储桶绑定自定义域名"
-    echo "  upload-cert <证书名称> <证书文件> <私钥文件> [region] - 上传SSL证书"
-    echo "  delete-cert <证书ID> [region] - 删除SSL证书"
-    echo "  deploy-cert <存储桶名称> <域名> <证书ID> [region] - 部署证书到OSS域名"
-    echo "  batch-copy [-in | --internal] <源存储桶/路径> <目标存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量复制对象并设置存储类型"
-    echo "  batch-delete [-in | --internal] <存储桶/路径> [包含文件类型列表的文件] [存储类型] - 批量删除指定存储类型的对象"
-    echo "  logs <存储桶路径> [选项...]    - 查询存储桶访问日志"
-    echo "    选项："
-    echo "      -s, --start-date DATE    开始日期 (YYYY-MM-DD)"
-    echo "      -e, --end-date DATE      结束日期 (YYYY-MM-DD)"
-    echo "      -f, --format FORMAT      输出格式 (human/json/tsv)"
-    echo "      -d, --domain DOMAIN      指定要查询的域名"
-    echo "      --status CODE           分析指定HTTP状态码的记录(如: 404,500,403)"
-    echo "      --file-types TYPES       指定要分析的文件类型（用逗号分隔，如：jpg,png,pdf）"
+    echo "OSS (对象存储服务) 操作"
     echo
-    echo "选项："
-    echo "  -in | --internal    使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）"
+    echo "全局选项："
+    echo "  -in, --internal     使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）"
+    echo
+    echo "命令："
+    echo "  list   [region]     列出 OSS 存储桶"
+    echo "  create <存储桶名称> [region]"
+    echo "                      创建 OSS 存储桶"
+    echo "  delete <存储桶名称> [region]"
+    echo "                      删除 OSS 存储桶"
+    echo "  bind-domain <存储桶名称> <域名>"
+    echo "                      为存储桶绑定自定义域名"
+    echo "  batch-copy <源存储桶/路径> <目标存储桶/路径> [文件类型列表] [存储类型]"
+    echo "                      批量复制对象并设置存储类型"
+    echo "  batch-delete <存储桶/路径> [文件类型列表] [存储类型]"
+    echo "                      批量删除指定存储类型的对象"
+    echo "  uris <URI文件> <存储桶名称> [存储类型]"
+    echo "                      处理URI文件中的对象并设置存储类型"
+    echo "  logs <存储桶路径> [选项...]"
+    echo "                      查询存储桶访问日志"
+    echo
+    echo "logs 命令选项："
+    echo "  -s, --start-date DATE    开始日期 (YYYY-MM-DD)"
+    echo "  -e, --end-date DATE      结束日期 (YYYY-MM-DD)"
+    echo "  -f, --format FORMAT      输出格式 (human/json/tsv)"
+    echo "  -d, --domain DOMAIN      指定要查询的域名"
+    echo "  --status CODE            分析指定HTTP状态码的记录(如: 404,500,403)"
+    echo "  --file-types TYPES       指定要分析的文件类型（用逗号分隔，如：jpg,png,pdf）"
+    echo "  --target-bucket NAME     指定目标存储桶（用于自动处理分析结果）"
     echo
     echo "示例："
-    echo "  $0 oss list"
+    echo "基本操作："
+    echo "  $0 oss list              # 列出所有存储桶"
+    echo "  $0 oss --internal list   # 使用内网列出所有存储桶"
+    echo
+    echo "存储桶管理："
     echo "  $0 oss create my-bucket"
     echo "  $0 oss delete my-bucket"
     echo "  $0 oss bind-domain my-bucket example.com"
-    echo "  $0 oss upload-cert my-cert path/to/cert.pem path/to/key.pem"
-    echo "  $0 oss delete-cert cert-1234567890abcdef"
-    echo "  $0 oss deploy-cert my-bucket example.com cert-1234567890abcdef"
+    echo
+    echo "批量操作："
     echo "  $0 oss batch-copy flynew/e/ flyh5/e/                    # 使用默认文件类型列表和IA存储类型"
     echo "  $0 oss batch-copy flynew/e/ flyh5/e/ file-list.txt IA   # 使用自定义文件类型列表"
-    echo "  $0 oss batch-delete flyh5/e/                           # 使用默认文件类型列表和IA存储类型"
-    echo "  $0 oss batch-delete flyh5/e/ file-list.txt IA          # 使用自定义文件类型列表"
-    echo "  $0 oss batch-copy -in flynew/e/ flyh5/e/                 # 使用内网进行复制"
-    echo "  $0 oss batch-delete -in flyh5/e/                        # 使用内网进行删除"
+    echo "  $0 oss --internal batch-copy flynew/e/ flyh5/e/         # 使用内网进行复制"
+    echo
+    echo "日志分析："
     echo "  $0 oss logs my-bucket/cdn_log/"
     echo "  $0 oss logs my-bucket/cdn_log/ -s 2024-03-01 -e 2024-03-10 -f json"
-    echo "  $0 oss logs my-bucket/cdn_log/ --start-date 2024-03-01 --404"
-    echo "  $0 oss logs my-bucket/cdn_log/ --404 --file-types jpg,png,pdf  # 只分析图片和PDF文件的404记录"
-    echo "  $0 oss logs my-bucket/cdn_log/ --domain flyh5.cn --404  # 分析指定域名的404记录"
-    echo "  $0 oss logs my-bucket/cdn_log/ --status 404,500  # 分析404和500错误记录"
-    echo "  $0 oss logs my-bucket/cdn_log/ --status 404 --file-types jpg,png,pdf  # 只分析图片和PDF文件的404记录"
-    echo "  $0 oss logs my-bucket/cdn_log/ --domain flyh5.cn --status 404  # 分析指定域名的404记录"
+    echo "  $0 oss logs my-bucket/cdn_log/ --status 404 --file-types jpg,png,pdf"
+    echo "  $0 oss logs my-bucket/cdn_log/ --domain flyh5.cn --status 404 --target-bucket other-bucket"
 }
 
 handle_oss_commands() {
     local operation=${1:-list}
     shift
+
+    # 先解析全局参数
+    local args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        -in | --internal) endpoint_url="http://oss-${region:-cn-hangzhou}-internal.aliyuncs.com" ;;
+        *) args+=("$1") ;;
+        esac
+        shift
+    done
+
+    # 重置参数为剩余的非全局参数
+    set -- "${args[@]}"
 
     case "$operation" in
     list) oss_list "$@" ;;
@@ -65,7 +88,8 @@ handle_oss_commands() {
     deploy-cert) oss_deploy_cert "$@" ;;
     batch-copy) oss_batch_copy "$@" ;;
     batch-delete) oss_batch_delete "$@" ;;
-    logs) handle_oss_logs_commands "$@" ;;
+    logs) oss_parse_cdn_logs "$@" ;;
+    uris) set_object_standard "$@" ;;
     *)
         echo "错误：未知的 OSS 操作：$operation" >&2
         show_oss_help
@@ -75,7 +99,7 @@ handle_oss_commands() {
 }
 
 # 添加新的函数处理日志相关命令
-handle_oss_logs_commands() {
+oss_parse_cdn_logs() {
     local bucket_path=""
     local start_date=""
     local end_date=""
@@ -83,6 +107,8 @@ handle_oss_logs_commands() {
     local status_codes=""
     local file_types=""
     local domain=""
+    local default_file_types_file=""
+    local target_bucket=""
 
     # 解析参数
     while [[ $# -gt 0 ]]; do
@@ -113,18 +139,21 @@ handle_oss_logs_commands() {
             ;;
         --status)
             if [[ -z "$2" || "$2" == -* ]]; then
-                echo "错误：--status 选项需要指定HTTP状态码（用逗号分隔）" >&2
-                return 1
+                status_codes="200,206,301,302,304,400,403,404,500,502,503,504"
+            else
+                status_codes="$2"
             fi
-            status_codes="$2"
             shift
             ;;
-        -t | --file-types)
+        -t | --file-types | --types)
             if [[ -z "$2" || "$2" == -* ]]; then
-                echo "错误：--file-types 选项需要指定文件类型列表（用逗号分隔）" >&2
-                return 1
+                default_file_types_file=$(generate_large_files_list)
+                file_types=$(sed 's/\*\.//g' "$default_file_types_file" | tr '\n' ',' | sed 's/,$//')
+                rm -f "$default_file_types_file"
+            else
+                file_types="$2"
+                shift
             fi
-            file_types="$2"
             shift
             ;;
         -d | --domain)
@@ -133,6 +162,14 @@ handle_oss_logs_commands() {
                 return 1
             fi
             domain="$2"
+            shift
+            ;;
+        --target-bucket)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "错误：--target-bucket 选项需要指定目标存储桶名称" >&2
+                return 1
+            fi
+            target_bucket="$2"
             shift
             ;;
         -*)
@@ -154,21 +191,7 @@ handle_oss_logs_commands() {
     # 检查必需参数
     if [ -z "$bucket_path" ]; then
         echo "错误：请指定存储桶路径" >&2
-        echo "用法：$0 oss logs <存储桶路径> [选项...]" >&2
-        echo "选项："
-        echo "  -s, --start-date DATE    开始日期 (YYYY-MM-DD)"
-        echo "  -e, --end-date DATE      结束日期 (YYYY-MM-DD)"
-        echo "  -f, --format FORMAT      输出格式 (human/json/tsv)"
-        echo "  -d, --domain DOMAIN      指定要查询的域名"
-        echo "  --status CODE           分析指定HTTP状态码的记录(如: 404,500,403)"
-        echo "  --file-types TYPES       指定要分析的文件类型（用逗号分隔，如：jpg,png,pdf）"
-        echo
-        echo "示例："
-        echo "  $0 oss logs my-bucket/cdn_log/"
-        echo "  $0 oss logs my-bucket/cdn_log/ -s 2024-03-01 -e 2024-03-10 -f json"
-        echo "  $0 oss logs my-bucket/cdn_log/ --status 404,500  # 分析404和500错误记录"
-        echo "  $0 oss logs my-bucket/cdn_log/ --status 404 --file-types jpg,png,pdf  # 只分析图片和PDF文件的404记录"
-        echo "  $0 oss logs my-bucket/cdn_log/ --domain flyh5.cn --status 404  # 分析指定域名的404记录"
+        show_oss_help
         return 1
     fi
 
@@ -180,16 +203,17 @@ handle_oss_logs_commands() {
     oss_get_logs "$bucket_path" "$start_date" "$end_date" "$format" "$status_codes" "$file_types" "$domain"
 }
 
+# 修改 oss_list 函数，使用 endpoint
 oss_list() {
     local format=${1:-human}
     local result
-    result=$(aliyun --profile "${profile:-}" oss ls --region "${region:-}")
+    result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" ls)
 
     case "$format" in
     json)
         ## - aliyun的oss list 输出格式不是json格式，**此处不要变更**
         if [ -n "$result" ]; then
-            echo "$result" | awk -F/ '/oss:/ {print $NF}' | jq -R -s 'split("\n") | map(select(length > 0)) | map({BucketName: .})'
+            echo "$result" | $CMD_AWK -F/ '/oss:/ {print $NF}' | jq -R -s 'split("\n") | map(select(length > 0)) | map({BucketName: .})'
         else
             echo "[]"
         fi
@@ -197,7 +221,7 @@ oss_list() {
     tsv)
         echo -e "BucketName"
         if [ -n "$result" ]; then
-            echo "$result" | awk -F/ '/oss:/ {print $NF}'
+            echo "$result" | $CMD_AWK -F/ '/oss:/ {print $NF}'
         fi
         ;;
     human | *)
@@ -207,7 +231,7 @@ oss_list() {
         else
             echo "存储桶名称"
             echo "----------------"
-            echo "$result" | awk -F/ '/oss:/ {print $NF}'
+            echo "$result" | $CMD_AWK -F/ '/oss:/ {print $NF}'
         fi
         ;;
     esac
@@ -218,11 +242,12 @@ oss_create() {
     local bucket_name=$1
     echo "创建 OSS 存储桶："
     local result
-    result=$(aliyun --profile "${profile:-}" oss mb "oss://$bucket_name" --region "$region")
+    result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" mb "oss://$bucket_name")
     echo "$result"
     log_result "$profile" "$region" "oss" "create" "$result"
 }
 
+# 修改 oss_delete 函数，添加 endpoint 支持
 oss_delete() {
     local bucket_name=$1
     echo "警告：您即将删除 OSS 存储桶：$bucket_name"
@@ -236,7 +261,7 @@ oss_delete() {
     echo "删除 OSS 存储桶："
 
     # 首先检查存储桶是否存在
-    if ! aliyun --profile "${profile:-}" oss ls "oss://$bucket_name" --region "$region" &>/dev/null; then
+    if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" ls "oss://$bucket_name" &>/dev/null; then
         echo "错误：存储桶 $bucket_name 不存在。"
         return 1
     fi
@@ -244,7 +269,7 @@ oss_delete() {
     # 先删除存储桶中的所有对象
     echo "正在删除存储桶中的所有对象..."
     local delete_objects_result
-    delete_objects_result=$(aliyun --profile "${profile:-}" oss rm "oss://$bucket_name" --region "$region" --recursive --force)
+    delete_objects_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" rm "oss://$bucket_name" -r -f)
     local delete_objects_status=$?
 
     if [ $delete_objects_status -ne 0 ]; then
@@ -256,7 +281,7 @@ oss_delete() {
     # 删除存储桶本身
     echo "正在删除存储桶..."
     local delete_bucket_result
-    delete_bucket_result=$(aliyun --profile "${profile:-}" oss rm "oss://$bucket_name" --region "$region" --bucket --force)
+    delete_bucket_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" rb "oss://$bucket_name")
     local delete_bucket_status=$?
 
     if [ $delete_bucket_status -eq 0 ]; then
@@ -276,7 +301,7 @@ oss_delete() {
     local deleted=false
 
     while [ $retry -lt $max_retries ]; do
-        if ! aliyun --profile "${profile:-}" oss ls "oss://$bucket_name" --region "$region" &>/dev/null; then
+        if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" ls "oss://$bucket_name" &>/dev/null; then
             deleted=true
             break
         fi
@@ -380,7 +405,7 @@ oss_bind_domain() {
     log_result "$profile" "$region" "oss" "verify-domain" "$verify_result"
 
     if echo "$verify_result" | $CMD_GREP -q "<Code>NoSuchCnameInDns</Code>"; then
-        echo "错误：DNS 验证失败。请确保 TXT 记录已经生效，然后重试。" >&2
+        echo "错误： DNS 验证失败。请确保 TXT 记录已经生效，然后重试。" >&2
         return 1
     fi
 
@@ -420,37 +445,6 @@ generate_oss_signature() {
     echo "$signature"
 }
 
-oss_upload_cert() {
-    local cert_name=$1
-    local cert_file=$2
-    local key_file=$3
-    echo "上传 SSL 证书："
-    local result
-    result=$(aliyun --profile "${profile:-}" cas UploadUserCertificate --Name "$cert_name" --Cert "$(cat "$cert_file")" --Key "$(cat "$key_file")" --region "$region")
-    echo "$result"
-    log_result "$profile" "$region" "oss" "upload-cert" "$result"
-}
-
-oss_delete_cert() {
-    local cert_id=$1
-    echo "删除 SSL 证书："
-    local result
-    result=$(aliyun --profile "${profile:-}" cas DeleteUserCertificate --CertId "$cert_id" --region "$region")
-    echo "$result"
-    log_result "$profile" "$region" "oss" "delete-cert" "$result"
-}
-
-oss_deploy_cert() {
-    local bucket_name=$1
-    local domain=$2
-    local cert_id=$3
-    echo "部署证书到 OSS 域名："
-    local result
-    result=$(aliyun --profile "${profile:-}" oss SetBucketCertificate --bucket "$bucket_name" --domain "$domain" --certId "$cert_id" --region "$region")
-    echo "$result"
-    log_result "$profile" "$region" "oss" "deploy-cert" "$result"
-}
-
 verify_domain_ownership() {
     local bucket_name=$1
     local domain=$2
@@ -461,7 +455,6 @@ verify_domain_ownership() {
     echo "$result"
 }
 
-# 添加一个新的函数用于生成大件类型列表
 generate_large_files_list() {
     local temp_file
     temp_file=$(mktemp)
@@ -475,48 +468,17 @@ generate_large_files_list() {
     echo "$temp_file"
 }
 
-# 修改 oss_batch_copy 函数，添加内网支持
 oss_batch_copy() {
-    local use_internal=false
-    local source=""
-    local dest=""
-    local file_list=""
-    local storage_class="IA"
-    local endpoint_url
+    local source="$1"
+    local dest="$2"
+    local file_list="$3"
+    local storage_class="${4:-IA}"
 
-    # 解析参数
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-        -in | --internal)
-            use_internal=true
-            ;;
-        *)
-            if [ -z "$source" ]; then
-                source=$1
-            elif [ -z "$dest" ]; then
-                dest=$1
-            elif [ -z "$file_list" ]; then
-                file_list=$1
-            else
-                storage_class=$1
-            fi
-            ;;
-        esac
-        shift
-    done
 
     if [ -z "$source" ] || [ -z "$dest" ]; then
         echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-copy [-in | --internal] <源存储桶/路径> <目标存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
+        echo "用法：$0 oss batch-copy <源存储桶/路径> <目标存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
         return 1
-    fi
-
-    # 根据是否使用内网设置 endpoint
-    if [ "$use_internal" = true ]; then
-        endpoint_url="http://oss-${region:-cn-hangzhou}-internal.aliyuncs.com"
-        echo "使用内网 endpoint: $endpoint_url"
-    else
-        endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     fi
 
     # 如果没有提供文件列表，则自动生成
@@ -570,44 +532,15 @@ oss_batch_copy() {
 
 # 修改 oss_batch_delete 函数，添加内网支持
 oss_batch_delete() {
-    local use_internal=false
-    local bucket_path=""
-    local file_list=""
-    local storage_class="IA"
-    local endpoint_url
-    local temp_list_file=""
+    local bucket_path="$1"
+    local file_list="$2"
+    local storage_class="${3:-IA}"
 
-    # 解析参数
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-        -in | --internal)
-            use_internal=true
-            ;;
-        *)
-            if [ -z "$bucket_path" ]; then
-                bucket_path=$1
-            elif [ -z "$file_list" ]; then
-                file_list=$1
-            else
-                storage_class=$1
-            fi
-            ;;
-        esac
-        shift
-    done
 
     if [ -z "$bucket_path" ]; then
         echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-delete [-in | --internal] <存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
+        echo "用法：$0 oss batch-delete <存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
         return 1
-    fi
-
-    # 根据是否使用内网设置 endpoint
-    if [ "$use_internal" = true ]; then
-        endpoint_url="http://oss-${region:-cn-hangzhou}-internal.aliyuncs.com"
-        echo "使用内网 endpoint: $endpoint_url"
-    else
-        endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     fi
 
     # 如果没有提供文件列表，则自动生成
@@ -689,6 +622,7 @@ analyze_logs_for_status() {
     local log_file=$2
     local status_codes=$3
     local file_types=${4:-"mp3,mp4,avi,mov,wmv,flv,mkv,webm,jpg,jpeg,png,gif,bmp,tiff,webp,psd,ai,zip,rar,7z,tar,gz,iso,dmg,pdf,doc,docx,ppt,pptx,xls,xlsx"}
+    local domain=${5:-""}
     local temp_dir
     temp_dir=$(mktemp -d)
     local log_filename
@@ -696,9 +630,18 @@ analyze_logs_for_status() {
     local local_gz_file="${temp_dir}/${log_filename}"
     local local_txt_file="${temp_dir}/${log_filename%.gz}"
 
+    # 修改全局 URI 文件名，加入 domain 信息
+    local domain_suffix=""
+    if [ -n "$domain" ]; then
+        domain_suffix="_${domain//./_}" # 将域名中的点替换为下划线
+    fi
+    global_uris_file="${SCRIPT_DATA:-/tmp}/oss_logs/global_uris_${status_codes//,/_}${domain_suffix}.txt"
+    mkdir -p "$(dirname "$global_uris_file")"
+    touch "$global_uris_file"
+
     # 下载日志文件
     echo "正在下载日志文件: $log_file ..."
-    if ! ossutil --profile "${profile:-}" cp "$log_file" "$local_gz_file"; then
+    if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" cp "$log_file" "$local_gz_file"; then
         echo "错误：下载日志文件失败: $log_file" >&2
         rm -rf "$temp_dir"
         return 1
@@ -751,7 +694,7 @@ analyze_logs_for_status() {
     # 分析日志文件中的指定状态码记录
     echo "正在分析HTTP状态码 $status_codes 的记录..."
     local filtered_records
-   filtered_records=$(
+    filtered_records=$(
         "$CMD_GREP" -vE "$exclude_grep" "$local_txt_file" |
             "$CMD_GREP" -E "$status_pattern" |
             "$CMD_GREP" -iE "$file_types_regex" || echo ""
@@ -759,40 +702,52 @@ analyze_logs_for_status() {
     local count_records
     count_records=$(echo -n "$filtered_records" | "$CMD_GREP" -c '^')
 
-    # 生成输出文件名
-    local output_dir="${SCRIPT_DATA:-/tmp}/oss_logs"
-    local date_str
-    date_str=$("$CMD_DATE" +%Y%m%d_%H%M%S)
-    local output_file="${output_dir}/status_${status_codes//,/_}_${date_str}.log"
+    # 提取当前日志的 URI 并与全局文件合并去重
+    local temp_uris_file
+    temp_uris_file=$(mktemp)
 
-    # 创建输出目录
-    mkdir -p "$output_dir"
+    echo "$filtered_records" | "$CMD_AWK" '
+    {
+        for (i = 1; i <= NF; i++) {
+            if ($i ~ /"GET|"POST/) {
+                url = $(i+1)
+                gsub(/^"|"$/, "", url)
+                sub(/^https?:\/\/[^\/]+/, "", url)
+                sub(/\?.*$/, "", url)
+                if (url != "" && url != "/" && url !~ /^[[:space:]]*$/) {
+                    print url
+                }
+                break
+            }
+        }
+    }' >"$temp_uris_file"
+
+    # 合并当前 URI 和全局 URI 并去重
+    cat "$temp_uris_file" "$global_uris_file" | sort -u >"${temp_uris_file}.sorted"
+    mv "${temp_uris_file}.sorted" "$global_uris_file"
+
+    rm -f "$temp_uris_file"
 
     # 保存分析结果
-    {
-        echo "分析时间: $("$CMD_DATE" '+%Y-%m-%d %H:%M:%S')"
-        echo "状态码: $status_codes"
-        echo "文件类型: $file_types"
-        echo "----------------------------------------"
-        if [ "$count_records" -gt 0 ]; then
-            echo "发现 $count_records 条指定类型文件的状态码 $status_codes 记录："
-            echo "原始日志内容："
-            echo "----------------------------------------"
-            echo "$filtered_records"
-        else
-            echo "未发现指定类型文件的状态码 $status_codes 记录"
-        fi
-    } | tee "$output_file"
-
-    echo "----------------------------------------"
-    echo "分析结果已保存到: $output_file"
+    # echo "分析时间: $("$CMD_DATE" '+%Y-%m-%d %H:%M:%S')"
+    # echo "文件类型: $file_types"
+    # echo "----------------------------------------"
+    if [ "$count_records" -gt 0 ]; then
+        echo "发现指定类型文件的状态码为 $status_codes 的记录 $count_records 条"
+        # echo "----------------------------------------"
+        # echo "原始日志内容："
+        # echo "$filtered_records" | head -n3
+        # echo "..."
+        # echo "$filtered_records" | tail -n3
+    else
+        echo "未发现指定类型文件的状态码为 $status_codes 的记录"
+    fi
+    echo "唯一 URI 列表已保存到: $global_uris_file ， 记录数为 $(wc -l <"$global_uris_file") 条"
 
     # 清理临时文件
-    # sleep 15 ## for debug
     rm -rf "$temp_dir"
 }
 
-# 修改 oss_get_logs 函数，添加 404 分析功能
 oss_get_logs() {
     local bucket_path="${1%/}/"
     local start_date=${2:-$("$CMD_DATE" +%Y-%m-%d)}
@@ -825,6 +780,7 @@ oss_get_logs() {
     # 使用日期列表文件查询日志
     local result
     result=$(ossutil --profile "${profile:-}" \
+        --endpoint "$endpoint_url" \
         ls "oss://${bucket_path}" \
         -r \
         --include-from "$date_list_file")
@@ -904,21 +860,130 @@ oss_get_logs() {
             echo "$filtered_result" | "$CMD_AWK" -F'\t' '{
                 printf "%-30s %-10s %-10s %s\n", $1, $2, $3, $5
             }'
-
-            # 如果需要分析 404 记录
             if [ -n "$status_codes" ]; then
                 echo
                 echo "正在分析状态码 $status_codes 的记录..."
                 echo "--------------------------------------------------------------------------------"
-                echo "$filtered_result" | while IFS=$'\t' read -r _ _ _ _ path; do
-                    echo "分析文件: $path"
-                    analyze_logs_for_status "$bucket_path" "$path" "$status_codes" "$file_types"
+                while IFS= read -r path; do
                     echo "--------------------------------------------------------------------------------"
-                done
+                    echo "分析文件: $path"
+                    echo "分析过程："
+                    result=$(analyze_logs_for_status "$bucket_path" "$path" "$status_codes" "$file_types" "$domain")
+                    echo "$result"
+                    local uris_file
+                    uris_file=$(echo "$result" | tail -n1 | "$CMD_AWK" '{print $NF}')
+                done < <(echo "$filtered_result" | "$CMD_AWK" '{print $NF}')
+
+                # 如果生成了 URI 文件且不为空，则自动处理
+                if [ -f "$uris_file" ] && [ -s "$uris_file" ] && [ -n "$target_bucket" ]; then
+                    echo "发现 URI 文件，开始自动处理..."
+                    # 使用指定的目标存储桶，如果未指定则使用源存储桶
+                    set_object_standard "$uris_file" "$target_bucket" "Standard" false
+                fi
             fi
         fi
         ;;
     esac
 
     log_result "${profile:-}" "${region:-}" "oss" "logs" "$filtered_result" "$format"
+}
+
+set_object_standard() {
+    local uris_file=$1
+    local bucket_name=$2
+    local storage_class=${3:-Standard}
+
+    if [ ! -f "$uris_file" ]; then
+        echo "错误：URI 文件不存在：$uris_file" >&2
+        return 1
+    fi
+
+    if [ -z "$bucket_name" ]; then
+        echo "错误：未指定存储桶名称" >&2
+        return 1
+    fi
+
+    echo "正在处理 URI 文件：$uris_file"
+    echo "存储桶：$bucket_name"
+    echo "存储类型：$storage_class"
+    echo "----------------------------------------"
+
+    # 创建临时目录
+    local temp_dir
+    temp_dir=$(mktemp -d)
+
+    # 提取第一级目录并创建相应的文件列表
+    local success=true
+    local dirs_count=0
+    local pipe_status=()
+
+    # 先获取所有二级目录并处理，如果没有二级目录再处理一级目录
+    while IFS= read -r dir; do
+        [ -z "$dir" ] && continue
+        dirs_count=$((dirs_count + 1))
+
+        # 检查是否是二级目录（包含一个斜杠）
+        if [[ "$dir" == */* ]]; then
+            # 为二级目录创建文件列表，去掉目录前缀
+            local files_list="$temp_dir/${dir//\//_}_files.txt"
+            "$CMD_GREP" "^/${dir}/" "$uris_file" | "$CMD_SED" "s|^/${dir}/||" >"$files_list"
+        else
+            # 检查是否存在该一级目录下的二级目录
+            local has_subdirs
+            has_subdirs=$("$CMD_GREP" "^/${dir}/" "$uris_file" | "$CMD_AWK" -F'/' 'NF>3{print $2 "/" $3}' | sort -u)
+
+            if [ -n "$has_subdirs" ]; then
+                # 如果有二级目录，跳过当前一级目录
+                continue
+            fi
+
+            # 为一级目录创建文件列表，去掉目录前缀
+            local files_list="$temp_dir/${dir}_files.txt"
+            "$CMD_GREP" "^/${dir}/" "$uris_file" | "$CMD_SED" "s|^/${dir}/||" >"$files_list"
+        fi
+
+        echo "处理目录 [$dirs_count]: $dir ($(wc -l <"$files_list") 个文件)"
+
+        # echo "执行命令："
+        # echo "ossutil --profile ${profile:-} --endpoint $endpoint_url set-props oss://$bucket_name/$dir/ --storage-class $storage_class --files-from $files_list -rf"
+
+        if ! ossutil --profile "${profile:-}" \
+            --endpoint "$endpoint_url" \
+            set-props "oss://$bucket_name/$dir/" \
+            --storage-class "$storage_class" \
+            --files-from "$files_list" \
+            -rf; then
+            echo "警告：目录处理失败：$dir"
+            success=false
+        fi
+        echo "----------------------------------------"
+        pipe_status+=("$?")
+    done < <("$CMD_AWK" -F'/' '
+        NF>3 {
+            # 输出二级目录
+            print $2 "/" $3
+        }
+        NF==3 {
+            # 输出一级目录
+            print $2
+        }
+    ' "$uris_file" | sort -u)
+
+    # 检查是否有任何操作失败
+    for status in "${pipe_status[@]}"; do
+        if [ "$status" -ne 0 ]; then
+            success=false
+            break
+        fi
+    done
+
+    # 清理临时文件
+    rm -rf "$temp_dir"
+
+    if [ "$success" = true ]; then
+        echo "所有目录处理完成"
+    else
+        echo "警告：部分目录处理失败"
+        return 1
+    fi
 }
