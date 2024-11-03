@@ -135,7 +135,7 @@ rds_delete() {
 rds_account_create() {
     local instance_id=$1
     local account_name=$2
-    local password=$3
+    local password=${3:-$(_get_random_password 2>/dev/null)}
     local description=${4:-"Created by CLI"}
     local privilege=${5:-ReadWrite}
 
