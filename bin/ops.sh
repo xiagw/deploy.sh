@@ -8,24 +8,6 @@
 # - SSH key synchronization
 # - Multiple viewer support (bat/cat)
 
-# Global command variables
-CMD_GREP=$(command -v ggrep || command -v grep)
-CMD_FIND=$(command -v gfind || command -v find)
-CMD_BAT="$(command -v bat || command -v batcat || command -v cat)"
-if [ -n "$CMD_BAT" ]; then
-    CMD_BAT="$CMD_BAT --paging=never \
-        --color=always \
-        --style=full \
-        --theme=Dracula \
-        --wrap=auto \
-        --tabs=2"
-fi
-CMD_FZF=$(command -v fzf || {
-    echo "Error: fzf is required" >&2
-    exit 1
-})
-CMD_OSS=$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")
-
 # SSL deployment functions
 select_file() {
     local search_dir="$1"
@@ -161,12 +143,12 @@ find_and_sync_files() {
 sync_ssh_keys() {
     local source_keys_file="$1"
     local oss_bucket_and_path="$2"
-    local temp_keys_file="$script_path/temp_ssh_keys.txt"
+    local temp_keys_file="${SCRIPT_DIR}/temp_ssh_keys.txt"
 
     # Validate required parameters
     if [[ -z "$source_keys_file" || -z "$oss_bucket_and_path" ]]; then
-        echo "Usage: $script_name keys <source_keys_file> <oss_bucket/path>" >&2
-        echo "Example: $script_name keys ./ssh-keys.txt oss-bucket/path/to/example.keys" >&2
+        echo "Usage: $SCRIPT_NAME keys <source_keys_file> <oss_bucket/path>" >&2
+        echo "Example: $SCRIPT_NAME keys ./ssh-keys.txt oss-bucket/path/to/example.keys" >&2
         return 1
     fi
 
@@ -199,8 +181,8 @@ search_project_files() {
     fi
     case "${viewer_mode:-bat}" in
     -b | --bat | bat)
-        viewer="$CMD_BAT"
-        preview_cmd="$CMD_BAT $preview_opts {}"
+        viewer="$CMD_CAT"
+        preview_cmd="$CMD_CAT $preview_opts {}"
         ;;
     -c | --cat | cat)
         viewer="cat"
@@ -262,14 +244,48 @@ deploy_ssl() {
     echo "同步完成"
 }
 
+# 添加微信验证文件处理函数
+process_wechat_file() {
+    local file="$1"
+    sudo chmod 644 "$file"
+    for host in "${host_path[@]:? undefined host_path}"; do
+        scp "$file" "$host"
+    done
+
+    cmd="$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")"
+    $cmd cp "$file" "oss://${bucket_name:? undefined bucket_name}/" -f
+
+    sleep 2
+    uri=${file##*/}
+    c_total=${#urls[@]}
+    c=0
+    for url in "${urls[@]}"; do
+        curl -x '' -fsSL "${url}/${uri}" && ((++c))
+    done
+
+    if [[ "$c" -ge "$c_total" ]]; then
+        sudo rm -f "$file"
+    fi
+}
+
+deploy_wechat() {
+    local find_dir=${wechat_dir:? undefined wechat_dir}
+    cd "$find_dir" || exit 1
+    for file in *.txt *.TXT; do
+        [ -f "$file" ] || continue
+        process_wechat_file "$file"
+    done
+}
+
 display_usage() {
     cat <<EOF
-Usage: ${script_name} COMMAND [ARGS]
+Usage: ${SCRIPT_NAME} COMMAND [ARGS]
 
 Commands:
     ssl [DIR]                   Deploy SSL certificates (default dir: ~/Downloads)
-    search DIR [PATTERN]        Search project files
-    keys FILE BUCKET/PATH       Sync SSH public keys to OSS storage
+    search [DIR] [PATTERN]      Search project files
+    keys [FILE] [BUCKET/PATH]   Sync SSH public keys to OSS storage
+    wechat                      Process WeChat verification files
     help                        Display this help message
 
 Options for search command:
@@ -277,19 +293,36 @@ Options for search command:
     -b, --bat          Use bat for viewing (default)
 
 Examples:
-    ${script_name} ssl
-    ${script_name} ssl /path/to/certificates
-    ${script_name} search /path/to/active
-    ${script_name} search /path/to/active search_pattern
-    ${script_name} search ~/a-nas-smb/projects/02-进行中 search_pattern
-    ${script_name} keys ~/a-nas-smb/projects/00-文档库/03研发/所有研发人员-ssh-public-key.txt flynew/d/flyh6.keys
+    ${SCRIPT_NAME} ssl /path/to/certificates
+    ${SCRIPT_NAME} search
+    ${SCRIPT_NAME} search /path/to/active pattern
+    ${SCRIPT_NAME} keys /path/to/ssh-keys.txt bucket/path
+    ${SCRIPT_NAME} wechat
 EOF
 }
 
 # Main function to handle command processing
 main() {
-    script_name=$(basename "$0")
-    script_path=$(dirname "$(readlink -f "$0")")
+    # Global command variables
+    CMD_READLINK=$(command -v greadlink || command -v readlink)
+    CMD_GREP=$(command -v ggrep || command -v grep)
+    CMD_FIND=$(command -v gfind || command -v find)
+    CMD_CAT="$(command -v bat || command -v batcat || command -v cat)"
+    if [ "$CMD_CAT" = "bat" ] || [ "$CMD_CAT" = "batcat" ]; then
+        CMD_CAT="$CMD_CAT --paging=never --color=always --style=full --theme=Dracula --wrap=auto --tabs=2"
+    fi
+    CMD_FZF=$(command -v fzf || { echo "Error: fzf is required" >&2 && exit 1; })
+    CMD_OSS=$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")
+
+    SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
+    SCRIPT_DIR="$(cd "$(dirname "$("$CMD_READLINK" -f "${BASH_SOURCE[0]}")")" && pwd)"
+    SCRIPT_DATA="$(dirname "${SCRIPT_DIR}")/data"
+    SCRIPT_ENV="${SCRIPT_DATA}/${SCRIPT_NAME}.env"
+
+    # 加载环境变量文件
+    [ -f "$SCRIPT_ENV" ] || { echo "Error: Environment file $SCRIPT_ENV not found" >&2 && exit 1; }
+    # shellcheck source=/dev/null
+    source "$SCRIPT_ENV"
 
     # Command processing
     case "${1:-search}" in
@@ -299,11 +332,22 @@ main() {
         ;;
     search)
         shift
-        search_project_files "${@}"
+        if [[ -z "${search_project_dir}" ]]; then
+            search_project_files "$@"
+        else
+            search_project_files "${search_project_dir}" "$@"
+        fi
         ;;
     keys)
         shift
-        sync_ssh_keys "$@"
+        if [[ -z "${all_keys_file}" ]]; then
+            sync_ssh_keys "$@"
+        else
+            sync_ssh_keys "${all_keys_file}" "$@"
+        fi
+        ;;
+    wechat)
+        deploy_wechat
         ;;
     *)
         echo "Unknown command: $1" >&2
