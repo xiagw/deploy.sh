@@ -248,18 +248,18 @@ deploy_ssl() {
 process_wechat_file() {
     local file="$1"
     sudo chmod 644 "$file"
-    for host in "${host_path[@]:? undefined host_path}"; do
+    for host in "${wechat_host_path[@]:? undefined wechat_host_path}"; do
         scp "$file" "$host"
     done
 
     cmd="$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")"
-    $cmd cp "$file" "oss://${bucket_name:? undefined bucket_name}/" -f
+    $cmd cp "$file" "oss://${wechat_bucket_name:? undefined wechat_bucket_name}/" -f
 
     sleep 2
     uri=${file##*/}
-    c_total=${#urls[@]}
+    c_total=${#wechat_urls[@]}
     c=0
-    for url in "${urls[@]}"; do
+    for url in "${wechat_urls[@]}"; do
         curl -x '' -fsSL "${url}/${uri}" && ((++c))
     done
 
