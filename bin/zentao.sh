@@ -39,7 +39,7 @@ EOF
 }
 
 _get_project() {
-    doing_path="${zen_project_path:? ERR: empty path}"
+    doing_path="${zen_project_path:? undefined zen_project_path}"
     closed_path="${doing_path}/已关闭"
     get_project_json=$(mktemp)
     if [[ ! -d "$doing_path" ]]; then
