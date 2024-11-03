@@ -474,7 +474,6 @@ oss_batch_copy() {
     local file_list="$3"
     local storage_class="${4:-IA}"
 
-
     if [ -z "$source" ] || [ -z "$dest" ]; then
         echo "错误：缺少必要参数" >&2
         echo "用法：$0 oss batch-copy <源存储桶/路径> <目标存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
@@ -535,7 +534,6 @@ oss_batch_delete() {
     local bucket_path="$1"
     local file_list="$2"
     local storage_class="${3:-IA}"
-
 
     if [ -z "$bucket_path" ]; then
         echo "错误：缺少必要参数" >&2
@@ -631,11 +629,7 @@ analyze_logs_for_status() {
     local local_txt_file="${temp_dir}/${log_filename%.gz}"
 
     # 修改全局 URI 文件名，加入 domain 信息
-    local domain_suffix=""
-    if [ -n "$domain" ]; then
-        domain_suffix="_${domain//./_}" # 将域名中的点替换为下划线
-    fi
-    global_uris_file="${SCRIPT_DATA:-/tmp}/oss_logs/global_uris_${status_codes//,/_}${domain_suffix}.txt"
+    global_uris_file="${SCRIPT_DATA:-/tmp}/oss_logs/global_uris_${status_codes//,/_}$([ -n "$domain" ] && echo "_${domain//./_}").txt"
     mkdir -p "$(dirname "$global_uris_file")"
     touch "$global_uris_file"
 
@@ -715,15 +709,50 @@ analyze_logs_for_status() {
                 sub(/^https?:\/\/[^\/]+/, "", url)
                 sub(/\?.*$/, "", url)
                 if (url != "" && url != "/" && url !~ /^[[:space:]]*$/) {
-                    print url
+                    # 在每个 URL 后面添加空格和状态码 0（表示未处理）
+                    print url " 0"
                 }
                 break
             }
         }
     }' >"$temp_uris_file"
 
-    # 合并当前 URI 和全局 URI 并去重
-    cat "$temp_uris_file" "$global_uris_file" | sort -u >"${temp_uris_file}.sorted"
+    # 合并文件时保留最新状态（优先保留状态为1的记录）
+    "$CMD_AWK" '
+        # 首先读取现有的全局文件
+        FILENAME == ARGV[1] {
+            # 检查行是否已经有状态码
+            if ($0 ~ /^.*[[:space:]][01]$/) {
+                # 如果已经有状态码，按原样处理
+                split($0, a, " ")
+                uri = a[1]
+                status = a[2]
+            } else {
+                # 如果没有状态码，添加状态码 0
+                uri = $0
+                status = "0"
+            }
+            if (!(uri in uris) || status == "1") {
+                uris[uri] = status
+            }
+            next
+        }
+        # 然后读取新的临时文件
+        {
+            split($0, a, " ")
+            uri = a[1]
+            status = a[2]
+            if (!(uri in uris) || status == "1") {
+                uris[uri] = status
+            }
+        }
+        END {
+            # 输出合并后的结果
+            for (uri in uris) {
+                print uri " " uris[uri]
+            }
+        }
+    ' "$global_uris_file" "$temp_uris_file" | sort >"${temp_uris_file}.sorted"
     mv "${temp_uris_file}.sorted" "$global_uris_file"
 
     rm -f "$temp_uris_file"
@@ -854,7 +883,6 @@ oss_get_logs() {
             echo "未找到访问日志。"
         else
             echo "日志文件列表："
-            echo "--------------------------------------------------------------------------------"
             echo "时间戳                        大小      存储类型    文件路径"
             echo "--------------------------------------------------------------------------------"
             echo "$filtered_result" | "$CMD_AWK" -F'\t' '{
@@ -863,11 +891,9 @@ oss_get_logs() {
             if [ -n "$status_codes" ]; then
                 echo
                 echo "正在分析状态码 $status_codes 的记录..."
-                echo "--------------------------------------------------------------------------------"
                 while IFS= read -r path; do
                     echo "--------------------------------------------------------------------------------"
                     echo "分析文件: $path"
-                    echo "分析过程："
                     result=$(analyze_logs_for_status "$bucket_path" "$path" "$status_codes" "$file_types" "$domain")
                     echo "$result"
                     local uris_file
@@ -893,6 +919,20 @@ set_object_standard() {
     local bucket_name=$2
     local storage_class=${3:-Standard}
 
+    # 如果只提供了文件名，则在 oss_logs 目录下查找
+    if [[ ! -f "$uris_file" && ! "$uris_file" =~ ^/ ]]; then
+        local oss_logs_dir="${SCRIPT_DATA:-/tmp}/oss_logs"
+        if [[ -f "$oss_logs_dir/$uris_file" ]]; then
+            uris_file="$oss_logs_dir/$uris_file"
+        else
+            echo "错误：URI 文件不存在：$uris_file" >&2
+            echo "已在以下位置查找："
+            echo "- $uris_file"
+            echo "- $oss_logs_dir/$uris_file"
+            return 1
+        fi
+    fi
+
     if [ ! -f "$uris_file" ]; then
         echo "错误：URI 文件不存在：$uris_file" >&2
         return 1
@@ -908,82 +948,42 @@ set_object_standard() {
     echo "存储类型：$storage_class"
     echo "----------------------------------------"
 
-    # 创建临时目录
-    local temp_dir
-    temp_dir=$(mktemp -d)
+    # 创建临时文件用于更新状态
+    local temp_file
+    temp_file=$(mktemp)
 
-    # 提取第一级目录并创建相应的文件列表
-    local success=true
-    local dirs_count=0
-    local pipe_status=()
-
-    # 先获取所有二级目录并处理，如果没有二级目录再处理一级目录
-    while IFS= read -r dir; do
-        [ -z "$dir" ] && continue
-        dirs_count=$((dirs_count + 1))
-
-        # 检查是否是二级目录（包含一个斜杠）
-        if [[ "$dir" == */* ]]; then
-            # 为二级目录创建文件列表，去掉目录前缀
-            local files_list="$temp_dir/${dir//\//_}_files.txt"
-            "$CMD_GREP" "^/${dir}/" "$uris_file" | "$CMD_SED" "s|^/${dir}/||" >"$files_list"
-        else
-            # 检查是否存在该一级目录下的二级目录
-            local has_subdirs
-            has_subdirs=$("$CMD_GREP" "^/${dir}/" "$uris_file" | "$CMD_AWK" -F'/' 'NF>3{print $2 "/" $3}' | sort -u)
-
-            if [ -n "$has_subdirs" ]; then
-                # 如果有二级目录，跳过当前一级目录
-                continue
+    # 读取文件并处理每个 URI
+    while IFS=' ' read -r uri status; do
+        # 只处理未处理的 URI（状态为 0）
+        if [ "$status" = "0" ]; then
+            echo "处理 URI: $uri"
+            if ossutil --profile "${profile:-}" \
+                --endpoint "$endpoint_url" \
+                set-props "oss://$bucket_name$uri" \
+                --storage-class "$storage_class" -f; then
+                # 处理成功，将状态更新为 1
+                echo "$uri 1" >>"$temp_file"
+            else
+                # 处理失败，保持状态为 0
+                echo "$uri 0" >>"$temp_file"
             fi
-
-            # 为一级目录创建文件列表，去掉目录前缀
-            local files_list="$temp_dir/${dir}_files.txt"
-            "$CMD_GREP" "^/${dir}/" "$uris_file" | "$CMD_SED" "s|^/${dir}/||" >"$files_list"
+        else
+            # 已处理的 URI 保持原状态
+            echo "$uri $status" >>"$temp_file"
         fi
+    done <"$uris_file"
 
-        echo "处理目录 [$dirs_count]: $dir ($(wc -l <"$files_list") 个文件)"
+    # 更新原文件
+    mv "$temp_file" "$uris_file"
 
-        # echo "执行命令："
-        # echo "ossutil --profile ${profile:-} --endpoint $endpoint_url set-props oss://$bucket_name/$dir/ --storage-class $storage_class --files-from $files_list -rf"
-
-        if ! ossutil --profile "${profile:-}" \
-            --endpoint "$endpoint_url" \
-            set-props "oss://$bucket_name/$dir/" \
-            --storage-class "$storage_class" \
-            --files-from "$files_list" \
-            -rf; then
-            echo "警告：目录处理失败：$dir"
-            success=false
-        fi
-        echo "----------------------------------------"
-        pipe_status+=("$?")
-    done < <("$CMD_AWK" -F'/' '
-        NF>3 {
-            # 输出二级目录
-            print $2 "/" $3
-        }
-        NF==3 {
-            # 输出一级目录
-            print $2
-        }
-    ' "$uris_file" | sort -u)
-
-    # 检查是否有任何操作失败
-    for status in "${pipe_status[@]}"; do
-        if [ "$status" -ne 0 ]; then
-            success=false
-            break
-        fi
-    done
-
-    # 清理临时文件
-    rm -rf "$temp_dir"
-
-    if [ "$success" = true ]; then
-        echo "所有目录处理完成"
-    else
-        echo "警告：部分目录处理失败"
-        return 1
-    fi
+    # 显示处理结果统计
+    local total_count
+    total_count=$(wc -l <"$uris_file")
+    local processed_count
+    processed_count=$(grep -c " 1$" "$uris_file")
+    echo "----------------------------------------"
+    echo "处理完成："
+    echo "总计 URI 数量：$total_count"
+    echo "成功处理数量：$processed_count"
+    echo "未处理数量：$((total_count - processed_count))"
 }
