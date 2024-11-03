@@ -39,7 +39,7 @@ EOF
 }
 
 _get_project() {
-    doing_path="${zen_project_path:? ERR: empty path}"
+    doing_path="${zen_project_path:? undefined zen_project_path}"
     closed_path="${doing_path}/已关闭"
     get_project_json=$(mktemp)
     if [[ ! -d "$doing_path" ]]; then
@@ -49,6 +49,7 @@ _get_project() {
     ## 获取项目列表
     case "${zen_get_method:-api}" in
     api)
+        _get_token "$@"
         $curl_opt -H "token:${zen_token}" "${zen_api}/projects?limit=1000" | jq '.projects' >"$get_project_json"
         # echo "Total projects: $(jq -r '.total' "$get_project_json")"
         ;;
@@ -117,14 +118,13 @@ main() {
 
     _common_lib
 
-    _get_token "$@"
-
     case "$1" in
     add)
+        _get_token "$@"
         _add_account
         ;;
     project)
-        _get_project
+        _get_project "$@"
         ;;
     *)
         echo "Usage: $g_me_name [add|update|project]"
