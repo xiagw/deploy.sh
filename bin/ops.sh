@@ -270,7 +270,7 @@ process_wechat_file() {
 
 deploy_wechat() {
     local find_dir=${wechat_dir:? undefined wechat_dir}
-    cd "$find_dir" || exit 1
+    cd "$find_dir" || return 1
     for file in *.txt *.TXT; do
         [ -f "$file" ] || continue
         process_wechat_file "$file"
