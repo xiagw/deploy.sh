@@ -168,8 +168,7 @@ rds_account_create() {
     }
 
     echo "$password" | $CMD_GREP -q '[^[:alnum:]]' || {
-        echo "错误：密码必须包含特殊字符。" >&2
-        return 1
+        password="${password}@"
     }
 
     # 先创建同名数据库（使用 rds_db_create 函数）

@@ -332,10 +332,10 @@ main() {
         ;;
     search)
         shift
-        if [[ -z "${search_project_dir}" ]]; then
+        if [[ -z "${project_dir}" ]]; then
             search_project_files "$@"
         else
-            search_project_files "${search_project_dir}" "$@"
+            search_project_files "${project_dir}" "$@"
         fi
         ;;
     keys)
