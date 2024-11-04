@@ -381,10 +381,8 @@ _install_ossutil() {
 
     # 确定版本和命令
     local ver=2 cmd=/usr/local/bin/ossutil
-    local cmd_get_ver=("$cmd" version)
     if [[ "${2:-2}" = 1 || "${2:-2}" = v1 ]]; then
         local ver='' cmd=/usr/local/bin/ossutil1
-        local cmd_get_ver=("$cmd" --version)
     fi
 
     # 获取系统类型
@@ -407,7 +405,11 @@ _install_ossutil() {
 
     # 清理并显示版本
     _msg green "Showing version"
-    "${cmd_get_ver[@]}"
+    if [[ "${ver:-2}" = 2 ]]; then
+        $cmd version
+    else
+        $cmd --version
+    fi
     rm -f ossu.zip ossutil ossutil64 ossutilmac64
 }
 
