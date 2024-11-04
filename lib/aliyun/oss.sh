@@ -708,6 +708,8 @@ analyze_logs_for_status() {
                 gsub(/^"|"$/, "", url)
                 sub(/^https?:\/\/[^\/]+/, "", url)
                 sub(/\?.*$/, "", url)
+                # 确保 URL 以单个斜杠开头
+                sub(/^\/+/, "/", url)
                 if (url != "" && url != "/" && url !~ /^[[:space:]]*$/) {
                     # 在每个 URL 后面添加空格和状态码 0（表示未处理）
                     print url " 0"

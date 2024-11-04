@@ -27,10 +27,12 @@ _prepare_project_directory() {
     local closed_path="${doing_path}/已关闭"
     local get_project_json
     get_project_json=$(mktemp)
+
     if [[ ! -d "$doing_path" ]]; then
-        echo "not found path: $doing_path"
+        echo "未找到路径: $doing_path"
         return 1
     fi
+
     ## 获取项目列表
     case "${zen_get_method:-db}" in
     api)
@@ -175,7 +177,7 @@ _completion() {
 _get_token() {
     local token_timeout
     token_timeout=$("${CMD_DATE}" +%s -d '3600 seconds ago')
-    if (($token_timeout > ${zen_token_save_time:-0})); then
+    if ((token_timeout > ${zen_token_save_time:-0})); then
         zen_token=$(
             "${CMD_CURL}" -fsSL -x '' -H "Content-Type: application/json" \
                 "${zen_api_url:-}/tokens" \
