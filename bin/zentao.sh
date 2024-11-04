@@ -39,8 +39,9 @@ EOF
 }
 
 _get_project() {
-    doing_path="${zen_project_path:? undefined zen_project_path}"
-    closed_path="${doing_path}/已关闭"
+    local doing_path="${zen_project_path:? undefined zen_project_path}"
+    local closed_path="${doing_path}/已关闭"
+    local get_project_json
     get_project_json=$(mktemp)
     if [[ ! -d "$doing_path" ]]; then
         echo "not found path: $doing_path"
@@ -62,27 +63,25 @@ EOF
         rm -f "$tmp_file"
         ;;
     esac
-
-    while IFS=';' read -r project_id project_name project_status; do
-        project_dir="${project_id}-${project_name}"
+    local id name status
+    while IFS=';' read -r id name status; do
         ## 排除 id
-        if echo "${zen_project_exclude[@]:-}" | grep -qw "$project_id"; then
+        if [[ " ${zen_project_exclude[*]:-} " == *" $id "* ]]; then
             continue
         fi
         ## 不足3位数前面补0
-        printf -v project_id "%03d" "$project_id"
-        project_dir="${project_id}-${project_name}"
+        printf -v id "%03d" "$id"
         ## 是否已经存在目录
-        dir_exist="$(find "$doing_path" -maxdepth 1 -iname "${project_id}-*" | head -n1)"
-        if [[ "$project_status" == 'closed' ]]; then
+        dir_exist="$(find "$doing_path" -mindepth 1 -maxdepth 1 -iname "${id}-*" | head -n1)"
+        if [[ "$status" == 'closed' ]]; then
             ## 已关闭项目，移动到已关闭目录
-            if [ -z "$(ls -A "$doing_path/${project_id}-"* 2>/dev/null)" ]; then
-                rmdir "$doing_path/${project_id}-"* 2>/dev/null
+            if [ -z "$(ls -A "$doing_path/${id}-"* 2>/dev/null)" ]; then
+                rmdir "$doing_path/${id}-"* 2>/dev/null
             else
-                mv "$doing_path/${project_id}-"* "$closed_path/" 2>/dev/null
+                mv "$doing_path/${id}-"* "$closed_path/" 2>/dev/null
             fi
         else
-            dir_path="${doing_path}/${project_dir}"
+            dir_path="${doing_path}/${id}-${name}"
             if [[ -d "$dir_exist" && "$dir_exist" != "$dir_path" ]]; then
                 mv "$dir_exist" "$dir_path"
             elif [[ ! -d "$dir_path" ]]; then
