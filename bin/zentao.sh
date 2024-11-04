@@ -1,44 +1,28 @@
 #!/usr/bin/env bash
+# -*- coding: utf-8 -*-
 # shellcheck disable=SC1090
-_get_token() {
-    if [ -f "$g_me_env" ]; then
-        source "$g_me_env" "$@"
-        if [ -z "$zen_domain" ]; then
-            select z in "${zen_domains[@]:-}"; do
-                zen_domain="${z}"
-                break
-            done
-        fi
-        source "$g_me_env" "${zen_domain:?empty}"
-        token_time=$(${CMD_DATE} +%s -d '3600 seconds ago')
-        if ((token_time > ${zen_token_time_save:-0})); then
-            unset zen_token
-        fi
-    else
-        echo "not found $g_me_env"
-        return 1
-    fi
-    if [ -z "$zen_token" ]; then
-        zen_root_password=${zen_root_password:-$(read -rsp "请输入管理员root密码: " pwd && echo "$pwd")}
-        zen_token="$(
-            $curl_opt "${zen_api:?empty}"/tokens -d '{"account": "'"${zen_account:-root}"'", "password": "'"$zen_root_password"'"}' |
-                jq -r '.token'
-        )"
-        sed -i -e "s/zen_token_time_save=.*/zen_token_time_save=$($CMD_DATE +%s)/" -e "s/zen_token=.*/zen_token=$zen_token/" "$g_me_env"
-    fi
-}
 
+# 函数定义
 _add_account() {
-    read -rp "请输入用户姓名: " user_realname
-    read -rp "请输入账号: " user_account
-    password_rand=$(_get_random_password 2>/dev/null)
-    echo "$user_realname / $user_account / ${password_rand}" | tee -a "$g_me_log"
-    $curl_opt -H "token:${zen_token}" "${zen_api:?empty}"/users -d @- <<EOF
-{"realname": "${user_realname:?}", "account": "${user_account:?}", "password": "${password_rand}", "group": "1", "gender": "m"}
-EOF
+    read -rp "请输入用户姓名[英文或中文]: " user_realname
+    read -rp "请输入账号[英文]: " user_account
+    local password
+    password=$(_get_random_password 2>/dev/null)
+
+    "${CMD_CURL}" -fsSL -H "token:${zen_token:? undefined zen_token}" \
+        "${zen_api_url:? undefined zen_api_url}/users" \
+        -d '{
+    "realname": "'"${user_realname}"'",
+    "account": "'"${user_account}"'",
+    "password": "'"${password}"'",
+    "group": "1",
+    "gender": "m"
+}' |
+        jq -r '.id'
+    echo "$user_realname / $user_account / ${password}" | tee -a "$SCRIPT_LOG"
 }
 
-_get_project() {
+_prepare_project_directory() {
     local doing_path="${zen_project_path:? undefined zen_project_path}"
     local closed_path="${doing_path}/已关闭"
     local get_project_json
@@ -48,87 +32,221 @@ _get_project() {
         return 1
     fi
     ## 获取项目列表
-    case "${zen_get_method:-api}" in
+    case "${zen_get_method:-db}" in
     api)
-        $curl_opt -H "token:${zen_token}" "${zen_api}/projects?limit=1000" | jq '.projects' >"$get_project_json"
-        # echo "Total projects: $(jq -r '.total' "$get_project_json")"
+        _get_token || return $?
+        ${CMD_CURL} -fsSL -H "token:${zen_token}" "${zen_api_url:-}/projects?limit=1000" |
+            jq '.projects' >"$get_project_json"
         ;;
     db)
-        tmp_file="$(mktemp)"
-        cat >"$tmp_file" <<'EOF'
-SET SESSION group_concat_max_len =1024*50;
-select concat('[', group_concat(json_object('id',id,'name',name,'status',status)), ']') from zt_project where deleted = '0' and parent = '0';
+        local tmp_sql tmp_result
+        tmp_sql="$(mktemp)"
+        tmp_result="$(mktemp)"
+        local batch_size=1000
+        local offset=0
+
+        while true; do
+            # 修改 SQL 查询，添加 LIMIT 和 OFFSET
+            cat >"$tmp_sql" <<EOF
+SELECT JSON_OBJECT(
+    'id', t1.id,
+    'name', t1.name,
+    'status', t1.status
+)
+FROM zt_project t1
+WHERE t1.deleted = '0'
+AND t1.parent = '0'
+AND t1.id NOT IN (${zen_project_exclude_id:-1})
+LIMIT ${offset},${batch_size};
 EOF
-        mysql zentao -N <"$tmp_file" >"$get_project_json"
-        rm -f "$tmp_file"
+
+            # 执行查询并追加到结果文件
+            mysql zentao -N <"$tmp_sql" | sed 's/$/,/' >>"$tmp_result"
+
+            # 获取当前查询的行数
+            local current_rows
+            current_rows=$(wc -l <"$tmp_result")
+
+            # 如果返回的行数小于批次大小，说明已经是最后一批
+            if [ "$current_rows" -lt "$batch_size" ]; then
+                break
+            fi
+
+            # 增加偏移量
+            offset=$((offset + batch_size))
+            # 避免过度占用数据库资源
+            sleep 0.2
+        done
+
+        # 处理最后的逗号
+        if [ -s "$tmp_result" ]; then
+            # 只有在文件非空时才处理
+            sed -i '$s/,$//' "$tmp_result"
+        fi
+        echo "[" >"$get_project_json"
+        cat "$tmp_result" >>"$get_project_json"
+        echo "]" >>"$get_project_json"
+
+        rm -f "$tmp_sql" "$tmp_result"
         ;;
     esac
-    local id name status
+
+    ## 如果排除的项目目录存在且为空，则删除
+    if [[ -n "$zen_project_exclude_id" ]]; then
+        for id in ${zen_project_exclude_id//,/ }; do
+            rmdir "$doing_path/${id}-*" 2>/dev/null
+        done
+    fi
+
+    # 第一步：处理所有 closed 状态的项目
     while IFS=';' read -r id name status; do
-        ## 排除 id
-        if [[ " ${zen_project_exclude[*]:-} " == *" $id "* ]]; then
-            continue
-        fi
-        ## 不足3位数前面补0
+        [[ "$status" != 'closed' ]] && continue
+        # 不足3位数前面补0
         printf -v id "%03d" "$id"
-        ## 是否已经存在目录
-        dir_exist="$(find "$doing_path" -mindepth 1 -maxdepth 1 -iname "${id}-*" | head -n1)"
-        if [[ "$status" == 'closed' ]]; then
-            ## 已关闭项目，移动到已关闭目录
-            if [ -z "$(ls -A "$doing_path/${id}-"* 2>/dev/null)" ]; then
-                rmdir "$doing_path/${id}-"* 2>/dev/null
-            else
-                mv "$doing_path/${id}-"* "$closed_path/" 2>/dev/null
-            fi
-        else
-            dir_path="${doing_path}/${id}-${name}"
-            if [[ -d "$dir_exist" && "$dir_exist" != "$dir_path" ]]; then
-                mv "$dir_exist" "$dir_path"
-            elif [[ ! -d "$dir_path" ]]; then
-                mkdir "$dir_path"
-            fi
+        # 获取源目录列表
+        mapfile -t source_dirs < <(find "$doing_path/" -mindepth 1 -maxdepth 1 -name "${id}-*" -type d)
+        # 如果有源目录存在
+        if [ "${#source_dirs[@]}" -gt 0 ]; then
+            dest_path="$closed_path/${id}-${name}"
+            # 确保目标目录存在
+            mkdir -p "$dest_path"
+
+            # 遍历源目录
+            for src_dir in "${source_dirs[@]}"; do
+                if find "$src_dir" -mindepth 1 -maxdepth 1 -print0 | xargs -0 -I {} mv {} "$dest_path/"; then
+                    rmdir "$src_dir"
+                else
+                    rsync -a "$src_dir/" "$dest_path/" &&
+                        rm -rf "$src_dir"
+                fi
+            done
         fi
+        # sleep 3
     done < <(jq -r '.[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
-    # jq -c '.projects[] | select (.status | contains("doing","closed"))' "$get_project_json" |
-    #         jq -r '(.id|tostring) + "-" + .name + ";" + .status'
+
+    # 第二步：处理其他状态的项目
+    while IFS=';' read -r id name status; do
+        [[ "$status" == 'closed' ]] && continue
+        # 不足3位数前面补0
+        printf -v id "%03d" "$id"
+        dest_path="$doing_path/${id}-${name}"
+        mkdir -p "$dest_path"
+        # 获取源目录列表（排除目标目录）
+        mapfile -t source_dirs < <(find "$doing_path/" -mindepth 1 -maxdepth 1 -name "${id}-*" -type d ! -path "$dest_path")
+        # 如果有其他源目录
+        if [ "${#source_dirs[@]}" -gt 0 ]; then
+            for src_dir in "${source_dirs[@]}"; do
+                if find "$src_dir" -mindepth 1 -maxdepth 1 -print0 | xargs -0 -I {} mv {} "$dest_path/"; then
+                    rmdir "$src_dir"
+                else
+                    rsync -a "$src_dir/" "$dest_path/" &&
+                        rm -rf "$src_dir"
+                fi
+            done
+        fi
+        # sleep 3
+    done < <(jq -r '.[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
+
     rm -f "$get_project_json"
 }
 
+# 新增命令补全函数
+_completion() {
+    local cur prev
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+    case "$prev" in
+    zentao.sh)
+        mapfile -t COMPREPLY < <(compgen -W "add project" -- "$cur")
+        ;;
+    add | project)
+        # 从环境文件中获取可用的域名
+        if [[ -f "$SCRIPT_ENV" ]]; then
+            local domains
+            domains=$(grep -oP '(?<=\[)[^\]]+' "$SCRIPT_ENV")
+            mapfile -t COMPREPLY < <(compgen -W "$domains" -- "$cur")
+        fi
+        ;;
+    esac
+}
+
+_get_token() {
+    local token_timeout
+    token_timeout=$("${CMD_DATE}" +%s -d '3600 seconds ago')
+    if (($token_timeout > ${zen_token_save_time:-0})); then
+        zen_token=$(
+            "${CMD_CURL}" -fsSL -x '' -H "Content-Type: application/json" \
+                "${zen_api_url:-}/tokens" \
+                -d '{
+                "account": "'"${zen_account:-root}"'",
+                "password": "'"${zen_password:-root}"'"
+}' |
+                jq -r '.token'
+        )
+
+        if [ -z "$zen_token" ]; then
+            echo "get token failed"
+            return 1
+        fi
+        sed -i \
+            -e "s/zen_token_time_save=.*/zen_token_time_save=$(${CMD_DATE} +%s)/" \
+            -e "s/zen_token=.*/zen_token=$zen_token/" "$SCRIPT_ENV"
+    else
+        return 0
+    fi
+}
+
 _common_lib() {
-    common_lib="$g_me_path/../lib/common.sh"
+    common_lib="${SCRIPT_PATH_PARENT}/lib/common.sh"
     if [ ! -f "$common_lib" ]; then
         common_lib='/tmp/common.sh'
         include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
-        [ -f "$common_lib" ] || curl -fsSL "$include_url" >"$common_lib"
+        [ -f "$common_lib" ] || "${CMD_CURL}" -fsSL "$include_url" >"$common_lib"
     fi
+
     . "$common_lib"
 }
 
 main() {
-    # set -xe
-    g_me_name="$(basename "$0")"
-    g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
-    g_me_data_path="${g_me_path}/../data"
-    g_me_log="${g_me_data_path}/${g_me_name}.log"
-    g_me_env="${g_me_data_path}/${g_me_name}.env"
+    # 全局变量定义
+    CMD_DATE=$(command -v gdate || command -v date)
+    CMD_READLINK=$(command -v greadlink || command -v readlink)
+    CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
 
-    curl_opt='curl -fsSL'
+    # 注册命令补全
+    # complete -F _completion "$SCRIPT_NAME"
+
+    SCRIPT_NAME="$(basename "$0")"
+    SCRIPT_PATH="$(dirname "$(${CMD_READLINK} -f "$0")")"
+    SCRIPT_PATH_PARENT="$(dirname "$SCRIPT_PATH")"
+    SCRIPT_DATA="${SCRIPT_PATH_PARENT}/data"
+    SCRIPT_LOG="${SCRIPT_DATA}/${SCRIPT_NAME}.log"
+    SCRIPT_ENV="${SCRIPT_DATA}/${SCRIPT_NAME}.env"
 
     _common_lib
 
-    _get_token "$@"
-
-    case "$1" in
+    local action="$1"
+    case "$action" in
     add)
+        shift
+        source "$SCRIPT_ENV" "$@" || return $?
+        _get_token || return $?
         _add_account
         ;;
     project)
-        _get_project
+        shift
+        source "$SCRIPT_ENV" "$@" || return $?
+        _prepare_project_directory "$@" || return $?
         ;;
     *)
-        echo "Usage: $g_me_name [add|update|project]"
+        echo "Usage: $SCRIPT_NAME <add|project> <domain>"
+        return 1
         ;;
     esac
 }
 
+# 仅在非交互式模式下执行main
+# [[ "${BASH_SOURCE[0]}" == "${0}" ]] && main "$@"
 main "$@"
