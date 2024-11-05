@@ -249,15 +249,15 @@ _encrypt_file() {
 
     if _check_commands gpg; then
         pass_rand=$(gpg --gen-random --armor 1 32 | tr -d '=' | tr '+-/' '_')
-        g_gpg_opt=(gpg --batch --yes --cipher-algo AES256 --passphrase "$pass_rand")
-        _log $LOG_LEVEL_INFO "Encrypting: ${g_gpg_opt[*]} --symmetric ${path}/$file"
-        "${g_gpg_opt[@]}" --symmetric "${path}/$file"
+        GPG_OPT=(gpg --batch --yes --cipher-algo AES256 --passphrase "$pass_rand")
+        _log $LOG_LEVEL_INFO "Encrypting: ${GPG_OPT[*]} --symmetric ${path}/$file"
+        "${GPG_OPT[@]}" --symmetric "${path}/$file"
         mv "${path}/${file}.gpg" "${path}/$file_enc"
     elif _check_commands openssl; then
         pass_rand=$(openssl rand -base64 32 | tr -d '=' | tr '+-/' '_')
-        g_openssl_opt=(openssl aes-256-cbc -salt -pbkdf2 -iter 10000 -k "$pass_rand")
-        _log $LOG_LEVEL_INFO "Encrypting: ${g_openssl_opt[*]} -in ${path}/$file -out ${path}/$file_enc"
-        "${g_openssl_opt[@]}" -in "${path}/$file" -out "${path}/$file_enc"
+        OPENSSL_OPT=(openssl aes-256-cbc -salt -pbkdf2 -iter 10000 -k "$pass_rand")
+        _log $LOG_LEVEL_INFO "Encrypting: ${OPENSSL_OPT[*]} -in ${path}/$file -out ${path}/$file_enc"
+        "${OPENSSL_OPT[@]}" -in "${path}/$file" -out "${path}/$file_enc"
     else
         _log $LOG_LEVEL_ERROR "Unsupported encryption method."
         return 1
@@ -344,9 +344,9 @@ _notify_wecom() {
 
     # 根据加密方法设置解密指令
     if _check_commands gpg; then
-        decryption_instructions="${g_gpg_opt[*]} --decrypt ${file_enc} > $file"
+        decryption_instructions="${GPG_OPT[*]} --decrypt ${file_enc} > $file"
     elif _check_commands openssl; then
-        decryption_instructions="${g_openssl_opt[*]} -d -in ${file_enc} -out $file"
+        decryption_instructions="${OPENSSL_OPT[*]} -d -in ${file_enc} -out $file"
     else
         _log $LOG_LEVEL_ERROR "Unsupported encryption method."
         return 1
@@ -453,20 +453,24 @@ _securely_remove_files() {
 main() {
     set -eo pipefail
 
+    SCRIPT_NAME="$(basename "$0")"
+    SCRIPT_PATH="$(dirname "$(readlink -f "$0")")"
+    SCRIPT_PARENT="$(dirname "${SCRIPT_PATH}")"
+    SCRIPT_LIB="${SCRIPT_PARENT}/lib"
+    SCRIPT_CONF_PATH="${SCRIPT_PARENT}/conf"
+    SCRIPT_DATA="${SCRIPT_PARENT}/data"
+    SCRIPT_ENV="${SCRIPT_DATA}/${SCRIPT_NAME}.env"
+    SCRIPT_LOG="${SCRIPT_DATA}/${SCRIPT_NAME}.log"
+
     # 导入通用函数
     # shellcheck source=/dev/null
-    source "$(dirname "$0")/../lib/common.sh"
+    source "${SCRIPT_LIB}/common.sh"
 
-    local me_name me_path me_env me_log timestamp
-
-    me_name="$(basename "$0")"
-    me_path="$(dirname "$(readlink -f "$0")")"
-    me_env="${me_path}/../data/${me_name}.env"
-    me_log="${me_path}/../data/${me_name}.log"
+    local timestamp
 
     # 初始化 CURRENT_LOG_LEVEL
     export CURRENT_LOG_LEVEL=$LOG_LEVEL_INFO
-    export LOG_FILE=$me_log
+    export LOG_FILE=$SCRIPT_LOG
 
     # 设置日期格式
     timestamp=$(date +%Y%m%d_%H%M%S)
@@ -479,13 +483,13 @@ main() {
         ;;
     esac
 
-    mkdir -p "${me_path}/${timestamp}"
+    mkdir -p "${SCRIPT_PATH}/${timestamp}"
 
     _log $LOG_LEVEL_INFO "Backup start"
 
     # Load configuration
-    [ -f "${me_env}" ] || cp "${me_path}/../conf/${me_name}.env" "${me_env}"
-    _load_config "$me_env" "$@"
+    [ -f "${SCRIPT_ENV}" ] || cp "${SCRIPT_CONF_PATH}/${SCRIPT_NAME}.env" "${SCRIPT_ENV}"
+    _load_config "$SCRIPT_ENV" "$@"
 
     ## 检查必要的命令
     _check_commands openssl curl tar gzip || return 1
@@ -494,32 +498,32 @@ main() {
     _check_disk_space 5 || return 1
 
     # 备份Redis数据库
-    _dump_redis "${me_path}" "$timestamp"
+    _dump_redis "${SCRIPT_PATH}" "$timestamp"
 
     # 备份MySQL数据库
-    _dump_mysql "${me_path}" "$timestamp"
+    _dump_mysql "${SCRIPT_PATH}" "$timestamp"
 
     # 备份服务器文件目录
-    _backup_directories "${me_path}" "${timestamp}"
+    _backup_directories "${SCRIPT_PATH}" "${timestamp}"
 
     ## 打包压缩文件
-    _compress_file "$me_path" "${timestamp}"
+    _compress_file "$SCRIPT_PATH" "${timestamp}"
 
     # 加密压缩文件, 生成sha256sum
-    _encrypt_file "$me_path" "${timestamp}"
+    _encrypt_file "$SCRIPT_PATH" "${timestamp}"
 
     # 上传文件
-    _upload_file "${me_path}" "${timestamp}"
+    _upload_file "${SCRIPT_PATH}" "${timestamp}"
 
     # 通知
     sleep=2h
-    _notify_wecom_work "${me_path}" "${timestamp}" $sleep
+    _notify_wecom_work "${SCRIPT_PATH}" "${timestamp}" $sleep
 
     # 刷新CDN
-    _refresh_cdn "${me_path}" "${timestamp}" $sleep &
+    _refresh_cdn "${SCRIPT_PATH}" "${timestamp}" $sleep &
 
     # 删除文件
-    _securely_remove_files "$me_path" "${timestamp}"
+    _securely_remove_files "$SCRIPT_PATH" "${timestamp}"
 
     _log $LOG_LEVEL_SUCCESS "Backup completed."
 }
