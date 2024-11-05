@@ -14,7 +14,7 @@
 
 _is_in_demo_mode() {
     local skip_msg="$1"
-    if grep -qE '=your_(password|username)' "$g_me_env"; then
+    if grep -qE '=your_(password|username)' "$SCRIPT_ENV"; then
         _msg purple "Found default docker credentials, skipping $skip_msg ..."
         return 0
     fi
@@ -22,7 +22,7 @@ _is_in_demo_mode() {
 }
 
 _test_unit() {
-    local test_scripts=("$gitlab_project_dir/tests/unit_test.sh" "$g_me_data_path/tests/unit_test.sh")
+    local test_scripts=("$gitlab_project_dir/tests/unit_test.sh" "$SCRIPT_DATA/tests/unit_test.sh")
 
     for test_script in "${test_scripts[@]}"; do
         [[ -f "$test_script" ]] || continue
@@ -39,7 +39,7 @@ _test_unit() {
 }
 
 _test_function() {
-    local test_scripts=("$gitlab_project_dir/tests/func_test.sh" "$g_me_data_path/tests/func_test.sh")
+    local test_scripts=("$gitlab_project_dir/tests/func_test.sh" "$SCRIPT_DATA/tests/func_test.sh")
 
     for test_script in "${test_scripts[@]}"; do
         [[ -f "$test_script" ]] || continue
@@ -114,7 +114,7 @@ _run_zap_scan() {
 _run_vulmap_scan() {
     # https://github.com/zhzyker/vulmap
     # $build_cmd run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
-    local config_file="$g_me_data_path/config.cfg"
+    local config_file="$SCRIPT_DATA/config.cfg"
     local output_file="vulmap_report.html"
 
     # Load environment variables from config file
@@ -149,7 +149,7 @@ _deploy_flyway_docker() {
     local run="$build_cmd run --rm -v ${vol_conf} -v ${vol_sql} flyway/flyway"
 
     # SSH port-forward if needed
-    [ -f "$g_me_bin_path/sshme" ] && source "$g_me_bin_path/sshme" port ssh_host ssh_forward_port
+    [ -f "$SCRIPT_BIN/sshme" ] && source "$SCRIPT_BIN/sshme" port ssh_host ssh_forward_port
 
     # Execute Flyway
     if $run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
@@ -200,7 +200,7 @@ _deploy_flyway_helm_job() {
 
 _login_docker_registry() {
     ${github_action:-false} && return 0
-    local lock_login_registry="$g_me_data_path/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
+    local lock_login_registry="$SCRIPT_DATA/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
     local time_last
 
     case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
@@ -281,7 +281,7 @@ _get_docker_context() {
         ;;
     rr)
         ## round-robin algorithm / 轮询算法
-        position_file="${g_me_data_path:-.}/.docker_context_history"
+        position_file="${SCRIPT_DATA:-.}/.docker_context_history"
         [[ -f "$position_file" ]] || echo 0 >"$position_file"
         # Read current position / 读取当前轮询位置
         position=$(<"$position_file")
@@ -412,7 +412,7 @@ _create_helm_chart() {
     helm_chart_path="$1"
     helm_chart_name="${helm_chart_path#"$(dirname $helm_chart_path)"/}"
     ## 获取 release 名称/协议/端口/等信息
-    helm_chart_env=$g_me_data_path/create_helm_chart.env
+    helm_chart_env=$SCRIPT_DATA/create_helm_chart.env
     ## create_helm_chart.env 格式： project_name  protocol  port  <port2> ，port2 可以为空
     if [ -f "${helm_chart_env}" ]; then
         read -ra values_array <<<"$(grep "^${helm_chart_name}\s" "${helm_chart_env}")"
@@ -426,7 +426,7 @@ _create_helm_chart() {
 
     ## 创建 helm chart
     helm create "$helm_chart_path"
-    _msg "helm create $helm_chart_path" >>$g_me_log
+    _msg "helm create $helm_chart_path" >>$SCRIPT_LOG
     ## 需要修改的配置文件
     local file_values="$helm_chart_path/values.yaml"
     local file_svc="$helm_chart_path/templates/service.yaml"
@@ -511,8 +511,8 @@ _deploy_to_aliyun_functions() {
 
     ## create FC
     _msg step "[deploy] create/update functions"
-    functions_conf_tmpl="$g_me_data_path/aliyun.functions.${project_lang}.json"
-    functions_conf="$g_me_data_path/aliyun.functions.json"
+    functions_conf_tmpl="$SCRIPT_DATA/aliyun.functions.${project_lang}.json"
+    functions_conf="$SCRIPT_DATA/aliyun.functions.json"
     if [ -f "$functions_conf_tmpl" ]; then
         TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_TAG=${image_tag} envsubst <$functions_conf_tmpl >$functions_conf
     else
@@ -568,9 +568,9 @@ _deploy_to_kubernetes() {
         "$gitlab_project_dir/helm/${release_name}"
         "$gitlab_project_dir/docs/helm/${release_name}"
         "$gitlab_project_dir/doc/helm/${release_name}"
-        "${g_me_data_path}/helm/${gitlab_project_path_slug}/${env_namespace}/${release_name}"
-        "${g_me_data_path}/helm/${gitlab_project_path_slug}/${release_name}"
-        "${g_me_data_path}/helm/${release_name}"
+        "${SCRIPT_DATA}/helm/${gitlab_project_path_slug}/${env_namespace}/${release_name}"
+        "${SCRIPT_DATA}/helm/${gitlab_project_path_slug}/${release_name}"
+        "${SCRIPT_DATA}/helm/${release_name}"
     )
     for dir in "${helm_dirs[@]}"; do
         if [ -d "$dir" ]; then
@@ -582,12 +582,12 @@ _deploy_to_kubernetes() {
     if [ -z "$helm_dir" ]; then
         _msg purple "Not found helm files"
         echo "Try to generate helm files"
-        helm_dir="${g_me_data_path}/helm/${gitlab_project_path_slug}/${release_name}"
+        helm_dir="${SCRIPT_DATA}/helm/${gitlab_project_path_slug}/${release_name}"
         mkdir -p "$helm_dir"
         _create_helm_chart "${helm_dir}"
     fi
 
-    echo "helm upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${env_namespace} --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag}" | sed "s#$HOME#\$HOME#g" | tee -a "$g_me_log"
+    echo "helm upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${env_namespace} --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${image_tag}" | sed "s#$HOME#\$HOME#g" | tee -a "$SCRIPT_LOG"
     ${github_action:-false} && return 0
 
     ## helm install / helm 安装  --atomic
@@ -614,8 +614,8 @@ _deploy_to_kubernetes() {
     fi
 
     ## helm install flyway jobs / helm 安装 flyway 任务
-    if ${ENV_FLYWAY_HELM_JOB:-false} && [[ -d "${g_me_conf_path}"/helm/flyway ]]; then
-        $helm_opt upgrade flyway "${g_me_conf_path}/helm/flyway/" --install --history-max 1 \
+    if ${ENV_FLYWAY_HELM_JOB:-false} && [[ -d "${SCRIPT_CONF_PATH}"/helm/flyway ]]; then
+        $helm_opt upgrade flyway "${SCRIPT_CONF_PATH}/helm/flyway/" --install --history-max 1 \
             --namespace "${env_namespace}" --create-namespace \
             --set image.repository="${ENV_DOCKER_REGISTRY}" \
             --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
@@ -628,13 +628,13 @@ _deploy_via_rsync_ssh() {
     _msg step "[deploy] deploy files with rsync+ssh"
     ## rsync exclude some files / rsync 排除某些文件
     rsync_exclude="${gitlab_project_dir}/rsync.exclude"
-    [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${g_me_conf_path}/rsync.exclude"
+    [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${SCRIPT_CONF_PATH}/rsync.exclude"
 
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
-    # grep "^${gitlab_project_path}:${env_namespace}" "$g_me_conf" | awk -F: '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10}' "$g_me_conf"
-    conf_line="$(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$g_me_conf" | wc -l)"
+    # grep "^${gitlab_project_path}:${env_namespace}" "$SCRIPT_CONF" | awk -F: '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10}' "$SCRIPT_CONF"
+    conf_line="$(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$SCRIPT_CONF" | wc -l)"
     if [ "$conf_line" -eq 0 ]; then
-        _msg warn "[deploy] not config $g_me_conf"
+        _msg warn "[deploy] not config $SCRIPT_CONF"
         return
     fi
 
@@ -647,7 +647,7 @@ _deploy_via_rsync_ssh() {
         # db_user=$(echo "$line" | jq -r '.db_user')
         # db_name=$(echo "$line" | jq -r '.db_name')
         ## Prevent empty variable / 防止出现空变量（若有空变量则自动退出）
-        echo "ssh host: ${ssh_host:?when stop here, please check $g_me_conf}, port: ${ssh_port:-22}"
+        echo "ssh host: ${ssh_host:?when stop here, please check $SCRIPT_CONF}, port: ${ssh_port:-22}"
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
         ## node/java use rsync --delete / node/java 使用 rsync --delete
@@ -683,9 +683,9 @@ _deploy_via_rsync_ssh() {
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
 
-        if [ -f "$g_me_data_bin_path/deploy.custom.sh" ]; then
+        if [ -f "$SCRIPT_DATA_BIN/deploy.custom.sh" ]; then
             _msg time "custom deploy..."
-            bash "$g_me_data_bin_path/deploy.custom.sh" ${ssh_host} ${rsync_dest}
+            bash "$SCRIPT_DATA_BIN/deploy.custom.sh" ${ssh_host} ${rsync_dest}
             _msg time "custom deploy."
         fi
 
@@ -693,7 +693,7 @@ _deploy_via_rsync_ssh() {
             _msg step "deploy to server with docker-compose"
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $gitlab_project_name"
         fi
-    done < <(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$g_me_conf")
+    done < <(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$SCRIPT_CONF")
     _msg time "[deploy] deploy files with rsync+ssh"
 }
 
@@ -707,7 +707,7 @@ _deploy_aliyun_oss() {
 
     # Check if OSS CLI is installed
     _install_ossutil
-    oss_config_file=${g_me_data_path}/aliyun.oss.key.conf
+    oss_config_file=${SCRIPT_DATA}/aliyun.oss.key.conf
     bucket_name=demo-bucket
     remote_dir=demo-dir
 
@@ -724,7 +724,7 @@ _deploy_aliyun_oss() {
 _deploy_rsync() {
     _msg step "[deploy] deploy files to rsyncd server"
     # Load configuration from file
-    rsyncd_conf="$g_me_data_path/rsyncd.conf"
+    rsyncd_conf="$SCRIPT_DATA/rsyncd.conf"
     source "$rsyncd_conf"
 
     # Deploy files with rsync
@@ -797,14 +797,14 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
     element)
         ## element / 发送至 element
         _msg time "notify to Element"
-        echo "$g_msg_body" | python3 "$g_me_lib/utils/element.py" ${ENV_ELM_SERVER:? } ${ENV_ELM_USERID:? } ${ENV_ELM_PASSWORD:? } ${ENV_ELM_ROOMID:? }
+        echo "$g_msg_body" | python3 "$SCRIPT_LIB/utils/element.py" ${ENV_ELM_SERVER:? } ${ENV_ELM_USERID:? } ${ENV_ELM_PASSWORD:? } ${ENV_ELM_ROOMID:? }
         ;;
     email)
         ## email / 发送至 email
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
         _msg time "notify to Email"
-        "$g_me_bin_path/sendEmail" \
+        "$SCRIPT_BIN/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
             -xu "$ENV_EMAIL_USERNAME" \
@@ -1006,7 +1006,7 @@ _check_aliyun_account_balance() {
 }
 
 _is_china() {
-    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} || grep -q 'ENV_IN_CHINA=true' "$g_me_env"; then
+    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} || grep -q 'ENV_IN_CHINA=true' "$SCRIPT_ENV"; then
         return 0
     fi
     return 1
@@ -1205,24 +1205,24 @@ _generate_api_documentation() {
 _inject_project_files() {
     # 如果禁用注入，则直接返回
     [ "${exec_inject_files:-true}" = "false" ] && return 0
-    _msg step "[inject] from ${g_me_data_path}/inject/"
+    _msg step "[inject] from ${SCRIPT_DATA}/inject/"
 
     # 定义路径变量 替换代码文件，例如 PHP 数据库配置等信息 .env 文件，例如 Java 数据库配置信息 yml 文件
-    local inject_code_path="${g_me_data_path}/inject/${gitlab_project_name}"
-    local inject_code_path_branch="${g_me_data_path}/inject/${gitlab_project_name}/${env_namespace}"
+    local inject_code_path="${SCRIPT_DATA}/inject/${gitlab_project_name}"
+    local inject_code_path_branch="${SCRIPT_DATA}/inject/${gitlab_project_name}/${env_namespace}"
     ## 项目代码库内已存在的 Dockerfile
     local project_dockerfile="${gitlab_project_dir}/Dockerfile"
     ## 打包镜像时注入的 Dockerfile 优先查找 data/ 目录 其次查找 conf/ 目录
-    local inject_dockerfile_1="${g_me_data_dockerfile}/Dockerfile.${project_lang}"
-    local inject_dockerfile_2="${g_me_conf_dockerfile}/Dockerfile.${project_lang}"
+    local inject_dockerfile_1="${SCRIPT_DATA_DOCKERFILE}/Dockerfile.${project_lang}"
+    local inject_dockerfile_2="${SCRIPT_DOCKERFILE}/Dockerfile.${project_lang}"
     ## 打包镜像时注入的 root/opt/ 目录
-    local inject_root_path="${g_me_conf_dockerfile}/root"
+    local inject_root_path="${SCRIPT_DOCKERFILE}/root"
     ## 打包镜像时注入的 settings.xml 文件
-    local inject_setting="${g_me_data_dockerfile}/settings.xml"
+    local inject_setting="${SCRIPT_DATA_DOCKERFILE}/settings.xml"
     ## 打包镜像时注入的 .dockerignore 文件
-    local inject_dockerignore="${g_me_conf_dockerfile}/.dockerignore"
+    local inject_dockerignore="${SCRIPT_DOCKERFILE}/.dockerignore"
     ## 打包镜像时注入的 /opt/init.sh 文件 容器启动时初始化配置文件 init.sh 可以注入 /etc/hosts 等配置
-    local inject_init="${g_me_data_dockerfile}"/init.sh
+    local inject_init="${SCRIPT_DATA_DOCKERFILE}"/init.sh
     ## replace code files / 替换代码文件
     if [ -d "$inject_code_path_branch" ]; then
         _msg warning "found $inject_code_path_branch, sync to ${gitlab_project_dir}/"
@@ -1332,7 +1332,7 @@ _inject_project_files() {
 }
 
 _setup_deployment_environment() {
-    local path_conf_base="${g_me_data_path}"
+    local path_conf_base="${SCRIPT_DATA}"
     local conf_dirs=(".ssh" ".acme.sh" ".aws" ".kube" ".aliyun")
     local file_python_gitlab="${path_conf_base}/.python-gitlab.cfg"
 
@@ -1409,15 +1409,15 @@ _initialize_gitlab_variables() {
 
     # Handle crontab execution
     if ${run_with_crontab:-false}; then
-        cron_save_file="$(find "${g_me_data_path}" -name "crontab.${gitlab_project_id}.*" -print -quit)"
+        cron_save_file="$(find "${SCRIPT_DATA}" -name "crontab.${gitlab_project_id}.*" -print -quit)"
         if [[ -n "$cron_save_file" ]]; then
             cron_save_id="${cron_save_file##*.}"
             if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
                 _msg warn "no code change found, <skip>."
                 exit 0
             else
-                rm -f "${g_me_data_path}/crontab.${gitlab_project_id}".*
-                touch "${g_me_data_path}/crontab.${gitlab_project_id}.${gitlab_commit_short_sha}"
+                rm -f "${SCRIPT_DATA}/crontab.${gitlab_project_id}".*
+                touch "${SCRIPT_DATA}/crontab.${gitlab_project_id}.${gitlab_commit_short_sha}"
             fi
         fi
     fi
@@ -1481,14 +1481,14 @@ _determine_deployment_method() {
 
 _setup_svn_repo() {
     ${checkout_with_svn:-false} || return 0
-    if [[ ! -d "$g_me_builds_path" ]]; then
-        echo "Not found $g_me_builds_path, create it..."
-        mkdir -p "$g_me_builds_path"
+    if [[ ! -d "$SCRIPT_BUILDS" ]]; then
+        echo "Not found $SCRIPT_BUILDS, create it..."
+        mkdir -p "$SCRIPT_BUILDS"
     fi
     local svn_repo_name
     svn_repo_name=$(basename "$svn_url")
     local svn_repo_dir
-    svn_repo_dir="${g_me_builds_path}/${svn_repo_name}"
+    svn_repo_dir="${SCRIPT_BUILDS}/${svn_repo_name}"
 
     if [ -d "$svn_repo_dir" ]; then
         echo "Updating existing repo: $svn_repo_dir"
@@ -1507,13 +1507,13 @@ _setup_svn_repo() {
 
 _setup_git_repo() {
     ${arg_git_clone:-false} || return 0
-    if [[ ! -d "$g_me_builds_path" ]]; then
-        echo "Not found $g_me_builds_path, create it..."
-        mkdir -p "$g_me_builds_path"
+    if [[ ! -d "$SCRIPT_BUILDS" ]]; then
+        echo "Not found $SCRIPT_BUILDS, create it..."
+        mkdir -p "$SCRIPT_BUILDS"
     fi
     local git_repo_name
     git_repo_name="$(basename $arg_git_clone_url)"
-    local git_repo_dir="${g_me_builds_path}/${git_repo_name%.git}"
+    local git_repo_dir="${SCRIPT_BUILDS}/${git_repo_name%.git}"
 
     if [ -d "$git_repo_dir" ]; then
         echo "Updating existing repo: $git_repo_dir"
@@ -1534,7 +1534,7 @@ _setup_git_repo() {
 
 _setup_kubernetes_cluster() {
     ${create_k8s_with_terraform:-false} || return 0
-    local terraform_dir="$g_me_data_path/terraform"
+    local terraform_dir="$SCRIPT_DATA/terraform"
     [[ -d "$terraform_dir" ]] || return 0
 
     _msg step "[PaaS] create k8s cluster"
@@ -1609,20 +1609,17 @@ _parse_args() {
         -d | --debug) set -x && debug_on=true ;;
         --cron | --loop) run_with_crontab=true ;;
         --github-action) set -x && debug_on=true && github_action=true ;;
-        --in-china) sed -i -e '/ENV_IN_CHINA=/s/false/true/' $g_me_env ;;
-
-            # Repository operations
+        --in-china) sed -i -e '/ENV_IN_CHINA=/s/false/true/' $SCRIPT_ENV ;;
+        # Repository operations
         --git-clone) arg_git_clone=true && arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         --svn-checkout) checkout_with_svn=true && svn_url="${2:?empty svn url}" && shift ;;
-
-            # Build and push
+        # Build and push
         --build-langs) arg_build_langs=true && exec_single_job=true ;;
-        --build-docker) arg_build_image=true && exec_single_job=true && build_cmd=docker ;;
-        --build-podman) arg_build_image=true && exec_single_job=true && build_cmd=podman && build_cmd_opt='--force-rm --format=docker' ;;
+        --build-docker) arg_build_image=true && exec_single_job=true && build_cmd=$(command -v docker || echo docker) ;;
+        --build-podman) arg_build_image=true && exec_single_job=true && build_cmd=$(command -v podman || echo podman) && build_cmd_opt='--force-rm --format=docker' ;;
         --push-image) arg_push_image=true && exec_single_job=true ;;
-
-            # Deployment
+        # Deployment
         --deploy-k8s) arg_deploy_k8s=true && exec_single_job=true ;;
         --deploy-functions) arg_deploy_functions=true && exec_single_job=true ;;
         --deploy-flyway) arg_deploy_flyway=true && exec_single_job=true ;;
@@ -1630,27 +1627,19 @@ _parse_args() {
         --deploy-rsync) arg_deploy_rsync=true && exec_single_job=true ;;
         --deploy-ftp) arg_deploy_ftp=true && exec_single_job=true ;;
         --deploy-sftp) arg_deploy_sftp=true && exec_single_job=true ;;
-
-            # Testing and quality
+        # Testing and quality
         --test-unit) arg_test_unit=true && exec_single_job=true ;;
         --test-function) arg_test_function=true && exec_single_job=true ;;
         --code-style) arg_code_style=true && exec_single_job=true ;;
         --code-quality) arg_code_quality=true && exec_single_job=true ;;
-
-            # Kubernetes operations
+        # Kubernetes operations
         --create-helm) arg_create_helm=true && exec_single_job=true && exec_inject_files=false && helm_dir="$2" && shift ;;
         --create-k8s) create_k8s_with_terraform=true ;;
-
-            # Miscellaneous
+        # Miscellaneous
         --get-balance) arg_get_balance=true && exec_single_job=true ;;
         --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true && exec_single_job=true ;;
-
-        # Unknown option
-        *)
-            _usage
-            exit 1
-            ;;
+        *) _usage && exit 1 ;;
         esac
         shift
     done
@@ -1662,38 +1651,38 @@ main() {
     set -e ## 出现错误自动退出
     # set -u ## 变量未定义报错 # set -Eeuo pipefail
     SECONDS=0
-    g_me_name="$(basename "$0")"
-    g_me_path="$(dirname "$(readlink -f "$0")")"
-    source "$g_me_path/lib/common.sh"
+    SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    SCRIPT_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+    source "$SCRIPT_PATH/lib/common.sh"
     _msg step "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _parse_args "$@"
 
-    g_me_conf_path="${g_me_path}/conf"
-    g_me_bin_path="${g_me_path}/bin"
-    g_me_lib="${g_me_path}/lib"
-    g_me_data_path="${g_me_path}/data"
-    g_me_data_bin_path="${g_me_data_path}/bin"
-    g_me_builds_path="${g_me_path}/builds"
-    g_me_log="${g_me_data_path}/${g_me_name}.log"
-    g_me_conf="${g_me_data_path}/deploy.json"
-    g_me_env="${g_me_data_path}/deploy.env"
-    g_me_conf_dockerfile="${g_me_conf_path}/dockerfile"
-    g_me_data_dockerfile="${g_me_data_path}/dockerfile"
+    SCRIPT_CONF_PATH="${SCRIPT_PATH}/conf"
+    SCRIPT_BIN="${SCRIPT_PATH}/bin"
+    SCRIPT_LIB="${SCRIPT_PATH}/lib"
+    SCRIPT_DATA="${SCRIPT_PATH}/data"
+    SCRIPT_DATA_BIN="${SCRIPT_DATA}/bin"
+    SCRIPT_BUILDS="${SCRIPT_PATH}/builds"
+    SCRIPT_LOG="${SCRIPT_DATA}/${SCRIPT_NAME}.log"
+    SCRIPT_CONF="${SCRIPT_DATA}/deploy.json"
+    SCRIPT_ENV="${SCRIPT_DATA}/deploy.env"
+    SCRIPT_DOCKERFILE="${SCRIPT_CONF_PATH}/dockerfile"
+    SCRIPT_DATA_DOCKERFILE="${SCRIPT_DATA}/dockerfile"
 
-    mkdir -p "${g_me_data_bin_path}"
+    mkdir -p "${SCRIPT_DATA_BIN}"
 
     # Copy config files if they don't exist
-    [[ -f "$g_me_conf" ]] || cp -v "${g_me_conf_path}/example-deploy.json" "$g_me_conf"
-    [[ -f "$g_me_env" ]] || cp -v "${g_me_conf_path}/example-deploy.env" "$g_me_env"
+    [[ -f "$SCRIPT_CONF" ]] || cp -v "${SCRIPT_CONF_PATH}/example-deploy.json" "$SCRIPT_CONF"
+    [[ -f "$SCRIPT_ENV" ]] || cp -v "${SCRIPT_CONF_PATH}/example-deploy.env" "$SCRIPT_ENV"
 
     # Set PATH
     declare -a paths_append=(
         "/usr/local/sbin"
         "/snap/bin"
-        "$g_me_bin_path"
-        "$g_me_data_bin_path"
-        "$g_me_data_path/.acme.sh"
+        "$SCRIPT_BIN"
+        "$SCRIPT_DATA_BIN"
+        "$SCRIPT_DATA/.acme.sh"
         "$HOME/.local/bin"
         "$HOME/.acme.sh"
         "$HOME/.config/composer/vendor/bin"
@@ -1725,7 +1714,7 @@ main() {
     _initialize_gitlab_variables
 
     ## source ENV, get global variables / 获取 ENV_ 开头的所有全局变量
-    source "$g_me_env"
+    source "$SCRIPT_ENV"
 
     # Set up kubectl and helm
     kubectl_opt="kubectl"
@@ -1785,10 +1774,10 @@ main() {
     _determine_deployment_method
 
     ## code style check / 代码格式检查
-    code_style_sh="$g_me_lib/style/${project_lang}.sh"
+    code_style_sh="$SCRIPT_LIB/style/${project_lang}.sh"
 
     ## code build / 代码编译打包
-    build_langs_sh="$g_me_lib/build/${project_lang}.sh"
+    build_langs_sh="$SCRIPT_LIB/build/${project_lang}.sh"
 
     ################################################################################
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
