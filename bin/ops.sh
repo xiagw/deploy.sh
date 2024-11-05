@@ -172,28 +172,13 @@ search_project_files() {
         return 1
     fi
     local search_pattern="$2"
-    local viewer_mode="$3"
-    local preview_opts="--color=always --style=full --wrap=auto --tabs=2"
     local selected_dir
 
     if [[ -d "$active_dir"/已关闭 ]]; then
         active_dir+=" $active_dir/已关闭"
     fi
-    case "${viewer_mode:-bat}" in
-    -b | --bat | bat)
-        viewer="$CMD_CAT"
-        preview_cmd="$CMD_CAT $preview_opts {}"
-        ;;
-    -c | --cat | cat)
-        viewer="cat"
-        preview_cmd="cat {}"
-        ;;
-    *)
-        echo "Error: Invalid viewer mode: $viewer_mode" >&2
-        return 1
-        ;;
-    esac
 
+    # 直接使用 $CMD_CAT，不需要额外的模式检查
     if [ -n "$search_pattern" ]; then
         selected_dir=$("$CMD_FIND" ${active_dir} -maxdepth 1 -type d -iname "*${search_pattern}*" | "$CMD_FZF" --height=50%)
     else
@@ -204,11 +189,11 @@ search_project_files() {
     "$CMD_FIND" "$selected_dir" |
         "$CMD_FZF" --multi \
             --height=60% \
-            --preview "$preview_cmd" \
+            --preview "$CMD_CAT --language=markdown {}" \
             --preview-window=right:50% \
             --bind 'ctrl-/:change-preview-window(hidden|)' \
             --header 'CTRL-/ to toggle preview' |
-        xargs -I {} $viewer {}
+        xargs -I {} $CMD_CAT --paging=never --language=markdown --color=always --style=full --theme=Dracula --wrap=auto --tabs=2 {}
 }
 
 deploy_ssl() {
