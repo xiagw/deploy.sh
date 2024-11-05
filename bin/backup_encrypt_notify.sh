@@ -15,7 +15,7 @@ _load_config() {
         --mysql-user=*) MYSQL_USER="${1#*=}" ;;
         --mysql-password=*) MYSQL_PASSWORD="${1#*=}" ;;
         --mysql-dbs=*) IFS=',' read -ra MYSQL_DBS <<<"${1#*=}" ;;
-        --wechat-key=*) WECHAT_KEY="${1#*=}" ;;
+        --wecom-key=*) WECOM_KEY="${1#*=}" ;;
         --aliyun-oss-bucket=*) ALIYUN_OSS_BUCKET="${1#*=}" ;;
         --aliyun-region=*) ALIYUN_REGION="${1#*=}" ;;
         --aliyun-access-key-id=*) ALIYUN_ACCESS_KEY_ID="${1#*=}" ;;
@@ -334,7 +334,7 @@ _upload_file() {
     done
 }
 
-_notify_wechat_work() {
+_notify_wecom() {
     local path="$1"
     local file="${2}.tar.gz"
     local sleep_time="$3"
@@ -381,21 +381,21 @@ _notify_wechat_work() {
 
     echo "$msg_body" | tee -a "$LOG_FILE"
 
-    if [[ -z "${WECHAT_KEY:-}" ]]; then
-        _log $LOG_LEVEL_WARNING "WECHAT_KEY not provided, WeChat notification skipped."
+    if [[ -z "${WECOM_KEY:-}" ]]; then
+        _log $LOG_LEVEL_WARNING "WECOM_KEY not provided, WeCom notification skipped."
         return
     fi
 
     # Notify to weixin_work 企业微信
-    local wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$WECHAT_KEY"
+    local wecom_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$WECOM_KEY"
     local response
     response=$(curl -fsS -X POST -H 'Content-Type: application/json' \
-        -d '{"msgtype": "text", "text": {"content": "'"$msg_body"'"}}' "$wechat_api") || {
-        _log $LOG_LEVEL_ERROR "Failed to send WeChat notification. Check your network connection."
+        -d '{"msgtype": "text", "text": {"content": "'"$msg_body"'"}}' "$wecom_api") || {
+        _log $LOG_LEVEL_ERROR "Failed to send WeCom notification. Check your network connection."
         return 1
     }
     if ! echo "$response" | grep -q 'errcode.*0'; then
-        _log $LOG_LEVEL_ERROR "Error: Failed to send WeChat notification. Response: $response"
+        _log $LOG_LEVEL_ERROR "Error: Failed to send WeCom notification. Response: $response"
         return 1
     fi
 }
@@ -513,7 +513,7 @@ main() {
 
     # 通知
     sleep=2h
-    _notify_wechat_work "${me_path}" "${timestamp}" $sleep
+    _notify_wecom_work "${me_path}" "${timestamp}" $sleep
 
     # 刷新CDN
     _refresh_cdn "${me_path}" "${timestamp}" $sleep &

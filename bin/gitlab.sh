@@ -29,14 +29,14 @@ _add_account() {
 _send_msg() {
     ## message body
     send_msg="https://git.$gitlab_domain /  username=$user_name / password=$password_rand"
-    if [[ -z "$gitlab_weixin_key" ]]; then
-        read -rp 'Enter weixin api key: ' read_weixin_key
-        wechat_api_key=$read_weixin_key
+    if [[ -z "$gitlab_wecom_key" ]]; then
+        read -rp 'Enter wecom api key: ' read_wecom_key
+        wecom_api_key=$read_wecom_key
     else
-        wechat_api_key=$gitlab_weixin_key
+        wecom_api_key=$gitlab_wecom_key
     fi
-    wechat_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wechat_api_key}"
-    curl -fsSL "$wechat_api" -H 'Content-Type: application/json' -d '{"msgtype": "text", "text": {"content": "'"$send_msg"'"},"at": {"isAtAll": true}}'
+    wecom_api="https://qyapi.wecom.qq.com/cgi-bin/webhook/send?key=${wecom_api_key}"
+    curl -fsSL "$wecom_api" -H 'Content-Type: application/json' -d '{"msgtype": "text", "text": {"content": "'"$send_msg"'"},"at": {"isAtAll": true}}'
 }
 
 _new_element_user() {
