@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+# shellcheck disable=SC1091
 # set -x
 
 ## set mirror
@@ -40,11 +40,22 @@ apt install -y byobu
 apt upgrade -y
 
 # ssh-key
-if ! grep -q cen8UtnI13y "$HOME"/.ssh/authorized_keys; then
-    curl -fsSL 'https://oss.flyh6.com/d/xiagw.keys' >>"$HOME"/.ssh/authorized_keys
-fi
+ssh_dir="$HOME/.ssh"
+ssh_auth="$ssh_dir/authorized_keys"
+# 确保目录和文件存在
+mkdir -p "$ssh_dir"
+touch "$ssh_auth"
+chmod 700 "$ssh_dir"
+chmod 600 "$ssh_auth"
 
-# export http_proxy=http://192.168.41.252:1080
+curl -fsSL 'https://oss.flyh6.com/d/xiagw.keys' | grep -vE '^#|^$|^\s+$' |
+    while read -r line; do
+        key=$(echo "$line" | awk '{print $2}')
+        [ -z "$key" ] && continue
+        grep -q "$key" "$ssh_auth" 2>/dev/null || echo "$line" >>"$ssh_auth"
+    done
+
+# export http_proxy=http://192.168.44.11:1080
 # https://forum.proxmox.com/threads/installing-ceph-in-pve8-nosub-repo.131348/
 ## install ceph 17
 # yes | pveceph install --repository no-subscription
