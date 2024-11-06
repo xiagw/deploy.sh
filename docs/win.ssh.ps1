@@ -94,7 +94,97 @@ if (Get-Command oh-my-posh.exe) {
 ## 设置winget
 
 ## windows server 2022安装Windows Terminal
-# https://4sysops.com/archives/install-windows-terminal-without-the-store-on-windows-server/
+function Install-WindowsTerminal {
+    # 检查是否已安装Windows Terminal
+    if (Get-Command wt -ErrorAction SilentlyContinue) {
+        Write-Output "Windows Terminal is already installed."
+        return
+    }
+
+    Write-Output "Installing Windows Terminal..."
+
+    # 创建临时目录
+    $tempDir = Join-Path $env:TEMP "WindowsTerminal"
+    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+
+    try {
+        # 获取最新版本的Windows Terminal
+        $releaseUrl = "https://api.github.com/repos/microsoft/terminal/releases/latest"
+        $release = Invoke-RestMethod -Uri $releaseUrl
+        $msixBundleUrl = ($release.assets | Where-Object { $_.name -like "*.msixbundle" }).browser_download_url
+
+        if (-not $msixBundleUrl) {
+            throw "Could not find Windows Terminal download URL"
+        }
+
+        # 下载Windows Terminal
+        $msixBundlePath = Join-Path $tempDir "WindowsTerminal.msixbundle"
+        Write-Output "Downloading Windows Terminal..."
+        Invoke-WebRequest -Uri $msixBundleUrl -OutFile $msixBundlePath
+
+        # 下载依赖包
+        $depsUrls = @(
+            "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx",
+            "https://aka.ms/Microsoft.UI.Xaml.2.7.x64.appx"
+        )
+
+        foreach ($url in $depsUrls) {
+            $fileName = Split-Path $url -Leaf
+            $filePath = Join-Path $tempDir $fileName
+            Write-Output "Downloading dependency: $fileName"
+            Invoke-WebRequest -Uri $url -OutFile $filePath
+        }
+
+        # 安装依赖包
+        Write-Output "Installing dependencies..."
+        Get-ChildItem $tempDir -Filter "*.appx" | ForEach-Object {
+            Add-AppxPackage -Path $_.FullName
+        }
+
+        # 安装Windows Terminal
+        Write-Output "Installing Windows Terminal..."
+        Add-AppxPackage -Path $msixBundlePath
+
+        Write-Output "Windows Terminal installed successfully!"
+    }
+    catch {
+        Write-Error "Failed to install Windows Terminal: $_"
+    }
+    finally {
+        # 清理临时文件
+        Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+    }
+}
+
+# 执行安装
+Install-WindowsTerminal
+
+# 配置Windows Terminal
+$settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+if (Test-Path $settingsPath) {
+    Write-Output "Configuring Windows Terminal..."
+
+    # 备份原始设置
+    Copy-Item $settingsPath "$settingsPath.backup"
+
+    # 读取现有设置
+    $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+
+    # 配置默认设置
+    $settings.defaultProfile = "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}" # PowerShell的GUID
+    $settings.profiles.defaults = @{
+        "fontFace" = "Cascadia Code"
+        "fontSize" = 12
+        "colorScheme" = "One Half Dark"
+        "useAcrylic" = $true
+        "acrylicOpacity" = 0.8
+    }
+
+    # 保存设置
+    $settings | ConvertTo-Json -Depth 32 | Set-Content $settingsPath
+
+    Write-Output "Windows Terminal configured successfully!"
+}
 
 ## 启用/禁用代理
 # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 0
