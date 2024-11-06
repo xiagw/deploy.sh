@@ -110,9 +110,18 @@ function Set-GlobalProxy {
 # 添加到PowerShell配置文件
 function Add-ProxyToProfile {
     param (
-        [string]$ProxyServer = "http://192.168.44.11:1080"
+        [string]$ProxyServer = $DEFAULT_PROXY
     )
 
+    # 检查配置文件是否存在
+    if (-not (Test-Path $PROFILE)) {
+        New-Item -Type File -Force -Path $PROFILE | Out-Null
+    }
+
+    # 读取现有配置
+    $currentContent = Get-Content $PROFILE -Raw
+
+    # 准备要添加的代理设置
     $proxySettings = @"
 # 代理快捷命令
 function Enable-Proxy { Set-GlobalProxy -ProxyServer '$ProxyServer' -Enable }
@@ -123,7 +132,14 @@ function Disable-Proxy { Set-GlobalProxy -Disable }
 `$env:ALL_PROXY = '$ProxyServer'
 "@
 
-    Add-Content -Path $PROFILE -Value $proxySettings
+    # 检查是否已经存在代理设置
+    if ($currentContent -and ($currentContent -match "Enable-Proxy|HTTP_PROXY = '$ProxyServer'")) {
+        Write-Output "Proxy settings already exist in PowerShell profile"
+        return
+    }
+
+    # 添加代理设置
+    Add-Content -Path $PROFILE -Value "`n$proxySettings"
     Write-Output "Proxy settings added to PowerShell profile"
 }
 #endregion
