@@ -24,13 +24,17 @@
     作者: xiagw
     版本: 1.0
 #>
-
+# 脚本参数必须在最开始
+param (
+    [string]$ProxyServer = $DEFAULT_PROXY,  # 使用默认代理地址
+    [switch]$UseProxy,
+    [string]$Action = "install"  # 默认动作
+)
 #region 全局变量
 # 常量定义
 $SCRIPT_VERSION = "2.0.0"
 $DEFAULT_SHELL = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 $DEFAULT_PROXY = "http://192.168.44.11:1080"  # 默认代理地址
-
 #endregion
 
 #region 代理相关函数
@@ -1059,32 +1063,27 @@ function Clear-GlobalSettings {
 #endregion
 
 #region 主执行代码
-# 在脚本开始处添加代理初始化
-param (
-    [string]$ProxyServer = $DEFAULT_PROXY,  # 使用默认代理地址
-    [switch]$UseProxy
-)
-
 # 初始化代理设置
 if ($UseProxy) {
     Write-Output "Initializing global proxy settings..."
     Set-GlobalProxy -ProxyServer $ProxyServer -Enable
 }
 
-# 调用安装函数
-Install-OpenSSH
-
-# 根据参数执行安装或升级
-$installAction = $args[0]
-switch ($installAction) {
-    "upgrade" {
-        Write-Output "Upgrading Windows Terminal..."
-        Install-WindowsTerminal -Upgrade
-    }
-    default {
-        Write-Output "Installing Windows Terminal..."
+# 根据Action参数执行相应操作
+switch ($Action) {
+    "help" { Show-ScriptHelp }
+    "help-detailed" { Show-ScriptHelp -Detailed }
+    "upgrade" { Install-WindowsTerminal -Upgrade }
+    "install" {
+        Install-OpenSSH
         Install-WindowsTerminal
     }
+}
+
+# 在原有的配置文件设置中添加代理配置
+if (Test-Path $PROFILE) {
+    Write-Output "Adding proxy settings to PowerShell profile..."
+    Add-ProxyToProfile
 }
 
 # 配置Windows Terminal
@@ -1114,17 +1113,9 @@ if (Test-Path $settingsPath) {
     Write-Output "Windows Terminal configured successfully!"
 }
 
-# 在原有的配置文件设置中添加代理配置
-if (Test-Path $PROFILE) {
-    Write-Output "Adding proxy settings to PowerShell profile..."
-    Add-ProxyToProfile
-}
-
 # 注册脚本结束时的清理操作
 $PSDefaultParameterValues['*:ProxyServer'] = $ProxyServer
 Register-EngineEvent PowerShell.Exiting -Action { Clear-GlobalSettings } | Out-Null
-
-
 #endregion
 
 # git logなどのマルチバイト文字を表示させるため (絵文字含む)
