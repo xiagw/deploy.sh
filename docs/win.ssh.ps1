@@ -272,12 +272,35 @@ function Install-OpenSSH {
 
     # 获取并添加SSH密钥
     try {
-        (Invoke-RestMethod 'https://api.github.com/users/xiagw/keys').key |
-            Add-Content -Path $FileAuthHome
-        Write-Output "Added SSH keys to $FileAuthHome"
+        # 创建临时文件存储新的密钥
+        $tempKeyFile = [System.IO.Path]::GetTempFileName()
+
+        # 获取现有的密钥（如果文件存在）
+        $existingKeys = @()
+        if (Test-Path $FileAuthHome) {
+            $existingKeys = Get-Content $FileAuthHome
+        }
+
+        # 获取新的密钥
+        $newKeys = (Invoke-RestMethod 'https://api.github.com/users/xiagw/keys').key
+
+        # 合并现有密钥和新密钥，并去重
+        $allKeys = ($existingKeys + $newKeys) | Select-Object -Unique
+
+        # 写入到临时文件
+        $allKeys | Set-Content -Path $tempKeyFile
+
+        # 替换原文件
+        Move-Item -Path $tempKeyFile -Destination $FileAuthHome -Force
+
+        Write-Output "Added SSH keys to $FileAuthHome (Total unique keys: $($allKeys.Count))"
     }
     catch {
         Write-Warning "Failed to fetch SSH keys: $_"
+        # 清理临时文件
+        if (Test-Path $tempKeyFile) {
+            Remove-Item -Path $tempKeyFile -Force
+        }
     }
 
     # 为管理员设置
