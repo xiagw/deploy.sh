@@ -266,7 +266,7 @@ function Install-OhMyPosh {
     Write-Output "Configuring PowerShell settings..."
     $basicSettings = @(
         'Set-PSReadlineKeyHandler -Key Tab -Function MenuComplete',
-        'Set-PSReadLineOption -EditMode Emacs',
+        'Set-PSReadLineOption -EditMode Emacs'
         # 可选的其他设置
         # 'Set-PSReadlineKeyHandler -Chord Alt+F4 -Function ViExit',
         # 'Set-PSReadlineKeyHandler -Chord Ctrl+d -Function DeleteCharOrExit'
