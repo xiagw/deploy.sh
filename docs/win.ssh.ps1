@@ -2,12 +2,17 @@
 # Get-ExecutionPolicy -List
 ## 设置执行策略为要求远程脚本签名，范围为当前用户
 # Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-## in-china # irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex
-## not-china # irm https://github.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex
 
+## 在中国大陆
+# irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex
+## 不在在中国大陆
+# irm https://github.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex
+
+## 激活windows
 ## https://github.com/massgravel/Microsoft-Activation-Scripts
 # irm https://massgrave.dev/get | iex
 
+## 安装openssh
 # Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH*'
 Get-WindowsCapability -online | Where-Object {$_.Name -like "OpenSSH*" -and $_.State -eq "NotPresent"} | Add-WindowsCapability -online
 ## Start the sshd service
@@ -28,6 +33,7 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 (Get-Content -Path C:\ProgramData\ssh\sshd_config -Raw) -replace 'AuthorizedKeysFile __PROGRAMDATA__','#AuthorizedKeysFile __PROGRAMDATA__' | Set-Content -Path C:\ProgramData\ssh\sshd_config
 ## restart sshd service
 Restart-Service sshd
+## 设置authorized_keys
 ## authoized_keys for normal users
 $FileAuthHome = "$HOME\.ssh\authorized_keys"
 if (Test-Path $FileAuthHome) {
@@ -49,6 +55,7 @@ if (Test-Path $FileAuthAdmin) {
 Copy-Item -Path $FileAuthHome -Destination $FileAuthAdmin -Force
 icacls.exe "$FileAuthAdmin" /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 
+## 设置ssh-agent服务
 # By default the ssh-agent service is disabled. Allow it to be manually started for the next step to work.
 # Make sure you're running as an Administrator.
 # Get-Service ssh-agent | Set-Service -StartupType Manual
@@ -58,20 +65,20 @@ Get-Service ssh-agent
 # Now load your key files into ssh-agent
 # ssh-add ~\.ssh\id_ed25519
 
-## install scoop, not Admin console
+## 安装scoop, 非管理员
 # irm get.scoop.sh | iex
 # win10 安装scoop的正确姿势 | impressionyang的个人分享站
 # https://impressionyang.gitee.io/2021/02/15/win10-install-scoop/
 
-## install oh my posh
+## 安装oh my posh
 New-Item -Type File -Force -Path $PROFILE
 Clear-Content -Force $PROFILE
 # Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Alt+F4 -Function ViExit'
 # Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Chord Ctrl+d -Function DeleteCharOrExit'
 Add-Content -Path $PROFILE -Value 'Set-PSReadlineKeyHandler -Key Tab -Function MenuComplete'
 Add-Content -Path $PROFILE -Value 'Set-PSReadLineOption -EditMode Emacs'
-Add-Content -Path $PROFILE -Value '# $env:HTTP_PROXY="http://192.168.41.252:1080"'
-Add-Content -Path $PROFILE -Value '# $env:HTTPS_PROXY="http://192.168.41.252:1080"'
+Add-Content -Path $PROFILE -Value '# $env:HTTP_PROXY="http://192.168.44.11:1080"'
+Add-Content -Path $PROFILE -Value '# $env:HTTPS_PROXY="http://192.168.44.11:1080"'
 if (Get-Command oh-my-posh.exe) {
     Write-Host "oh-my-posh already installed"
 } else {
@@ -84,19 +91,19 @@ if (Get-Command oh-my-posh.exe) {
     Add-Content -Path $PROFILE -Value 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/ys.omp.json" | Invoke-Expression'
 }
 
-# winget settings
+## 设置winget
 
-## windows server 2022 install Windows Terminal
+## windows server 2022安装Windows Terminal
 # https://4sysops.com/archives/install-windows-terminal-without-the-store-on-windows-server/
 
-## enable/disable proxy
+## 启用/禁用代理
 # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 0
 # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" ProxyEnable -value 1
 
-## install powershell 7
+## 安装powershell 7
 # winget install --id Microsoft.Powershell --source winget
 
-## install Remote Server Administrator
+## 安装Remote Server Administrator
 # Get-WindowsCapability -Online -Name 'Rsat.Server*' | Add-WindowsCapability -Online
 
 ## windows auto login
@@ -107,6 +114,7 @@ if (Get-Command oh-my-posh.exe) {
 # Set-ItemProperty $RegPath "DefaultUsername" -Value "$DefaultUsername" -type String
 # Set-ItemProperty $RegPath "DefaultPassword" -Value "$DefaultPassword" -type String
 
+## windows auto login
 # Microsoft.PowerShell_profile.ps1
 # PowerShell Core7でもConsoleのデフォルトエンコーディングはsjisなので必要
 # [System.Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding("utf-8")
