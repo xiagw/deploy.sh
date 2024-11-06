@@ -724,3 +724,136 @@ clean_runtime() {
         sudo chown -R 33:33 "$line"
     done < <(find . -type d -iname runtime)
 }
+
+# 获取 GitHub 仓库的最新发布版本下载链接
+get_github_latest_download() {
+    local repo="$1"
+    local source_only="false"  # 是否只获取源码包
+    local arch="amd64"        # 架构，默认amd64
+    local os="linux"          # 操作系统，默认linux
+
+    # 解析命名参数
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            source_only=*) source_only="${1#*=}" ;;
+            arch=*) arch="${1#*=}" ;;
+            os=*) os="${1#*=}" ;;
+            *) _msg warning "Unknown parameter: $1" ;;
+        esac
+        shift
+    done
+
+    # 标准化操作系统名称（使用 tr 替代 ${var,,}）
+    os=$(echo "$os" | tr '[:upper:]' '[:lower:]')
+    case "$os" in
+        mac*|darwin*) os="darwin" ;;
+        win*) os="windows" ;;
+        linux*) os="linux" ;;
+        freebsd*) os="freebsd" ;;
+        openbsd*) os="openbsd" ;;
+        *) _msg warning "Unknown OS: $os, using linux" && os="linux" ;;
+    esac
+
+    # 标准化架构名称
+    arch=$(echo "$arch" | tr '[:upper:]' '[:lower:]')
+    case "$arch" in
+        x86_64|x64|amd64) arch="amd64" ;;  # 把 amd64 也放在这里
+        x86|386) arch="386" ;;
+        aarch64|arm64) arch="arm64" ;;      # 把 arm64 也放在这里
+        armv*) ;;  # 保持原样 armv6/armv7 等
+        *)
+            if [ "$arch" != "amd64" ]; then
+                _msg warning "Unknown architecture: $arch, using amd64"
+                arch="amd64"
+            fi
+            ;;
+    esac
+
+    local api_url="https://api.github.com/repos/$repo/releases/latest"
+    local latest_ver
+    local download_url
+
+    # 获取最新版本信息并处理可能的错误
+    local release_info
+    release_info=$(curl -sS -H "Accept: application/vnd.github.v3+json" "$api_url")
+    if [ $? -ne 0 ] || [ -z "$release_info" ]; then
+        _msg warning "Failed to fetch release info from GitHub API"
+        echo "https://github.com/$repo/archive/refs/heads/master.tar.gz"
+        return
+    fi
+
+    # 使用 grep 和 sed 来提取版本号，避免 JSON 解析问题
+    latest_ver=$(echo "$release_info" | grep -o '"tag_name": *"[^"]*"' | sed 's/.*": *"//;s/"//')
+    if [ -z "$latest_ver" ]; then
+        _msg warning "Failed to parse release version"
+        echo "https://github.com/$repo/archive/refs/heads/master.tar.gz"
+        return
+    fi
+
+    if [ "$source_only" = "false" ]; then
+        # 构建操作系统名称的搜索模式
+        local os_pattern
+        case "$os" in
+            darwin) os_pattern="darwin\|mac\|macos" ;;
+            windows) os_pattern="windows\|win" ;;
+            linux) os_pattern="linux" ;;
+            freebsd) os_pattern="freebsd" ;;
+            openbsd) os_pattern="openbsd" ;;
+            *) os_pattern="$os" ;;
+        esac
+
+        # 使用 grep 和 sed 来提取下载链接，避免 JSON 解析问题
+        # 使用不区分大小写的匹配和扩展的操作系统名称模式
+        pattern="\"browser_download_url\": *\"[^\"]*\(${os_pattern}\)[^\"]*${arch}[^\"]*\""
+        download_url=$(echo "$release_info" | grep -io "$pattern" |
+                      sed 's/.*": *"//;s/"//' | head -n 1)
+        if [ -n "$download_url" ]; then
+            echo "$download_url"
+            return
+        fi
+
+        # 如果没找到，尝试反向顺序（架构在前，系统在后）的匹配
+        pattern="\"browser_download_url\": *\"[^\"]*${arch}[^\"]*\(${os_pattern}\)[^\"]*\""
+        download_url=$(echo "$release_info" | grep -io "$pattern" |
+                      sed 's/.*": *"//;s/"//' | head -n 1)
+        if [ -n "$download_url" ]; then
+            echo "$download_url"
+            return
+        fi
+    fi
+
+    # 如果没有二进制包或指定只要源码包，返回源码包链接
+    echo "https://github.com/$repo/archive/refs/tags/${latest_ver}.tar.gz"
+}
+
+# 安装或升级 acme.sh
+_install_acme() {
+    local force=${1:-}
+    if [ "$force" != "upgrade" ] && command -v acme.sh >/dev/null; then
+        return
+    fi
+    _msg green "Installing acme.sh..."
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    local download_url
+    download_url=$(get_github_latest_download "acmesh-official/acme.sh" source_only=true)
+
+    curl -fsSL "$download_url" | tar xz -C "$temp_dir" --strip-components=1
+    cd "$temp_dir" || exit
+    ./acme.sh --install \
+        --home "$HOME/.acme.sh" \
+        --config-home "$HOME/.acme.sh" \
+        --cert-home "$HOME/.acme.sh/certs" \
+        --accountemail "root@deploy.sh" \
+        --accountkey "$HOME/.acme.sh/account.key" \
+        --accountconf "$HOME/.acme.sh/account.conf" \
+        --useragent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    cd - || exit
+    rm -rf "$temp_dir"
+
+    # 显示版本
+    _msg green "Showing version"
+    "$HOME/.acme.sh"/acme.sh --version
+}
