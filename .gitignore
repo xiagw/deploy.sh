@@ -12,6 +12,7 @@ cache/
 
 ## deploy.sh conf/
 conf/deploy.*
+!conf/example-*
 
 ## data/
 data/**
