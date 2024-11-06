@@ -89,16 +89,16 @@ function Set-GlobalProxy {
         Remove-Item Env:\ALL_PROXY -ErrorAction SilentlyContinue
 
         # 清除 Git 代理
-        git config --global --unset http.proxy
-        git config --global --unset https.proxy
+        # git config --global --unset http.proxy
+        # git config --global --unset https.proxy
 
         # 清除 npm 代理
-        npm config delete proxy
-        npm config delete https-proxy
+        # npm config delete proxy
+        # npm config delete https-proxy
 
         # 清除 pip 代理
-        [System.Environment]::SetEnvironmentVariable("HTTP_PROXY", $null, [System.EnvironmentVariableTarget]::User)
-        [System.Environment]::SetEnvironmentVariable("HTTPS_PROXY", $null, [System.EnvironmentVariableTarget]::User)
+        # [System.Environment]::SetEnvironmentVariable("HTTP_PROXY", $null, [System.EnvironmentVariableTarget]::User)
+        # [System.Environment]::SetEnvironmentVariable("HTTPS_PROXY", $null, [System.EnvironmentVariableTarget]::User)
 
         # 禁用winget代理
         Set-WingetConfig -Disable
