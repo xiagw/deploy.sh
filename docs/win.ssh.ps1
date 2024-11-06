@@ -51,6 +51,11 @@ function Set-GlobalProxy {
 
     # PowerShell会话的代理设置
     if ($Enable) {
+        # 在原有的配置文件设置中添加代理配置
+        if (Test-Path $PROFILE) {
+            Write-Output "Adding proxy settings to PowerShell profile..."
+            Add-ProxyToProfile
+        }
         # 设置系统代理
         Set-ItemProperty -Path $RegPath -Name ProxyEnable -Value 1
         Set-ItemProperty -Path $RegPath -Name ProxyServer -Value $ProxyServer
@@ -79,6 +84,11 @@ function Set-GlobalProxy {
     }
 
     if ($Disable) {
+        ## 删除代理配置
+        if (Test-Path $PROFILE) {
+            Write-Output "Removing proxy settings from PowerShell profile..."
+            Remove-ProxyFromProfile
+        }
         # 禁用系统代理
         Set-ItemProperty -Path $RegPath -Name ProxyEnable -Value 0
         Remove-ItemProperty -Path $RegPath -Name ProxyServer -ErrorAction SilentlyContinue
@@ -141,6 +151,34 @@ function Disable-Proxy { Set-GlobalProxy -Disable }
     # 添加代理设置
     Add-Content -Path $PROFILE -Value "`n$proxySettings"
     Write-Output "Proxy settings added to PowerShell profile"
+}
+
+function Remove-ProxyFromProfile {
+    # 检查配置文件是否存在
+    if (-not (Test-Path $PROFILE)) {
+        Write-Output "PowerShell profile does not exist"
+        return
+    }
+
+    # 读取现有配置
+    $content = Get-Content $PROFILE -Raw
+
+    if (-not $content) {
+        Write-Output "PowerShell profile is empty"
+        return
+    }
+
+    # 移除代理相关设置
+    $newContent = $content -replace "(?ms)# 代理快捷命令.*?# 设置默认代理.*?\n.*?\n.*?\n.*?\n", ""
+
+    # 如果内容有变化，保存文件
+    if ($newContent -ne $content) {
+        $newContent.Trim() | Set-Content $PROFILE
+        Write-Output "Proxy settings removed from PowerShell profile"
+    }
+    else {
+        Write-Output "No proxy settings found in PowerShell profile"
+    }
 }
 #endregion
 
@@ -499,13 +537,30 @@ function Install-WindowsTerminal {
 
         Write-Output "Windows Terminal $(if ($Upgrade) {'upgraded'} else {'installed'}) successfully to version $latestVersion!"
 
-        # 如果是升级,保留原有配置
-        if ($Upgrade) {
-            $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-            if (Test-Path "$settingsPath.backup") {
-                Write-Output "Restoring previous settings..."
-                Copy-Item "$settingsPath.backup" $settingsPath -Force
+        # 配置Windows Terminal
+        $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+        if (Test-Path $settingsPath) {
+            Write-Output "Configuring Windows Terminal..."
+
+            # 备份原始设置
+            Copy-Item $settingsPath "$settingsPath.backup"
+
+            # 读取现有设置
+            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+
+            # 配置默认设置
+            $settings.defaultProfile = "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}" # PowerShell的GUID
+            $settings.profiles.defaults = @{
+                "fontFace" = "Cascadia Code"
+                "fontSize" = 12
+                "colorScheme" = "One Half Dark"
+                "useAcrylic" = $true
+                "acrylicOpacity" = 0.9
             }
+            # 保存设置
+            $settings | ConvertTo-Json -Depth 32 | Set-Content $settingsPath
+
+            Write-Output "Windows Terminal configured successfully!"
         }
     }
     catch {
@@ -1086,50 +1141,67 @@ if ($UseProxy) {
 }
 
 # 根据Action参数执行相应操作
-switch ($Action) {
-    "help" { Show-ScriptHelp }
-    "help-detailed" { Show-ScriptHelp -Detailed }
-    "upgrade" { Install-WindowsTerminal -Upgrade }
-    "install" {
+switch -Regex ($Action) {
+    "^help(-detailed)?$" {
+        Show-ScriptHelp -Detailed:($Action -eq "help-detailed")
+    }
+    "^install$" {
         Install-OpenSSH
         Install-WindowsTerminal
     }
-}
-
-# 在原有的配置文件设置中添加代理配置
-if (Test-Path $PROFILE) {
-    Write-Output "Adding proxy settings to PowerShell profile..."
-    Add-ProxyToProfile
-}
-
-# 配置Windows Terminal
-$settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-if (Test-Path $settingsPath) {
-    Write-Output "Configuring Windows Terminal..."
-
-    # 备份原始设置
-    Copy-Item $settingsPath "$settingsPath.backup"
-
-    # 读取现有设置
-    $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
-
-    # 配置默认设置
-    $settings.defaultProfile = "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}" # PowerShell的GUID
-    $settings.profiles.defaults = @{
-        "fontFace" = "Cascadia Code"
-        "fontSize" = 12
-        "colorScheme" = "One Half Dark"
-        "useAcrylic" = $true
-        "acrylicOpacity" = 0.8
+    "^upgrade$" {
+        Install-WindowsTerminal -Upgrade
     }
-
-    # 保存设置
-    $settings | ConvertTo-Json -Depth 32 | Set-Content $settingsPath
-
-    Write-Output "Windows Terminal configured successfully!"
+    "^ssh(-force)?$" {
+        Install-OpenSSH -Force:($Action -eq "ssh-force")
+    }
+    "^terminal(-upgrade)?$" {
+        Install-WindowsTerminal -Upgrade:($Action -eq "terminal-upgrade")
+    }
+    "^pwsh(-[\d\.]+)?$" {
+        if ($Action -eq "pwsh") {
+            Install-PowerShell7
+        } else {
+            $version = $Action -replace "^pwsh-",""
+            Install-PowerShell7 -Version $version
+        }
+    }
+    "^posh(-theme-.*)?$" {
+        if ($Action -eq "posh") {
+            Install-OhMyPosh
+        } else {
+            $theme = $Action -replace "^posh-theme-",""
+            Install-OhMyPosh -Theme $theme
+        }
+    }
+    "^scoop(-force)?$" {
+        Install-Scoop -Force:($Action -eq "scoop-force")
+    }
+    "^rsat(-list|-.*)?$" {
+        switch -Regex ($Action) {
+            "^rsat-list$" { Install-RSAT -ListOnly }
+            "^rsat-(.+)$" {
+                $features = ($Action -replace "^rsat-","").Split(',')
+                Install-RSAT -Features $features
+            }
+            default { Install-RSAT }
+        }
+    }
+    "^autologin-(.+)$" {
+        $username = $Action -replace "^autologin-",""
+        if ($username -eq "disable") {
+            Set-SecureAutoLogin -Username "Administrator" -Disable
+        } else {
+            Set-SecureAutoLogin -Username $username -Secure
+        }
+    }
+    default {
+        Write-Output "Unknown action: $Action"
+        Show-ScriptHelp
+    }
 }
 
-# 注册脚本结束时的清理操作
+# 注册清理操作
 $PSDefaultParameterValues['*:ProxyServer'] = $ProxyServer
 Register-EngineEvent PowerShell.Exiting -Action { Clear-GlobalSettings } | Out-Null
 #endregion
@@ -1149,83 +1221,63 @@ Register-EngineEvent PowerShell.Exiting -Action { Clear-GlobalSettings } | Out-N
 # }
 
 function Show-ScriptHelp {
-    param (
-        [switch]$Detailed
-    )
-
     $helpText = @"
 Windows System Configuration Script v$SCRIPT_VERSION
 
 基本用法:
-    irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex [-Args @{UseProxy=`$true}]
+    `$script = irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1
 
-参数:
-    -UseProxy          启用代理
-    -ProxyServer      设置代理服务器地址 (默认: $DEFAULT_PROXY)
+功能和调用方式:
+1. 基础安装 (OpenSSH + Windows Terminal)
+    & ([ScriptBlock]::Create(`$script))
+    & ([ScriptBlock]::Create(`$script)) -Action install
 
-主要功能:
-    1. SSH服务
-       Install-OpenSSH [-Force]                    # 安装并配置OpenSSH服务
+2. 使用代理
+    & ([ScriptBlock]::Create(`$script)) -UseProxy
+    & ([ScriptBlock]::Create(`$script)) -UseProxy -ProxyServer "http://proxy:8080"
 
-    2. 终端工具
-       Install-WindowsTerminal [-Upgrade]          # 安装/升级Windows Terminal
-       Install-PowerShell7 [-Force] [-Version]     # 安装PowerShell 7
-       Install-OhMyPosh [-Force] [-Theme <name>]   # 安装Oh My Posh
+3. 显示帮助
+    & ([ScriptBlock]::Create(`$script)) -Action help
+    & ([ScriptBlock]::Create(`$script)) -Action help-detailed
 
-    3. 包管理器
-       Install-Scoop [-Force]                      # 安装Scoop包管理器
+4. 升级 Windows Terminal
+    & ([ScriptBlock]::Create(`$script)) -Action upgrade
 
-    4. 系统工具
-       Install-RSAT [-ListOnly] [-Features <名称>] # 安装远程服务器管理工具
-       Set-SecureAutoLogin -Username <用户名> -Secure  # 配置安全的自动登录
+5. 单独功能安装:
+   SSH:
+    & ([ScriptBlock]::Create(`$script)) -Action ssh
+    & ([ScriptBlock]::Create(`$script)) -Action ssh-force
 
-    5. 代理设置
-       Set-GlobalProxy -Enable/-Disable            # 启用/禁用全局代理
-       Set-WingetConfig -Enable/-Disable           # 配置winget代理
+   Windows Terminal:
+    & ([ScriptBlock]::Create(`$script)) -Action terminal
+    & ([ScriptBlock]::Create(`$script)) -Action terminal-upgrade
 
-示例:
-    # 使用代理安装
-    irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex -Args @{UseProxy=`$true}
+   PowerShell 7:
+    & ([ScriptBlock]::Create(`$script)) -Action pwsh
+    & ([ScriptBlock]::Create(`$script)) -Action "pwsh-7.3.4"
 
-    # 安装特定版本的PowerShell
-    Install-PowerShell7 -Version "7.3.4"
+   Oh My Posh:
+    & ([ScriptBlock]::Create(`$script)) -Action posh
+    & ([ScriptBlock]::Create(`$script)) -Action "posh-theme-agnoster"
 
-    # 列出可用的RSAT功能
-    Install-RSAT -ListOnly
+   Scoop:
+    & ([ScriptBlock]::Create(`$script)) -Action scoop
+    & ([ScriptBlock]::Create(`$script)) -Action scoop-force
+
+   RSAT:
+    & ([ScriptBlock]::Create(`$script)) -Action rsat
+    & ([ScriptBlock]::Create(`$script)) -Action "rsat-dns,dhcp"
+    & ([ScriptBlock]::Create(`$script)) -Action rsat-list
+
+   自动登录:
+    & ([ScriptBlock]::Create(`$script)) -Action "autologin-YourUsername"
+    & ([ScriptBlock]::Create(`$script)) -Action autologin-disable
+
+参数说明:
+    -Action         执行的操作 (install/upgrade/help/ssh/terminal/pwsh/posh/scoop/rsat/autologin)
+    -UseProxy       启用代理
+    -ProxyServer    代理服务器地址 (默认: $DEFAULT_PROXY)
 "@
-
-    if ($Detailed) {
-        $helpText += @"
-
-详细说明:
-1. OpenSSH安装
-   - 安装SSH服务器和客户端组件
-   - 配置防火墙规则
-   - 设置默认shell
-   - 配置SSH密钥
-
-2. Windows Terminal
-   - 安装必要的依赖
-   - 配置默认设置
-   - 支持自动升级
-
-3. PowerShell 7
-   - 支持多种安装方式
-   - 自动添加到PATH
-   - 可选设置为默认shell
-
-4. 代理设置
-   - 支持系统级代理
-   - 支持多种工具的代理配置
-   - 自动清理功能
-
-注意事项:
-1. 需要管理员权限运行
-2. 某些功能可能需要重启
-3. 建议在安装前备份重要数据
-"@
-    }
-
     Write-Output $helpText
 }
 
