@@ -1133,6 +1133,72 @@ function Clear-GlobalSettings {
 }
 #endregion
 
+
+function Show-ScriptHelp {
+    $helpText = @"
+Windows System Configuration Script v$SCRIPT_VERSION
+
+基本用法:
+    `$script = irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1
+
+功能和调用方式:
+1. 基础安装 (OpenSSH + Windows Terminal)
+    & ([ScriptBlock]::Create(`$script))
+    & ([ScriptBlock]::Create(`$script)) -Action install
+
+2. 使用代理
+    & ([ScriptBlock]::Create(`$script)) -UseProxy
+    & ([ScriptBlock]::Create(`$script)) -UseProxy -ProxyServer "http://proxy:8080"
+
+3. 显示帮助
+    & ([ScriptBlock]::Create(`$script)) -Action help
+    & ([ScriptBlock]::Create(`$script)) -Action help-detailed
+
+4. 升级 Windows Terminal
+    & ([ScriptBlock]::Create(`$script)) -Action upgrade
+
+5. 单独功能安装:
+   SSH:
+    & ([ScriptBlock]::Create(`$script)) -Action ssh
+    & ([ScriptBlock]::Create(`$script)) -Action ssh-force
+
+   Windows Terminal:
+    & ([ScriptBlock]::Create(`$script)) -Action terminal
+    & ([ScriptBlock]::Create(`$script)) -Action terminal-upgrade
+
+   PowerShell 7:
+    & ([ScriptBlock]::Create(`$script)) -Action pwsh
+    & ([ScriptBlock]::Create(`$script)) -Action "pwsh-7.3.4"
+
+   Oh My Posh:
+    & ([ScriptBlock]::Create(`$script)) -Action posh
+    & ([ScriptBlock]::Create(`$script)) -Action "posh-theme-agnoster"
+
+   Scoop:
+    & ([ScriptBlock]::Create(`$script)) -Action scoop
+    & ([ScriptBlock]::Create(`$script)) -Action scoop-force
+
+   RSAT:
+    & ([ScriptBlock]::Create(`$script)) -Action rsat
+    & ([ScriptBlock]::Create(`$script)) -Action "rsat-dns,dhcp"
+    & ([ScriptBlock]::Create(`$script)) -Action rsat-list
+
+   自动登录:
+    & ([ScriptBlock]::Create(`$script)) -Action "autologin-YourUsername"
+    & ([ScriptBlock]::Create(`$script)) -Action autologin-disable
+
+参数说明:
+    -Action         执行的操作 (install/upgrade/help/ssh/terminal/pwsh/posh/scoop/rsat/autologin)
+    -UseProxy       启用代理
+    -ProxyServer    代理服务器地址 (默认: $DEFAULT_PROXY)
+"@
+    Write-Output $helpText
+}
+
+# 使用示例：
+# Show-ScriptHelp              # 显示基本帮助
+# Show-ScriptHelp -Detailed    # 显示详细帮助
+
 #region 主执行代码
 # 初始化代理设置
 if ($UseProxy) {
@@ -1219,68 +1285,3 @@ Register-EngineEvent PowerShell.Exiting -Action { Clear-GlobalSettings } | Out-N
 #     $command = Get-Content (Get-PSReadlineOption).HistorySavePath | awk '!a[$0]++' | fzf --tac
 #     [Microsoft.PowerShell.PSConsoleReadLine]::Insert($command)
 # }
-
-function Show-ScriptHelp {
-    $helpText = @"
-Windows System Configuration Script v$SCRIPT_VERSION
-
-基本用法:
-    `$script = irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1
-
-功能和调用方式:
-1. 基础安装 (OpenSSH + Windows Terminal)
-    & ([ScriptBlock]::Create(`$script))
-    & ([ScriptBlock]::Create(`$script)) -Action install
-
-2. 使用代理
-    & ([ScriptBlock]::Create(`$script)) -UseProxy
-    & ([ScriptBlock]::Create(`$script)) -UseProxy -ProxyServer "http://proxy:8080"
-
-3. 显示帮助
-    & ([ScriptBlock]::Create(`$script)) -Action help
-    & ([ScriptBlock]::Create(`$script)) -Action help-detailed
-
-4. 升级 Windows Terminal
-    & ([ScriptBlock]::Create(`$script)) -Action upgrade
-
-5. 单独功能安装:
-   SSH:
-    & ([ScriptBlock]::Create(`$script)) -Action ssh
-    & ([ScriptBlock]::Create(`$script)) -Action ssh-force
-
-   Windows Terminal:
-    & ([ScriptBlock]::Create(`$script)) -Action terminal
-    & ([ScriptBlock]::Create(`$script)) -Action terminal-upgrade
-
-   PowerShell 7:
-    & ([ScriptBlock]::Create(`$script)) -Action pwsh
-    & ([ScriptBlock]::Create(`$script)) -Action "pwsh-7.3.4"
-
-   Oh My Posh:
-    & ([ScriptBlock]::Create(`$script)) -Action posh
-    & ([ScriptBlock]::Create(`$script)) -Action "posh-theme-agnoster"
-
-   Scoop:
-    & ([ScriptBlock]::Create(`$script)) -Action scoop
-    & ([ScriptBlock]::Create(`$script)) -Action scoop-force
-
-   RSAT:
-    & ([ScriptBlock]::Create(`$script)) -Action rsat
-    & ([ScriptBlock]::Create(`$script)) -Action "rsat-dns,dhcp"
-    & ([ScriptBlock]::Create(`$script)) -Action rsat-list
-
-   自动登录:
-    & ([ScriptBlock]::Create(`$script)) -Action "autologin-YourUsername"
-    & ([ScriptBlock]::Create(`$script)) -Action autologin-disable
-
-参数说明:
-    -Action         执行的操作 (install/upgrade/help/ssh/terminal/pwsh/posh/scoop/rsat/autologin)
-    -UseProxy       启用代理
-    -ProxyServer    代理服务器地址 (默认: $DEFAULT_PROXY)
-"@
-    Write-Output $helpText
-}
-
-# 使用示例：
-# Show-ScriptHelp              # 显示基本帮助
-# Show-ScriptHelp -Detailed    # 显示详细帮助
