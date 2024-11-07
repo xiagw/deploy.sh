@@ -178,7 +178,7 @@ function Install-OpenSSH {
     }
 
     foreach ($svc in $services.Keys) {
-        Set-Service -Name $svc @($services[$svc])
+        Set-Service -Name $svc -StartupType $services[$svc].StartupType
         Start-Service $svc -ErrorAction SilentlyContinue
     }
 
