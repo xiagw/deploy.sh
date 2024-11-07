@@ -828,7 +828,7 @@ get_github_latest_download() {
 }
 
 # 安装或升级 acme.sh
-_install_acme() {
+_install_acme_github() {
     local force=${1:-}
     if [ "$force" != "upgrade" ] && command -v acme.sh >/dev/null; then
         return
@@ -841,14 +841,7 @@ _install_acme() {
 
     curl -fsSL "$download_url" | tar xz -C "$temp_dir" --strip-components=1
     cd "$temp_dir" || exit
-    ./acme.sh --install \
-        --home "$HOME/.acme.sh" \
-        --config-home "$HOME/.acme.sh" \
-        --cert-home "$HOME/.acme.sh/certs" \
-        --accountemail "root@deploy.sh" \
-        --accountkey "$HOME/.acme.sh/account.key" \
-        --accountconf "$HOME/.acme.sh/account.conf" \
-        --useragent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    ./acme.sh --install --accountemail fly@laradock.com
 
     cd - || exit
     rm -rf "$temp_dir"
