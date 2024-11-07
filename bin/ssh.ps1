@@ -744,7 +744,7 @@ function Show-ScriptHelp {
 Windows System Configuration Script v$SCRIPT_VERSION
 
 基本用法:
-    `$script = irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1
+    `$script = irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1
 
 功能:
 1. 基础安装: & ([ScriptBlock]::Create(`$script)) [-Action install]
