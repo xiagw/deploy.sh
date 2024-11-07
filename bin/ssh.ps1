@@ -99,6 +99,9 @@ function Add-ProxyToProfile {
 
     # 读取现有配置
     $currentContent = Get-Content $PROFILE -Raw
+    if (-not $currentContent) {
+        $currentContent = ""
+    }
 
     # 准备要添加的代理设置
     $proxySettings = @"
@@ -111,19 +114,22 @@ function Add-ProxyToProfile {
 `$env:ALL_PROXY = '$ProxyServer'
 "@
 
-    # 检查是否已经存在代理设置
-    if ($currentContent -and ($currentContent -match [regex]::Escape($proxySettings))) {
-        Write-Output "Proxy settings already exist in PowerShell profile"
-        return
+    # 检查是否已经存在任何代理设置
+    $proxyPatterns = @(
+        [regex]::Escape($proxySettings),
+        "HTTP_PROXY = ['`"]$([regex]::Escape($ProxyServer))['`"]",
+        "HTTPS_PROXY = ['`"]$([regex]::Escape($ProxyServer))['`"]",
+        "ALL_PROXY = ['`"]$([regex]::Escape($ProxyServer))['`"]"
+    )
+
+    foreach ($pattern in $proxyPatterns) {
+        if ($currentContent -match $pattern) {
+            Write-Output "Proxy settings already exist in PowerShell profile"
+            return
+        }
     }
 
-    # 检查是否存在旧的代理设置
-    if ($currentContent -and ($currentContent -match "HTTP_PROXY = '$ProxyServer'")) {
-        Write-Output "Proxy settings already exist in PowerShell profile"
-        return
-    }
-
-    # 添加代理设置
+    # 如果没有找到任何代理设置，则添加新的设置
     Add-Content -Path $PROFILE -Value "`n$proxySettings"
     Write-Output "Proxy settings added to PowerShell profile"
 }
@@ -275,7 +281,28 @@ function Install-OhMyPosh {
 
     # 配置主题
     if (Get-Command oh-my-posh.exe -ErrorAction SilentlyContinue) {
-        Add-Content -Path $PROFILE -Value ('oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/' + $Theme + '.omp.json" | Invoke-Expression')
+        # 读取现有配置
+        $currentContent = Get-Content $PROFILE -Raw
+        if (-not $currentContent) {
+            $currentContent = ""
+        }
+
+        # 准备要添加的 Oh My Posh 配置
+        $poshConfig = 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/' + $Theme + '.omp.json" | Invoke-Expression'
+
+        # 检查是否已存在 Oh My Posh 配置
+        $poshPattern = 'oh-my-posh init pwsh --config.*\.omp\.json.*Invoke-Expression'
+        if ($currentContent -match $poshPattern) {
+            # 如果存在旧配置，替换为新配置
+            $newContent = $currentContent -replace $poshPattern, $poshConfig
+            $newContent | Set-Content $PROFILE
+            Write-Output "Oh My Posh theme updated to: $Theme"
+        } else {
+            # 如果不存在，添加新配置
+            Add-Content -Path $PROFILE -Value $poshConfig
+            Write-Output "Oh My Posh theme configured: $Theme"
+        }
+
         Write-Output "Oh My Posh $(oh-my-posh version) configured with theme: $Theme"
         Write-Output "Please reload profile: . `$PROFILE"
     }
