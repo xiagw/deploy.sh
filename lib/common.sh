@@ -841,12 +841,12 @@ _install_acme_github() {
 
     curl -fsSL "$download_url" | tar xz -C "$temp_dir" --strip-components=1
     cd "$temp_dir" || exit
-    ./acme.sh --install --accountemail fly@laradock.com
+    ./acme.sh --install --accountemail deploy@deploy.sh
 
     cd - || exit
     rm -rf "$temp_dir"
 
     # 显示版本
     _msg green "Showing version"
-    "$HOME/.acme.sh"/acme.sh --version
+    "$HOME/.acme.sh/acme.sh" --version
 }
