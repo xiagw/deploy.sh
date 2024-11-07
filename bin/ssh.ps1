@@ -51,12 +51,16 @@ function Set-GlobalProxy {
 
     if ($Enable) {
         # 设置代理
-        Test-Path $PROFILE && Add-ProxyToProfile -ProxyServer $ProxyServer
+        if (Test-Path $PROFILE) {
+            Add-ProxyToProfile -ProxyServer $ProxyServer
+        }
         Set-ItemProperty -Path $RegPath -Name ProxyEnable -Value 1
         Set-ItemProperty -Path $RegPath -Name ProxyServer -Value $ProxyServer
 
         # 设置环境变量
-        $envVars | ForEach-Object { $env:$_ = $ProxyServer }
+        foreach ($var in $envVars) {
+            Set-Item -Path "env:$var" -Value $ProxyServer
+        }
 
         # 设置winget代理
         Set-WingetConfig -ProxyServer $ProxyServer -Enable
@@ -65,12 +69,16 @@ function Set-GlobalProxy {
 
     if ($Disable) {
         # 移除代理
-        Test-Path $PROFILE && Remove-ProxyFromProfile
+        if (Test-Path $PROFILE) {
+            Remove-ProxyFromProfile
+        }
         Set-ItemProperty -Path $RegPath -Name ProxyEnable -Value 0
         Remove-ItemProperty -Path $RegPath -Name ProxyServer -ErrorAction SilentlyContinue
 
         # 清除环境变量
-        $envVars | ForEach-Object { Remove-Item Env:$_ -ErrorAction SilentlyContinue }
+        foreach ($var in $envVars) {
+            Remove-Item -Path "env:$var" -ErrorAction SilentlyContinue
+        }
 
         # 禁用winget代理
         Set-WingetConfig -Disable
@@ -805,7 +813,11 @@ foreach ($pattern in $actions.Keys) {
         break
     }
 }
-$executed -or (Write-Output "Unknown action: $Action"; Show-ScriptHelp)
+
+if (-not $executed) {
+    Write-Output "Unknown action: $Action"
+    Show-ScriptHelp
+}
 
 # 注册清理操作
 $PSDefaultParameterValues['*:ProxyServer'] = $ProxyServer
