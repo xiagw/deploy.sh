@@ -7,9 +7,9 @@
 # Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 ## 在中国大陆
-# irm https://gitee.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex
+# irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1 | iex
 ## 不在在中国大陆
-# irm https://github.com/xiagw/deploy.sh/raw/main/docs/win.ssh.ps1 | iex
+# irm https://github.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1 | iex
 
 ## 激活windows
 ## https://github.com/massgravel/Microsoft-Activation-Scripts
