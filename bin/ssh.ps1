@@ -22,7 +22,7 @@
     提供Windows系统配置、SSH设置、软件安装等功能
 .NOTES
     作者: xiagw
-    版本: 1.0
+    版本: 2.0.0
 #>
 # 脚本参数必须在最开始
 param (
@@ -109,9 +109,9 @@ function Add-ProxyToProfile {
 # function Enable-Proxy { Set-GlobalProxy -ProxyServer '$ProxyServer' -Enable }
 # function Disable-Proxy { Set-GlobalProxy -Disable }
 # 设置默认代理
-`$env:HTTP_PROXY = '$ProxyServer'
-`$env:HTTPS_PROXY = '$ProxyServer'
-`$env:ALL_PROXY = '$ProxyServer'
+#$env:HTTP_PROXY = '$ProxyServer'
+#$env:HTTPS_PROXY = '$ProxyServer'
+#$env:ALL_PROXY = '$ProxyServer'
 "@
 
     # 检查是否已经存在任何代理设置
