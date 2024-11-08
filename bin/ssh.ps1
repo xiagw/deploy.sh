@@ -771,13 +771,13 @@ function Show-ScriptHelp {
 Windows System Configuration Script v$SCRIPT_VERSION
 
 基本用法:
-    `$script = irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1
+    `$script = irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1 -OutFile ssh.ps1
 
 功能:
-1. 基础安装: & ([ScriptBlock]::Create(`$script)) [-Action install]
-2. 使用代理: & ([ScriptBlock]::Create(`$script)) -UseProxy [-ProxyServer "http://proxy:8080"]
-3. 显示帮助: & ([ScriptBlock]::Create(`$script)) -Action help[|-detailed]
-4. 升级终端: & ([ScriptBlock]::Create(`$script)) -Action upgrade
+1. 基础安装: .\ssh.ps1 [-Action install]
+2. 使用代理: .\ssh.ps1 -UseProxy [-ProxyServer "http://proxy:8080"]
+3. 显示帮助: .\ssh.ps1 -Action help[|-detailed]
+4. 升级终端: .\ssh.ps1 -Action upgrade
 
 单独功能:
 SSH:        -Action ssh[-force]
