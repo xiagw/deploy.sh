@@ -793,7 +793,10 @@ $UseProxy -and (Set-GlobalProxy -ProxyServer $ProxyServer -Enable)
 # Ö´ÐÐ²Ù×÷
 $actions = @{
     'help(-detailed)?$' = { Show-ScriptHelp -Detailed:($Action -eq "help-detailed") }
-    '^install$' = { Install-OpenSSH }
+    '^install$' = {
+        Install-OpenSSH
+        Install-OhMyPosh
+    }
     '^ssh(-force)?$' = { Install-OpenSSH -Force:($Action -eq "ssh-force") }
     '^upgrade$' = { Install-WindowsTerminal -Upgrade }
     '^terminal(-upgrade)?$' = { Install-WindowsTerminal -Upgrade:($Action -eq "terminal-upgrade") }
