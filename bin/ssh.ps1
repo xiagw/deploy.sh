@@ -315,83 +315,14 @@ function Install-OhMyPosh {
 # 强制重新安装并使用不同主题
 # Install-OhMyPosh -Force -Theme "agnoster"
 
-
-#region 终端和Shell相关函数
-## windows server 2022安装Windows Terminal
-function Install-WindowsTerminal {
-    param ([switch]$Upgrade)
-
-    # 检查安装状态
-    $isInstalled = Get-Command wt -ErrorAction SilentlyContinue
-    $currentVersion = $(if ($isInstalled) { (Get-AppxPackage Microsoft.WindowsTerminal).Version })
-
-    if ($isInstalled -and -not $Upgrade) {
-        Write-Output "Windows Terminal $currentVersion is installed. Use -Upgrade to upgrade."
-        return
-    }
-
-    Write-Output "$(if ($Upgrade) {'Upgrading'} else {'Installing'}) Windows Terminal..."
-    $tempDir = Join-Path $env:TEMP "WindowsTerminal"
-    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-
-    try {
-        # 获取最新版本
-        $release = Invoke-RestMethod "https://api.github.com/repos/microsoft/terminal/releases/latest"
-        $latestVersion = $release.tag_name -replace '[^0-9.]'
-        $msixBundleUrl = ($release.assets | Where-Object { $_.name -like "*.msixbundle" }).browser_download_url
-
-        if ($currentVersion -eq $latestVersion) {
-            Write-Output "Already running latest version ($latestVersion)"
-            return
-        }
-
-        # 下载并安装依赖
-        $deps = @{
-            "VCLibs" = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
-            "UI Xaml" = "https://aka.ms/Microsoft.UI.Xaml.2.8.x64.appx"
-        }
-
-        foreach ($dep in $deps.GetEnumerator()) {
-            $path = Join-Path $tempDir ($dep.Key + ".appx")
-            Write-Output "Downloading $($dep.Key)..."
-            Invoke-WebRequest -Uri $dep.Value -OutFile $path
-            Add-AppxPackage -Path $path -ErrorAction Stop
-        }
-
-        # 下载并安装 Terminal
-        $msixPath = Join-Path $tempDir "WindowsTerminal.msixbundle"
-        Write-Output "Downloading Windows Terminal $latestVersion..."
-        Invoke-WebRequest -Uri $msixBundleUrl -OutFile $msixPath
-        Add-AppxPackage -Path $msixPath -ForceApplicationShutdown
-
-        # 配置 Terminal
-        $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-        if (Test-Path $settingsPath) {
-            Copy-Item $settingsPath "$settingsPath.backup"
-            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
-            $settings.defaultProfile = "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}"
-            $settings.profiles.defaults = @{
-                fontFace = "Cascadia Code"
-                fontSize = 12
-                colorScheme = "One Half Dark"
-                useAcrylic = $true
-                acrylicOpacity = 0.9
-            }
-            $settings | ConvertTo-Json -Depth 32 | Set-Content $settingsPath
-        }
-
-        Write-Output "Windows Terminal $latestVersion installed successfully!"
-    }
-    catch {
-        Write-Error "Installation failed: $_"
-    }
-    finally {
-        Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
-    }
-}
-
-
 #region 包管理器相关函数
+## 安装scoop, 非管理员
+# irm get.scoop.sh | iex
+# win10 安装scoop的正确姿势 | impressionyang的个人分享站
+# https://impressionyang.gitee.io/2021/02/15/win10-install-scoop/
+
+# Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+# Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
 function Install-Scoop {
     param ([switch]$Force)
 
@@ -429,10 +360,7 @@ function Install-Scoop {
     }
 }
 #endregion
-## 安装scoop, 非管理员
-# irm get.scoop.sh | iex
-# win10 安装scoop的正确姿势 | impressionyang的个人分享站
-# https://impressionyang.gitee.io/2021/02/15/win10-install-scoop/
+
 
 # 使用示例（可以注释掉）:
 # 普通安装
@@ -484,6 +412,65 @@ function Set-WingetConfig {
 # 禁用winget代理
 # Set-WingetConfig -Disable
 
+
+#region 终端和Shell相关函数
+## windows server 2022安装Windows Terminal
+# method 1 winget install --id Microsoft.WindowsTerminal -e
+# method 2 scoop install windows-terminal
+# scoop update windows-terminal
+function Install-WindowsTerminal {
+    param ([switch]$Upgrade)
+
+    # 确保已安装scoop
+    if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+        Write-Output "Installing Scoop first..."
+        Install-Scoop
+    }
+
+    # 确保extras bucket已添加
+    if (-not (Test-Path "$(scoop prefix scoop)\buckets\extras")) {
+        Write-Output "Adding extras bucket..."
+        scoop bucket add extras
+    }
+
+    try {
+        if ($Upgrade) {
+            Write-Output "Upgrading Windows Terminal..."
+            scoop update windows-terminal
+        } else {
+            # 检查是否已安装
+            $isInstalled = Get-Command wt -ErrorAction SilentlyContinue
+            if ($isInstalled) {
+                Write-Output "Windows Terminal is already installed. Use -Upgrade to upgrade."
+                return
+            }
+
+            Write-Output "Installing Windows Terminal via Scoop..."
+            scoop install windows-terminal
+        }
+
+        # 配置 Terminal
+        $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+        if (Test-Path $settingsPath) {
+            Copy-Item $settingsPath "$settingsPath.backup"
+            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+            $settings.defaultProfile = "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}"
+            $settings.profiles.defaults = @{
+                fontFace = "Cascadia Code"
+                fontSize = 12
+                colorScheme = "One Half Dark"
+                useAcrylic = $true
+                acrylicOpacity = 0.9
+            }
+            $settings | ConvertTo-Json -Depth 32 | Set-Content $settingsPath
+        }
+
+        Write-Output "Windows Terminal $(scoop info windows-terminal | Select-String 'Version:' | ForEach-Object { $_.ToString().Split(':')[1].Trim() }) installed successfully!"
+    }
+    catch {
+        Write-Error "Installation failed: $_"
+    }
+}
 
 function Install-PowerShell7 {
     param (
@@ -771,7 +758,7 @@ function Show-ScriptHelp {
 Windows System Configuration Script v$SCRIPT_VERSION
 
 基本用法:
-    `$script = irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1 -OutFile ssh.ps1
+    irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1 -OutFile ssh.ps1
 
 功能:
 1. 基础安装: .\ssh.ps1 [-Action install]
@@ -806,9 +793,9 @@ $UseProxy -and (Set-GlobalProxy -ProxyServer $ProxyServer -Enable)
 # 执行操作
 $actions = @{
     'help(-detailed)?$' = { Show-ScriptHelp -Detailed:($Action -eq "help-detailed") }
-    '^install$' = { Install-OpenSSH; Install-WindowsTerminal }
-    '^upgrade$' = { Install-WindowsTerminal -Upgrade }
+    '^install$' = { Install-OpenSSH }
     '^ssh(-force)?$' = { Install-OpenSSH -Force:($Action -eq "ssh-force") }
+    '^upgrade$' = { Install-WindowsTerminal -Upgrade }
     '^terminal(-upgrade)?$' = { Install-WindowsTerminal -Upgrade:($Action -eq "terminal-upgrade") }
     '^pwsh(-[\d\.]+)?$' = {
         Install-PowerShell7 -Version $(if ($Action -eq "pwsh") {"latest"} else {$Action -replace "^pwsh-",""})
