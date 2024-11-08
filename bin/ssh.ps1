@@ -105,9 +105,6 @@ function Add-ProxyToProfile {
 
     # 准备要添加的代理设置
     $proxySettings = @"
-# 代理快捷命令
-# function Enable-Proxy { Set-GlobalProxy -ProxyServer '$ProxyServer' -Enable }
-# function Disable-Proxy { Set-GlobalProxy -Disable }
 # 设置默认代理
 #$env:HTTP_PROXY = '$ProxyServer'
 #$env:HTTPS_PROXY = '$ProxyServer'
