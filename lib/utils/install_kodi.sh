@@ -65,6 +65,10 @@ $apt_opt install -y kodi-visualization-spectrum
 $apt_opt install -y kodi-visualization-waveform
 $apt_opt install -y xbmc-visualization-fishbmc
 
+if [ -z "$1" ] || [ "$1" != "unfinish-donot-run" ]; then
+    exit 1
+fi
+
 ## Ubuntu 默认仓库自带 git （非最新版）
 $apt_opt install -y vim curl git
 

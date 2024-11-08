@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 
-set -xe
+if [ -z "$1" ] || [ "$1" != "unfinish-donot-run" ]; then
+    exit 1
+fi
+
+if [ "$1" = "debug" ]; then
+    set -xe
+fi
 
 ## 增加虚拟内存 8G
 sudo dd if=/dev/zero of=/swapfile bs=1G count=8
