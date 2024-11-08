@@ -108,7 +108,7 @@ install_or_update_packages() {
 }
 
 run_python_script() {
-    python flyh6.py "$@"
+    python main.py "$@"
 }
 
 # 主函数

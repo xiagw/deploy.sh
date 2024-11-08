@@ -15,7 +15,9 @@ show_ram_help() {
     echo
     echo "示例："
     echo "  $0 ram list"
-    echo "  $0 ram create test-user 'Test User'"
+    echo "  $0 ram create                          # 自动生成 dev 开头的用户名"
+    echo "  $0 ram create test-user                # 自动生成显示名称"
+    echo "  $0 ram create test-user 'Test User'    # 指定用户名和显示名称"
     echo "  $0 ram update test-user 'New Test User'"
     echo "  $0 ram delete test-user"
     echo "  $0 ram create-key test-user"
@@ -28,13 +30,8 @@ handle_ram_commands() {
     shift
 
     case "$operation" in
-    list) ram_list "$@";;
+    list) ram_list "$@" ;;
     create)
-        if [ $# -lt 2 ]; then
-            echo "错误：create 操作需要提供用户名和显示名。" >&2
-            show_ram_help
-            return 1
-        fi
         ram_create "$1" "$2"
         ;;
     update)
@@ -125,10 +122,16 @@ ram_create() {
     local username=$1
     local display_name=$2
 
+    # 如果未提供用户名和显示名称,则自动生成
+    if [ -z "$username" ]; then
+        username="dev$(printf "%04d" $((RANDOM % 10000)))"
+    fi
+    if [ -z "$display_name" ]; then
+        display_name="${username}-$(date +%F)"
+    fi
+
     # 首先检查用户是否已存在
-    local check_result
-    check_result=$(aliyun ram GetUser --UserName "$username" --profile "${profile:-}" --region "${region:-}" 2>&1)
-    if [ $? -eq 0 ]; then
+    if aliyun ram GetUser --UserName "$username" --profile "${profile:-}" --region "${region:-}" 2>&1; then
         echo "错误：用户 $username 已存在。" >&2
         return 1
     fi
@@ -174,9 +177,7 @@ ram_delete() {
     fi
 
     # 检查用户是否存在
-    local user_exists
-    user_exists=$(aliyun ram GetUser --UserName "$username" --profile "${profile:-}" --region "${region:-}" 2>/dev/null)
-    if [ $? -ne 0 ]; then
+    if ! aliyun ram GetUser --UserName "$username" --profile "${profile:-}" --region "${region:-}" 2>/dev/null; then
         echo "错误：用户 $username 不存在。" >&2
         return 1
     fi
@@ -200,14 +201,14 @@ ram_delete() {
     list_policies_result=$(aliyun ram ListPoliciesForUser --UserName "$username" --profile "${profile:-}" --region "${region:-}")
     if [ $? -eq 0 ]; then
         echo "$list_policies_result" | jq -r '.Policies.Policy[] | [.PolicyName, .PolicyType] | @tsv' |
-        while IFS=$'\t' read -r policy_name policy_type; do
-            if [ -n "$policy_name" ] && [ -n "$policy_type" ]; then
-                echo "取消附加策略: $policy_name (类型: $policy_type)"
-                aliyun ram DetachPolicyFromUser --PolicyName "$policy_name" --PolicyType "$policy_type" --UserName "$username" --profile "${profile:-}" --region "${region:-}"
-            else
-                echo "警告：策略名称或类型为空，跳过。"
-            fi
-        done
+            while IFS=$'\t' read -r policy_name policy_type; do
+                if [ -n "$policy_name" ] && [ -n "$policy_type" ]; then
+                    echo "取消附加策略: $policy_name (类型: $policy_type)"
+                    aliyun ram DetachPolicyFromUser --PolicyName "$policy_name" --PolicyType "$policy_type" --UserName "$username" --profile "${profile:-}" --region "${region:-}"
+                else
+                    echo "警告：策略名称或类型为空，跳过。"
+                fi
+            done
     else
         echo "警告：无法获取用户权限列表。"
     fi
