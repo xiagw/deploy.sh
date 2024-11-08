@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090
 
 _cleanup() {
     trap - SIGINT SIGTERM ERR EXIT
@@ -119,22 +120,10 @@ _parse_params() {
         -n | --dry-run) flag_dryrun=1 ;;
         -u | --upload) flag_upload=1 ;;
         -k | --upgrade-apk) flag_upgrade=1 ;;
-        -p | --path)
-            param="${2-}"
-            shift
-            ;;
-        -A | --album-name)
-            param_album="${2-}"
-            shift
-            ;;
-        -U | --account)
-            param_account="${2-}"
-            shift
-            ;;
-        -v | --verbose)
-            set -x
-            enable_log=1
-            ;;
+        -p | --path) param="${2-}" && shift ;;
+        -A | --album-name) param_album="${2-}" && shift ;;
+        -U | --account) param_account="${2-}" && shift ;;
+        -v | --verbose) set -x && enable_log=1 ;;
         -?*) _die "Unknown option: $1" ;;
         *) break ;;
         esac
@@ -401,7 +390,7 @@ _upgrade_immich_apk() {
 main() {
     _color
     _parse_params "$@"
-    set -Eeuo pipefail
+    set -Eeo pipefail
     trap _cleanup SIGINT SIGTERM ERR EXIT
 
     ## script logic here
@@ -416,6 +405,7 @@ main() {
         me_env="${me_path}/../data/${me_name}.env"
     else
         echo "not found $me_env, exit 1."
+        return 1
     fi
     source "$me_env" "${param_account-}"
     [[ "${enable_log-}" -eq 1 ]] && echo "Log file is \"$me_log\""
