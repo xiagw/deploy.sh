@@ -1,44 +1,44 @@
 #Requires -RunAsAdministrator
 #Requires -Version 5.1
 
-## æŸ¥çœ‹å½“å‰çš„æ‰§è¡Œç­–ç•¥
+## ²é¿´µ±Ç°µÄÖ´ĞĞ²ßÂÔ
 # Get-ExecutionPolicy -List
-## è®¾ç½®æ‰§è¡Œç­–ç•¥ä¸ºè¦æ±‚è¿œç¨‹è„šæœ¬ç­¾åï¼ŒèŒƒå›´ä¸ºå½“å‰ç”¨æˆ·
+## ÉèÖÃÖ´ĞĞ²ßÂÔÎªÒªÇóÔ¶³Ì½Å±¾Ç©Ãû£¬·¶Î§Îªµ±Ç°ÓÃ»§
 # Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
-## åœ¨ä¸­å›½å¤§é™†
+## ÔÚÖĞ¹ú´óÂ½
 # irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1 | iex
-## ä¸åœ¨åœ¨ä¸­å›½å¤§é™†
+## ²»ÔÚÔÚÖĞ¹ú´óÂ½
 # irm https://github.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1 | iex
 
-## æ¿€æ´»windows
+## ¼¤»îwindows
 ## https://github.com/massgravel/Microsoft-Activation-Scripts
 # irm https://massgrave.dev/get | iex
 
 <#
 .SYNOPSIS
-    Windowsç³»ç»Ÿé…ç½®å’Œè½¯ä»¶å®‰è£…è„šæœ¬
+    WindowsÏµÍ³ÅäÖÃºÍÈí¼ş°²×°½Å±¾
 .DESCRIPTION
-    æä¾›Windowsç³»ç»Ÿé…ç½®ã€SSHè®¾ç½®ã€è½¯ä»¶å®‰è£…ç­‰åŠŸèƒ½
+    Ìá¹©WindowsÏµÍ³ÅäÖÃ¡¢SSHÉèÖÃ¡¢Èí¼ş°²×°µÈ¹¦ÄÜ
 .NOTES
-    ä½œè€…: xiagw
-    ç‰ˆæœ¬: 1.0
+    ×÷Õß: xiagw
+    °æ±¾: 1.0
 #>
-# è„šæœ¬å‚æ•°å¿…é¡»åœ¨æœ€å¼€å§‹
+# ½Å±¾²ÎÊı±ØĞëÔÚ×î¿ªÊ¼
 param (
-    [string]$ProxyServer = $DEFAULT_PROXY,  # ä½¿ç”¨é»˜è®¤ä»£ç†åœ°å€
+    [string]$ProxyServer = $DEFAULT_PROXY,  # Ê¹ÓÃÄ¬ÈÏ´úÀíµØÖ·
     [switch]$UseProxy,
-    [string]$Action = "install"  # é»˜è®¤åŠ¨ä½œ
+    [string]$Action = "install"  # Ä¬ÈÏ¶¯×÷
 )
-#region å…¨å±€å˜é‡
-# å¸¸é‡å®šä¹‰
+#region È«¾Ö±äÁ¿
+# ³£Á¿¶¨Òå
 $SCRIPT_VERSION = "2.0.0"
 $DEFAULT_SHELL = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-$DEFAULT_PROXY = "http://192.168.44.11:1080"  # é»˜è®¤ä»£ç†åœ°å€
+$DEFAULT_PROXY = "http://192.168.44.11:1080"  # Ä¬ÈÏ´úÀíµØÖ·
 #endregion
 
-#region ä»£ç†ç›¸å…³å‡½æ•°
-## å…¨å±€ä»£ç†è®¾ç½®å‡½æ•°
+#region ´úÀíÏà¹Øº¯Êı
+## È«¾Ö´úÀíÉèÖÃº¯Êı
 function Set-GlobalProxy {
     param (
         [string]$ProxyServer = $DEFAULT_PROXY,
@@ -50,71 +50,71 @@ function Set-GlobalProxy {
     $envVars = @("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY")
 
     if ($Enable) {
-        # è®¾ç½®ä»£ç†
+        # ÉèÖÃ´úÀí
         if (Test-Path $PROFILE) {
             Add-ProxyToProfile -ProxyServer $ProxyServer
         }
         Set-ItemProperty -Path $RegPath -Name ProxyEnable -Value 1
         Set-ItemProperty -Path $RegPath -Name ProxyServer -Value $ProxyServer
 
-        # è®¾ç½®ç¯å¢ƒå˜é‡
+        # ÉèÖÃ»·¾³±äÁ¿
         foreach ($var in $envVars) {
             Set-Item -Path "env:$var" -Value $ProxyServer
         }
 
-        # è®¾ç½®wingetä»£ç†
+        # ÉèÖÃwinget´úÀí
         Set-WingetConfig -ProxyServer $ProxyServer -Enable
         Write-Output "Global proxy enabled: $ProxyServer"
     }
 
     if ($Disable) {
-        # ç§»é™¤ä»£ç†
+        # ÒÆ³ı´úÀí
         if (Test-Path $PROFILE) {
             Remove-ProxyFromProfile
         }
         Set-ItemProperty -Path $RegPath -Name ProxyEnable -Value 0
         Remove-ItemProperty -Path $RegPath -Name ProxyServer -ErrorAction SilentlyContinue
 
-        # æ¸…é™¤ç¯å¢ƒå˜é‡
+        # Çå³ı»·¾³±äÁ¿
         foreach ($var in $envVars) {
             Remove-Item -Path "env:$var" -ErrorAction SilentlyContinue
         }
 
-        # ç¦ç”¨wingetä»£ç†
+        # ½ûÓÃwinget´úÀí
         Set-WingetConfig -Disable
         Write-Output "Global proxy disabled"
     }
 }
 
-# æ·»åŠ åˆ°PowerShellé…ç½®æ–‡ä»¶
+# Ìí¼Óµ½PowerShellÅäÖÃÎÄ¼ş
 function Add-ProxyToProfile {
     param (
         [string]$ProxyServer = $DEFAULT_PROXY
     )
 
-    # æ£€æŸ¥é…ç½®æ–‡ä»¶æ˜¯å¦å­˜åœ¨
+    # ¼ì²éÅäÖÃÎÄ¼şÊÇ·ñ´æÔÚ
     if (-not (Test-Path $PROFILE)) {
         New-Item -Type File -Force -Path $PROFILE | Out-Null
     }
 
-    # è¯»å–ç°æœ‰é…ç½®
+    # ¶ÁÈ¡ÏÖÓĞÅäÖÃ
     $currentContent = Get-Content $PROFILE -Raw
     if (-not $currentContent) {
         $currentContent = ""
     }
 
-    # å‡†å¤‡è¦æ·»åŠ çš„ä»£ç†è®¾ç½®
+    # ×¼±¸ÒªÌí¼ÓµÄ´úÀíÉèÖÃ
     $proxySettings = @"
-# ä»£ç†å¿«æ·å‘½ä»¤
+# ´úÀí¿ì½İÃüÁî
 # function Enable-Proxy { Set-GlobalProxy -ProxyServer '$ProxyServer' -Enable }
 # function Disable-Proxy { Set-GlobalProxy -Disable }
-# è®¾ç½®é»˜è®¤ä»£ç†
+# ÉèÖÃÄ¬ÈÏ´úÀí
 `$env:HTTP_PROXY = '$ProxyServer'
 `$env:HTTPS_PROXY = '$ProxyServer'
 `$env:ALL_PROXY = '$ProxyServer'
 "@
 
-    # æ£€æŸ¥æ˜¯å¦å·²ç»å­˜åœ¨ä»»ä½•ä»£ç†è®¾ç½®
+    # ¼ì²éÊÇ·ñÒÑ¾­´æÔÚÈÎºÎ´úÀíÉèÖÃ
     $proxyPatterns = @(
         [regex]::Escape($proxySettings),
         "HTTP_PROXY = ['`"]$([regex]::Escape($ProxyServer))['`"]",
@@ -129,19 +129,19 @@ function Add-ProxyToProfile {
         }
     }
 
-    # å¦‚æœæ²¡æœ‰æ‰¾åˆ°ä»»ä½•ä»£ç†è®¾ç½®ï¼Œåˆ™æ·»åŠ æ–°çš„è®¾ç½®
+    # Èç¹ûÃ»ÓĞÕÒµ½ÈÎºÎ´úÀíÉèÖÃ£¬ÔòÌí¼ÓĞÂµÄÉèÖÃ
     Add-Content -Path $PROFILE -Value "`n$proxySettings"
     Write-Output "Proxy settings added to PowerShell profile"
 }
 
 function Remove-ProxyFromProfile {
-    # æ£€æŸ¥é…ç½®æ–‡ä»¶æ˜¯å¦å­˜åœ¨
+    # ¼ì²éÅäÖÃÎÄ¼şÊÇ·ñ´æÔÚ
     if (-not (Test-Path $PROFILE)) {
         Write-Output "PowerShell profile does not exist"
         return
     }
 
-    # è¯»å–ç°æœ‰é…ç½®
+    # ¶ÁÈ¡ÏÖÓĞÅäÖÃ
     $content = Get-Content $PROFILE -Raw
 
     if (-not $content) {
@@ -149,10 +149,10 @@ function Remove-ProxyFromProfile {
         return
     }
 
-    # ç§»é™¤ä»£ç†ç›¸å…³è®¾ç½®
-    $newContent = $content -replace "(?ms)# ä»£ç†å¿«æ·å‘½ä»¤.*?# è®¾ç½®é»˜è®¤ä»£ç†.*?\n.*?\n.*?\n.*?\n", ""
+    # ÒÆ³ı´úÀíÏà¹ØÉèÖÃ
+    $newContent = $content -replace "(?ms)# ´úÀí¿ì½İÃüÁî.*?# ÉèÖÃÄ¬ÈÏ´úÀí.*?\n.*?\n.*?\n.*?\n", ""
 
-    # å¦‚æœå†…å®¹æœ‰å˜åŒ–ï¼Œä¿å­˜æ–‡ä»¶
+    # Èç¹ûÄÚÈİÓĞ±ä»¯£¬±£´æÎÄ¼ş
     if ($newContent -ne $content) {
         $newContent.Trim() | Set-Content $PROFILE
         Write-Output "Proxy settings removed from PowerShell profile"
@@ -163,21 +163,21 @@ function Remove-ProxyFromProfile {
 }
 #endregion
 
-#region SSHç›¸å…³å‡½æ•°
-## å®‰è£…openssh
+#region SSHÏà¹Øº¯Êı
+## °²×°openssh
 function Install-OpenSSH {
     param ([switch]$Force)
 
     Write-Output "Installing and configuring OpenSSH..."
 
-    # å®‰è£… OpenSSH ç»„ä»¶
+    # °²×° OpenSSH ×é¼ş
     Get-WindowsCapability -Online | Where-Object {
         $_.Name -like "OpenSSH*" -and ($_.State -eq "NotPresent" -or $Force)
     } | ForEach-Object {
         Add-WindowsCapability -Online -Name $_.Name
     }
 
-    # é…ç½®å¹¶å¯åŠ¨æœåŠ¡
+    # ÅäÖÃ²¢Æô¶¯·şÎñ
     $services = @{
         sshd = @{ StartupType = 'Automatic' }
         'ssh-agent' = @{ StartupType = 'Automatic' }
@@ -188,38 +188,38 @@ function Install-OpenSSH {
         Start-Service $svc -ErrorAction SilentlyContinue
     }
 
-    # é…ç½®é˜²ç«å¢™
+    # ÅäÖÃ·À»ğÇ½
     if (-not (Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' `
             -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
     }
 
-    # è®¾ç½® PowerShell ä¸ºé»˜è®¤ shell
+    # ÉèÖÃ PowerShell ÎªÄ¬ÈÏ shell
     New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell `
         -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Force
 
-    # é…ç½® SSH å¯†é’¥
+    # ÅäÖÃ SSH ÃÜÔ¿
     $sshPaths = @{
         UserKeys = "$HOME\.ssh\authorized_keys"
         AdminKeys = "C:\ProgramData\ssh\administrators_authorized_keys"
         Config = "C:\ProgramData\ssh\sshd_config"
     }
 
-    # åˆ›å»ºå¹¶é…ç½® SSH ç›®å½•å’Œæ–‡ä»¶
+    # ´´½¨²¢ÅäÖÃ SSH Ä¿Â¼ºÍÎÄ¼ş
     foreach ($path in $sshPaths.Values) {
         if (-not (Test-Path $path)) {
             New-Item -Path $path -Force | Out-Null
         }
     }
 
-    # æ›´æ–° sshd_config
+    # ¸üĞÂ sshd_config
     $configContent = Get-Content $sshPaths.Config -Raw
     @('Match Group administrators', 'AuthorizedKeysFile __PROGRAMDATA__') | ForEach-Object {
         $configContent = $configContent -replace $_, "#$_"
     }
     $configContent | Set-Content $sshPaths.Config
 
-    # è·å–å¹¶è®¾ç½® SSH å¯†é’¥
+    # »ñÈ¡²¢ÉèÖÃ SSH ÃÜÔ¿
     try {
         $keys = @(
             if (Test-Path $sshPaths.UserKeys) { Get-Content $sshPaths.UserKeys }
@@ -229,7 +229,7 @@ function Install-OpenSSH {
         $keys | Set-Content $sshPaths.UserKeys
         Copy-Item $sshPaths.UserKeys $sshPaths.AdminKeys -Force
 
-        # è®¾ç½®ç®¡ç†å‘˜å¯†é’¥æ–‡ä»¶æƒé™
+        # ÉèÖÃ¹ÜÀíÔ±ÃÜÔ¿ÎÄ¼şÈ¨ÏŞ
         icacls.exe $sshPaths.AdminKeys /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 
         Write-Output "SSH keys configured (Total: $($keys.Count))"
@@ -238,13 +238,13 @@ function Install-OpenSSH {
         Write-Warning "Failed to fetch SSH keys: $_"
     }
 
-    # é‡å¯æœåŠ¡ä»¥åº”ç”¨æ›´æ”¹
+    # ÖØÆô·şÎñÒÔÓ¦ÓÃ¸ü¸Ä
     Restart-Service sshd
     Write-Output "OpenSSH installation completed!"
 }
 #endregion
 
-## å®‰è£… oh my posh
+## °²×° oh my posh
 function Install-OhMyPosh {
     param (
         [switch]$Force,
@@ -253,7 +253,7 @@ function Install-OhMyPosh {
 
     Write-Output "Setting up Oh My Posh..."
 
-    # åˆå§‹åŒ–é…ç½®æ–‡ä»¶
+    # ³õÊ¼»¯ÅäÖÃÎÄ¼ş
     if (-not (Test-Path $PROFILE) -or $Force) {
         New-Item -Type File -Force -Path $PROFILE | Out-Null
         @(
@@ -262,7 +262,7 @@ function Install-OhMyPosh {
         ) | Set-Content $PROFILE
     }
 
-    # å®‰è£… Oh My Posh
+    # °²×° Oh My Posh
     if ($Force -or -not (Get-Command oh-my-posh.exe -ErrorAction SilentlyContinue)) {
         try {
             Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -279,26 +279,26 @@ function Install-OhMyPosh {
         }
     }
 
-    # é…ç½®ä¸»é¢˜
+    # ÅäÖÃÖ÷Ìâ
     if (Get-Command oh-my-posh.exe -ErrorAction SilentlyContinue) {
-        # è¯»å–ç°æœ‰é…ç½®
+        # ¶ÁÈ¡ÏÖÓĞÅäÖÃ
         $currentContent = Get-Content $PROFILE -Raw
         if (-not $currentContent) {
             $currentContent = ""
         }
 
-        # å‡†å¤‡è¦æ·»åŠ çš„ Oh My Posh é…ç½®
+        # ×¼±¸ÒªÌí¼ÓµÄ Oh My Posh ÅäÖÃ
         $poshConfig = 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/' + $Theme + '.omp.json" | Invoke-Expression'
 
-        # æ£€æŸ¥æ˜¯å¦å·²å­˜åœ¨ Oh My Posh é…ç½®
+        # ¼ì²éÊÇ·ñÒÑ´æÔÚ Oh My Posh ÅäÖÃ
         $poshPattern = 'oh-my-posh init pwsh --config.*\.omp\.json.*Invoke-Expression'
         if ($currentContent -match $poshPattern) {
-            # å¦‚æœå­˜åœ¨æ—§é…ç½®ï¼Œæ›¿æ¢ä¸ºæ–°é…ç½®
+            # Èç¹û´æÔÚ¾ÉÅäÖÃ£¬Ìæ»»ÎªĞÂÅäÖÃ
             $newContent = $currentContent -replace $poshPattern, $poshConfig
             $newContent | Set-Content $PROFILE
             Write-Output "Oh My Posh theme updated to: $Theme"
         } else {
-            # å¦‚æœä¸å­˜åœ¨ï¼Œæ·»åŠ æ–°é…ç½®
+            # Èç¹û²»´æÔÚ£¬Ìí¼ÓĞÂÅäÖÃ
             Add-Content -Path $PROFILE -Value $poshConfig
             Write-Output "Oh My Posh theme configured: $Theme"
         }
@@ -308,17 +308,17 @@ function Install-OhMyPosh {
     }
 }
 
-# ä½¿ç”¨ç¤ºä¾‹ï¼ˆå¯ä»¥æ³¨é‡Šæ‰ï¼‰ï¼š
-# åŸºæœ¬å®‰è£…
+# Ê¹ÓÃÊ¾Àı£¨¿ÉÒÔ×¢ÊÍµô£©£º
+# »ù±¾°²×°
 # Install-OhMyPosh
 
-# å¼ºåˆ¶é‡æ–°å®‰è£…å¹¶ä½¿ç”¨ä¸åŒä¸»é¢˜
+# Ç¿ÖÆÖØĞÂ°²×°²¢Ê¹ÓÃ²»Í¬Ö÷Ìâ
 # Install-OhMyPosh -Force -Theme "agnoster"
 
-#region åŒ…ç®¡ç†å™¨ç›¸å…³å‡½æ•°
-## å®‰è£…scoop, éç®¡ç†å‘˜
+#region °ü¹ÜÀíÆ÷Ïà¹Øº¯Êı
+## °²×°scoop, ·Ç¹ÜÀíÔ±
 # irm get.scoop.sh | iex
-# win10 å®‰è£…scoopçš„æ­£ç¡®å§¿åŠ¿ | impressionyangçš„ä¸ªäººåˆ†äº«ç«™
+# win10 °²×°scoopµÄÕıÈ·×ËÊÆ | impressionyangµÄ¸öÈË·ÖÏíÕ¾
 # https://impressionyang.gitee.io/2021/02/15/win10-install-scoop/
 
 # Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -332,12 +332,12 @@ function Install-Scoop {
     }
 
     try {
-        # è®¾ç½®ç¯å¢ƒ
+        # ÉèÖÃ»·¾³
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
         $env:HTTPS_PROXY = $ProxyServer
 
-        # é€‰æ‹©å®‰è£…æºå¹¶å®‰è£…
+        # Ñ¡Ôñ°²×°Ô´²¢°²×°
         $installUrl = if ($ProxyServer -match "china|cn") {
             "https://gitee.com/glsnames/scoop-installer/raw/master/bin/install.ps1"
         } else {
@@ -346,7 +346,7 @@ function Install-Scoop {
 
         Invoke-Expression (New-Object Net.WebClient).DownloadString($installUrl)
 
-        # å®‰è£…åŸºç¡€ç»„ä»¶
+        # °²×°»ù´¡×é¼ş
         @("extras", "versions") | ForEach-Object { scoop bucket add $_ }
         scoop install git 7zip
 
@@ -362,15 +362,15 @@ function Install-Scoop {
 #endregion
 
 
-# ä½¿ç”¨ç¤ºä¾‹ï¼ˆå¯ä»¥æ³¨é‡Šæ‰ï¼‰:
-# æ™®é€šå®‰è£…
+# Ê¹ÓÃÊ¾Àı£¨¿ÉÒÔ×¢ÊÍµô£©:
+# ÆÕÍ¨°²×°
 # Install-Scoop
 
-# å¼ºåˆ¶é‡æ–°å®‰è£…
+# Ç¿ÖÆÖØĞÂ°²×°
 # Install-Scoop -Force
 
 
-## è®¾ç½® winget
+## ÉèÖÃ winget
 function Set-WingetConfig {
     param (
         [string]$ProxyServer,
@@ -381,14 +381,14 @@ function Set-WingetConfig {
     $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\settings.json"
     New-Item -ItemType Directory -Force -Path (Split-Path $settingsPath) | Out-Null
 
-    # åŠ è½½æˆ–åˆ›å»ºé…ç½®
+    # ¼ÓÔØ»ò´´½¨ÅäÖÃ
     $settings = if (Test-Path $settingsPath) {
         Get-Content $settingsPath -Raw | ConvertFrom-Json
     } else {
         @{ "$schema" = "https://aka.ms/winget-settings.schema.json" }
     }
 
-    # æ›´æ–°é…ç½®
+    # ¸üĞÂÅäÖÃ
     if ($Enable -and $ProxyServer) {
         $settings.network = @{ downloader = "wininet"; proxy = $ProxyServer }
         Write-Output "Enabled winget proxy: $ProxyServer"
@@ -397,37 +397,37 @@ function Set-WingetConfig {
         Write-Output "Disabled winget proxy"
     }
 
-    # ä¿å­˜å¹¶æ˜¾ç¤ºé…ç½®
+    # ±£´æ²¢ÏÔÊ¾ÅäÖÃ
     $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath
     Get-Content $settingsPath
 
-    # æµ‹è¯•winget
+    # ²âÊÔwinget
     Write-Output "Testing winget..."
     winget source update
 }
-# ä½¿ç”¨ç¤ºä¾‹ï¼š
-# è®¾ç½®wingetä»£ç†
+# Ê¹ÓÃÊ¾Àı£º
+# ÉèÖÃwinget´úÀí
 # Set-WingetConfig -ProxyServer "http://192.168.44.11:1080" -Enable
 
-# ç¦ç”¨wingetä»£ç†
+# ½ûÓÃwinget´úÀí
 # Set-WingetConfig -Disable
 
 
-#region ç»ˆç«¯å’ŒShellç›¸å…³å‡½æ•°
-## windows server 2022å®‰è£…Windows Terminal
+#region ÖÕ¶ËºÍShellÏà¹Øº¯Êı
+## windows server 2022°²×°Windows Terminal
 # method 1 winget install --id Microsoft.WindowsTerminal -e
 # method 2 scoop install windows-terminal
 # scoop update windows-terminal
 function Install-WindowsTerminal {
     param ([switch]$Upgrade)
 
-    # ç¡®ä¿å·²å®‰è£…scoop
+    # È·±£ÒÑ°²×°scoop
     if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
         Write-Output "Installing Scoop first..."
         Install-Scoop
     }
 
-    # ç¡®ä¿extras bucketå·²æ·»åŠ 
+    # È·±£extras bucketÒÑÌí¼Ó
     if (-not (Test-Path "$(scoop prefix scoop)\buckets\extras")) {
         Write-Output "Adding extras bucket..."
         scoop bucket add extras
@@ -438,7 +438,7 @@ function Install-WindowsTerminal {
             Write-Output "Upgrading Windows Terminal..."
             scoop update windows-terminal
         } else {
-            # æ£€æŸ¥æ˜¯å¦å·²å®‰è£…
+            # ¼ì²éÊÇ·ñÒÑ°²×°
             $isInstalled = Get-Command wt -ErrorAction SilentlyContinue
             if ($isInstalled) {
                 Write-Output "Windows Terminal is already installed. Use -Upgrade to upgrade."
@@ -449,7 +449,7 @@ function Install-WindowsTerminal {
             scoop install windows-terminal
         }
 
-        # é…ç½® Terminal
+        # ÅäÖÃ Terminal
         $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
         if (Test-Path $settingsPath) {
             Copy-Item $settingsPath "$settingsPath.backup"
@@ -478,7 +478,7 @@ function Install-PowerShell7 {
         [string]$Version = "latest"
     )
 
-    # æ£€æŸ¥å®‰è£…çŠ¶æ€
+    # ¼ì²é°²×°×´Ì¬
     $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
     if ($pwsh -and -not $Force) {
         Write-Output "PowerShell $(&pwsh -Version) already installed. Use -Force to reinstall."
@@ -487,20 +487,20 @@ function Install-PowerShell7 {
 
     try {
         if ($Version -eq "latest") {
-            # ä½¿ç”¨wingetå®‰è£…æœ€æ–°ç‰ˆæœ¬
+            # Ê¹ÓÃwinget°²×°×îĞÂ°æ±¾
             winget install --id Microsoft.Powershell --source winget
         } else {
-            # ä½¿ç”¨MSIå®‰è£…ç‰¹å®šç‰ˆæœ¬
+            # Ê¹ÓÃMSI°²×°ÌØ¶¨°æ±¾
             $msiPath = Join-Path $env:TEMP "PowerShell7\PowerShell-$Version-win-x64.msi"
             New-Item -ItemType Directory -Force -Path (Split-Path $msiPath) | Out-Null
 
-            # ä¸‹è½½å¹¶å®‰è£…
+            # ÏÂÔØ²¢°²×°
             Invoke-WebRequest -Uri "https://github.com/PowerShell/PowerShell/releases/download/v$Version/$($msiPath | Split-Path -Leaf)" -OutFile $msiPath
             Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /quiet ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1 ENABLE_PSREMOTING=1 REGISTER_MANIFEST=1" -Wait
             Remove-Item -Recurse -Force (Split-Path $msiPath) -ErrorAction SilentlyContinue
         }
 
-        # éªŒè¯å¹¶é…ç½®
+        # ÑéÖ¤²¢ÅäÖÃ
         if ($newPwsh = Get-Command pwsh -ErrorAction SilentlyContinue) {
             $pwshPath = Split-Path $newPwsh.Source -Parent
             if ($env:Path -notlike "*$pwshPath*") {
@@ -515,17 +515,17 @@ function Install-PowerShell7 {
     }
 }
 
-# ä½¿ç”¨ç¤ºä¾‹ï¼š
-# å®‰è£…æœ€æ–°ç‰ˆæœ¬
+# Ê¹ÓÃÊ¾Àı£º
+# °²×°×îĞÂ°æ±¾
 # Install-PowerShell7
 
-# å¼ºåˆ¶é‡æ–°å®‰è£…
+# Ç¿ÖÆÖØĞÂ°²×°
 # Install-PowerShell7 -Force
 
-# å®‰è£…ç‰¹å®šç‰ˆæœ¬
+# °²×°ÌØ¶¨°æ±¾
 # Install-PowerShell7 -Version "7.3.4"
 
-#region ç³»ç»Ÿç®¡ç†å·¥å…·ç›¸å…³å‡½æ•°
+#region ÏµÍ³¹ÜÀí¹¤¾ßÏà¹Øº¯Êı
 function Install-RSAT {
     param (
         [switch]$Force,
@@ -533,20 +533,20 @@ function Install-RSAT {
         [switch]$ListOnly
     )
 
-    # è·å–RSATåŠŸèƒ½
+    # »ñÈ¡RSAT¹¦ÄÜ
     $rsatFeatures = Get-WindowsCapability -Online | Where-Object Name -like "Rsat.Server*"
     if (-not $rsatFeatures) {
         Write-Error "No RSAT features found"
         return
     }
 
-    # åˆ—å‡ºåŠŸèƒ½æˆ–å®‰è£…
+    # ÁĞ³ö¹¦ÄÜ»ò°²×°
     if ($ListOnly) {
         $rsatFeatures | Format-Table Name, State
         return
     }
 
-    # ç­›é€‰å¹¶å®‰è£…åŠŸèƒ½
+    # É¸Ñ¡²¢°²×°¹¦ÄÜ
     $toInstall = $rsatFeatures | Where-Object {
         ($_.State -eq "NotPresent" -or $Force) -and
         ($Features -eq '*' -or $Features | Where-Object { $_.Name -like "Rsat.Server.$_" })
@@ -568,30 +568,30 @@ function Install-RSAT {
         Write-Progress -Activity "Installing RSAT" -Completed
     }
 
-    # æ˜¾ç¤ºç»“æœ
+    # ÏÔÊ¾½á¹û
     $installed = @(Get-WindowsCapability -Online | Where-Object {
         $_.Name -like "Rsat.Server*" -and $_.State -eq "Installed"
     }).Count
     Write-Output "RSAT features installed: $installed"
 }
 #endregion
-# ä½¿ç”¨ç¤ºä¾‹ï¼š
-# åˆ—å‡ºæ‰€æœ‰å¯ç”¨çš„RSATåŠŸèƒ½
+# Ê¹ÓÃÊ¾Àı£º
+# ÁĞ³öËùÓĞ¿ÉÓÃµÄRSAT¹¦ÄÜ
 # Install-RSAT -ListOnly
 
-# å®‰è£…æ‰€æœ‰RSATåŠŸèƒ½
+# °²×°ËùÓĞRSAT¹¦ÄÜ
 # Install-RSAT
 
-# å®‰è£…ç‰¹å®šåŠŸèƒ½ï¼ˆä¾‹å¦‚DNSå’ŒDHCPï¼‰
+# °²×°ÌØ¶¨¹¦ÄÜ£¨ÀıÈçDNSºÍDHCP£©
 # Install-RSAT -Features 'Dns','Dhcp'
 
-# å¼ºåˆ¶é‡æ–°å®‰è£…æ‰€æœ‰åŠŸèƒ½
+# Ç¿ÖÆÖØĞÂ°²×°ËùÓĞ¹¦ÄÜ
 # Install-RSAT -Force
 
-# å¼ºåˆ¶é‡æ–°å®‰è£…ç‰¹å®šåŠŸèƒ½
+# Ç¿ÖÆÖØĞÂ°²×°ÌØ¶¨¹¦ÄÜ
 # Install-RSAT -Features 'Dns','Dhcp' -Force
 
-#region è‡ªåŠ¨ç™»å½•ç›¸å…³å‡½æ•°
+#region ×Ô¶¯µÇÂ¼Ïà¹Øº¯Êı
 function Set-WindowsAutoLogin {
     param (
         [Parameter(Mandatory=$true)][string]$Username,
@@ -629,14 +629,14 @@ function Set-WindowsAutoLogin {
     }
 }
 
-# ä½¿ç”¨ç¤ºä¾‹ï¼š
-# å¯ç”¨è‡ªåŠ¨ç™»å½•
+# Ê¹ÓÃÊ¾Àı£º
+# ÆôÓÃ×Ô¶¯µÇÂ¼
 # Set-WindowsAutoLogin -Username "Administrator" -Password "YourPassword"
 
-# ç¦ç”¨è‡ªåŠ¨ç™»å½•
+# ½ûÓÃ×Ô¶¯µÇÂ¼
 # Set-WindowsAutoLogin -Username "Administrator" -Password "YourPassword" -Disable
 
-# ä»åŠ å¯†æ–‡ä»¶è¯»å–å‡­æ®å¹¶é…ç½®è‡ªåŠ¨ç™»å½•
+# ´Ó¼ÓÃÜÎÄ¼ş¶ÁÈ¡Æ¾¾İ²¢ÅäÖÃ×Ô¶¯µÇÂ¼
 function Set-WindowsAutoLoginFromFile {
     param (
         [Parameter(Mandatory=$true)][string]$CredentialFile,
@@ -644,12 +644,12 @@ function Set-WindowsAutoLoginFromFile {
     )
 
     try {
-        # éªŒè¯å¹¶è¯»å–å‡­æ®
+        # ÑéÖ¤²¢¶ÁÈ¡Æ¾¾İ
         if (-not (Test-Path $CredentialFile)) { throw "Credential file not found" }
         $cred = Get-Content $CredentialFile | ConvertFrom-Json
         if (-not ($cred.username -and $cred.password)) { throw "Invalid credential format" }
 
-        # é…ç½®è‡ªåŠ¨ç™»å½•
+        # ÅäÖÃ×Ô¶¯µÇÂ¼
         Set-WindowsAutoLogin -Username $cred.username -Password $cred.password -Disable:$Disable
     }
     catch {
@@ -658,14 +658,14 @@ function Set-WindowsAutoLoginFromFile {
     }
 }
 
-# ä½¿ç”¨ç¤ºä¾‹ï¼š
-# åˆ›å»ºå‡­æ®æ–‡ä»¶
+# Ê¹ÓÃÊ¾Àı£º
+# ´´½¨Æ¾¾İÎÄ¼ş
 # @{username="Administrator"; password="YourPassword"} | ConvertTo-Json | Out-File "C:\credentials.json"
 
-# ä»æ–‡ä»¶é…ç½®è‡ªåŠ¨ç™»å½•
+# ´ÓÎÄ¼şÅäÖÃ×Ô¶¯µÇÂ¼
 # Set-WindowsAutoLoginFromFile -CredentialFile "C:\credentials.json"
 
-# ä»æ–‡ä»¶ç¦ç”¨è‡ªåŠ¨ç™»å½•
+# ´ÓÎÄ¼ş½ûÓÃ×Ô¶¯µÇÂ¼
 # Set-WindowsAutoLoginFromFile -CredentialFile "C:\credentials.json" -Disable
 
 function Set-SecureAutoLogin {
@@ -681,7 +681,7 @@ function Set-SecureAutoLogin {
 
     try {
         if ($Disable) {
-            # ç¦ç”¨è‡ªåŠ¨ç™»å½•
+            # ½ûÓÃ×Ô¶¯µÇÂ¼
             Set-ItemProperty -Path $RegPath -Name "AutoAdminLogon" -Value "0" -Type String
             Remove-ItemProperty -Path $RegPath -Name "DefaultUsername" -ErrorAction SilentlyContinue
             cmdkey /delete:$CredTarget
@@ -690,14 +690,14 @@ function Set-SecureAutoLogin {
         }
 
         if ($Secure) {
-            # è·å–å‡­æ®å¹¶å­˜å‚¨
+            # »ñÈ¡Æ¾¾İ²¢´æ´¢
             $SecurePass = Read-Host -Prompt "Enter password for $Username" -AsSecureString
             $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePass)
             $PlainPass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
             [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
             cmdkey /generic:$CredTarget /user:$Username /pass:$PlainPass | Out-Null
 
-            # é…ç½®æ³¨å†Œè¡¨
+            # ÅäÖÃ×¢²á±í
             @{
                 "AutoAdminLogon" = "1"
                 "DefaultUsername" = $Username
@@ -706,7 +706,7 @@ function Set-SecureAutoLogin {
                 Set-ItemProperty -Path $RegPath -Name $_.Key -Value $_.Value -Type String
             }
 
-            # åˆ›å»ºå¹¶é…ç½®è‡ªåŠ¨ç™»å½•è„šæœ¬
+            # ´´½¨²¢ÅäÖÃ×Ô¶¯µÇÂ¼½Å±¾
             New-Item -ItemType Directory -Force -Path (Split-Path $ScriptPath) | Out-Null
             @"
 `$cred = cmdkey /list | Where-Object { `$_ -like "*$CredTarget*" }
@@ -716,7 +716,7 @@ if (`$cred) {
 }
 "@ | Set-Content $ScriptPath
 
-            # è®¾ç½®è„šæœ¬æƒé™å’Œè®¡åˆ’ä»»åŠ¡
+            # ÉèÖÃ½Å±¾È¨ÏŞºÍ¼Æ»®ÈÎÎñ
             $Acl = Get-Acl $ScriptPath
             $Ar = New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM", "FullControl", "Allow")
             $Acl.SetAccessRule($Ar)
@@ -738,15 +738,15 @@ if (`$cred) {
     }
 }
 #endregion
-# ä½¿ç”¨ç¤ºä¾‹ï¼š
-# é…ç½®å®‰å…¨çš„è‡ªåŠ¨ç™»å½•
+# Ê¹ÓÃÊ¾Àı£º
+# ÅäÖÃ°²È«µÄ×Ô¶¯µÇÂ¼
 # Set-SecureAutoLogin -Username "Administrator" -Secure
 
-# ç¦ç”¨è‡ªåŠ¨ç™»å½•
+# ½ûÓÃ×Ô¶¯µÇÂ¼
 # Set-SecureAutoLogin -Username "Administrator" -Disable
 
-#region æ¸…ç†å‡½æ•°
-# æ¸…ç†å‡½æ•° - åœ¨è„šæœ¬ç»“æŸæ—¶è°ƒç”¨
+#region ÇåÀíº¯Êı
+# ÇåÀíº¯Êı - ÔÚ½Å±¾½áÊøÊ±µ÷ÓÃ
 function Clear-GlobalSettings {
     $UseProxy -and (Set-GlobalProxy -Disable)
 }
@@ -757,16 +757,16 @@ function Show-ScriptHelp {
     @"
 Windows System Configuration Script v$SCRIPT_VERSION
 
-åŸºæœ¬ç”¨æ³•:
+»ù±¾ÓÃ·¨:
     irm https://gitee.com/xiagw/deploy.sh/raw/main/bin/ssh.ps1 -OutFile ssh.ps1
 
-åŠŸèƒ½:
-1. åŸºç¡€å®‰è£…: .\ssh.ps1 [-Action install]
-2. ä½¿ç”¨ä»£ç†: .\ssh.ps1 -UseProxy [-ProxyServer "http://proxy:8080"]
-3. æ˜¾ç¤ºå¸®åŠ©: .\ssh.ps1 -Action help[|-detailed]
-4. å‡çº§ç»ˆç«¯: .\ssh.ps1 -Action upgrade
+¹¦ÄÜ:
+1. »ù´¡°²×°: .\ssh.ps1 [-Action install]
+2. Ê¹ÓÃ´úÀí: .\ssh.ps1 -UseProxy [-ProxyServer "http://proxy:8080"]
+3. ÏÔÊ¾°ïÖú: .\ssh.ps1 -Action help[|-detailed]
+4. Éı¼¶ÖÕ¶Ë: .\ssh.ps1 -Action upgrade
 
-å•ç‹¬åŠŸèƒ½:
+µ¥¶À¹¦ÄÜ:
 SSH:        -Action ssh[-force]
 Terminal:   -Action terminal[-upgrade]
 PowerShell: -Action pwsh[-7.3.4]
@@ -775,22 +775,22 @@ Scoop:      -Action scoop[-force]
 RSAT:       -Action rsat[-dns,dhcp|-list]
 AutoLogin:  -Action autologin-[Username|disable]
 
-å‚æ•°:
-    -Action      : æ‰§è¡Œæ“ä½œ
-    -UseProxy    : å¯ç”¨ä»£ç†
-    -ProxyServer : ä»£ç†åœ°å€ (é»˜è®¤: $DEFAULT_PROXY)
+²ÎÊı:
+    -Action      : Ö´ĞĞ²Ù×÷
+    -UseProxy    : ÆôÓÃ´úÀí
+    -ProxyServer : ´úÀíµØÖ· (Ä¬ÈÏ: $DEFAULT_PROXY)
 "@ | Write-Output
 }
 
-# ä½¿ç”¨ç¤ºä¾‹ï¼š
-# Show-ScriptHelp              # æ˜¾ç¤ºåŸºæœ¬å¸®åŠ©
-# Show-ScriptHelp -Detailed    # æ˜¾ç¤ºè¯¦ç»†å¸®åŠ©
+# Ê¹ÓÃÊ¾Àı£º
+# Show-ScriptHelp              # ÏÔÊ¾»ù±¾°ïÖú
+# Show-ScriptHelp -Detailed    # ÏÔÊ¾ÏêÏ¸°ïÖú
 
-#region ä¸»æ‰§è¡Œä»£ç 
-# åˆå§‹åŒ–ä»£ç†
+#region Ö÷Ö´ĞĞ´úÂë
+# ³õÊ¼»¯´úÀí
 $UseProxy -and (Set-GlobalProxy -ProxyServer $ProxyServer -Enable)
 
-# æ‰§è¡Œæ“ä½œ
+# Ö´ĞĞ²Ù×÷
 $actions = @{
     'help(-detailed)?$' = { Show-ScriptHelp -Detailed:($Action -eq "help-detailed") }
     '^install$' = { Install-OpenSSH }
@@ -818,7 +818,7 @@ $actions = @{
     }
 }
 
-# æ‰§è¡ŒåŒ¹é…çš„æ“ä½œæˆ–æ˜¾ç¤ºå¸®åŠ©
+# Ö´ĞĞÆ¥ÅäµÄ²Ù×÷»òÏÔÊ¾°ïÖú
 $executed = $false
 foreach ($pattern in $actions.Keys) {
     if ($Action -match $pattern) {
@@ -833,18 +833,18 @@ if (-not $executed) {
     Show-ScriptHelp
 }
 
-# æ³¨å†Œæ¸…ç†æ“ä½œ
+# ×¢²áÇåÀí²Ù×÷
 $PSDefaultParameterValues['*:ProxyServer'] = $ProxyServer
 Register-EngineEvent PowerShell.Exiting -Action { Clear-GlobalSettings } | Out-Null
 #endregion
 
-# git logãªã©ã®ãƒãƒ«ãƒãƒã‚¤ãƒˆæ–‡å­—ã‚’è¡¨ç¤ºã•ã›ã‚‹ãŸã‚ (çµµæ–‡å­—å«ã‚€)
+# git log¤Ê¤É¤Î¥Ş¥ë¥Á¥Ğ¥¤¥ÈÎÄ×Ö¤ò±íÊ¾¤µ¤»¤ë¤¿¤á (½}ÎÄ×Öº¬¤à)
 # $env:LESSCHARSET = "utf-8"
 
-## éŸ³ã‚’æ¶ˆã™
+## Òô¤òÏû¤¹
 # Set-PSReadlineOption -BellStyle None
 
-## å±¥æ­´æ¤œç´¢
+## ÂÄšs—ÊË÷
 # scoop install fzf gawk
 # Set-PSReadLineKeyHandler -Chord Ctrl+r -ScriptBlock {
 #     Set-Alias awk $HOME\scoop\apps\gawk\current\bin\awk.exe
