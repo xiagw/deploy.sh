@@ -863,7 +863,7 @@ _renew_ssl_certificates() {
     ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
     for file in "${acme_home}"/account.conf.*.dns_*; do
         if [ -f "$file" ]; then
-            _msg time "Found $file"
+            _msg blue "Found $file"
         else
             continue
         fi
@@ -874,7 +874,7 @@ _renew_ssl_certificates() {
         _set_proxy on
         case "${dns_type}" in
         dns_gd)
-            _msg warn "dns type: Goddady"
+            _msg yellow "dns type: Goddady"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
             api_goddady="https://api.godaddy.com/v1/domains"
             domains="$(curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true)"
@@ -882,14 +882,14 @@ _renew_ssl_certificates() {
             export GD_Secret="${SAVED_GD_Secret:-none}"
             ;;
         dns_cf)
-            _msg warn "dns type: cloudflare"
+            _msg yellow "dns type: cloudflare"
             _install_flarectl
             domains="$(flarectl zone list | awk '/active/ {print $3}' || true)"
             export CF_Token="${SAVED_CF_Token:-none}"
             export CF_Account_ID="${SAVED_CF_Account_ID:-none}"
             ;;
         dns_ali)
-            _msg warn "dns type: aliyun"
+            _msg yellow "dns type: aliyun"
             _install_aliyun_cli
             aliyun configure set \
                 --mode AK \
@@ -902,23 +902,24 @@ _renew_ssl_certificates() {
             export Ali_Secret=$SAVED_Ali_Secret
             ;;
         dns_tencent)
-            _msg warn "dns type: tencent"
+            _msg yellow "dns type: tencent"
             _install_tencent_cli
             tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
             domains="$(tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true)"
             ;;
         from_env)
-            _msg warn "get domains from env file"
+            _msg yellow "get domains from env file"
             source "$file"
             ;;
         *)
-            _msg warn "unknown dns type: $dns_type"
+            _msg yellow "unknown dns type: $dns_type"
             continue
             ;;
         esac
 
         ## single account may have multiple domains / 单个账号可能有多个域名
         for domain in ${domains}; do
+            _msg orange "Checking domain: $domain"
             if "${acme_cmd}" list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
                 "${acme_cmd}" --accountconf "$file" --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
@@ -946,7 +947,7 @@ _renew_ssl_certificates() {
         echo "Found ${acme_home}/custom.acme.sh"
         bash "${acme_home}/custom.acme.sh"
     fi
-    _msg time "[cert] renew cert with acme.sh using dns+api"
+    _msg time "[cert] completed"
 
     if ${github_action:-false}; then
         return 0
@@ -996,7 +997,7 @@ _check_aliyun_account_balance() {
         fi
     done
 
-    _msg time "[finance] Aliyun account balance check completed"
+    _msg time "[finance] completed"
     if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${arg_renew_cert:-false}; then
         return 0
     fi
