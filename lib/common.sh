@@ -8,7 +8,7 @@ CMD_DATE=$(command -v gdate || command -v date)
 CMD_GREP=$(command -v ggrep || command -v grep)
 CMD_SED=$(command -v gsed || command -v sed)
 CMD_AWK=$(command -v gawk || command -v awk)
-CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
+CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl || :)
 
 # 定义日志级别常量
 LOG_LEVEL_ERROR=0
