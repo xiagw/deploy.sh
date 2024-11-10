@@ -581,7 +581,7 @@ _install_python_gitlab() {
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg green "python-gitlab is installed successfully"
         _msg green "Showing version"
-        gitlab --version
+        /root/.local/bin/gitlab --version
     else
         _msg error "failed to install python-gitlab"
     fi
