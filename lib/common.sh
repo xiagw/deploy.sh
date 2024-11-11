@@ -728,7 +728,7 @@ clean_runtime() {
 # 获取 GitHub 仓库的最新发布版本下载链接
 get_github_latest_download() {
     local repo="$1"
-    local source_only="false"  # 是否只获取源码包
+    local source_only="false" # 是否只获取源码包
     local arch="amd64"        # 架构，默认amd64
     local os="linux"          # 操作系统，默认linux
 
@@ -736,10 +736,10 @@ get_github_latest_download() {
     shift
     while [ $# -gt 0 ]; do
         case "$1" in
-            source_only=*) source_only="${1#*=}" ;;
-            arch=*) arch="${1#*=}" ;;
-            os=*) os="${1#*=}" ;;
-            *) _msg warning "Unknown parameter: $1" ;;
+        source_only=*) source_only="${1#*=}" ;;
+        arch=*) arch="${1#*=}" ;;
+        os=*) os="${1#*=}" ;;
+        *) _msg warning "Unknown parameter: $1" ;;
         esac
         shift
     done
@@ -747,27 +747,27 @@ get_github_latest_download() {
     # 标准化操作系统名称（使用 tr 替代 ${var,,}）
     os=$(echo "$os" | tr '[:upper:]' '[:lower:]')
     case "$os" in
-        mac*|darwin*) os="darwin" ;;
-        win*) os="windows" ;;
-        linux*) os="linux" ;;
-        freebsd*) os="freebsd" ;;
-        openbsd*) os="openbsd" ;;
-        *) _msg warning "Unknown OS: $os, using linux" && os="linux" ;;
+    mac* | darwin*) os="darwin" ;;
+    win*) os="windows" ;;
+    linux*) os="linux" ;;
+    freebsd*) os="freebsd" ;;
+    openbsd*) os="openbsd" ;;
+    *) _msg warning "Unknown OS: $os, using linux" && os="linux" ;;
     esac
 
     # 标准化架构名称
     arch=$(echo "$arch" | tr '[:upper:]' '[:lower:]')
     case "$arch" in
-        x86_64|x64|amd64) arch="amd64" ;;  # 把 amd64 也放在这里
-        x86|386) arch="386" ;;
-        aarch64|arm64) arch="arm64" ;;      # 把 arm64 也放在这里
-        armv*) ;;  # 保持原样 armv6/armv7 等
-        *)
-            if [ "$arch" != "amd64" ]; then
-                _msg warning "Unknown architecture: $arch, using amd64"
-                arch="amd64"
-            fi
-            ;;
+    x86_64 | x64 | amd64) arch="amd64" ;; # 把 amd64 也放在这里
+    x86 | 386) arch="386" ;;
+    aarch64 | arm64) arch="arm64" ;; # 把 arm64 也放在这里
+    armv*) ;;                        # 保持原样 armv6/armv7 等
+    *)
+        if [ "$arch" != "amd64" ]; then
+            _msg warning "Unknown architecture: $arch, using amd64"
+            arch="amd64"
+        fi
+        ;;
     esac
 
     local api_url="https://api.github.com/repos/$repo/releases/latest"
@@ -795,19 +795,19 @@ get_github_latest_download() {
         # 构建操作系统名称的搜索模式
         local os_pattern
         case "$os" in
-            darwin) os_pattern="darwin\|mac\|macos" ;;
-            windows) os_pattern="windows\|win" ;;
-            linux) os_pattern="linux" ;;
-            freebsd) os_pattern="freebsd" ;;
-            openbsd) os_pattern="openbsd" ;;
-            *) os_pattern="$os" ;;
+        darwin) os_pattern="darwin\|mac\|macos" ;;
+        windows) os_pattern="windows\|win" ;;
+        linux) os_pattern="linux" ;;
+        freebsd) os_pattern="freebsd" ;;
+        openbsd) os_pattern="openbsd" ;;
+        *) os_pattern="$os" ;;
         esac
 
         # 使用 grep 和 sed 来提取下载链接，避免 JSON 解析问题
         # 使用不区分大小写的匹配和扩展的操作系统名称模式
         pattern="\"browser_download_url\": *\"[^\"]*\(${os_pattern}\)[^\"]*${arch}[^\"]*\""
         download_url=$(echo "$release_info" | grep -io "$pattern" |
-                      sed 's/.*": *"//;s/"//' | head -n 1)
+            sed 's/.*": *"//;s/"//' | head -n 1)
         if [ -n "$download_url" ]; then
             echo "$download_url"
             return
@@ -816,7 +816,7 @@ get_github_latest_download() {
         # 如果没找到，尝试反向顺序（架构在前，系统在后）的匹配
         pattern="\"browser_download_url\": *\"[^\"]*${arch}[^\"]*\(${os_pattern}\)[^\"]*\""
         download_url=$(echo "$release_info" | grep -io "$pattern" |
-                      sed 's/.*": *"//;s/"//' | head -n 1)
+            sed 's/.*": *"//;s/"//' | head -n 1)
         if [ -n "$download_url" ]; then
             echo "$download_url"
             return
@@ -827,7 +827,26 @@ get_github_latest_download() {
     echo "https://github.com/$repo/archive/refs/tags/${latest_ver}.tar.gz"
 }
 
-# 安装或升级 acme.sh
+# 安装或升级 acme.sh with official
+_install_acme_official() {
+    local force=${1:-}
+    local cmd_acme="$HOME/.acme.sh/acme.sh"
+    if [ "$force" != "upgrade" ] && [ -x "$cmd_acme" ]; then
+        return
+    fi
+
+    _msg green "Installing acme.sh..."
+    if ${IN_CHINA:-false}; then
+        git clone --depth 1 https://gitee.com/neilpang/acme.sh.git
+        cd acme.sh && ./acme.sh --install --accountemail deploy@deploy.sh
+    else
+        curl https://get.acme.sh | bash -s email=deploy@deploy.sh
+    fi
+    _msg green "Showing version"
+    "$cmd_acme" --version
+}
+
+# 安装或升级 acme.sh via source code on github
 _install_acme_github() {
     local force=${1:-}
     if [ "$force" != "upgrade" ] && command -v acme.sh >/dev/null; then
