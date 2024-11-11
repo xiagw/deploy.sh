@@ -146,7 +146,6 @@ Examples:
 EOF
 }
 
-set -euo pipefail
 IFS=$'\n\t'
 
 CMD_READLINK=$(command -v greadlink || command -v readlink)
