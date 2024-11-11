@@ -703,7 +703,7 @@ get_oom_score() {
         printf "%2d      %5d       %s\n" \
             "$(cat "$proc"/oom_score)" \
             "$(basename "$proc")" \
-            "$(cat "$proc"/cmdline | tr '\0' ' ' | head -c 50)"
+            "$(tr '\0' ' ' <"$proc"/cmdline | head -c 50)"
     done < <(find /proc -maxdepth 1 -regex '/proc/[0-9]+' 2>/dev/null | sort -nr | head -n 15)
 }
 
@@ -868,4 +868,202 @@ _install_acme_github() {
     # 显示版本
     _msg green "Showing version"
     "$HOME/.acme.sh/acme.sh" --version
+}
+
+# 压缩 PDF 文件的内部函数
+_compress_pdf_with_gs() {
+    local input_pdf="$1"
+    local output_pdf="$2"
+    local quality="${3:-ebook}"
+    local compatibility="${4:-1.4}"
+
+    # 验证兼容性级别参数
+    case "$compatibility" in
+        1.4|1.5|1.6|1.7) ;;
+        *)
+            _msg warning "Invalid compatibility level: $compatibility, using 1.4"
+            compatibility="1.4"
+            ;;
+    esac
+
+    # 设置压缩质量参数
+    local resolution
+    local image_downsample
+    local color_image_quality
+    local gray_image_quality
+    local mono_image_quality
+
+    case "$quality" in
+        screen)  # 最大压缩率
+            resolution=72
+            image_downsample=72
+            color_image_quality=25
+            gray_image_quality=25
+            mono_image_quality=25
+            ;;
+        ebook)   # 平衡模式
+            resolution=150
+            image_downsample=150
+            color_image_quality=60
+            gray_image_quality=60
+            mono_image_quality=60
+            ;;
+        printer) # 较好质量
+            resolution=300
+            image_downsample=300
+            color_image_quality=90
+            gray_image_quality=90
+            mono_image_quality=90
+            ;;
+        prepress) # 最佳质量
+            resolution=600
+            image_downsample=600
+            color_image_quality=100
+            gray_image_quality=100
+            mono_image_quality=100
+            ;;
+        *)
+            _msg warning "Invalid quality level: $quality, using ebook"
+            resolution=150
+            image_downsample=150
+            color_image_quality=60
+            gray_image_quality=60
+            mono_image_quality=60
+            ;;
+    esac
+
+    gs -sDEVICE=pdfwrite \
+        -dCompatibilityLevel="$compatibility" \
+        -dPDFSETTINGS=/"$quality" \
+        -dNOPAUSE -dQUIET -dBATCH \
+        -dDownsampleColorImages=true \
+        -dColorImageDownsampleType=/Bicubic \
+        -dColorImageResolution="$resolution" \
+        -dDownsampleGrayImages=true \
+        -dGrayImageDownsampleType=/Bicubic \
+        -dGrayImageResolution="$resolution" \
+        -dDownsampleMonoImages=true \
+        -dMonoImageDownsampleType=/Bicubic \
+        -dMonoImageResolution="$resolution" \
+        -dColorImageDownsampleThreshold=1.0 \
+        -dGrayImageDownsampleThreshold=1.0 \
+        -dMonoImageDownsampleThreshold=1.0 \
+        -dCompressPages=true \
+        -dUseFlateCompression=true \
+        -dEmbedAllFonts=true \
+        -dSubsetFonts=true \
+        -dDetectDuplicateImages=true \
+        -dOptimize=true \
+        -dAutoFilterColorImages=true \
+        -dAutoFilterGrayImages=true \
+        -dColorImageFilter=/DCTEncode \
+        -dGrayImageFilter=/DCTEncode \
+        -dColorConversionStrategy=/sRGB \
+        -dCompatibilityLevel="$compatibility" \
+        -dProcessColorModel=/DeviceRGB \
+        -dConvertCMYKImagesToRGB=true \
+        -dCompressFonts=true \
+        -dUseCIEColor=true \
+        -dPrinted=false \
+        -dCannotEmbedFontPolicy=/Warning \
+        -sOutputFile="$output_pdf" \
+        "$input_pdf"
+
+    local ret=$?
+    if [ $ret -eq 0 ]; then
+        local original_size
+        local compressed_size
+        original_size=$(du -h "$input_pdf" | cut -f1)
+        compressed_size=$(du -h "$output_pdf" | cut -f1)
+        local original_bytes
+        local compressed_bytes
+        original_bytes=$(stat -f%z "$input_pdf" 2>/dev/null || stat -c%s "$input_pdf")
+        compressed_bytes=$(stat -f%z "$output_pdf" 2>/dev/null || stat -c%s "$output_pdf")
+        local compression_ratio
+        compression_ratio=$(awk "BEGIN {printf \"%.2f\", ($compressed_bytes/$original_bytes)*100}")
+
+        _msg success "PDF compression completed:"
+        _msg info "Original size: $original_size"
+        _msg info "Compressed size: $compressed_size"
+        _msg info "Compression ratio: ${compression_ratio}%"
+        _msg info "Output file: $output_pdf"
+        return 0
+    else
+        _msg error "PDF compression failed"
+        return 1
+    fi
+}
+
+_compress_document() {
+    local input_file="$1"
+    local output_file="${2:-}"
+    local quality="${3:-ebook}"
+    local compatibility="${4:-1.4}"  # 新增参数
+
+    # 检查输入文件是否存在
+    if [ ! -f "$input_file" ]; then
+        _msg error "Input file does not exist: $input_file"
+        return 1
+    fi
+
+    # 检查必要的命令
+    if ! _check_commands gs libreoffice; then
+        _msg info "Installing required packages..."
+        _install_packages ghostscript libreoffice
+    fi
+
+    # 获取文件扩展名
+    local ext="${input_file##*.}"
+    ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+
+    case "$ext" in
+    pdf)
+        # 如果没有指定输出文件，则使用原文件名加上 _compressed 后缀
+        if [ -z "$output_file" ]; then
+            output_file="${input_file%.*}_compressed.pdf"
+        fi
+        _compress_pdf_with_gs "$input_file" "$output_file" "$quality" "$compatibility"
+        ;;
+
+    ppt | pptx)
+        # 如果没有指定输出文件，则使用原文件名加上 _compressed 后缀
+        if [ -z "$output_file" ]; then
+            output_file="${input_file%.*}_compressed.pdf"
+        fi
+
+        # 创建临时目录
+        local temp_dir
+        temp_dir=$(mktemp -d)
+
+        # 使用 LibreOffice 转换为 PDF
+        _msg info "Converting PPT to PDF..."
+        libreoffice --headless --convert-to pdf --outdir "$temp_dir" "$input_file"
+        local ret="$?"
+
+        if [ "$ret" -eq 0 ]; then
+            local temp_pdf
+            temp_pdf="$temp_dir/$(basename "${input_file%.*}").pdf"
+
+            # 使用抽取的函数压缩 PDF
+            _msg info "Compressing converted PDF..."
+            if ! _compress_pdf_with_gs "$temp_pdf" "$output_file" "$quality" "$compatibility"; then
+                rm -rf "$temp_dir"
+                return 1
+            fi
+        else
+            _msg error "PPT to PDF conversion failed"
+            rm -rf "$temp_dir"
+            return 1
+        fi
+
+        # 清理临时文件
+        rm -rf "$temp_dir"
+        ;;
+
+    *)
+        _msg error "Unsupported file format: $ext"
+        _msg info "Supported formats: pdf, ppt, pptx"
+        return 1
+        ;;
+    esac
 }
