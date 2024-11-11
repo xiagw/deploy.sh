@@ -848,10 +848,8 @@ _renew_ssl_certificates() {
     file_reload_nginx="$acme_home/reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
-    if [[ ! -x "${acme_cmd}" ]]; then
-        _install_cron
-        curl https://get.acme.sh | bash -s email=deploy@deploy.sh
-    fi
+    _install_cron
+    _install_acme_official
 
     [ -d "$acme_cert_dest" ] || mkdir -p "$acme_cert_dest"
 
