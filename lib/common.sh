@@ -963,7 +963,6 @@ _compress_pdf_with_gs() {
         -dProcessColorModel=/DeviceRGB \
         -dConvertCMYKImagesToRGB=true \
         -dCompressFonts=true \
-        -dUseCIEColor=true \
         -dPrinted=false \
         -dCannotEmbedFontPolicy=/Warning \
         -sOutputFile="$output_pdf" \
