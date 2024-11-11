@@ -876,6 +876,8 @@ _compress_pdf_with_gs() {
     local output_pdf="$2"
     local quality="${3:-ebook}"
     local compatibility="${4:-1.4}"
+    local start_time
+    start_time=$($CMD_DATE +%s)
 
     # 验证兼容性级别参数
     case "$compatibility" in
@@ -894,6 +896,13 @@ _compress_pdf_with_gs() {
     local mono_image_quality
 
     case "$quality" in
+        screen-hq)  # 新增：高质量图片的 screen 模式
+            resolution=150      # 提高分辨率到150dpi
+            image_downsample=150
+            color_image_quality=60  # 提高图片质量到60%
+            gray_image_quality=60
+            mono_image_quality=60
+            ;;
         screen)  # 最大压缩率
             resolution=72
             image_downsample=72
@@ -934,7 +943,7 @@ _compress_pdf_with_gs() {
 
     gs -sDEVICE=pdfwrite \
         -dCompatibilityLevel="$compatibility" \
-        -dPDFSETTINGS=/"$quality" \
+        -dPDFSETTINGS=/"${quality/screen-hq/screen}" \
         -dNOPAUSE -dQUIET -dBATCH \
         -dDownsampleColorImages=true \
         -dColorImageDownsampleType=/Bicubic \
@@ -969,6 +978,20 @@ _compress_pdf_with_gs() {
         "$input_pdf"
 
     local ret=$?
+    local end_time
+    end_time=$($CMD_DATE +%s)
+    local duration=$((end_time - start_time))
+
+    # 格式化持续时间
+    local hours=$((duration / 3600))
+    local minutes=$(( (duration % 3600) / 60 ))
+    local seconds=$((duration % 60))
+    local time_str=""
+    [ $hours -gt 0 ] && time_str="${hours}h"
+    [ $minutes -gt 0 ] && time_str="${time_str}${minutes}m"
+    [ $seconds -gt 0 ] && time_str="${time_str}${seconds}s"
+    [ -z "$time_str" ] && time_str="0s"
+
     if [ $ret -eq 0 ]; then
         local original_size
         local compressed_size
@@ -982,6 +1005,7 @@ _compress_pdf_with_gs() {
         compression_ratio=$(awk "BEGIN {printf \"%.2f\", ($compressed_bytes/$original_bytes)*100}")
 
         _msg success "PDF compression completed:"
+        _msg info "Time taken: $time_str"
         _msg info "Original size: $original_size"
         _msg info "Compressed size: $compressed_size"
         _msg info "Compression ratio: ${compression_ratio}%"
@@ -989,6 +1013,7 @@ _compress_pdf_with_gs() {
         return 0
     else
         _msg error "PDF compression failed"
+        _msg info "Time taken: $time_str"
         return 1
     fi
 }
