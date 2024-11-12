@@ -164,7 +164,7 @@ _check_distribution() {
         )
     fi
     lsb_dist="${lsb_dist:-unknown}"
-    _msg time "Your distribution is ${lsb_dist}, ARCH is $(uname -m)."
+    _msg time "Your distribution is ${lsb_dist} ${version_id}, ARCH is $(uname -m)."
 }
 
 _check_cmd() {
