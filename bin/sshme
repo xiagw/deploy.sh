@@ -9,12 +9,6 @@ _get_input() {
         return 1
     fi
 
-    # 添加端口号验证
-    if ! [[ "$ssh_port" =~ ^[0-9]+$ ]] || [ "$ssh_port" -lt 1 ] || [ "$ssh_port" -gt 65535 ]; then
-        echo "Error: Invalid port number" >&2
-        return 1
-    fi
-
     count=0
     if "${delete_flag:-false}"; then
         if "${has_fzf:-false}"; then
@@ -38,22 +32,40 @@ _get_input() {
             ssh_port=${ssh_port:-22}
         fi
         read -rp "[$((++count))]. Enter SSH name: [alias name] " read_ssh_name
-        read -rp "[$((++count))]. Enable byobu? [Y/n] " read_byobu
+        # read -rp "[$((++count))]. Enable byobu? [Y/n] " read_byobu
         ssh_name="${read_ssh_name:-host_${ssh_host//./_}}"
     fi
 
     if "${has_fzf:-false}"; then
-        ssh_conf=$(printf '%s\n' "${ssh_conf_files[@]}" | fzf)
-        ansible_conf=$(printf '%s\n' "${ansible_host_files[@]}" | fzf)
+        if [ "${#ssh_conf_files[@]}" -eq 1 ]; then
+            ssh_conf="${ssh_conf_files[0]}"
+        else
+            ssh_conf=$(printf '%s\n' "${ssh_conf_files[@]}" | fzf)
+        fi
+
+        if [ "${#ansible_host_files[@]}" -eq 1 ]; then
+            ansible_conf="${ansible_host_files[0]}"
+        else
+            ansible_conf=$(printf '%s\n' "${ansible_host_files[@]}" | fzf)
+        fi
     else
-        select c in "${ssh_conf_files[@]}"; do
-            ssh_conf="$("$CMD_READLINK" -f "$c")"
-            break
-        done
-        select a in "${ansible_host_files[@]}"; do
-            ansible_conf="$("$CMD_READLINK" -f "$a")"
-            break
-        done
+        if [ "${#ssh_conf_files[@]}" -eq 1 ]; then
+            ssh_conf="$("$CMD_READLINK" -f "${ssh_conf_files[0]}")"
+        else
+            select c in "${ssh_conf_files[@]}"; do
+                ssh_conf="$("$CMD_READLINK" -f "$c")"
+                break
+            done
+        fi
+
+        if [ "${#ansible_host_files[@]}" -eq 1 ]; then
+            ansible_conf="$("$CMD_READLINK" -f "${ansible_host_files[0]}")"
+        else
+            select a in "${ansible_host_files[@]}"; do
+                ansible_conf="$("$CMD_READLINK" -f "$a")"
+                break
+            done
+        fi
     fi
 }
 
