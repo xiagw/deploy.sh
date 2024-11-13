@@ -25,7 +25,7 @@ select_file() {
     local selected_file
     selected_file=$(find "$search_dir" -maxdepth 1 \
         \( -name "*.zip" -o -name "*nginx*" -o -name "*.key" -o -name "*.pem" -o -name "*.crt" \) \
-        -type f | $CMD_FZF --height 50% --prompt="选择要同步的文件: ")
+        -type f | fzf --height 50% --prompt="选择要同步的文件: ")
 
     if [[ -z "$selected_file" ]]; then
         echo "错误: 未选择文件" >&2
@@ -44,7 +44,7 @@ select_ssh_host() {
         return 1
     fi
 
-    echo "$hosts" | $CMD_FZF --height 50% --prompt="选择目标SSH主机: "
+    echo "$hosts" | fzf --height 50% --prompt="选择目标SSH主机: "
 }
 
 cleanup() {
@@ -180,14 +180,14 @@ search_project_files() {
 
     # 直接使用 $CMD_CAT，不需要额外的模式检查
     if [ -n "$search_pattern" ]; then
-        selected_dir=$(find ${active_dir} -maxdepth 1 -type d -iname "*${search_pattern}*" | "$CMD_FZF" --height=50%)
+        selected_dir=$(find ${active_dir} -maxdepth 1 -type d -iname "*${search_pattern}*" | fzf --height=50%)
     else
-        selected_dir=$(find $active_dir -maxdepth 1 -type d | "$CMD_FZF" --height=50%)
+        selected_dir=$(find $active_dir -maxdepth 1 -type d | fzf --height=50%)
     fi
 
     echo "Selected directory: ${selected_dir:? selected_dir must be set}"
     find "$selected_dir" |
-        "$CMD_FZF" --multi \
+        fzf --multi \
             --height=60% \
             --preview "$CMD_CAT --language=markdown {}" \
             --preview-window=right:50% \
@@ -292,11 +292,11 @@ main() {
     if [ "$CMD_CAT" = "bat" ] || [ "$CMD_CAT" = "batcat" ]; then
         CMD_CAT="$CMD_CAT --paging=never --color=always --style=full --theme=Dracula --wrap=auto --tabs=2"
     fi
-    CMD_FZF=$(command -v fzf || { echo "Error: fzf is required" >&2 && exit 1; })
+    command -v fzf || { echo "Error: fzf is required" >&2 && exit 1; }
     CMD_OSS=$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")
 
     SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
-    SCRIPT_DIR="$(cd "$(dirname "$("$CMD_READLINK" -f "${BASH_SOURCE[0]}")")" && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
     SCRIPT_DATA="$(dirname "${SCRIPT_DIR}")/data"
     SCRIPT_ENV="${SCRIPT_DATA}/${SCRIPT_NAME}.env"
 
