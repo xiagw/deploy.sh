@@ -43,7 +43,10 @@ _get_saved_ip() {
 # ip6_current=$ip6_current/${netmask:-128}
 
 _update_dynv6() {
-    [ "$ip6_last" = "${ip6_current-}" ] && [ "$ip4_last" = "${ip4_current-}" ] && [ "${force_update:-0}" -ne 1 ] && return
+    if [ "$ip6_last" = "${ip6_current-}" ] && [ "$ip4_last" = "${ip4_current-}" ] && [ "${force_update:-0}" -ne 1 ]; then
+        echo "old == current, skip update"
+        return
+    fi
 
     base_url="http://dynv6.com/api/update?hostname=${dynv6_host}&token=${dynv6_token}"
     if curl -fssL "${base_url}&ipv4=${ip4_current}" -fsSL "${base_url}&ipv6=${ip6_current}"; then

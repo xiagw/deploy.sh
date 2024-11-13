@@ -276,7 +276,7 @@ _get_random_password() {
 }
 
 _get_current_ip() {
-    _check_distribution
+    _check_distribution >/dev/null
     case "$lsb_dist" in
     macos)
         ip4_current=$(curl -x '' -4 --connect-timeout 10 -fsSL 4.ipw.cn)
