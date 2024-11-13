@@ -72,9 +72,9 @@ log_result() {
     local log_dir="${SCRIPT_DATA}/${profile}/${region}/logs"
     local log_file="${log_dir}/${service}.log"
     local timestamp
-    timestamp=$($CMD_DATE "+%Y-%m-%d %H:%M:%S")
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     local unique_id
-    unique_id=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$($CMD_DATE +%s)-$$")
+    unique_id=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$(date +%s)-$$")
 
     mkdir -p "$log_dir"
     {
@@ -101,7 +101,7 @@ log_delete_operation() {
     local resource_name=$5
     local status=$6
     local timestamp
-    timestamp=$($CMD_DATE "+%Y-%m-%d %H:%M:%S")
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
     local log_dir="${SCRIPT_DATA}/${profile}/${region}/logs"
     local log_file="${log_dir}/${service}.log"
@@ -673,8 +673,8 @@ list_all_services() {
 }
 
 query_daily_cost() {
-    local query_date=${1:-$($CMD_DATE -d "yesterday" +%Y-%m-%d)}
-    local current_month=$($CMD_DATE -d "$query_date" +%Y-%m)
+    local query_date=${1:-$(date -d "yesterday" +%Y-%m-%d)}
+    local current_month=$(date -d "$query_date" +%Y-%m)
     local format=${2:-human}
 
     local result

@@ -9,7 +9,7 @@ _add_account() {
     local password
     password=$(_get_random_password 2>/dev/null)
 
-    "${CMD_CURL}" -fsSL -H "token:${zen_token:? undefined zen_token}" \
+    "curl" -fsSL -H "token:${zen_token:? undefined zen_token}" \
         "${zen_api_url:? undefined zen_api_url}/users" \
         -d '{
     "realname": "'"${user_realname}"'",
@@ -37,7 +37,7 @@ _prepare_project_directory() {
     case "${zen_get_method:-db}" in
     api)
         _get_token || return $?
-        ${CMD_CURL} -fsSL -H "token:${zen_token}" "${zen_api_url:-}/projects?limit=1000" |
+        curl -fsSL -H "token:${zen_token}" "${zen_api_url:-}/projects?limit=1000" |
             jq '.projects' >"$get_project_json"
         ;;
     db)
@@ -176,10 +176,10 @@ _completion() {
 
 _get_token() {
     local token_timeout
-    token_timeout=$("${CMD_DATE}" +%s -d '3600 seconds ago')
+    token_timeout=$(date +%s -d '3600 seconds ago')
     if ((token_timeout > ${zen_token_save_time:-0})); then
         zen_token=$(
-            "${CMD_CURL}" -fsSL -x '' -H "Content-Type: application/json" \
+            "curl" -fsSL -x '' -H "Content-Type: application/json" \
                 "${zen_api_url:-}/tokens" \
                 -d '{
                 "account": "'"${zen_account:-root}"'",
@@ -193,7 +193,7 @@ _get_token() {
             return 1
         fi
         sed -i \
-            -e "s/zen_token_time_save=.*/zen_token_time_save=$(${CMD_DATE} +%s)/" \
+            -e "s/zen_token_time_save=.*/zen_token_time_save=$(date +%s)/" \
             -e "s/zen_token=.*/zen_token=$zen_token/" "$SCRIPT_ENV"
     else
         return 0
@@ -205,23 +205,18 @@ _common_lib() {
     if [ ! -f "$common_lib" ]; then
         common_lib='/tmp/common.sh'
         include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
-        [ -f "$common_lib" ] || "${CMD_CURL}" -fsSL "$include_url" >"$common_lib"
+        [ -f "$common_lib" ] || "curl" -fsSL "$include_url" >"$common_lib"
     fi
 
     . "$common_lib"
 }
 
 main() {
-    # 全局变量定义
-    CMD_DATE=$(command -v gdate || command -v date)
-    CMD_READLINK=$(command -v greadlink || command -v readlink)
-    CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
-
     # 注册命令补全
     # complete -F _completion "$SCRIPT_NAME"
 
     SCRIPT_NAME="$(basename "$0")"
-    SCRIPT_PATH="$(dirname "$(${CMD_READLINK} -f "$0")")"
+    SCRIPT_PATH="$(dirname "$(readlink -f "$0")")"
     SCRIPT_PATH_PARENT="$(dirname "$SCRIPT_PATH")"
     SCRIPT_DATA="${SCRIPT_PATH_PARENT}/data"
     SCRIPT_LOG="${SCRIPT_DATA}/${SCRIPT_NAME}.log"

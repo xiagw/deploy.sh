@@ -152,22 +152,22 @@ rds_account_create() {
         return 1
     fi
 
-    echo "$password" | $CMD_GREP -q "[A-Z]" || {
+    echo "$password" | grep -q "[A-Z]" || {
         echo "错误：密码必须包含大写字母。" >&2
         return 1
     }
 
-    echo "$password" | $CMD_GREP -q "[a-z]" || {
+    echo "$password" | grep -q "[a-z]" || {
         echo "错误：密码必须包含小写字母。" >&2
         return 1
     }
 
-    echo "$password" | $CMD_GREP -q "[0-9]" || {
+    echo "$password" | grep -q "[0-9]" || {
         echo "错误：密码必须包含数字。" >&2
         return 1
     }
 
-    echo "$password" | $CMD_GREP -q '[^[:alnum:]]' || {
+    echo "$password" | grep -q '[^[:alnum:]]' || {
         password="${password}@"
     }
 

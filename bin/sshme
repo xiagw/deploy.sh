@@ -12,9 +12,9 @@ _get_input() {
     count=0
     if "${delete_flag:-false}"; then
         if "${has_fzf:-false}"; then
-            ssh_host=$("$CMD_AWK" '/^Host/ {print $2}' "${ssh_conf_files[@]}" | "$CMD_GREP" -v '\*' | fzf)
+            ssh_host=$(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*' | fzf)
         else
-            select s in $("$CMD_AWK" '/^Host/ {print $2}' "${ssh_conf_files[@]}" | "$CMD_GREP" -v '\*'); do
+            select s in $(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*'); do
                 ssh_host="$s"
                 break
             done
@@ -50,19 +50,19 @@ _get_input() {
         fi
     else
         if [ "${#ssh_conf_files[@]}" -eq 1 ]; then
-            ssh_conf="$("$CMD_READLINK" -f "${ssh_conf_files[0]}")"
+            ssh_conf="$(readlink -f "${ssh_conf_files[0]}")"
         else
             select c in "${ssh_conf_files[@]}"; do
-                ssh_conf="$("$CMD_READLINK" -f "$c")"
+                ssh_conf="$(readlink -f "$c")"
                 break
             done
         fi
 
         if [ "${#ansible_host_files[@]}" -eq 1 ]; then
-            ansible_conf="$("$CMD_READLINK" -f "${ansible_host_files[0]}")"
+            ansible_conf="$(readlink -f "${ansible_host_files[0]}")"
         else
             select a in "${ansible_host_files[@]}"; do
-                ansible_conf="$("$CMD_READLINK" -f "$a")"
+                ansible_conf="$(readlink -f "$a")"
                 break
             done
         fi
@@ -70,7 +70,7 @@ _get_input() {
 }
 
 _add_host() {
-    if "$CMD_GREP" -qE "^Host.*${ssh_name}$|^### ${ssh_name} begin" "$ssh_conf"; then
+    if grep -qE "^Host.*${ssh_name}$|^### ${ssh_name} begin" "$ssh_conf"; then
         echo "host ${ssh_name} exist, skip"
         return 1
     fi
@@ -89,8 +89,8 @@ EOF
 }
 
 _delete_host() {
-    "$CMD_SED" -i "/^### ${ssh_host:? empty ssh host} begin/,/^### ${ssh_host} end/d" "${ssh_conf:? empty ssh conf}"
-    [ -f "$ansible_conf" ] && "$CMD_SED" -i "/^${ssh_host}$/d" "$ansible_conf"
+    sed -i "/^### ${ssh_host:? empty ssh host} begin/,/^### ${ssh_host} end/d" "${ssh_conf:? empty ssh conf}"
+    [ -f "$ansible_conf" ] && sed -i "/^${ssh_host}$/d" "$ansible_conf"
 }
 
 _port_forward() {
@@ -159,11 +159,6 @@ EOF
 
 IFS=$'\n\t'
 
-CMD_READLINK=$(command -v greadlink || command -v readlink)
-CMD_SED=$(command -v gsed || command -v sed)
-CMD_AWK=$(command -v gawk || command -v awk)
-CMD_GREP=$(command -v ggrep || command -v grep)
-
 main() {
     # set -xe
     # LANG="en_US.UTF-8"
@@ -186,9 +181,9 @@ main() {
     has_fzf=$(command -v fzf >/dev/null && echo true || echo false)
 
     if "${has_fzf}"; then
-        host=$(printf 'add\nupdate\ndelete\n%s\n' "$("$CMD_AWK" '/^Host/ {print $2}' "${ssh_conf_files[@]}" | "$CMD_GREP" -v '\*')" | fzf)
+        host=$(printf 'add\nupdate\ndelete\n%s\n' "$(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*')" | fzf)
     else
-        select h in add update delete $("$CMD_AWK" '/^Host/ {print $2}' "${ssh_conf_files[@]}" | "$CMD_GREP" -v '\*'); do
+        select h in add update delete $(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*'); do
             host=$h
             break
         done
@@ -213,8 +208,8 @@ main() {
         _delete_host
         ;;
     *)
-        if "$CMD_GREP" -B2 -E "Host\s+${host}$" "${ssh_conf_files[@]}" | "$CMD_GREP" -q 'byobu'; then
-            uname -a | "$CMD_GREP" -i -q 'iphone.*ish' || use_byobu='byobu'
+        if grep -B2 -E "Host\s+${host}$" "${ssh_conf_files[@]}" | grep -q 'byobu'; then
+            uname -a | grep -i -q 'iphone.*ish' || use_byobu='byobu'
         fi
         ## get username from $1
         [ -n "${1}" ] && host="${1}@${host}"

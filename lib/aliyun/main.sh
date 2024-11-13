@@ -2,16 +2,8 @@
 # shellcheck disable=SC2034
 # -*- coding: utf-8 -*-
 
-# 定义全局命令变量
-CMD_READLINK=$(command -v greadlink || command -v readlink)
-CMD_DATE=$(command -v gdate || command -v date)
-CMD_GREP=$(command -v ggrep || command -v grep)
-CMD_SED=$(command -v gsed || command -v sed)
-CMD_AWK=$(command -v gawk || command -v awk)
-CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
-
 ## 定义执行所在目录
-SCRIPT_DIR=$(dirname "$($CMD_READLINK -f "${BASH_SOURCE[0]}")")
+SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 ## 定义上一级 lib/ 目录
 SCRIPT_LIB=$(dirname "${SCRIPT_DIR}")
 ## 定义项目根目录

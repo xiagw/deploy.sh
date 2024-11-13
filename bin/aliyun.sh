@@ -26,7 +26,7 @@ _get_aliyun_profile() {
 }
 
 _export_resource() {
-    resource_export_log="${g_me_data_path}/${g_me_name}.$(${CMD_DATE-} +%F_%s).log"
+    resource_export_log="${g_me_data_path}/${g_me_name}.$(date +%F_%s).log"
     _get_aliyun_profile
 
     (
@@ -520,7 +520,7 @@ _upload_cert() {
     set -e
 
     local today
-    today="$($CMD_DATE +%m%d)"
+    today="$(date +%m%d)"
     while read -r line; do
         domain="${line// /.}"
         upload_name="${domain//./-}-$today"

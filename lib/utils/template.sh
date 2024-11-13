@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
 
-# Global variables for commands
-CMD_DATE=$(command -v gdate || command -v date)
-CMD_GREP=$(command -v ggrep || command -v grep)
-CMD_SED=$(command -v gsed || command -v sed)
-CMD_READLINK=$(command -v greadlink || command -v readlink)
-CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl)
-
 # Function definitions
 _cleanup() {
     trap - SIGINT SIGTERM ERR EXIT
@@ -84,7 +77,7 @@ _msg() {
 
 _log() {
     if [[ -n "${me_log-}" ]]; then
-        echo "[$(${CMD_DATE} +%Y%m%d-%T)], $*" >>"$me_log"
+        echo "[$(date +%Y%m%d-%T)], $*" >>"$me_log"
     fi
 }
 
@@ -150,7 +143,7 @@ EOF
 
 _myself() {
     me_name=$(basename "${BASH_SOURCE[0]}")
-    me_path=$(dirname "$(${CMD_READLINK} -f "${BASH_SOURCE[0]}")")
+    me_path=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
     me_log="${me_path}/${me_name}.log"
     [[ ! -w "$me_path" ]] && me_log="/tmp/${me_name}.log"
     [[ "${enable_log-}" -eq 1 ]] && echo "Log file is \"$me_log\""

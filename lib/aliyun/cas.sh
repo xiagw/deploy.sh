@@ -113,7 +113,7 @@ cas_create() {
         local cert_id
         cert_id=$(echo "$result" | jq -r '.CertId')
         local upload_time
-        upload_time=$($CMD_DATE "+%Y-%m-%d %H:%M:%S")
+        upload_time=$(date "+%Y-%m-%d %H:%M:%S")
 
         # 确保目录存在
         mkdir -p "$(dirname "$CAS_CERT_FILE")"
@@ -195,7 +195,7 @@ cas_detail() {
 cas_batch_upload_deploy() {
     local domains=("$@")
     local today
-    today="$($CMD_DATE +%m%d)"
+    today="$(date +%m%d)"
 
     # 如果没有提供域名参数,则从CDN域名列表获取
     if [ ${#domains[@]} -eq 0 ]; then

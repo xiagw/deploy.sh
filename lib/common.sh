@@ -1,14 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034,SC1090,SC1091
-# 兼容sh/bash/zsh，少使用新命令
-
-# 定义全局命令变量
-CMD_READLINK=$(command -v greadlink || command -v readlink)
-CMD_DATE=$(command -v gdate || command -v date)
-CMD_GREP=$(command -v ggrep || command -v grep)
-CMD_SED=$(command -v gsed || command -v sed)
-CMD_AWK=$(command -v gawk || command -v awk)
-CMD_CURL=$(command -v /usr/local/opt/curl/bin/curl || command -v curl || :)
+# 需要兼容sh/bash/zsh，尽量少使用不兼容命令/数组/(subshell)等
 
 # 定义日志级别常量
 LOG_LEVEL_ERROR=0
@@ -95,7 +87,7 @@ _msg() {
     local color_on color_off='\033[0m'
     local time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
     local timestamp
-    timestamp="$($CMD_DATE +%Y%m%d-%u-%T.%3N)"
+    timestamp="$(date +%Y%m%d-%u-%T.%3N)"
 
     case "${1:-none}" in
     info) color_on='' ;;
@@ -276,7 +268,7 @@ _get_random_password() {
         2) password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
         3) password_rand="$(dd if=/dev/urandom bs=1 count=15 | base64 | head -c"$bits" 2>/dev/null)" ;;
         4) password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null) ;;
-        5) password_rand="$(echo "$RANDOM$($CMD_DATE)$RANDOM" | $cmd_hash | base64 | head -c"$bits" 2>/dev/null)" ;;
+        5) password_rand="$(echo "$RANDOM$(date)$RANDOM" | $cmd_hash | base64 | head -c"$bits" 2>/dev/null)" ;;
         *) echo "${password_rand:?Failed-to-generate-password}" && return 1 ;;
         esac
     done
@@ -877,7 +869,7 @@ _compress_pdf_with_gs() {
     local quality="${3:-ebook}"
     local compatibility="${4:-1.4}"
     local start_time
-    start_time=$($CMD_DATE +%s)
+    start_time=$(date +%s)
 
     # 验证兼容性级别参数
     case "$compatibility" in
@@ -979,7 +971,7 @@ _compress_pdf_with_gs() {
 
     local ret=$?
     local end_time
-    end_time=$($CMD_DATE +%s)
+    end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
     # 格式化持续时间

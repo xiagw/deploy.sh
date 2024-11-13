@@ -37,7 +37,7 @@ select_file() {
 select_ssh_host() {
     local ssh_config_files=("$HOME/.ssh/config"* "$HOME/.ssh/config.d/"*)
     local hosts
-    hosts=$("$CMD_GREP" "^Host " "${ssh_config_files[@]}" 2>/dev/null | awk '{print $2}' | sort -u)
+    hosts=$(grep "^Host " "${ssh_config_files[@]}" 2>/dev/null | awk '{print $2}' | sort -u)
 
     if [[ -z "$hosts" ]]; then
         echo "错误: 未找到SSH主机配置" >&2
@@ -157,7 +157,7 @@ sync_ssh_keys() {
         return 1
     fi
 
-    "$CMD_GREP" -vE '^#|^$|^[[:space:]]*$' "$source_keys_file" | tr -d '\r' | tee "$temp_keys_file"
+    grep -vE '^#|^$|^[[:space:]]*$' "$source_keys_file" | tr -d '\r' | tee "$temp_keys_file"
     if [ -n "$CMD_OSS" ]; then
         $CMD_OSS cp "$temp_keys_file" "oss://${oss_bucket_and_path}" -f
     fi
@@ -180,13 +180,13 @@ search_project_files() {
 
     # 直接使用 $CMD_CAT，不需要额外的模式检查
     if [ -n "$search_pattern" ]; then
-        selected_dir=$("$CMD_FIND" ${active_dir} -maxdepth 1 -type d -iname "*${search_pattern}*" | "$CMD_FZF" --height=50%)
+        selected_dir=$(find ${active_dir} -maxdepth 1 -type d -iname "*${search_pattern}*" | "$CMD_FZF" --height=50%)
     else
-        selected_dir=$("$CMD_FIND" $active_dir -maxdepth 1 -type d | "$CMD_FZF" --height=50%)
+        selected_dir=$(find $active_dir -maxdepth 1 -type d | "$CMD_FZF" --height=50%)
     fi
 
     echo "Selected directory: ${selected_dir:? selected_dir must be set}"
-    "$CMD_FIND" "$selected_dir" |
+    find "$selected_dir" |
         "$CMD_FZF" --multi \
             --height=60% \
             --preview "$CMD_CAT --language=markdown {}" \
@@ -288,10 +288,6 @@ EOF
 
 # Main function to handle command processing
 main() {
-    # Global command variables
-    CMD_READLINK=$(command -v greadlink || command -v readlink)
-    CMD_GREP=$(command -v ggrep || command -v grep)
-    CMD_FIND=$(command -v gfind || command -v find)
     CMD_CAT="$(command -v bat || command -v batcat || command -v cat)"
     if [ "$CMD_CAT" = "bat" ] || [ "$CMD_CAT" = "batcat" ]; then
         CMD_CAT="$CMD_CAT --paging=never --color=always --style=full --theme=Dracula --wrap=auto --tabs=2"

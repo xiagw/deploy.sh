@@ -196,7 +196,7 @@ oss_parse_cdn_logs() {
     fi
 
     # 设置默认日期为今天
-    start_date=${start_date:-$("$CMD_DATE" +%Y-%m-%d)}
+    start_date=${start_date:-$(date +%Y-%m-%d)}
     end_date=${end_date:-$start_date}
 
     # 调用日志查询函数
@@ -213,7 +213,7 @@ oss_list() {
     json)
         ## - aliyun的oss list 输出格式不是json格式，**此处不要变更**
         if [ -n "$result" ]; then
-            echo "$result" | $CMD_AWK -F/ '/oss:/ {print $NF}' | jq -R -s 'split("\n") | map(select(length > 0)) | map({BucketName: .})'
+            echo "$result" | awk -F/ '/oss:/ {print $NF}' | jq -R -s 'split("\n") | map(select(length > 0)) | map({BucketName: .})'
         else
             echo "[]"
         fi
@@ -221,17 +221,17 @@ oss_list() {
     tsv)
         echo -e "BucketName"
         if [ -n "$result" ]; then
-            echo "$result" | $CMD_AWK -F/ '/oss:/ {print $NF}'
+            echo "$result" | awk -F/ '/oss:/ {print $NF}'
         fi
         ;;
     human | *)
         echo "列出 OSS 存储桶："
-        if echo "$result" | $CMD_GREP -q 'Bucket Number.*0'; then
+        if echo "$result" | grep -q 'Bucket Number.*0'; then
             echo "没有找到 OSS 存储桶。"
         else
             echo "存储桶名称"
             echo "----------------"
-            echo "$result" | $CMD_AWK -F/ '/oss:/ {print $NF}'
+            echo "$result" | awk -F/ '/oss:/ {print $NF}'
         fi
         ;;
     esac
@@ -326,7 +326,7 @@ get_cname_token() {
     result=$(aliyun --profile "${profile:-}" oss bucket-cname --method get --item token oss://"$bucket_name" "$domain" --region "$region")
     echo "$result"
     local token
-    token=$(echo "$result" | "${CMD_GREP}" -oP '(?<=<Token>)[^<]+')
+    token=$(echo "$result" | grep -oP '(?<=<Token>)[^<]+')
     echo "成功获取 CNAME 令牌：$token"
 
     echo "请在您的 DNS 服务商处添加以下 TXT 记录："
@@ -351,7 +351,7 @@ oss_bind_domain() {
     log_result "$profile" "$region" "oss" "bind-domain" "$result"
 
     local token
-    token=$(echo "$result" | "${CMD_GREP}" -oP '(?<=<Token>)[^<]+')
+    token=$(echo "$result" | grep -oP '(?<=<Token>)[^<]+')
     if [ -z "$token" ]; then
         echo "错误：无法获取 CNAME 令牌。响应内容：" >&2
         echo "$result" >&2
@@ -368,7 +368,7 @@ oss_bind_domain() {
     echo "生效后，请按回车键继续..."
     local max_wait_time=600 # 10 minutes in seconds
     local start_time
-    start_time=$("$CMD_DATE" +%s)
+    start_time=$(date +%s)
     local current_time
     local elapsed_time
 
@@ -404,7 +404,7 @@ oss_bind_domain() {
     echo "$verify_result"
     log_result "$profile" "$region" "oss" "verify-domain" "$verify_result"
 
-    if echo "$verify_result" | $CMD_GREP -q "<Code>NoSuchCnameInDns</Code>"; then
+    if echo "$verify_result" | grep -q "<Code>NoSuchCnameInDns</Code>"; then
         echo "错误： DNS 验证失败。请确保 TXT 记录已经生效，然后重试。" >&2
         return 1
     fi
@@ -419,7 +419,7 @@ generate_oss_signature() {
     local access_key_id=$4
     local access_key_secret=$5
     local date
-    date=$("${CMD_DATE}" -u "+%Y-%m-%dT%H:%M:%SZ")
+    date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
     local host="${bucket}.oss-${region}.aliyuncs.com"
 
     # Construct the canonical request
@@ -430,7 +430,7 @@ generate_oss_signature() {
 
     # Calculate the hash of the canonical request
     local hashed_canonical_request
-    hashed_canonical_request=$(echo -n "$canonical_request" | openssl dgst -sha256 -hex | "$CMD_SED" 's/^.* //')
+    hashed_canonical_request=$(echo -n "$canonical_request" | openssl dgst -sha256 -hex | sed 's/^.* //')
 
     # Construct the string to sign
     local string_to_sign="OSS4-HMAC-SHA256\n${date}\n${hashed_canonical_request}"
@@ -604,11 +604,11 @@ generate_date_list() {
 
     # 生成日期序列
     local current_date=$start_date
-    while [ "$("$CMD_DATE" -d "$current_date" +%s)" -le "$("$CMD_DATE" -d "$end_date" +%s)" ]; do
+    while [ "$(date -d "$current_date" +%s)" -le "$(date -d "$end_date" +%s)" ]; do
         # 添加两种日期格式的匹配模式
-        echo "*$("$CMD_DATE" -d "$current_date" +%Y-%m-%d)*"
-        echo "*$("$CMD_DATE" -d "$current_date" +%Y_%m_%d)*"
-        current_date=$("$CMD_DATE" -d "$current_date +1 day" +%Y-%m-%d)
+        echo "*$(date -d "$current_date" +%Y-%m-%d)*"
+        echo "*$(date -d "$current_date" +%Y_%m_%d)*"
+        current_date=$(date -d "$current_date +1 day" +%Y-%m-%d)
     done >"$temp_file"
 
     echo "$temp_file"
@@ -689,18 +689,18 @@ analyze_logs_for_status() {
     echo "正在分析HTTP状态码 $status_codes 的记录..."
     local filtered_records
     filtered_records=$(
-        "$CMD_GREP" -vE "$exclude_grep" "$local_txt_file" |
-            "$CMD_GREP" -E "$status_pattern" |
-            "$CMD_GREP" -iE "$file_types_regex" || echo ""
+        grep -vE "$exclude_grep" "$local_txt_file" |
+            grep -E "$status_pattern" |
+            grep -iE "$file_types_regex" || echo ""
     )
     local count_records
-    count_records=$(echo -n "$filtered_records" | "$CMD_GREP" -c '^')
+    count_records=$(echo -n "$filtered_records" | grep -c '^')
 
     # 提取当前日志的 URI 并与全局文件合并去重
     local temp_uris_file
     temp_uris_file=$(mktemp)
 
-    echo "$filtered_records" | "$CMD_AWK" '
+    echo "$filtered_records" | awk '
     {
         for (i = 1; i <= NF; i++) {
             if ($i ~ /"GET|"POST/) {
@@ -720,7 +720,7 @@ analyze_logs_for_status() {
     }' >"$temp_uris_file"
 
     # 合并文件时保留最新状态（优先保留状态为1的记录）
-    "$CMD_AWK" '
+    awk '
         # 首先读取现有的全局文件
         FILENAME == ARGV[1] {
             # 检查行是否已经有状态码
@@ -760,7 +760,7 @@ analyze_logs_for_status() {
     rm -f "$temp_uris_file"
 
     # 保存分析结果
-    # echo "分析时间: $("$CMD_DATE" '+%Y-%m-%d %H:%M:%S')"
+    # echo "分析时间: $(date '+%Y-%m-%d %H:%M:%S')"
     # echo "文件类型: $file_types"
     # echo "----------------------------------------"
     if [ "$count_records" -gt 0 ]; then
@@ -781,7 +781,7 @@ analyze_logs_for_status() {
 
 oss_get_logs() {
     local bucket_path="${1%/}/"
-    local start_date=${2:-$("$CMD_DATE" +%Y-%m-%d)}
+    local start_date=${2:-$(date +%Y-%m-%d)}
     local end_date=${3:-$start_date}
     local format=${4:-human}
     local status_codes=${5:-""}
@@ -794,12 +794,12 @@ oss_get_logs() {
     fi
 
     # 验证日期格式
-    if ! "$CMD_DATE" -d "$start_date" >/dev/null 2>&1; then
+    if ! date -d "$start_date" >/dev/null 2>&1; then
         echo "错误：开始日期格式无效，请使用 YYYY-MM-DD 格式" >&2
         return 1
     fi
 
-    if ! "$CMD_DATE" -d "$end_date" >/dev/null 2>&1; then
+    if ! date -d "$end_date" >/dev/null 2>&1; then
         echo "错误：结束日期格式无效，请使用 YYYY-MM-DD 格式" >&2
         return 1
     fi
@@ -818,7 +818,7 @@ oss_get_logs() {
 
     # 如果指定了域名，则过滤指定域名的日志
     if [ -n "$domain" ]; then
-        result=$(echo "$result" | "$CMD_GREP" "$domain" || echo "")
+        result=$(echo "$result" | grep "$domain" || echo "")
     fi
 
     # 删除临时文件
@@ -826,7 +826,7 @@ oss_get_logs() {
 
     # 过滤指定日期范围内的日志
     local filtered_result
-    filtered_result=$(echo "$result" | "$CMD_AWK" -v start="$start_date" -v end="$end_date" -v cmd_date="$CMD_DATE" '
+    filtered_result=$(echo "$result" | awk -v start="$start_date" -v end="$end_date" -v cmd_date=date '
         function to_epoch(date) {
             cmd = cmd_date " -d \"" date "\" +%s"
             cmd | getline ts
@@ -860,7 +860,7 @@ oss_get_logs() {
     case "$format" in
     json)
         if [ -n "$filtered_result" ]; then
-            echo "$filtered_result" | "$CMD_AWK" -F'\t' '{
+            echo "$filtered_result" | awk -F'\t' '{
                 print "{"
                 print "  \"timestamp\": \"" $1 "\","
                 print "  \"size\": \"" $2 "\","
@@ -887,7 +887,7 @@ oss_get_logs() {
             echo "日志文件列表："
             echo "时间戳                        大小      存储类型    文件路径"
             echo "--------------------------------------------------------------------------------"
-            echo "$filtered_result" | "$CMD_AWK" -F'\t' '{
+            echo "$filtered_result" | awk -F'\t' '{
                 printf "%-30s %-10s %-10s %s\n", $1, $2, $3, $5
             }'
             if [ -n "$status_codes" ]; then
@@ -899,8 +899,8 @@ oss_get_logs() {
                     result=$(analyze_logs_for_status "$bucket_path" "$path" "$status_codes" "$file_types" "$domain")
                     echo "$result"
                     local uris_file
-                    uris_file=$(echo "$result" | tail -n1 | "$CMD_AWK" '{print $NF}')
-                done < <(echo "$filtered_result" | "$CMD_AWK" '{print $NF}')
+                    uris_file=$(echo "$result" | tail -n1 | awk '{print $NF}')
+                done < <(echo "$filtered_result" | awk '{print $NF}')
 
                 # 如果生成了 URI 文件且不为空，则自动处理
                 if [ -f "$uris_file" ] && [ -s "$uris_file" ] && [ -n "$target_bucket" ]; then
