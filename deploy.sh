@@ -978,7 +978,7 @@ _check_aliyun_account_balance() {
         fi
 
         _msg green "Current balance: $current_balance"
-        if (($(echo "$current_balance < $alarm_balance" | bc -l))); then
+        if ((${current_balance%.*} < ${alarm_balance%.*})); then
             g_msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
             _notify_wecom "${ENV_ALARM_WECOM_KEY}" "$g_msg_body"
         fi
@@ -989,7 +989,7 @@ _check_aliyun_account_balance() {
             jq -r '.Data.Items.Item[].CashAmount | tostring | gsub(","; "")')
 
         _msg red "Yesterday's spending: $daily_spending"
-        if (($(echo "$daily_spending > $alarm_daily" | bc -l))); then
+        if ((${daily_spending%.*} > ${alarm_daily%.*})); then
             g_msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f , 超过告警阈值：%.2f" "$profile" "$daily_spending" "${alarm_daily}")
             _notify_wecom "${ENV_ALARM_WECOM_KEY}" "$g_msg_body"
         fi

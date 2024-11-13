@@ -142,7 +142,6 @@ Commands:
     delete             Delete SSH host
     port HOST [PORT]   Create SSH port forward
     list               List all SSH hosts
-    backup             Backup SSH config
     import FILE        Import hosts from CSV file
     test HOST          Test SSH connection
 
