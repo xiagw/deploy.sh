@@ -2,6 +2,14 @@
 # -*- coding: utf-8 -*-
 # shellcheck disable=SC1090
 
+# 解析JSON函数
+_parse_json() {
+    local uri="$1"
+    curl -fsSL -H "token:${zen_token:? undefined zen_token}" \
+    "${zen_json_url:? undefined zen_json_url}/$uri" |
+        jq -r '.data' | jq '.'
+}
+
 # 函数定义
 _add_account() {
     read -rp "请输入用户姓名[英文或中文]: " user_realname
@@ -9,12 +17,12 @@ _add_account() {
     local password
     password=$(_get_random_password 2>/dev/null)
 
-    "curl" -fsSL -H "token:${zen_token:? undefined zen_token}" \
+    curl -fsSL -H "token:${zen_token:? undefined zen_token}" \
         "${zen_api_url:? undefined zen_api_url}/users" \
         -d '{
-    "realname": "'"${user_realname}"'",
-    "account": "'"${user_account}"'",
-    "password": "'"${password}"'",
+    "realname": "'"${user_realname:? undefined user_realname}"'",
+    "account": "'"${user_account:? undefined user_account}"'",
+    "password": "'"${password:? undefined password}"'",
     "group": "1",
     "gender": "m"
 }' |
@@ -180,7 +188,7 @@ _get_token() {
     if ((token_timeout > ${zen_token_save_time:-0})); then
         zen_token=$(
             "curl" -fsSL -x '' -H "Content-Type: application/json" \
-                "${zen_api_url:-}/tokens" \
+                "${zen_api_url:? undefine zen_api_url}/tokens" \
                 -d '{
                 "account": "'"${zen_account:-root}"'",
                 "password": "'"${zen_password:-root}"'"
@@ -193,8 +201,8 @@ _get_token() {
             return 1
         fi
         sed -i \
-            -e "s/zen_token_time_save=.*/zen_token_time_save=$(date +%s)/" \
-            -e "s/zen_token=.*/zen_token=$zen_token/" "$SCRIPT_ENV"
+            -e "s/zen_token_save_time=$zen_token_save_time/zen_token_save_time=$(date +%s)/g" \
+            -e "s/zen_token=.*/zen_token=$zen_token/g" "$SCRIPT_ENV"
     else
         return 0
     fi
@@ -237,8 +245,14 @@ main() {
         source "$SCRIPT_ENV" "$@" || return $?
         _prepare_project_directory "$@" || return $?
         ;;
+    json)
+        shift
+        source "$SCRIPT_ENV" "$@" || return $?
+        _get_token || return $?
+        _parse_json "$@" || return $?
+        ;;
     *)
-        echo "Usage: $SCRIPT_NAME <add|project> <domain>"
+        echo "Usage: $SCRIPT_NAME <add|project> <example.com>"
         return 1
         ;;
     esac
