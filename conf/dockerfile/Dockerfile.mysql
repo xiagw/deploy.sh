@@ -6,7 +6,7 @@ ARG TZ=UTC
 # ARG MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 ARG MYSQL_SLAVE=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
-ENV TZ ${TZ}
+ENV TZ=${TZ}
 # ENV MYSQL_RANDOM_ROOT_PASSWORD=true
 EXPOSE 3306
 RUN --mount=type=cache,target=/var/lib/apt/lists \
