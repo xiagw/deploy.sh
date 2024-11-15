@@ -60,8 +60,8 @@ if (Test-Path $DisableFile) {
 
 ## study mode, program with vscode, but no minecraft
 
-## homework mode, week 1-4, after 19:30, always shutdown
-if ( ((Get-Date -Uformat %w) -lt 5) -and ((Get-Date -Uformat %H%M) -gt 1930) ) {
+## homework mode, week 1-5, after 19:30, always shutdown
+if ( ((Get-Date -Uformat %w) -lt 6) -and ((Get-Date -Uformat %H%M) -gt 1930) ) {
     if (Test-Path $ForceFile) {
         Write-Output ""
     }
