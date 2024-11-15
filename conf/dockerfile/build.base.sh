@@ -18,7 +18,7 @@ _build() {
             -f Dockerfile."$v"
         )
         ;;
-    mysql-5.7 | mysql-8.0)
+    mysql-5.7 | mysql-8.0 | mysql-8.4)
         cmd_opt+=(
             -f Dockerfile.mysql
             --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
@@ -67,7 +67,7 @@ cmd_opt+=(
 )
 
 me_path="$(dirname "$(readlink -f "$0")")"
-args=(5.6 7.1 7.3 7.4 8.1 8.2 8.3 mysql-5.7 mysql-8.0 mysql-8.4spring-8 spring-17 spring-21 nodejs-18 nodejs-20 nodejs-21 redis nginx)
+args=(5.6 7.1 7.3 7.4 8.1 8.2 8.3 mysql-5.7 mysql-8.0 mysql-8.4 spring-8 spring-17 spring-21 nodejs-18 nodejs-20 nodejs-21 redis nginx)
 arg="${1:-}"
 
 case "$arg" in
