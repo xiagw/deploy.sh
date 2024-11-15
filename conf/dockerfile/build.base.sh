@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# shellcheck disable=SC2207
 set -xe
 
 _build() {
@@ -52,13 +52,11 @@ _build() {
 
 cmd_opt=()
 cmd_opt+=(
-    "$(
-        if command -v docker >/dev/null 2>&1; then
-            echo docker build
-        elif command -v podman >/dev/null 2>&1; then
-            echo podman build --force-rm --format=docker
-        fi
-    )"
+    $(if command -v docker; then
+        echo build
+    elif command -v podman; then
+        echo build --force-rm --format=docker
+    fi)
     --progress=plain
     --platform "linux/amd64,linux/arm64"
     --build-arg CHANGE_SOURCE=true
