@@ -82,6 +82,7 @@ _set_mirror() {
         ;;
     */python | */python3)
         command -v java && return
+        command -v mysqld && return
         pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
         command -v python3 && python3 -m pip config set global.index-url $pip_mirror
         command -v python && python -m pip config set global.index-url $pip_mirror
