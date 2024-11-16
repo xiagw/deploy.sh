@@ -16,17 +16,21 @@ set "REST_MINUTES=120"
 set "WORK_HOUR_8=8"
 set "WORK_HOUR_17=17"
 set "WORK_HOUR_21=21"
+set "DELAY_SECONDS=30"
+set "URL_HOST=http://192.168.5.1"
+set "URL_PORT=8899"
 
 echo.%1| findstr /i "^debug$ ^d$" >nul && set "DEBUG_MODE=1"
 echo.%1| findstr /i "^reset$ ^r$" >nul && goto :RESET
 echo.%1| findstr /i "^install$ ^i$" >nul && goto :INSTALL_TASK
+echo.%1| findstr /i "^server$ ^s$" >nul && goto :START_SERVER
 
 :: 获取当前时间信息，处理前导空格和确保24小时制
 for /f "tokens=1 delims=:" %%a in ('time /t') do (
     set "CURR_HOUR=%%a"
 )
-set "CURR_HOUR=%CURR_HOUR: =%"
-if %CURR_HOUR% LSS 10 set "CURR_HOUR=0%CURR_HOUR%"
+@REM set "CURR_HOUR=%CURR_HOUR: =%"
+@REM if %CURR_HOUR% LSS 10 set "CURR_HOUR=0%CURR_HOUR%"
 
 :: 获取当前星期几 (1-7, 其中1是周一)
 if "%DATE:~11%"=="周一" set "WEEKDAY=1"
@@ -44,6 +48,8 @@ if "%DEBUG_MODE%"=="1" (
 ) else (
     call :CHECK_TIME_LIMITS
 )
+
+call :TRIGGER
 
 :: 如果启动时间文件不存在，先创建
 if not exist "%PLAY_FILE%" ( echo %DATE% %TIME% > "%PLAY_FILE%" )
@@ -140,7 +146,7 @@ if "%DEBUG_MODE%"=="1" (
     exit /b 0
 )
 :: 执行关机
-shutdown /s /t 30 /c "%~1，系统将在30秒后关机" >nul 2>&1
+shutdown /s /t %DELAY_SECONDS% /c "%~1，系统将在%DELAY_SECONDS%秒后关机" >nul 2>&1
 if !ERRORLEVEL! neq 0 (
     call :LOG "执行关机命令失败"
     exit /b 1
@@ -151,6 +157,76 @@ exit /b 0
 :LOG
 echo [%DATE% %TIME%] %~1
 echo [%DATE% %TIME%] %~1 >> "%LOGFILE%"
+exit /b 0
+
+:TRIGGER
+curl.exe -fssSL -X POST %URL_HOST%/trigger | findstr /i "rest" >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    call :DO_SHUTDOWN "收到远程关机命令"
+    exit /b 0
+)
+exit /b 1
+
+:TRIGGER2
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+"try { ^
+    $content = (Invoke-RestMethod -Uri '%URL_HOST%/trigger' -Method POST); ^
+    if ($content -match 'rest') { exit 0 } else { exit 1 } ^
+} catch { exit 1 }"
+if %ERRORLEVEL% EQU 0 (
+    call :DO_SHUTDOWN "收到远程关机命令"
+    exit /b 0
+)
+exit /b 1
+
+:START_SERVER
+:: 检查管理员权限
+net session >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    call :LOG "需要管理员权限运行此命令"
+    powershell -Command "Start-Process '%~f0' -Verb RunAs -ArgumentList 'server'"
+    exit /b
+)
+
+:: 启动简单的HTTP服务器来监听关机命令
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+"$ErrorActionPreference = 'Stop'; ^
+try { ^
+    $listener = New-Object System.Net.HttpListener; ^
+    $listener.Prefixes.Add('http://+:%URL_PORT%/'); ^
+    $listener.Start(); ^
+    Write-Host '服务器已启动，监听端口 %URL_PORT%'; ^
+    while ($listener.IsListening) { ^
+        try { ^
+            $context = $listener.GetContext(); ^
+            $url = $context.Request.Url.LocalPath; ^
+            $response = $context.Response; ^
+            try { ^
+                if ($url -eq '/rest') { ^
+                    $buffer = [System.Text.Encoding]::UTF8.GetBytes('正在执行关机操作'); ^
+                    $response.OutputStream.Write($buffer, 0, $buffer.Length); ^
+                    $response.Close(); ^
+                    shutdown /s /t %DELAY_SECONDS% /c '收到远程关机命令，系统将在%DELAY_SECONDS%秒后关机'; ^
+                    break; ^
+                } else { ^
+                    $buffer = [System.Text.Encoding]::UTF8.GetBytes('服务正在运行'); ^
+                    $response.OutputStream.Write($buffer, 0, $buffer.Length); ^
+                } ^
+            } finally { ^
+                if ($response -ne $null) { $response.Close() } ^
+            } ^
+        } catch { ^
+            Write-Host $_.Exception.Message; ^
+        } ^
+    } ^
+} catch { ^
+    Write-Host ('错误: ' + $_.Exception.Message); ^
+} finally { ^
+    if ($listener -ne $null) { ^
+        $listener.Stop(); ^
+        $listener.Close(); ^
+    } ^
+}"
 exit /b 0
 
 :END
