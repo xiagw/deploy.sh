@@ -8,62 +8,76 @@
 endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
 
 show_oss_help() {
-    echo "OSS (对象存储服务) 操作"
-    echo
-    echo "全局选项："
-    echo "  -in, --internal     使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）"
-    echo
-    echo "命令："
-    echo "  list   [region]     列出 OSS 存储桶"
-    echo "  create <存储桶名称> [region]"
-    echo "                      创建 OSS 存储桶"
-    echo "  delete <存储桶名称> [region]"
-    echo "                      删除 OSS 存储桶"
-    echo "  bind-domain <存储桶名称> <域名>"
-    echo "                      为存储桶绑定自定义域名"
-    echo "  batch-copy <源路径> <目标路径> [文件类型列表] [存储类型]"
-    echo "                      批量复制文件。源路径和目标路径可以是："
-    echo "                      - OSS路径：oss://bucket-name/path/"
-    echo "                      - 本地路径：/path/to/local/dir/"
-    echo "                      存储类型仅在目标为OSS时有效"
-    echo "  batch-delete <存储桶/路径> [文件类型列表] [存储类型]"
-    echo "                      批量删除指定存储类型的对象: oss://bucket-name/path/"
-    echo "  uris <URI文件> <存储桶名称> [存储类型]"
-    echo "                      处理URI文件中的对象并设置存储类型"
-    echo "  logs <存储桶路径> [选项...]"
-    echo "                      查询存储桶访问日志"
-    echo
-    echo "logs 命令选项："
-    echo "  -s, --start-date DATE    开始日期 (YYYY-MM-DD)"
-    echo "  -e, --end-date DATE      结束日期 (YYYY-MM-DD)"
-    echo "  -f, --format FORMAT      输出格式 (human/json/tsv)"
-    echo "  -d, --domain DOMAIN      指定要查询的域名"
-    echo "  --status CODE            分析指定HTTP状态码的记录(如: 404,500,403)"
-    echo "  --file-types TYPES       指定要分析的文件类型（用逗号分隔，如：jpg,png,pdf）"
-    echo "  --target-bucket NAME     指定目标存储桶（用于自动处理分析结果）"
-    echo
-    echo "示例："
-    echo "基本操作："
-    echo "  $0 oss list              # 列出所有存储桶"
-    echo "  $0 oss --internal list   # 使用内网列出所有存储桶"
-    echo
-    echo "存储桶管理："
-    echo "  $0 oss create my-bucket"
-    echo "  $0 oss delete my-bucket"
-    echo "  $0 oss bind-domain my-bucket example.com"
-    echo
-    echo "批量操作："
-    echo "  $0 oss batch-copy oss://flynew/e/ oss://flyh5/e/              # OSS间复制"
-    echo "  $0 oss batch-copy /local/path/ oss://bucket/path/             # 本地上传到OSS"
-    echo "  $0 oss batch-copy oss://bucket/path/ /local/path/             # 从OSS下载到本地"
-    echo "  $0 oss batch-copy oss://flynew/e/ oss://flyh5/e/ file-list.txt IA  # 使用自定义文件类型列表"
-    echo "  $0 oss --internal batch-copy oss://flynew/e/ oss://flyh5/e/   # 使用内网进行复制"
-    echo
-    echo "日志分析："
-    echo "  $0 oss logs my-bucket/cdn_log/"
-    echo "  $0 oss logs my-bucket/cdn_log/ -s 2024-03-01 -e 2024-03-10 -f json"
-    echo "  $0 oss logs my-bucket/cdn_log/ --status 404 --file-types jpg,png,pdf"
-    echo "  $0 oss logs my-bucket/cdn_log/ --domain flyh5.cn --status 404 --target-bucket other-bucket"
+    cat <<'EOF'
+OSS (对象存储服务) 操作
+
+全局选项：
+  -in, --internal     使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）
+
+命令：
+  list   [region]     列出 OSS 存储桶
+  create <存储桶名称> [region]
+                      创建 OSS 存储桶
+  delete <存储桶名称> [region]
+                      删除 OSS 存储桶
+  bind-domain <存储桶名称> <域名>
+                      为存储桶绑定自定义域名
+  batch-copy <源路径> <目标路径> [选项...]
+                      批量复制文件。源路径和目标路径可以是：
+                      - OSS路径：oss://bucket-name/path/
+                      - 本地路径：/path/to/local/dir/
+                      选项：
+                        -l, --file-list FILE    指定包含文件类型列表的文件
+                        -s, --storage-class TYPE 指定存储类型(默认:IA)
+                        -f, --force             不提示确认直接复制
+  batch-delete <存储桶/路径> [选项...]
+                      批量删除指定存储类型的对象
+                      选项：
+                        -l, --file-list FILE    指定包含文件类型列表的文件
+                        -s, --storage-class TYPE 指定存储类型(默认:IA)
+                        -f, --force             不提示确认直接删除
+  uris <URI文件> <存储桶名称> [存储类型]
+                      处理URI文件中的对象并设置存储类型
+  logs <存储桶路径> [选项...]
+                      查询存储桶访问日志
+
+logs 命令选项：
+  -s, --start-date DATE    开始日期 (YYYY-MM-DD)
+  -e, --end-date DATE      结束日期 (YYYY-MM-DD)
+  -f, --format FORMAT      输出格式 (human/json/tsv)
+  -d, --domain DOMAIN      指定要查询的域名
+  --status CODE            分析指定HTTP状态码的记录(如: 404,500,403)
+  --file-types TYPES       指定要分析的文件类型（用逗号分隔，如：jpg,png,pdf）
+  --target-bucket NAME     指定目标存储桶（用于自动处理分析结果）
+
+示例：
+基本操作：
+  $0 oss list              # 列出所有存储桶
+  $0 oss --internal list   # 使用内网列出所有存储桶
+
+存储桶管理：
+  $0 oss create my-bucket
+  $0 oss delete my-bucket
+  $0 oss bind-domain my-bucket example.com
+
+批量操作：
+  $0 oss batch-copy oss://flynew/e/ oss://flyh5/e/              # OSS间复制
+  $0 oss batch-copy /local/path/ oss://bucket/path/             # 本地上传到OSS
+  $0 oss batch-copy oss://bucket/path/ /local/path/             # 从OSS下载到本地
+  $0 oss batch-copy oss://flynew/e/ oss://flyh5/e/ file-list.txt IA  # 使用自定义文件类型列表
+  $0 oss --internal batch-copy oss://flynew/e/ oss://flyh5/e/   # 使用内网进行复制
+  $0 oss batch-delete oss://bucket/path/                    # 使用默认文件类型列表和存储类型
+  $0 oss batch-delete oss://bucket/path/ -s IA          # 指定存储类型
+  $0 oss batch-delete oss://bucket/path/ -l types.txt   # 指定文件类型列表
+  $0 oss batch-delete oss://bucket/path/ -f             # 不提示确认
+  $0 oss batch-delete oss://bucket/path/ -f -s IA -l types.txt  # 组合使用
+
+日志分析：
+  $0 oss logs my-bucket/cdn_log/
+  $0 oss logs my-bucket/cdn_log/ -s 2024-03-01 -e 2024-03-10 -f json
+  $0 oss logs my-bucket/cdn_log/ --status 404 --file-types jpg,png,pdf
+  $0 oss logs my-bucket/cdn_log/ --domain flyh5.cn --status 404 --target-bucket other-bucket
+EOF
 }
 
 handle_oss_commands() {
@@ -106,7 +120,7 @@ handle_oss_commands() {
     *)
         echo "错误：未知的 OSS 操作：$operation" >&2
         show_oss_help
-        exit 1
+        return 1
         ;;
     esac
 }
@@ -129,8 +143,8 @@ oss_parse_cdn_logs() {
         -s | --start-date)
             if [[ -z "$2" || "$2" == -* ]]; then
                 echo "错误：--start-date 选项需要指定日期" >&2
-                return 1
-            fi
+        return 1
+    fi
             start_date="$2"
             shift
             ;;
@@ -481,20 +495,48 @@ generate_large_files_list() {
     echo "$temp_file"
 }
 
+# 修改 oss_batch_copy 函数
 oss_batch_copy() {
+    local OPTIND OPTARG opt
     local source="$1"
     local dest="$2"
-    local file_list="$3"
-    local storage_class="${4:-IA}"
+    local file_list=""
+    local storage_class="IA"
+    local force=false
+
+    # 定义使用说明
+    local usage="用法: $0 oss batch-copy <源路径> <目标路径> [-l|--file-list FILE] [-s|--storage-class TYPE] [-f|--force]
+源路径和目标路径格式：
+  - OSS路径：oss://bucket-name/path/
+  - 本地路径：/path/to/local/dir/"
+
+    # 前两个参数必须是源路径和目标路径
+    shift 2
 
     if [ -z "$source" ] || [ -z "$dest" ]; then
-        echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-copy <源路径> <目标路径> [包含文件列表的文件] [存储类型]" >&2
-        echo "源路径和目标路径格式：" >&2
-        echo "  - OSS路径：oss://bucket-name/path/" >&2
-        echo "  - 本地路径：/path/to/local/dir/" >&2
+        echo "错误：缺少源路径或目标路径" >&2
+        echo "$usage" >&2
         return 1
     fi
+
+    # 解析选项
+    while getopts ":fl:s:" opt; do
+        case $opt in
+        f) force=true ;;
+        l) file_list="$OPTARG" ;;
+        s) storage_class="$OPTARG" ;;
+        \?)
+            echo "错误：未知的选项 -$OPTARG" >&2
+            echo "$usage" >&2
+            return 1
+            ;;
+        :)
+            echo "错误：选项 -$OPTARG 需要参数" >&2
+            echo "$usage" >&2
+            return 1
+            ;;
+        esac
+    done
 
     # 如果没有提供文件列表，则自动生成
     if [ -z "$file_list" ]; then
@@ -564,20 +606,47 @@ oss_batch_copy() {
     fi
 
     # 如果使用了临时文件，则删除它
-    rm -f "$temp_list_file"
+    [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
 }
 
 # 修改 oss_batch_delete 函数，添加内网支持
 oss_batch_delete() {
+    local OPTIND OPTARG opt
     local bucket_path="$1"
-    local file_list="$2"
-    local storage_class="${3:-IA}"
+    local file_list=""
+    local storage_class="IA"
+    local force=false
+
+    # 定义使用说明
+    local usage="用法: $0 oss batch-delete <oss://存储桶/路径> [-l|--file-list FILE] [-s|--storage-class TYPE] [-f|--force]"
+
+    # 第一个参数必须是存储桶路径
+    shift
 
     if [ -z "$bucket_path" ]; then
-        echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-delete <存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
+        echo "错误：缺少oss://存储桶/路径" >&2
+        echo "$usage" >&2
         return 1
     fi
+
+    # 解析选项
+    while getopts ":fl:s:" opt; do
+        case $opt in
+        f) force=true ;;
+        l) file_list="$OPTARG" ;;
+        s) storage_class="$OPTARG" ;;
+        \?)
+            echo "错误：未知的选项 -$OPTARG" >&2
+            echo "$usage" >&2
+            return 1
+            ;;
+        :)
+            echo "错误：选项 -$OPTARG 需要参数" >&2
+            echo "$usage" >&2
+            return 1
+            ;;
+        esac
+    done
 
     # 如果没有提供文件列表，则自动生成
     if [ -z "$file_list" ]; then
@@ -598,12 +667,14 @@ oss_batch_delete() {
     tr '\n' ' ' <"$file_list"
     echo
 
-    read -r -p "请输入 'YES' 以确认删除操作: " confirm
-
-    if [ "$confirm" != "YES" ]; then
-        echo "操作已取消。"
-        [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
-        return 1
+    # 如果不是强制模式，需要确认
+    if [ "$force" = false ]; then
+        read -r -p "请输入 'YES' 以确认删除操作: " confirm
+        if [ "$confirm" != "YES" ]; then
+            echo "操作已取消。"
+            [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
+            return 1
+        fi
     fi
 
     local result
@@ -1026,3 +1097,4 @@ set_object_standard() {
     echo "成功处理数量：$processed_count"
     echo "未处理数量：$((total_count - processed_count))"
 }
+
