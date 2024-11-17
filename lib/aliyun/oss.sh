@@ -27,7 +27,7 @@ show_oss_help() {
     echo "                      - 本地路径：/path/to/local/dir/"
     echo "                      存储类型仅在目标为OSS时有效"
     echo "  batch-delete <存储桶/路径> [文件类型列表] [存储类型]"
-    echo "                      批量删除指定存储类型的对象"
+    echo "                      批量删除指定存储类型的对象: oss://bucket-name/path/"
     echo "  uris <URI文件> <存储桶名称> [存储类型]"
     echo "                      处理URI文件中的对象并设置存储类型"
     echo "  logs <存储桶路径> [选项...]"
@@ -609,7 +609,7 @@ oss_batch_delete() {
     local result
     result=$(ossutil --profile "${profile:-}" \
         --endpoint "$endpoint_url" \
-        rm "oss://$bucket_path" \
+        rm "$bucket_path" \
         --all-versions -r -f \
         --include-from "$file_list" \
         --metadata-include "x-oss-storage-class=$storage_class")
