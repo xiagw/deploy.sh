@@ -62,34 +62,42 @@ show_oss_help() {
 }
 
 handle_oss_commands() {
-    local operation=${1:-list}
-    shift
+    local operation=""
+    local args=()
 
     # 先解析全局参数
-    local args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
-        -in | --internal) endpoint_url="http://oss-${region:-cn-hangzhou}-internal.aliyuncs.com" ;;
-        *) args+=("$1") ;;
+        -in | --internal)
+            endpoint_url="http://oss-${region:-cn-hangzhou}-internal.aliyuncs.com"
+            ;;
+        *)
+            if [ -z "$operation" ]; then
+                operation=$1
+            else
+                args+=("$1")
+            fi
+            ;;
         esac
         shift
     done
 
-    # 重置参数为剩余的非全局参数
-    set -- "${args[@]}"
+    # 如果没有指定操作，默认为 list
+    operation=${operation:-list}
 
+    # 根据操作调用相应的函数
     case "$operation" in
-    list) oss_list "$@" ;;
-    create) oss_create "$@" ;;
-    delete) oss_delete "$@" ;;
-    bind-domain) oss_bind_domain "$@" ;;
-    upload-cert) oss_upload_cert "$@" ;;
-    delete-cert) oss_delete_cert "$@" ;;
-    deploy-cert) oss_deploy_cert "$@" ;;
-    batch-copy) oss_batch_copy "$@" ;;
-    batch-delete) oss_batch_delete "$@" ;;
-    logs) oss_parse_cdn_logs "$@" ;;
-    uris) set_object_standard "$@" ;;
+    list) oss_list "${args[@]}" ;;
+    create) oss_create "${args[@]}" ;;
+    delete) oss_delete "${args[@]}" ;;
+    bind-domain) oss_bind_domain "${args[@]}" ;;
+    upload-cert) oss_upload_cert "${args[@]}" ;;
+    delete-cert) oss_delete_cert "${args[@]}" ;;
+    deploy-cert) oss_deploy_cert "${args[@]}" ;;
+    batch-copy) oss_batch_copy "${args[@]}" ;;
+    batch-delete) oss_batch_delete "${args[@]}" ;;
+    logs) oss_parse_cdn_logs "${args[@]}" ;;
+    uris) set_object_standard "${args[@]}" ;;
     *)
         echo "错误：未知的 OSS 操作：$operation" >&2
         show_oss_help
