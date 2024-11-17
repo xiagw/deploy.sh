@@ -21,8 +21,11 @@ show_oss_help() {
     echo "                      删除 OSS 存储桶"
     echo "  bind-domain <存储桶名称> <域名>"
     echo "                      为存储桶绑定自定义域名"
-    echo "  batch-copy <源存储桶/路径> <目标存储桶/路径> [文件类型列表] [存储类型]"
-    echo "                      批量复制对象并设置存储类型"
+    echo "  batch-copy <源路径> <目标路径> [文件类型列表] [存储类型]"
+    echo "                      批量复制文件。源路径和目标路径可以是："
+    echo "                      - OSS路径：oss://bucket-name/path/"
+    echo "                      - 本地路径：/path/to/local/dir/"
+    echo "                      存储类型仅在目标为OSS时有效"
     echo "  batch-delete <存储桶/路径> [文件类型列表] [存储类型]"
     echo "                      批量删除指定存储类型的对象"
     echo "  uris <URI文件> <存储桶名称> [存储类型]"
@@ -50,7 +53,9 @@ show_oss_help() {
     echo "  $0 oss bind-domain my-bucket example.com"
     echo
     echo "批量操作："
-    echo "  $0 oss batch-copy flynew/e/ flyh5/e/                    # 使用默认文件类型列表和IA存储类型"
+    echo "  $0 oss batch-copy flynew/e/ flyh5/e/                    # OSS间复制"
+    echo "  $0 oss batch-copy /local/path/ oss://bucket/path/       # 本地上传到OSS"
+    echo "  $0 oss batch-copy oss://bucket/path/ /local/path/       # 从OSS下载到本地"
     echo "  $0 oss batch-copy flynew/e/ flyh5/e/ file-list.txt IA   # 使用自定义文件类型列表"
     echo "  $0 oss --internal batch-copy flynew/e/ flyh5/e/         # 使用内网进行复制"
     echo
@@ -484,7 +489,10 @@ oss_batch_copy() {
 
     if [ -z "$source" ] || [ -z "$dest" ]; then
         echo "错误：缺少必要参数" >&2
-        echo "用法：$0 oss batch-copy <源存储桶/路径> <目标存储桶/路径> [包含文件列表的文件] [存储类型]" >&2
+        echo "用法：$0 oss batch-copy <源路径> <目标路径> [包含文件列表的文件] [存储类型]" >&2
+        echo "源路径和目标路径格式：" >&2
+        echo "  - OSS路径：oss://bucket-name/path/" >&2
+        echo "  - 本地路径：/path/to/local/dir/" >&2
         return 1
     fi
 
@@ -499,42 +507,64 @@ oss_batch_copy() {
         return 1
     fi
 
-    echo "开始批量复制对象："
-    echo "源路径： oss://$source"
-    echo "目标路径： oss://$dest"
+    # 判断源路径和目标路径的类型
+    local source_type="local"
+    local dest_type="local"
+    if [[ "$source" == oss://* ]]; then
+        source_type="oss"
+    fi
+    if [[ "$dest" == oss://* ]]; then
+        dest_type="oss"
+    fi
+
+    echo "开始批量复制："
+    echo "源路径： $source (${source_type})"
+    echo "目标路径： $dest (${dest_type})"
     echo "文件类型列表：$file_list"
     echo "存储类型：$storage_class"
-
     # 显示将要处理的文件类型
     echo "将要处理的文件类型："
     tr '\n' ' ' <"$file_list"
     echo
 
-    local result
-    result=$(ossutil --profile "${profile:-}" \
-        --endpoint "$endpoint_url" \
-        cp "oss://$source" "oss://$dest" \
-        -r -f --update \
-        --include-from "$file_list" \
-        --metadata-include "x-oss-storage-class=$storage_class" \
-        --storage-class "$storage_class")
-
-    local status=$?
-    echo "$result"
-
-    # 如果使用了临时文件，则删除它
-    if [ -n "$temp_list_file" ]; then
-        rm -f "$temp_list_file"
-    fi
-
-    if [ $status -eq 0 ]; then
-        echo "批量复制操作完成"
-        log_result "$profile" "$region" "oss" "batch-copy" "成功：$result"
+    # 根据源和目标类型选择不同的复制命令
+    if [ "$source_type" = "oss" ] && [ "$dest_type" = "oss" ]; then
+        # OSS 到 OSS 的复制
+        ossutil --profile "${profile:-}" \
+            --endpoint "$endpoint_url" \
+            cp "$source" "$dest" \
+            -r -f --update \
+            --include-from "$file_list" \
+            --metadata-include "x-oss-storage-class=$storage_class" \
+            --storage-class "$storage_class"
+    elif [ "$source_type" = "local" ] && [ "$dest_type" = "oss" ]; then
+        # 本地到 OSS 的上传
+        ossutil --profile "${profile:-}" \
+            --endpoint "$endpoint_url" \
+            cp "$source" "$dest" \
+            -r -f --update \
+            --include-from "$file_list" \
+            --metadata-include "x-oss-storage-class=$storage_class" \
+            --storage-class "$storage_class"
+    elif [ "$source_type" = "oss" ] && [ "$dest_type" = "local" ]; then
+        # OSS 到本地的下载
+        # 确保目标目录存在
+        mkdir -p "$dest"
+        ossutil --profile "${profile:-}" \
+            --endpoint "$endpoint_url" \
+            cp "$source" "$dest" \
+            -r -f --update \
+            --include-from "$file_list" \
+            --metadata-include "x-oss-storage-class=$storage_class" \
+            --storage-class "$storage_class"
     else
-        echo "批量复制操作失败"
-        log_result "$profile" "$region" "oss" "batch-copy" "失败：$result"
+        echo "错误：不支持本地到本地的复制，请使用系统的 cp 命令" >&2
+        [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
         return 1
     fi
+
+    # 如果使用了临时文件，则删除它
+    rm -f "$temp_list_file"
 }
 
 # 修改 oss_batch_delete 函数，添加内网支持
@@ -564,7 +594,6 @@ oss_batch_delete() {
     echo "存储桶/路径：$bucket_path"
     echo "文件类型列表：$file_list"
     echo "存储类型：$storage_class"
-
     echo "将要处理的文件类型："
     tr '\n' ' ' <"$file_list"
     echo
