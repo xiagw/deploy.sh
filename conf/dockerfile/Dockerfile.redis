@@ -1,4 +1,8 @@
-FROM redis:latest
+ARG BASE_IMAGE=redis
+ARG IMAGE_VERSION=latest
+FROM ${BASE_IMAGE}:${IMAGE_VERSION}
+
+LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
 
 ARG TZ=UTC
 

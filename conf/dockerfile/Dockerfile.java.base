@@ -1,9 +1,11 @@
 # ARG JDK_IMAGE=openjdk
 ARG JDK_IMAGE=amazoncorretto
+# JDK version options: 8, 17, 21
 ARG JDK_VERSION=8
-# ARG JDK_VERSION=17
-# ARG JDK_VERSION=21
 FROM ${JDK_IMAGE}:${JDK_VERSION}
+
+LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
+
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG TZ=Asia/Shanghai
@@ -11,15 +13,25 @@ ARG INSTALL_FONTS=false
 ARG INSTALL_FFMPEG=false
 ARG INSTALL_LIBREOFFICE=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+
 ENV TZ=$TZ
+
 EXPOSE 8080 8081 8082
+
 WORKDIR /app
+
 CMD ["bash", "/opt/run0.sh"]
-RUN --mount=type=cache,target=/var/cache/yum \
+
+RUN --mount=type=cache,target=/var/cache/yum,sharing=locked \
     --mount=type=bind,target=/src,rw \
-    if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
-    elif [ -f build.sh ]; then bash build.sh; \
-    else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
+    if [ -f /src/root/opt/build.sh ]; then \
+        bash /src/root/opt/build.sh; \
+    elif [ -f build.sh ]; then \
+        bash build.sh; \
+    else \
+        curl -fLo build.sh "$BUILD_URL" && \
+        bash build.sh; \
+    fi
 
 ONBUILD COPY ./root/ /
-ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi
+ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi

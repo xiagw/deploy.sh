@@ -1,16 +1,31 @@
-FROM nginx:stable-alpine
+# Base image selection
+ARG BASE_IMAGE=nginx
+ARG IMAGE_VERSION=stable-alpine
+FROM ${BASE_IMAGE}:${IMAGE_VERSION}
+
+LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
+
 ARG IN_CHINA=false
+ARG TZ=UTC
 ARG CHANGE_SOURCE=false
 ARG INSTALL_NGINX=true
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+
+
+ENV TZ=${TZ}
+
 EXPOSE 80 81 443
 WORKDIR /app
-RUN --mount=type=cache,target=/var/cache/apk \
+RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
     --mount=type=bind,target=/src,rw \
-    if [ -f /src/root/opt/build.sh ]; then sh /src/root/opt/build.sh; \
-    elif [ -f build.sh ]; then sh build.sh; \
-    else curl -fLo build.sh $BUILD_URL; sh build.sh; fi
+    if [ -f /src/root/opt/build.sh ]; then \
+        sh /src/root/opt/build.sh; \
+    elif [ -f build.sh ]; then \
+        sh build.sh; \
+    else \
+        curl -fLo build.sh "$BUILD_URL" && \
+        sh build.sh; \
+    fi
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then sh /opt/onbuild.sh; else :; fi
-## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:nginx-alpine-base --push -f Dockerfile.nginx --progress=plain --build-arg IN_CHINA="true" .
