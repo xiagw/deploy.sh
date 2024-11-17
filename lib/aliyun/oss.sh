@@ -53,11 +53,11 @@ show_oss_help() {
     echo "  $0 oss bind-domain my-bucket example.com"
     echo
     echo "批量操作："
-    echo "  $0 oss batch-copy flynew/e/ flyh5/e/                    # OSS间复制"
-    echo "  $0 oss batch-copy /local/path/ oss://bucket/path/       # 本地上传到OSS"
-    echo "  $0 oss batch-copy oss://bucket/path/ /local/path/       # 从OSS下载到本地"
-    echo "  $0 oss batch-copy flynew/e/ flyh5/e/ file-list.txt IA   # 使用自定义文件类型列表"
-    echo "  $0 oss --internal batch-copy flynew/e/ flyh5/e/         # 使用内网进行复制"
+    echo "  $0 oss batch-copy oss://flynew/e/ oss://flyh5/e/              # OSS间复制"
+    echo "  $0 oss batch-copy /local/path/ oss://bucket/path/             # 本地上传到OSS"
+    echo "  $0 oss batch-copy oss://bucket/path/ /local/path/             # 从OSS下载到本地"
+    echo "  $0 oss batch-copy oss://flynew/e/ oss://flyh5/e/ file-list.txt IA  # 使用自定义文件类型列表"
+    echo "  $0 oss --internal batch-copy oss://flynew/e/ oss://flyh5/e/   # 使用内网进行复制"
     echo
     echo "日志分析："
     echo "  $0 oss logs my-bucket/cdn_log/"
@@ -590,7 +590,7 @@ oss_batch_delete() {
         return 1
     fi
 
-    echo "警告：您即将批量删除以下内容："
+    echo "警告：您即将批量[彻底]删除以下内容："
     echo "存储桶/路径：$bucket_path"
     echo "文件类型列表：$file_list"
     echo "存储类型：$storage_class"
