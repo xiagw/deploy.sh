@@ -3,7 +3,7 @@
 
 _add_account() {
     if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -w "$user_name"; then
-        if _get_yes_no "user $user_name exists, update $user_name password?"; then
+        if _get_yes_no "User [$user_name] exists, update $user_name password?"; then
             user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
             $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand}" --name "$user_name" --email "$user_name@${gitlab_domain}" --skip-reconfirmation 1
             return
@@ -12,7 +12,7 @@ _add_account() {
     fi
 
     $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand}" --email "${user_name}@${gitlab_domain}" --skip-confirmation 1 --can-create-group 0
-    _msg log "$g_me_log" "username=$user_name / password=$password_rand"
+    _msg log "$SCRIPT_LOG" "username=$user_name / password=$password_rand"
 
     _msg "add to default group \"pms\"."
     pms_group_id=$($cmd_gitlab group list --search pms | jq -r '.[] | select (.name == "pms") | .id')
@@ -20,9 +20,10 @@ _add_account() {
     $cmd_gitlab group-member create --access-level 30 --group-id "$pms_group_id" --user-id "$user_id"
 
     $cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[] | (.id | tostring) + "\t" + .name'
+    ## deveop 30, maintain 40, guest 10, reporter 20
     select group_id in $($cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[].id') quit; do
         [ "${group_id:-quit}" == quit ] && break
-        $cmd_gitlab group-member create --access-level 30 --group-id "$group_id" --user-id "$user_id"
+        $cmd_gitlab group-member create --access-level 40 --group-id "$group_id" --user-id "$user_id"
     done
 }
 
@@ -42,7 +43,7 @@ _send_msg() {
 _new_element_user() {
     cd ~/src/matrix-docker-ansible-deploy || exit 1
     # file_secret=inventory/host_vars/matrix.example.com/user_pass.txt
-    _msg log "$g_me_log" "username=${user_name} / password=${password_rand}"
+    _msg log "$SCRIPT_LOG" "username=${user_name} / password=${password_rand}"
     sed -i -e 's/^matrix.example1.com/#matrix.example2.com/' inventory/hosts
     ansible-playbook -i inventory/hosts setup.yml --extra-vars="username=$user_name password=$password_rand admin=no" --tags=register-user
     # ansible-playbook -i inventory/hosts setup.yml --extra-vars='username=fangzheng password=Eefaiyau6de1' --tags=update-user-password
@@ -140,7 +141,7 @@ EOF
 }
 
 _common_lib() {
-    common_lib="$g_me_path/../lib/common.sh"
+    common_lib="$(dirname "$SCRIPT_DIR")/lib/common.sh"
     if [ ! -f "$common_lib" ]; then
         common_lib='/tmp/common.sh'
         include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
@@ -152,12 +153,11 @@ _common_lib() {
 
 main() {
     set -e
-    unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
-    g_me_name="$(basename "$0")"
-    g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
-    g_me_data_path="$g_me_path/../data"
-    g_me_log="$g_me_data_path/${g_me_name}.log"
-    g_me_env="$g_me_data_path/${g_me_name}.env"
+    SCRIPT_NAME="$(basename "$0")"
+    SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+    SCRIPT_DATA="$(dirname "$SCRIPT_DIR")/data"
+    SCRIPT_LOG="$SCRIPT_DATA/${SCRIPT_NAME}.log"
+    SCRIPT_ENV="$SCRIPT_DATA/${SCRIPT_NAME}.env"
 
     _common_lib
 
@@ -179,12 +179,8 @@ main() {
     elif [[ -f "$HOME/.config/python-gitlab.cfg" ]]; then
         gitlab_python_config="$HOME/.config/python-gitlab.cfg"
     fi
-    select f in $(grep '^\[' "$gitlab_python_config" | grep -v 'global' | sed -e 's/\[//g; s/\]//g'); do
-        gitlab_profile=$f
-        break
-    done
-
-    . "$g_me_env" "$gitlab_profile"
+    gitlab_profile=$(grep '^\[' "$gitlab_python_config" | grep -v 'global' | sed -e 's/\[//g; s/\]//g' | fzf)
+    . "$SCRIPT_ENV" "$gitlab_profile"
 
     _msg "gitlab profile is: $gitlab_profile"
     cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
@@ -198,7 +194,7 @@ main() {
     fi
 
     password_rand=$(_get_random_password 2>/dev/null)
-    _add_account
+    _add_account "$gitlab_domain" "$user_name" "$password_rand"
     _send_msg
     # _new_element_user
 }
