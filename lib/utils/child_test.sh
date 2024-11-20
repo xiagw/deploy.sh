@@ -61,7 +61,7 @@ _setup() {
         fi
     }
 
-    # 默认时间设置
+    # 修改date函数实现
     date() {
         case "$1" in
             +%H) echo "${MOCK_HOUR:-12}" ;;  # 默认中午12点
@@ -70,9 +70,18 @@ _setup() {
             +%F" "%T) echo "2024-01-01 ${MOCK_HOUR:-12}:00:00" ;;
             +%s)
                 if [[ $* == *"-d"* ]]; then
-                    echo "$((MOCK_TIMESTAMP - 3600))"  # 1小时前
+                    # 从参数中提取时间字符串
+                    local time_str
+                    time_str=$(echo "$*" | grep -o '"[^"]*"' | tr -d '"')
+                    # 根据时间字符串返回合适的时间戳
+                    case "${time_str}" in
+                        *"23:00:00"*) echo "1704067200" ;;  # 23:00
+                        *"18:00:00"*) echo "1704049200" ;;  # 18:00
+                        *"12:00:00"*) echo "1704028800" ;;  # 12:00
+                        *) echo "1704067200" ;;  # 默认值
+                    esac
                 else
-                    echo "${MOCK_TIMESTAMP:-1704096000}"  # 当前时间
+                    echo "${MOCK_TIMESTAMP:-1704028800}"  # 当前时间
                 fi
                 ;;
             -d*) echo "2024-01-01 ${MOCK_HOUR:-12}:00:00" ;;
@@ -93,24 +102,119 @@ _teardown() {
 
 test_night_time_limit() {
     _setup
-    MOCK_HOUR=23
-    MOCK_WEEKDAY=6
     debug_mod=1
+
+    # 创建临时目录和假的date命令
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    cat > "${temp_dir}/date" << 'EOF'
+#!/bin/bash
+case "$1" in
+    +%H) echo "23";;  # 晚上11点
+    +%u) echo "6";;   # 周六
+    +%F_%T) echo "2024-01-01_23:00:00";;
+    +%F" "%T) echo "2024-01-01 23:00:00";;
+    +%s)
+        if [[ $* == *"-d"* ]]; then
+            echo "1704067200"
+        else
+            echo "1704067200"
+        fi
+        ;;
+    *) echo "2024-01-01 23:00:00";;
+esac
+EOF
+    chmod +x "${temp_dir}/date"
 
     # 禁用其他检查
     _trigger() { return 1; }
-    _get_minutes_elapsed() { echo "150"; }
+    _get_minutes_elapsed() { echo "150"; }  # 设置足够长的休息时间
 
-    # 创建测试文件
-    echo "2024-01-01 23:00:00" > "${file_play}"
-    echo "2024-01-01 21:00:00" > "${file_rest}"
+    # 将临时目录添加到PATH的最前面，并导出
+    export PATH="${temp_dir}:$PATH"
+    # 取消_setup中的date函数定义
+    unset -f date
 
-    # 运行脚本，但不捕获 _do_shutdown 的输出
-    output=$({ _check_time_limits; } 2>&1)
+    # 验证使用的是正确的date命令
+    local date_path
+    date_path=$(which date)
+    if [[ ${date_path} != "${temp_dir}/date" ]]; then
+        echo "错误: 使用了错误的date命令: ${date_path}"
+        rm -rf "${temp_dir}"
+        return 1
+    fi
+
+    # 运行测试，只执行时间限制检查
+    output=$(_check_time_limits 2>&1)
     echo "测试输出: ${output}"
 
-    _assert "[[ \"${output}\" == *'禁止使用时间段'* ]]" "应该触发夜间时间限制"
-sleep 600
+    # 检查是否包含正确的关机原因
+    _assert "[[ \"${output}\" == *'禁止使用时间段'* ]]" "应该触发夜间时间限制" || {
+        rm -rf "${temp_dir}"
+        return 1
+    }
+
+    # 清理
+    rm -rf "${temp_dir}"
+    _teardown
+}
+
+test_workday_time_limit() {
+    _setup
+    debug_mod=1
+
+    # 创建临时目录和假的date命令
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    cat > "${temp_dir}/date" << 'EOF'
+#!/bin/bash
+case "$1" in
+    +%H) echo "18";;  # 晚上6点
+    +%u) echo "3";;   # 周三
+    +%F_%T) echo "2024-01-01_18:00:00";;
+    +%F" "%T) echo "2024-01-01 18:00:00";;
+    +%s)
+        if [[ $* == *"-d"* ]]; then
+            echo "1704049200"
+        else
+            echo "1704049200"
+        fi
+        ;;
+    *) echo "2024-01-01 18:00:00";;
+esac
+EOF
+    chmod +x "${temp_dir}/date"
+
+    # 禁用其他检查
+    _trigger() { return 1; }
+    _get_minutes_elapsed() { echo "150"; }  # 设置足够长的休息时间
+
+    # 将临时目录添加到PATH的最前面，并导出
+    export PATH="${temp_dir}:$PATH"
+    # 取消_setup中的date函数定义
+    unset -f date
+
+    # 验证使用的是正确的date命令
+    local date_path
+    date_path=$(which date)
+    if [[ ${date_path} != "${temp_dir}/date" ]]; then
+        echo "错误: 使用了错误的date命令: ${date_path}"
+        rm -rf "${temp_dir}"
+        return 1
+    fi
+
+    # 运行测试，只执行时间限制检查
+    output=$(_check_time_limits 2>&1)
+    echo "测试输出: ${output}"
+
+    # 检查是否包含正确的关机原因
+    _assert "[[ \"${output}\" == *'工作日17点后'* ]]" "应该触发工作日时间限制" || {
+        rm -rf "${temp_dir}"
+        return 1
+    }
+
+    # 清理
+    rm -rf "${temp_dir}"
     _teardown
 }
 
@@ -207,24 +311,7 @@ test_update_play_time() {
     _teardown
 }
 
-# 添加新的测试用例：测试工作日时间限制
-test_workday_time_limit() {
-    _setup
-    MOCK_HOUR=18  # 晚上6点
-    MOCK_WEEKDAY=3  # 周三
-    debug_mod=1
 
-    # 禁用其他检查
-    _trigger() { return 1; }
-    _get_minutes_elapsed() { echo "150"; }
-
-    # 运行脚本，但不捕获 _do_shutdown 的输出
-    output=$({ _check_time_limits; } 2>&1)
-    echo "测试输出: ${output}"
-
-    _assert "[[ \"${output}\" == *'工作日17点后'* ]]" "应该触发工作日时间限制"
-    _teardown
-}
 
 # 修改文件格式验证函数
 _validate_time_format_regex() {
@@ -322,6 +409,7 @@ test_invalid_time_format() {
 run_all_tests() {
     local failed=0
     local total=0
+    local test_result=0
 
     echo "开始运行测试..."
     echo "===================="
@@ -331,6 +419,7 @@ run_all_tests() {
         echo "🧪 运行测试: ${test_func}"
         if ! $test_func; then
             ((failed++))
+            test_result=1
         fi
         echo "--------------------"
     done
@@ -338,7 +427,7 @@ run_all_tests() {
     echo "===================="
     echo "测试完成: 总共 ${total} 个测试，失败 ${failed} 个"
 
-    return $failed
+    return $test_result
 }
 
 # 如果直接运行此脚本，则执行所有测试
