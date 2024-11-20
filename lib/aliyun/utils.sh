@@ -21,9 +21,9 @@ show_help() {
     echo "可用服务:"
     echo "  list-all - 列出所有服务的资源"
     echo "  ecs      - 弹性计算服务"
-    echo "  dns      - 域名解析服务"
     echo "  oss      - 对象存储服务"
     echo "  domain   - 域名服务"
+    echo "  dns      - 域名解析服务"
     echo "  cdn      - 内容分发网络"
     echo "  lbs      - 负载均衡服务"
     echo "  rds      - 关系型数据库服务"
@@ -31,13 +31,13 @@ show_help() {
     echo "  vpc      - 专有网络"
     echo "  nat      - NAT网关"
     echo "  eip      - 弹性公网IP"
-    echo "  config   - 配置管理"
-    echo "  cost     - 费用查询"
     echo "  cas      - 证书服务"
     echo "  ram      - 访问控制"
     echo "  nas      - 文件存储"
     echo "  ack      - 容器服务 Kubernetes 版"
+    echo "  config   - 配置管理"
     echo "  balance  - 账户余额查询"
+    echo "  cost     - 费用查询"
     echo
     echo "每个服务的具体操作和参数，请使用 '$0 <服务>' 查看"
     echo
@@ -122,19 +122,19 @@ validate_params() {
     ecs)
         case "$operation" in
         list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 ecs list [region]" >&2
+            echo "错误：参数错误。用法：$0 ecs list" >&2
             return 1
         } ;;
         create) [[ ${#params[@]} -ge 3 ]] || {
-            echo "错误：缺少参数。用法：$0 ecs create <名称> <类型> <镜像ID> [region]" >&2
+            echo "错误：缺少参数。用法：$0 ecs create <名称> <类型> <镜像ID>" >&2
             return 1
         } ;;
         update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 ecs update <实例ID> <新名称> [region]" >&2
+            echo "错误：缺少参数。用法：$0 ecs update <实例ID> <新名称>" >&2
             return 1
         } ;;
         delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 ecs delete <实例ID> [region]" >&2
+            echo "错误：缺少参数。用法：$0 ecs delete <实例ID>" >&2
             return 1
         } ;;
         *)
@@ -182,15 +182,15 @@ validate_params() {
     oss)
         case "$operation" in
         list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 oss list [region]" >&2
+            echo "错误：参数错误。用法：$0 oss list" >&2
             return 1
         } ;;
         create) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 oss create <存储桶名称> [region]" >&2
+            echo "错误：缺少参数。用法：$0 oss create <存储桶名称>" >&2
             return 1
         } ;;
         delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 oss delete <存储桶名称> [region]" >&2
+            echo "错误：缺少参数。用法：$0 oss delete <存储桶名称>" >&2
             return 1
         } ;;
         *)
@@ -237,11 +237,11 @@ validate_params() {
             local lb_type=${params[0]}
             case "$lb_type" in
             slb) [[ ${#params[@]} -ge 4 ]] || {
-                echo "错误：缺少参数。用法：$0 lbs create slb <名称> <规格> <付费类型> [地域]" >&2
+                echo "错误：缺少参数。用法：$0 lbs create slb <名称> <规格> <付费类型>" >&2
                 return 1
             } ;;
             nlb | alb) [[ ${#params[@]} -ge 4 ]] || {
-                echo "错误：缺少参数。用法：$0 lbs create $lb_type <名称> <VPC-ID> <交换机ID> [地域]" >&2
+                echo "错误：缺少参数。用法：$0 lbs create $lb_type <名称> <VPC-ID> <交换机ID>" >&2
                 return 1
             } ;;
             *)
@@ -251,11 +251,11 @@ validate_params() {
             esac
             ;;
         update) [[ ${#params[@]} -ge 3 ]] || {
-            echo "错误：缺少参数。用法：$0 lbs update <type> <实例ID> <新名称> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 lbs update <type> <实例ID> <新名称>" >&2
             return 1
         } ;;
         delete) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 lbs delete <type> <实例ID> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 lbs delete <type> <实例ID>" >&2
             return 1
         } ;;
         *)
@@ -267,19 +267,19 @@ validate_params() {
     rds)
         case "$operation" in
         list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 rds list [region]" >&2
+            echo "错误：参数错误。用法：$0 rds list" >&2
             return 1
         } ;;
         create) [[ ${#params[@]} -ge 4 ]] || {
-            echo "错误：缺少参数。用法：$0 rds create <名称> <引擎> <版本> <规格> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 rds create <名称> <引擎> <版本> <规格>" >&2
             return 1
         } ;;
         update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 rds update <实例ID> <新名称> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 rds update <实例ID> <新名称>" >&2
             return 1
         } ;;
         delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 rds delete <实例ID> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 rds delete <实例ID>" >&2
             return 1
         } ;;
         *)
@@ -291,19 +291,19 @@ validate_params() {
     nlb)
         case "$operation" in
         list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 nlb list [region]" >&2
+            echo "错误：参数错误。用法：$0 nlb list" >&2
             return 1
         } ;;
         create) [[ ${#params[@]} -ge 4 ]] || {
-            echo "错误：缺少参数。用法：$0 nlb create <名称> <VPC-ID> <交换机ID> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 nlb create <名称> <VPC-ID> <交换机ID>" >&2
             return 1
         } ;;
         update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 nlb update <实例ID> <新名称> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 nlb update <实例ID> <新名称>" >&2
             return 1
         } ;;
         delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 nlb delete <实例ID> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 nlb delete <实例ID>" >&2
             return 1
         } ;;
         *)
@@ -315,19 +315,19 @@ validate_params() {
     alb)
         case "$operation" in
         list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 alb list [region]" >&2
+            echo "错误：参数错误。用法：$0 alb list" >&2
             return 1
         } ;;
         create) [[ ${#params[@]} -ge 4 ]] || {
-            echo "错误：缺少参数。用法：$0 alb create <名称> <VPC-ID> <交换机ID> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 alb create <名称> <VPC-ID> <交换机ID>" >&2
             return 1
         } ;;
         update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 alb update <实例ID> <新名称> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 alb update <实例ID> <新名称>" >&2
             return 1
         } ;;
         delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 alb delete <实例ID> [地域]" >&2
+            echo "错误：缺少参数。用法：$0 alb delete <实例ID>" >&2
             return 1
         } ;;
         *)
@@ -339,19 +339,19 @@ validate_params() {
     eip)
         case "$operation" in
         list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 eip list [region]" >&2
+            echo "错误：参数错误。用法：$0 eip list" >&2
             return 1
         } ;;
         create) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 eip create <带宽> [region]" >&2
+            echo "错误：缺少参数。用法：$0 eip create <带宽>" >&2
             return 1
         } ;;
         update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 eip update <EIP-ID> <新带宽> [region]" >&2
+            echo "错误：缺少参数。用法：$0 eip update <EIP-ID> <新带宽>" >&2
             return 1
         } ;;
         delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 eip delete <EIP-ID> [region]" >&2
+            echo "错误：缺少参数。用法：$0 eip delete <EIP-ID>" >&2
             return 1
         } ;;
         *)
@@ -363,19 +363,19 @@ validate_params() {
     kvstore)
         case "$operation" in
         list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 kvstore list [region]" >&2
+            echo "错误：参数错误。用法：$0 kvstore list" >&2
             return 1
         } ;;
         create) [[ ${#params[@]} -ge 3 ]] || {
-            echo "错误：缺少参数。用法：$0 kvstore create <名称> <实例类型> <容量> [region]" >&2
+            echo "错误：缺少参数。用法：$0 kvstore create <名称> <实例类型> <容量>" >&2
             return 1
         } ;;
         update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 kvstore update <实例ID> <新名称> [region]" >&2
+            echo "错误：缺少参数。用法：$0 kvstore update <实例ID> <新名称>" >&2
             return 1
         } ;;
         delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 kvstore delete <实例ID> [region]" >&2
+            echo "错误：缺少参数。用法：$0 kvstore delete <实例ID>" >&2
             return 1
         } ;;
         *)
@@ -477,14 +477,7 @@ get_credentials() {
             ]
         }' >"$config_file"
     fi
-
-    # 输出凭证信息
-    # echo "$access_key_id"
-    # echo "$access_key_secret"
-    # echo "$region"
 }
-
-# 在文件末尾添加以下函数
 
 create_profile() {
     local name=$1
@@ -583,8 +576,6 @@ query_account_balance() {
     fi
     log_result "${profile:-}" "${region:-}" "account" "balance" "$result" "$format"
 }
-
-# 在文件末尾添加以下函数
 
 show_balance_help() {
     echo "账户余额操作："

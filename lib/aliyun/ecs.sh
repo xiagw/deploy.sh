@@ -68,8 +68,8 @@ ecs_list() {
 
     # 获取 EIP 列表
     eip_result=$(aliyun --profile "${profile:-}" vpc DescribeEipAddresses --RegionId "${region:-}")
-
-    if [ $? -ne 0 ]; then
+    return_code=$?
+    if [ $return_code -ne 0 ]; then
         echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -166,7 +166,8 @@ ecs_create() {
     local vswitch_id
     local vswitch_list
     vswitch_list=$(vpc_vswitch_list "$vpc_id" json)
-    if [ $? -ne 0 ] || [ -z "$vswitch_list" ]; then
+    return_code=$?
+    if [ $return_code -ne 0 ] || [ -z "$vswitch_list" ]; then
         echo "错误：在选定的 VPC 中没有找到交换机，请先创建交换机。"
         return 1
     fi
@@ -272,7 +273,8 @@ ecs_create() {
     echo "正在创建 ECS 实例..."
     local result
     result=$(eval "$create_command")
-    if [ $? -eq 0 ]; then
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
         echo "$result" | jq '.'
         echo "ECS 实例创建并启动成功。"
 
@@ -379,8 +381,8 @@ ecs_key_create() {
     echo "创建 SSH 密钥对："
     local result
     result=$(aliyun --profile "${profile:-}" ecs CreateKeyPair --RegionId "$region" --KeyPairName "$key_name")
-
-    if [ $? -eq 0 ]; then
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
         echo "SSH 密钥对创建成功："
         echo "$result" | jq '.'
         echo "请保存私钥内容，它只会显示一次！"
@@ -414,8 +416,8 @@ ecs_key_import() {
 
     local result
     result=$(aliyun --profile "${profile:-}" ecs ImportKeyPair --RegionId "$region" --KeyPairName "$key_name" --PublicKeyBody "$public_key")
-
-    if [ $? -eq 0 ]; then
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
         echo "SSH 密钥对导入成功："
         echo "$result" | jq '.'
     else
@@ -439,9 +441,9 @@ ecs_key_delete() {
     echo "删除 SSH 密钥对："
     local result
     result=$(aliyun --profile "${profile:-}" ecs DeleteKeyPairs --RegionId "$region" --KeyPairNames "['$key_name']")
-    local status=$?
+    return_code=$?
 
-    if [ $status -eq 0 ]; then
+    if [ $return_code -eq 0 ]; then
         echo "SSH 密钥对删除成功。"
         log_delete_operation "$profile" "$region" "ecs" "$key_name" "SSH密钥对" "成功"
     else
@@ -468,7 +470,8 @@ get_supported_disk_categories() {
         --DestinationResource SystemDisk \
         --InstanceType "${instance_type:-}")
 
-    if [ "$?" -ne 0 ]; then
+    return_code=$?
+    if [ $return_code -ne 0 ]; then
         echo "错误：调用 DescribeAvailableResource API 失败。" >&2
         echo "$result" >&2
         return 1
@@ -508,7 +511,8 @@ ecs_start() {
         --RegionId "$region" \
         --InstanceId "$instance_id")
 
-    if [ $? -eq 0 ]; then
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
         echo "ECS 实例启动命令已发送。"
         echo "$result" | jq '.'
 
@@ -550,7 +554,8 @@ ecs_stop() {
         --StoppedMode StopCharging \
         --ForceStop false)
 
-    if [ $? -eq 0 ]; then
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
         echo "ECS 实例停止命令已发送。"
         echo "$result" | jq '.'
 
