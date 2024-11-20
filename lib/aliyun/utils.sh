@@ -37,6 +37,7 @@ show_help() {
     echo "  ram      - 访问控制"
     echo "  nas      - 文件存储"
     echo "  ack      - 容器服务 Kubernetes 版"
+    echo "  balance  - 账户余额查询"
     echo
     echo "每个服务的具体操作和参数，请使用 '$0 <服务>' 查看"
     echo
@@ -383,6 +384,18 @@ validate_params() {
             ;;
         esac
         ;;
+    balance)
+        case "$operation" in
+        list) [[ ${#params[@]} -le 1 ]] || {
+            echo "错误：参数错误。用法：$0 balance list [format]" >&2
+            return 1
+        } ;;
+        *)
+            echo "错误：未知的 Balance 操作：$operation" >&2
+            return 1
+            ;;
+        esac
+        ;;
     *)
         echo "错误：未知的服务：$service" >&2
         return 1
@@ -543,8 +556,8 @@ query_account_balance() {
 
     local result
     result=$(aliyun --profile "${profile:-}" bssopenapi QueryAccountBalance --region "${region:-cn-hangzhou}")
-
-    if [ $? -eq 0 ]; then
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
         case "$format" in
         json)
             # JSON 格式不显示提示信息，直接输出结果
@@ -557,8 +570,10 @@ query_account_balance() {
             ;;
         human | *)
             echo "查询账户余额："
-            local available_amount=$(echo "$result" | jq -r '.Data.AvailableAmount')
-            local currency=$(echo "$result" | jq -r '.Data.Currency')
+            local available_amount
+            available_amount=$(echo "$result" | jq -r '.Data.AvailableAmount')
+            local currency
+            currency=$(echo "$result" | jq -r '.Data.Currency')
             echo "可用余额: $available_amount $currency"
             ;;
         esac
@@ -612,7 +627,8 @@ list_all_services() {
 
     echo "================================"
     echo "交换机（VSwitch）："
-    local vpc_ids=$(vpc_list json | jq -r '.Vpcs.Vpc[].VpcId')
+    local vpc_ids
+    vpc_ids=$(handle_vpc_commands list json | jq -r '.Vpcs.Vpc[].VpcId')
     for vpc_id in $vpc_ids; do
         echo "VPC ID: $vpc_id 的交换机："
         handle_vpc_commands vswitch-list "$vpc_id"
@@ -674,7 +690,8 @@ list_all_services() {
 
 query_daily_cost() {
     local query_date=${1:-$(date -d "yesterday" +%Y-%m-%d)}
-    local current_month=$(date -d "$query_date" +%Y-%m)
+    local current_month
+    current_month=$(date -d "$query_date" +%Y-%m)
     local format=${2:-human}
 
     local result
@@ -682,8 +699,8 @@ query_daily_cost() {
         --BillingCycle "$current_month" \
         --BillingDate "$query_date" \
         --Granularity DAILY)
-
-    if [ $? -eq 0 ]; then
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
         case "$format" in
         json)
             # JSON 格式不显示提示信息，直接输出结果
@@ -696,8 +713,10 @@ query_daily_cost() {
             ;;
         human | *)
             echo "查询 $query_date 的消费总额："
-            local total_amount=$(echo "$result" | jq -r '.Data.Items.Item[0].CashAmount')
-            local currency=$(echo "$result" | jq -r '.Data.Items.Item[0].Currency')
+            local total_amount
+            total_amount=$(echo "$result" | jq -r '.Data.Items.Item[0].CashAmount')
+            local currency
+            currency=$(echo "$result" | jq -r '.Data.Items.Item[0].Currency')
             if [ -n "$total_amount" ] && [ "$total_amount" != "null" ]; then
                 echo "$query_date 消费总额: $total_amount $currency"
             else
