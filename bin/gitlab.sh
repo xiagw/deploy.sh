@@ -1,45 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=1090
 
-_add_account() {
-    if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -w "$user_name"; then
-        if _get_yes_no "User [$user_name] exists, update $user_name password?"; then
-            user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
-            $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand}" --name "$user_name" --email "$user_name@${gitlab_domain}" --skip-reconfirmation 1
-            return
-        fi
-        return 1
-    fi
-
-    $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand}" --email "${user_name}@${gitlab_domain}" --skip-confirmation 1 --can-create-group 0
-    _msg log "$SCRIPT_LOG" "username=$user_name / password=$password_rand"
-
-    _msg "add to default group \"pms\"."
-    pms_group_id=$($cmd_gitlab group list --search pms | jq -r '.[] | select (.name == "pms") | .id')
-    user_id="$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')"
-    $cmd_gitlab group-member create --access-level 30 --group-id "$pms_group_id" --user-id "$user_id"
-
-    $cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[] | (.id | tostring) + "\t" + .name'
-    ## deveop 30, maintain 40, guest 10, reporter 20
-    select group_id in $($cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[].id') quit; do
-        [ "${group_id:-quit}" == quit ] && break
-        $cmd_gitlab group-member create --access-level 40 --group-id "$group_id" --user-id "$user_id"
-    done
-}
-
-_send_msg() {
-    ## message body
-    send_msg="https://git.$gitlab_domain /  username=$user_name / password=$password_rand"
-    if [[ -z "$gitlab_wecom_key" ]]; then
-        read -rp 'Enter wecom api key: ' read_wecom_key
-        wecom_api_key=$read_wecom_key
-    else
-        wecom_api_key=$gitlab_wecom_key
-    fi
-    wecom_api="https://qyapi.wecom.qq.com/cgi-bin/webhook/send?key=${wecom_api_key}"
-    curl -fsSL "$wecom_api" -H 'Content-Type: application/json' -d '{"msgtype": "text", "text": {"content": "'"$send_msg"'"},"at": {"isAtAll": true}}'
-}
-
 _new_element_user() {
     cd ~/src/matrix-docker-ansible-deploy || exit 1
     # file_secret=inventory/host_vars/matrix.example.com/user_pass.txt
@@ -140,6 +101,50 @@ EOF
     fi
 }
 
+_add_account() {
+    local user_name="$1"
+    local gitlab_domain="$2"
+    local password_rand user_id pms_group_id
+
+    if [[ -z "$user_name" ]]; then
+        read -rp 'Enter gitlab username: ' read_user_name
+        user_name=${read_user_name:? ERR: empty user name}
+    fi
+    if [[ -z "$gitlab_domain" ]]; then
+        read -rp 'Enter gitlab domain: ' gitlab_domain
+        gitlab_domain=${gitlab_domain:? ERR: empty domain name}
+    fi
+
+    password_rand=$(_get_random_password 2>/dev/null)
+    ## check if user exists
+    if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -w "$user_name"; then
+        if _get_yes_no "User [$user_name] exists, update $user_name password?"; then
+            user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
+            $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand}" --name "$user_name" --email "$user_name@${gitlab_domain}" --skip-reconfirmation 1
+            return
+        fi
+        return 1
+    fi
+    ## create user
+    $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand}" --email "${user_name}@${gitlab_domain}" --skip-confirmation 1 --can-create-group 0
+    _msg log "$SCRIPT_LOG" "username=$user_name / password=$password_rand"
+
+    _msg 'add to default group "pms\"'
+    pms_group_id=$($cmd_gitlab group list --search pms | jq -r '.[] | select (.name == "pms") | .id')
+    user_id="$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')"
+    $cmd_gitlab group-member create --access-level 30 --group-id "$pms_group_id" --user-id "$user_id"
+
+    $cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[] | (.id | tostring) + "\t" + .name' | grep -E 'back-|front-'
+    ## deveop 30, maintain 40, guest 10, reporter 20
+    select group_id in $($cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[].id') quit; do
+        [ "${group_id:-quit}" == quit ] && break
+        $cmd_gitlab group-member create --access-level 40 --group-id "$group_id" --user-id "$user_id"
+    done
+
+    send_msg="https://git.$gitlab_domain  /  username=$user_name / password=$password_rand"
+    _notify_wecom "${gitlab_wecom_key:? ERR: empty wecom_key}" "$send_msg"
+}
+
 _common_lib() {
     common_lib="$(dirname "$SCRIPT_DIR")/lib/common.sh"
     if [ ! -f "$common_lib" ]; then
@@ -151,8 +156,33 @@ _common_lib() {
     . "$common_lib"
 }
 
+_print_usage() {
+    echo "Usage: $0 [options]"
+    echo "  -a, --add <username> <domain>  add gitlab account"
+    echo "  -i, --install                  install gitlab-runner"
+    echo "  -h, --help                     print this help message"
+}
+
+_parse_args() {
+    if [ $# -eq 0 ]; then
+        _print_usage && exit 0
+    fi
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -a | --add)
+            user_name=$2
+            gitlab_domain=$3
+            shift 2
+            ;;
+        -i | --install) install_runner=true ;;
+        -h | --help) _print_usage && exit 0 ;;
+        *) echo "Unknown option: $1" && _print_usage && exit 1 ;;
+        esac
+        shift
+    done
+}
+
 main() {
-    set -e
     SCRIPT_NAME="$(basename "$0")"
     SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
     SCRIPT_DATA="$(dirname "$SCRIPT_DIR")/data"
@@ -161,17 +191,12 @@ main() {
 
     _common_lib
 
-    case "$1" in
-    install)
+    _parse_args "$@"
+
+    if ${install_runner:-false}; then
         _install_gitlab_runner
         return
-        ;;
-    *)
-        ## user_name and gitlab_domain
-        user_name=${1}
-        gitlab_domain=${2}
-        ;;
-    esac
+    fi
 
     ## python-gitlab config
     if [[ -f "$HOME/.python-gitlab.cfg" ]]; then
@@ -184,18 +209,8 @@ main() {
 
     _msg "gitlab profile is: $gitlab_profile"
     cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
-    if [[ -z "$user_name" ]]; then
-        read -rp 'Enter gitlab username: ' read_user_name
-        user_name=${read_user_name:? ERR: empty user name}
-    fi
-    if [[ -z "$gitlab_domain" ]]; then
-        read -rp 'Enter gitlab domain: ' gitlab_domain
-        gitlab_domain=${gitlab_domain:? ERR: empty domain name}
-    fi
 
-    password_rand=$(_get_random_password 2>/dev/null)
-    _add_account "$gitlab_domain" "$user_name" "$password_rand"
-    _send_msg
+    _add_account "$user_name" "$gitlab_domain"
     # _new_element_user
 }
 
