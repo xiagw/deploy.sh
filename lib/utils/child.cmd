@@ -27,9 +27,7 @@ echo.%1| findstr /i "^install$ ^i$" >nul && goto :INSTALL_TASK
 echo.%1| findstr /i "^server$ ^s$" >nul && goto :START_SERVER
 
 :: 获取当前时间信息，处理前导空格和确保24小时制
-for /f "tokens=1 delims=:" %%a in ('time /t') do (
-    set "CURR_HOUR=%%a"
-)
+for /f "tokens=1 delims=:" %%a in ('time /t') do (set "CURR_HOUR=%%a")
 @REM set "CURR_HOUR=%CURR_HOUR: =%"
 @REM if %CURR_HOUR% LSS 10 set "CURR_HOUR=0%CURR_HOUR%"
 
@@ -43,8 +41,6 @@ if "%DATE:~11%"=="周六" set "WEEKDAY=6"
 if "%DATE:~11%"=="周日" set "WEEKDAY=7"
 
 if "%DEBUG_MODE%"=="1" (
-    call :LOG "DEBUG模式: 当前时间=%CURR_HOUR%"
-    call :LOG "DEBUG模式: 当前星期几=%WEEKDAY%"
     call :LOG "DEBUG模式: 不检查时间限制"
 ) else (
     call :CHECK_TIME_LIMITS
@@ -65,15 +61,13 @@ powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command "
 
 :: 读取结果
 if "%DEBUG_MODE%"=="1" ( type "%DEBUG_FILE%" )
-for /f "tokens=1,2 delims==" %%a in ('type "%DEBUG_FILE%" ^| findstr "##"') do (
-    set "%%a=%%b"
-)
+for /f "tokens=1,2 delims==" %%a in ('type "%DEBUG_FILE%" ^| findstr "##"') do (set "%%a=%%b")
 del /Q /F "%DEBUG_FILE%" 2>nul
 
 :: 更新启动时间
 if !##need_update! EQU 1 (
     if "%DEBUG_MODE%"=="1" (
-        call :LOG "DEBUG模式: 更新启动时间文件"
+        call :LOG "DEBUG模式: 需要更新启动时间文件"
     ) else (
         echo %DATE% %TIME% > "%PLAY_FILE%"
         if !ERRORLEVEL! neq 0 (
@@ -85,7 +79,7 @@ if !##need_update! EQU 1 (
 
 :: 检查关机条件
 if !##rest_minutes! LSS %REST_MINUTES% (
-    call :DO_SHUTDOWN "距离上次关机未满%REST_MINUTES%分钟"
+    call :DO_SHUTDOWN "距离上次关机未满%REST_MINUTES%分钟，立刻关机"
     exit /b
 )
 
@@ -96,7 +90,7 @@ if !##play_minutes! GEQ %PLAY_MINUTES% (
     ) else (
         echo %DATE% %TIME% > "%REST_FILE%"
     )
-    call :DO_SHUTDOWN "开机时间超过%PLAY_MINUTES%分钟"
+    call :DO_SHUTDOWN "开机时间超过%PLAY_MINUTES%分钟，立刻关机"
     exit /b
 )
 :: 结束
@@ -107,17 +101,17 @@ goto :END
 :: 检查是否在允许的时间范围内
 :: 检查21:00-08:00时间段
 if %CURR_HOUR% GEQ %WORK_HOUR_21% (
-    call :DO_SHUTDOWN "现在是%WORK_HOUR_21%点后"
+    call :DO_SHUTDOWN "现在是%WORK_HOUR_21%点后，立刻关机"
     exit /b
 )
 if %CURR_HOUR% LSS %WORK_HOUR_8% (
-    call :DO_SHUTDOWN "现在是%WORK_HOUR_8%点前"
+    call :DO_SHUTDOWN "现在是%WORK_HOUR_8%点前，立刻关机"
     exit /b
 )
 :: 检查工作日17:00后限制
 if %WEEKDAY% LEQ 5 (
     if %CURR_HOUR% GEQ %WORK_HOUR_17% (
-        call :DO_SHUTDOWN "现在是工作日%WORK_HOUR_17%点后"
+        call :DO_SHUTDOWN "现在是工作日%WORK_HOUR_17%点后，立刻关机"
         exit /b
     )
 )
