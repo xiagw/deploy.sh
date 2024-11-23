@@ -64,11 +64,11 @@ if not exist "%REST_FILE%" (
 powershell -command "$error.clear(); try { $result = @{}; $now = Get-Date; if(Test-Path '%REST_FILE%') { $shutdown = Get-Date (Get-Content '%REST_FILE%'); $result.rest_minutes = [Math]::Round(($now - $shutdown).TotalMinutes) }; if(Test-Path '%PLAY_FILE%') { $startup = Get-Date (Get-Content '%PLAY_FILE%'); $result.play_minutes = [Math]::Round(($now - $startup).TotalMinutes); if(Test-Path '%REST_FILE%') { $result.need_update = if($startup -gt $shutdown) { '0' } else { '1' } } }; foreach($k in $result.Keys) { Write-Output ('##' + $k + '=' + $result[$k]) } } catch { Write-Output ('错误: ' + $_.Exception.Message) }" > "%DEBUG_FILE%"
 
 :: 读取结果
+if "%DEBUG_MODE%"=="1" ( type "%DEBUG_FILE%" )
 for /f "tokens=1,2 delims==" %%a in ('type "%DEBUG_FILE%" ^| findstr "##"') do (
     set "%%a=%%b"
-    call :LOG "设置变量 %%a=%%b"
 )
-del "%DEBUG_FILE%" 2>nul
+del /Q /F "%DEBUG_FILE%" 2>nul
 
 :: 更新启动时间
 if !##need_update! EQU 1 (
@@ -122,18 +122,13 @@ goto :END
 
 :: 如果有参数"install"，则创建计划任务
 :INSTALL_TASK
-schtasks /query /tn "%SCRIPT_NAME%" >nul 2>&1
-if !ERRORLEVEL! neq 0 (
-    :: 使用当前用户账户创建任务，不使用系统账户
-    schtasks /create /tn "%SCRIPT_NAME%" /tr "\"%~f0\"" /sc minute /mo 1 /f /ru "%USERNAME%" >nul 2>&1
-    if !ERRORLEVEL! equ 0 (
-        call :LOG "成功创建计划任务"
-    ) else (
-        call :LOG "创建计划任务失败"
-        exit /b 1
-    )
+:: 使用系统账户创建任务
+schtasks /Create /NP /TN "%SCRIPT_NAME%" /TR "\"%~f0\"" /SC minute /MO 1 /F /RU SYSTEM >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    call :LOG "成功创建计划任务"
 ) else (
-    call :LOG "计划任务已存在"
+    call :LOG "创建计划任务失败"
+    exit /b 1
 )
 exit /b 0
 
@@ -156,8 +151,11 @@ exit /b 0
 
 :: 定义一个记录日志的函数
 :LOG
-echo [%DATE% %TIME%] %~1
-echo [%DATE% %TIME%] %~1 >> "%LOGFILE%"
+if "%DEBUG_MODE%"=="1" (
+    echo [%DATE% %TIME%] %~1
+) else (
+    echo [%DATE% %TIME%] %~1 >> "%LOGFILE%"
+)
 exit /b 0
 
 :TRIGGER
