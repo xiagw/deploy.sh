@@ -1,6 +1,6 @@
 @echo off
 :: [保留文件头部注释段不删除]
-:: GBK编码，CRLF换行
+:: GBK编码，CRLF换行    curl.exe -Lo child.cmd https://gitee.com/xiagw/deploy.sh/raw/main/lib/utils/child.cmd
 :: 需求描述：关机前60秒倒计时；每天21:00-08:00时间段和工作日17:00后关机；每次只能开机50分钟，关机后120分钟内不能开机
 setlocal EnableDelayedExpansion
 
