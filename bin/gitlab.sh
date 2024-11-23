@@ -101,45 +101,73 @@ EOF
     fi
 }
 
+_add_user_to_groups() {
+    local user_name="$1"
+    local user_id level
+    local tmp_groups="/tmp/gitlab_groups_${gitlab_profile}.txt"
+    _msg "add user [$user_name] to groups..."
+    # Cache group list to temporary file, guest 10, reporter 20, deveop 30, maintain 40
+    $cmd_gitlab group list --skip-groups 2 --top-level-only 1 |
+        jq -r '.[] | select(.name | test("back-|front-|pms")) | (.id | tostring) + "\t" + .name' \
+            >"$tmp_groups"
+
+    while true; do
+        group_info=$(fzf --prompt="Select group (ESC to quit): " --header="ID\tName" --height=60% <"$tmp_groups")
+
+        [ -z "$group_info" ] && break
+
+        group_id=$(echo "$group_info" | cut -f1)
+        group_name=$(echo "$group_info" | cut -f2)
+        [[ $group_name == "pms" ]] && level=30 || level=40
+
+        $cmd_gitlab group-member create --access-level "$level" --group-id "$group_id" --user-id "$user_id"
+        _msg "Added user [$user_name] to group [$group_name]"
+    done
+
+    # Clean up
+    rm -f "$tmp_groups"
+}
+
+_update_user_password() {
+    local user_name="$1"
+    local gitlab_domain="$2"
+    local password_rand="$3"
+    local user_id
+
+    user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
+    $cmd_gitlab user update --id "${user_id}" \
+        --username "$user_name" \
+        --password "${password_rand}" \
+        --name "$user_name" \
+        --email "$user_name@${gitlab_domain}" \
+        --skip-reconfirmation 1
+
+    _msg log "$SCRIPT_LOG" "Update password for $user_name: $password_rand"
+    return 0
+}
+
 _add_account() {
     local user_name="$1"
     local gitlab_domain="$2"
-    local password_rand user_id pms_group_id
-
-    if [[ -z "$user_name" ]]; then
-        read -rp 'Enter gitlab username: ' read_user_name
-        user_name=${read_user_name:? ERR: empty user name}
-    fi
-    if [[ -z "$gitlab_domain" ]]; then
-        read -rp 'Enter gitlab domain: ' gitlab_domain
-        gitlab_domain=${gitlab_domain:? ERR: empty domain name}
-    fi
+    local password_rand user_id
 
     password_rand=$(_get_random_password 2>/dev/null)
     ## check if user exists
     if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -w "$user_name"; then
         if _get_yes_no "User [$user_name] exists, update $user_name password?"; then
-            user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
-            $cmd_gitlab user update --id "${user_id}" --username "$user_name" --password "${password_rand}" --name "$user_name" --email "$user_name@${gitlab_domain}" --skip-reconfirmation 1
+            _update_user_password "$user_name" "$gitlab_domain" "$password_rand"
             return
         fi
-        return 1
+        return
     fi
     ## create user
-    $cmd_gitlab user create --name "$user_name" --username "$user_name" --password "${password_rand}" --email "${user_name}@${gitlab_domain}" --skip-confirmation 1 --can-create-group 0
+    $cmd_gitlab user create --name "$user_name" \
+        --username "$user_name" \
+        --password "${password_rand}" \
+        --email "${user_name}@${gitlab_domain}" \
+        --skip-confirmation 1 \
+        --can-create-group 0
     _msg log "$SCRIPT_LOG" "username=$user_name / password=$password_rand"
-
-    _msg 'add to default group "pms\"'
-    pms_group_id=$($cmd_gitlab group list --search pms | jq -r '.[] | select (.name == "pms") | .id')
-    user_id="$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')"
-    $cmd_gitlab group-member create --access-level 30 --group-id "$pms_group_id" --user-id "$user_id"
-
-    $cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[] | (.id | tostring) + "\t" + .name' | grep -E 'back-|front-'
-    ## deveop 30, maintain 40, guest 10, reporter 20
-    select group_id in $($cmd_gitlab group list --skip-groups 2,"$pms_group_id" | jq -r '.[].id') quit; do
-        [ "${group_id:-quit}" == quit ] && break
-        $cmd_gitlab group-member create --access-level 40 --group-id "$group_id" --user-id "$user_id"
-    done
 
     send_msg="https://git.$gitlab_domain  /  username=$user_name / password=$password_rand"
     _notify_wecom "${gitlab_wecom_key:? ERR: empty wecom_key}" "$send_msg"
@@ -158,23 +186,20 @@ _common_lib() {
 
 _print_usage() {
     echo "Usage: $0 [options]"
-    echo "  -a, --add <username> <domain>  add gitlab account"
-    echo "  -i, --install                  install gitlab-runner"
-    echo "  -h, --help                     print this help message"
+    echo "  -d, --domain <domain>           gitlab domain"
+    echo "  -u, --username <username>       add or update gitlab account"
+    echo "  -p, --profile <profile>         select gitlab profile"
+    echo "  -i, --install                   install gitlab-runner"
+    echo "  -h, --help                      print this help message"
 }
 
 _parse_args() {
-    if [ $# -eq 0 ]; then
-        _print_usage && exit 0
-    fi
     while [ "$#" -gt 0 ]; do
         case "$1" in
-        -a | --add)
-            user_name=$2
-            gitlab_domain=$3
-            shift 2
-            ;;
+        -u | --username) user_name=$2 && shift 1 ;;
+        -d | --domain) gitlab_domain=$2 && shift 1 ;;
         -i | --install) install_runner=true ;;
+        -p | --profile) gitlab_profile=$2 && shift 1 ;;
         -h | --help) _print_usage && exit 0 ;;
         *) echo "Unknown option: $1" && _print_usage && exit 1 ;;
         esac
@@ -204,13 +229,35 @@ main() {
     elif [[ -f "$HOME/.config/python-gitlab.cfg" ]]; then
         gitlab_python_config="$HOME/.config/python-gitlab.cfg"
     fi
-    gitlab_profile=$(grep '^\[' "$gitlab_python_config" | grep -v 'global' | sed -e 's/\[//g; s/\]//g' | fzf)
-    . "$SCRIPT_ENV" "$gitlab_profile"
+    if [ -z "$gitlab_profile" ]; then
+        # 获取所有profiles并存入数组
+        mapfile -t profiles < <(grep -E '^\[.*\]$' "$gitlab_python_config" | sed 's/\[\|\]//g' | grep -v '^global$')
 
-    _msg "gitlab profile is: $gitlab_profile"
+        # 检查profiles数量
+        if [ "${#profiles[@]}" -eq 0 ]; then
+            echo "Error: No gitlab profiles found in $gitlab_python_config" >&2
+            return 1
+        elif [ "${#profiles[@]}" -eq 1 ]; then
+            # 只有一个profile时，直接使用
+            gitlab_profile="${profiles[0]}"
+        else
+            # 多个profiles时，使用fzf让用户选择
+            gitlab_profile=$(printf '%s\n' "${profiles[@]}" | fzf --prompt="Select gitlab profile: " --height=60%)
+        fi
+    fi
+    if [ -f "$SCRIPT_ENV" ]; then
+        . "$SCRIPT_ENV" "$gitlab_profile"
+    fi
+
     cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
 
-    _add_account "$user_name" "$gitlab_domain"
+    [[ -z "$user_name" ]] && read -rp 'Enter gitlab username: ' user_name
+    [[ -z "$gitlab_domain" ]] && read -rp 'Enter gitlab domain: ' gitlab_domain
+
+    _add_account "${user_name:? ERR: empty username}" "${gitlab_domain:? ERR: empty domain name}"
+
+    _add_user_to_groups "$user_name"
+
     # _new_element_user
 }
 

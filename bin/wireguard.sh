@@ -161,9 +161,11 @@ _revoke_client() {
 _restart_host() {
     _msg yellow "scp $conf to root@$host:/etc/wireguard/wg0.conf"
     if scp "${conf}" root@"$host":/etc/wireguard/wg0.conf; then
-        _msg yellow "wg syncconf wg0 <(wg-quick strip wg0); wg show"
-        if ssh root@"$host" "wg syncconf wg0 <(wg-quick strip wg0); echo sleep 2; sleep 2; wg show"; then
-            _msg green "Wireguard restarted on $host"
+        _msg yellow "Setting up WireGuard with infinite DNS retries..."
+        if ssh root@"$host" "export WG_ENDPOINT_RESOLUTION_RETRIES=infinity && \
+            wg syncconf wg0 <(wg-quick strip wg0); \
+            echo sleep 2; sleep 2; wg show"; then
+            _msg green "Wireguard restarted on $host with infinite DNS retries"
         else
             _msg red "Error restarting Wireguard on $host"
         fi
