@@ -72,9 +72,14 @@ del /Q /F "%DEBUG_FILE%" 2>nul
 
 :: 更新启动时间
 if !##need_update! EQU 1 (
-    echo %DATE% %TIME% > "%PLAY_FILE%" || (
-        call :LOG "无法更新启动时间文件"
-        exit /b 1
+    if "%DEBUG_MODE%"=="1" (
+        call :LOG "DEBUG模式: 更新启动时间文件"
+    ) else (
+        echo %DATE% %TIME% > "%PLAY_FILE%"
+        if !ERRORLEVEL! neq 0 (
+            call :LOG "无法更新启动时间文件"
+            exit /b 1
+        )
     )
 )
 
@@ -86,7 +91,11 @@ if !##rest_minutes! LSS %REST_MINUTES% (
 
 :: 检查开机时长
 if !##play_minutes! GEQ %PLAY_MINUTES% (
-    echo %DATE% %TIME% > "%REST_FILE%"
+    if "%DEBUG_MODE%"=="1" (
+        call :LOG "DEBUG模式: 开机时间超过%PLAY_MINUTES%分钟，更新关机时间文件"
+    ) else (
+        echo %DATE% %TIME% > "%REST_FILE%"
+    )
     call :DO_SHUTDOWN "开机时间超过%PLAY_MINUTES%分钟"
     exit /b
 )
