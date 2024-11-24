@@ -41,7 +41,7 @@ if "%DATE:~11%"=="周六" set "WEEKDAY=6"
 if "%DATE:~11%"=="周日" set "WEEKDAY=7"
 
 if "%DEBUG_MODE%"=="1" (
-    call :LOG "DEBUG模式: 不检查时间限制"
+    call :LOG "DEBUG模式: 不检查时间段限制"
 ) else (
     call :CHECK_TIME_LIMITS
 )
@@ -57,7 +57,7 @@ if not exist "%REST_FILE%" (
 )
 
 :: 执行所有时间检查
-powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command "$error.clear(); try { $result = @{}; $now = Get-Date; if(Test-Path '%REST_FILE%') { $shutdown = Get-Date (Get-Content '%REST_FILE%'); $result.rest_minutes = [Math]::Round(($now - $shutdown).TotalMinutes) }; if(Test-Path '%PLAY_FILE%') { $startup = Get-Date (Get-Content '%PLAY_FILE%'); $result.play_minutes = [Math]::Round(($now - $startup).TotalMinutes); if(Test-Path '%REST_FILE%') { $result.need_update = if($startup -gt $shutdown) { '0' } else { '1' } } }; foreach($k in $result.Keys) { Write-Output ('##' + $k + '=' + $result[$k]) } } catch { Write-Output ('错误: ' + $_.Exception.Message) }" > "%DEBUG_FILE%"
+powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command "$error.clear(); try { $result = @{}; $now = Get-Date; $shutdown = Get-Date (Get-Content '%REST_FILE%'); $result.rest_minutes = [Math]::Round(($now - $shutdown).TotalMinutes); $startup = Get-Date (Get-Content '%PLAY_FILE%'); $result.play_minutes = [Math]::Round(($now - $startup).TotalMinutes); $result.need_update = if($startup -lt $shutdown) { '1' } else { '0' }; foreach($k in $result.Keys) { Write-Output ('##' + $k + '=' + $result[$k]) } } catch { Write-Output ('错误: ' + $_.Exception.Message) }" > "%DEBUG_FILE%"
 
 :: 读取结果
 if "%DEBUG_MODE%"=="1" ( type "%DEBUG_FILE%" )
