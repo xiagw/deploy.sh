@@ -6,7 +6,7 @@
 _parse_json() {
     local uri="$1"
     curl -fsSL -H "token:${zen_token:? undefined zen_token}" \
-    "${zen_json_url:? undefined zen_json_url}/$uri" |
+        "${zen_json_url:? undefined zen_json_url}/$uri" |
         jq -r '.data' | jq '.'
 }
 
@@ -145,14 +145,14 @@ EOF
         mapfile -t source_dirs < <(find "$doing_path/" -mindepth 1 -maxdepth 1 -name "${id}-*" -type d ! -path "$dest_path")
         # 如果有其他源目录
         if [ "${#source_dirs[@]}" -gt 0 ]; then
-            for src_dir in "${source_dirs[@]}"; do
-                if find "$src_dir" -mindepth 1 -maxdepth 1 -print0 | xargs -0 -I {} mv {} "$dest_path/"; then
+            while read -r src_dir; do
+                if find "$src_dir" -mindepth 1 -maxdepth 1 -print0 | xargs -0 -I {} mv "{}" "$dest_path/"; then
                     rmdir "$src_dir"
                 else
                     rsync -a "$src_dir/" "$dest_path/" &&
                         rm -rf "$src_dir"
                 fi
-            done
+            done < <(find "$doing_path/" -mindepth 1 -maxdepth 1 -name "${id}-*" -type d ! -path "$dest_path")
         fi
         # sleep 3
     done < <(jq -r '.[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
