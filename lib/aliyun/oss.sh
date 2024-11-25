@@ -143,8 +143,8 @@ oss_parse_cdn_logs() {
         -s | --start-date)
             if [[ -z "$2" || "$2" == -* ]]; then
                 echo "错误：--start-date 选项需要指定日期" >&2
-        return 1
-    fi
+                return 1
+            fi
             start_date="$2"
             shift
             ;;
@@ -450,7 +450,7 @@ generate_oss_signature() {
     local host="${bucket}.oss-${region}.aliyuncs.com"
 
     # Construct the canonical request
-    local canonical_headers="content-type:${content_type}\nhost:${host}\nx-oss-date:${date}\n"
+    local canonical_headers="content-type:${content_type:-}\nhost:${host}\nx-oss-date:${date}\n"
     local signed_headers="content-type;host;x-oss-date"
     local canonical_resource="/${bucket}${resource}"
     local canonical_request="${method}\n${canonical_resource}\n\n${canonical_headers}\n${signed_headers}\n"
@@ -468,7 +468,7 @@ generate_oss_signature() {
     local signature
     signature=$(echo -n "$string_to_sign" | openssl dgst -sha256 -hmac "$access_key_secret" -binary | base64)
 
-    echo "Debug: Generated signature: $signature" >&2
+    echo "Debug: $access_key_id Generated signature: $signature" >&2
     echo "$signature"
 }
 
@@ -558,6 +558,11 @@ oss_batch_copy() {
     if [[ "$dest" == oss://* ]]; then
         dest_type="oss"
     fi
+    if [ "$source_type" = "local" ] && [ "$dest_type" = "local" ]; then
+        echo "错误：不支持本地到本地的复制，请使用系统的 cp 命令" >&2
+        [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
+        return 1
+    fi
 
     echo "开始批量复制："
     echo "源路径： $source (${source_type})"
@@ -569,41 +574,16 @@ oss_batch_copy() {
     tr '\n' ' ' <"$file_list"
     echo
 
-    # 根据源和目标类型选择不同的复制命令
-    if [ "$source_type" = "oss" ] && [ "$dest_type" = "oss" ]; then
-        # OSS 到 OSS 的复制
-        ossutil --profile "${profile:-}" \
-            --endpoint "$endpoint_url" \
-            cp "$source" "$dest" \
-            -r -f --update \
-            --include-from "$file_list" \
-            --metadata-include "x-oss-storage-class=$storage_class" \
-            --storage-class "$storage_class"
-    elif [ "$source_type" = "local" ] && [ "$dest_type" = "oss" ]; then
-        # 本地到 OSS 的上传
-        ossutil --profile "${profile:-}" \
-            --endpoint "$endpoint_url" \
-            cp "$source" "$dest" \
-            -r -f --update \
-            --include-from "$file_list" \
-            --metadata-include "x-oss-storage-class=$storage_class" \
-            --storage-class "$storage_class"
-    elif [ "$source_type" = "oss" ] && [ "$dest_type" = "local" ]; then
-        # OSS 到本地的下载
-        # 确保目标目录存在
-        mkdir -p "$dest"
-        ossutil --profile "${profile:-}" \
-            --endpoint "$endpoint_url" \
-            cp "$source" "$dest" \
-            -r -f --update \
-            --include-from "$file_list" \
-            --metadata-include "x-oss-storage-class=$storage_class" \
-            --storage-class "$storage_class"
-    else
-        echo "错误：不支持本地到本地的复制，请使用系统的 cp 命令" >&2
-        [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
-        return 1
-    fi
+    [ "$dest_type" = "local" ] && mkdir -p "$dest"
+
+    # 执行统一的复制命令
+    ossutil --profile "${profile:-}" \
+        --endpoint "$endpoint_url" \
+        cp "$source" "$dest" \
+        -r -f --update --job 50 \
+        --include-from "$file_list" \
+        --metadata-include "x-oss-storage-class=$storage_class" \
+        --storage-class "$storage_class"
 
     # 如果使用了临时文件，则删除它
     [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
@@ -681,7 +661,7 @@ oss_batch_delete() {
     result=$(ossutil --profile "${profile:-}" \
         --endpoint "$endpoint_url" \
         rm "$bucket_path" \
-        --all-versions -r -f \
+        --all-versions -r -f --job 50 \
         --include-from "$file_list" \
         --metadata-include "x-oss-storage-class=$storage_class")
 
@@ -1097,4 +1077,3 @@ set_object_standard() {
     echo "成功处理数量：$processed_count"
     echo "未处理数量：$((total_count - processed_count))"
 }
-
