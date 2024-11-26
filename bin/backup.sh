@@ -210,15 +210,17 @@ _backup_zfs() {
     if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last" >/dev/null 2>&1; then
         # Incremental backup
         if [[ "$has_pv" -eq 1 ]]; then
-            zfs send -v -i "${zfs_src}@last" "${zfs_src}@now" | pv | zfs recv "${zfs_dest}"
+            size="$(zfs send -v -n -R -i "${zfs_src}@last" "${zfs_src}@now" | awk 'END {print $NF}' | sed 's/B//')"
+            zfs send -i "${zfs_src}@last" "${zfs_src}@now" | pv -pertb -s "$size" | zfs recv "${zfs_dest}"
         else
-            zfs send -v -i "${zfs_src}@last" "${zfs_src}@now" | zfs recv "${zfs_dest}"
+            zfs send -i "${zfs_src}@last" "${zfs_src}@now" | zfs recv "${zfs_dest}"
         fi
     else
         ## full backup
         zfs snapshot "${zfs_src}@last"
         if [[ "$has_pv" -eq 1 ]]; then
-            zfs send -v "${zfs_src}@last" | pv | zfs recv "${zfs_dest}"
+            size="$(zfs list -p -o used "${zfs_src}" | awk 'END {print $NF}')"
+            zfs send -v "${zfs_src}@last" | pv -pertb -s "$size" | zfs recv "${zfs_dest}"
         else
             zfs send -v "${zfs_src}@last" | zfs recv "${zfs_dest}"
         fi
