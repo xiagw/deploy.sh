@@ -210,7 +210,23 @@ _backup_zfs() {
     if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last" >/dev/null 2>&1; then
         # Incremental backup
         if [[ "$has_pv" -eq 1 ]]; then
-            size="$(zfs send -v -n -R -i "${zfs_src}@last" "${zfs_src}@now" | awk 'END {print $NF}' | sed 's/B//')"
+            # 修改这里：使用 awk 将大小转换为字节
+            size="$(zfs send -vnRi "${zfs_src}@last" "${zfs_src}@now" 2>&1 | awk '
+                function convert(size) {
+                    multiplier = 1
+                    if (size ~ /K$/) { multiplier = 1024 }
+                    else if (size ~ /M$/) { multiplier = 1024 * 1024 }
+                    else if (size ~ /G$/) { multiplier = 1024 * 1024 * 1024 }
+                    else if (size ~ /T$/) { multiplier = 1024 * 1024 * 1024 * 1024 }
+                    gsub(/[KMGT]$/, "", size)
+                    return size * multiplier
+                }
+                /estimated size is/ {
+                    gsub(/estimated size is /, "")
+                    print convert($0)
+                    exit
+                }
+            ')"
             zfs send -i "${zfs_src}@last" "${zfs_src}@now" | pv -pertb -s "$size" | zfs recv "${zfs_dest}"
         else
             zfs send -i "${zfs_src}@last" "${zfs_src}@now" | zfs recv "${zfs_dest}"
