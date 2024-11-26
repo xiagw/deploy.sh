@@ -236,7 +236,7 @@ _backup_zfs() {
         zfs snapshot "${zfs_src}@last"
         if [[ "$has_pv" -eq 1 ]]; then
             size="$(zfs list -p -o used "${zfs_src}" | awk 'END {print $NF}')"
-            zfs send -v "${zfs_src}@last" | pv -pertb -s "$size" | zfs recv "${zfs_dest}"
+            zfs send "${zfs_src}@last" | pv -pertb -s "$size" | zfs recv "${zfs_dest}"
         else
             zfs send -v "${zfs_src}@last" | zfs recv "${zfs_dest}"
         fi
