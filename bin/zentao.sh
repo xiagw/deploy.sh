@@ -27,7 +27,7 @@ _add_account() {
     "gender": "m"
 }' |
         jq -r '.id'
-    echo "$user_realname / $user_account / ${password}" | tee -a "$SCRIPT_LOG"
+    echo "$zen_json_url/  /  $user_realname / $user_account / ${password}" | tee -a "$SCRIPT_LOG"
 }
 
 _prepare_project_directory() {
