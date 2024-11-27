@@ -183,11 +183,10 @@ _backup_directories() {
 _backup_zfs() {
     local zfs_src="${1:-zfs01/share}"
     local zfs_dest="${2:-zfs02/share}"
-    local snap start_time
+    local snap
     snap="$(date +%s)"
-    start_time=$(date +%Y%m%d-%u-%T.%3N)
 
-    echo "Starting backup at $start_time"
+    _log $LOG_LEVEL_INFO "Starting backup at $(date +%Y%m%d-%u-%T.%3N)"
     zfs list -t snapshot
 
     # Rename existing snapshots
@@ -209,6 +208,7 @@ _backup_zfs() {
     # Perform incremental or full backup
     if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last" >/dev/null 2>&1; then
         # Incremental backup
+        _log $LOG_LEVEL_INFO "Incremental backup"
         if [[ "$has_pv" -eq 1 ]]; then
             # 修改这里：使用 awk 将大小转换为字节
             size="$(zfs send -vnRi "${zfs_src}@last" "${zfs_src}@now" 2>&1 | awk '
@@ -232,7 +232,7 @@ _backup_zfs() {
             zfs send -i "${zfs_src}@last" "${zfs_src}@now" | zfs recv "${zfs_dest}"
         fi
     else
-        ## full backup
+        _log $LOG_LEVEL_INFO "Full backup"
         zfs snapshot "${zfs_src}@last"
         if [[ "$has_pv" -eq 1 ]]; then
             size="$(zfs list -p -o used "${zfs_src}" | awk 'END {print $NF}')"
@@ -246,8 +246,8 @@ _backup_zfs() {
     zfs destroy "${zfs_src}@${snap}"
     zfs destroy "${zfs_dest}@${snap}"
 
-    echo "Backup completed at $(date +%Y%m%d-%u-%T.%3N)"
-    echo "Total duration: $(($(date +%s) - snap)) seconds"
+    _log $LOG_LEVEL_INFO "Backup completed at $(date +%Y%m%d-%u-%T.%3N)"
+    _log $LOG_LEVEL_INFO "Total duration: $(($(date +%s) - snap)) seconds"
 }
 
 _compress_file() {
