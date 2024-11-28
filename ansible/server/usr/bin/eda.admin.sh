@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 # set -x
 _get_yes_no() {
@@ -61,7 +61,9 @@ _get_username() {
 
 _create_user() {
     _get_username create
-    _get_random_password
+    # 生成密码
+    user_pass_sys=$(_get_random_password)
+    user_pass_vnc=$(_get_random_password)
     if ! id "$user_name"; then
         # useradd -p $(openssl passwd -crypt $user_pass_sys) test1
         useradd -m -s "$user_shell" -b "$path_home" "$user_name" && create_ok=1
@@ -91,7 +93,9 @@ _create_user() {
 _change_user_password() {
     _msg log "change password..."
     _get_username password
-    _get_random_password
+    # 生成密码
+    user_pass_sys=$(_get_random_password)
+    user_pass_vnc=$(_get_random_password)
     if _get_yes_no "[ssh] Do you want change system password of ${user_name}?"; then
         echo "$user_pass_sys" | passwd --stdin "$user_name"
         _msg logpass "system password: $user_name / $user_pass_sys"
@@ -141,7 +145,7 @@ _remove_user() {
     fi
 }
 
-_backup() {
+_backup_rsync() {
     _msg log "start backup..."
     local ssh_opt='ssh -o StrictHostKeyChecking=no -oConnectTimeout=10'
     local rsync_opt=(
@@ -256,42 +260,27 @@ _backup_borg() {
 }
 
 _get_random_password() {
-    # dd if=/dev/urandom bs=1 count=15 | base64 -w 0 | head -c10
-    local cmd
-    cmd=$(command -v md5sum || command -v sha256sum || command -v md5)
-    local count=0
-    while [ -z "$user_pass_sys" ]; do
-        ((++count))
-        case $count in
-        1)
-            user_pass_sys="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
-            user_pass_vnc="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
-            ;;
-        2)
-            user_pass_sys=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c10)
-            user_pass_vnc=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c10)
-            ;;
-        3)
-            user_pass_sys="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
-            user_pass_vnc="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c10)"
-            ;;
-        4)
-            user_pass_sys="$(echo "$RANDOM$(date)$RANDOM" | $cmd | base64 | head -c10)"
-            user_pass_vnc="$(echo "$RANDOM$(date)$RANDOM" | $cmd | base64 | head -c10)"
-            ;;
-        *)
-            echo "Failed to generate password, exit 1"
-            return 1
-            ;;
-        esac
-    done
+    local length=10
+    # 优先使用 openssl，这是最可靠的方法
+    if command -v openssl >/dev/null 2>&1; then
+        pass=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c "$length")
+        echo "$pass" && return
+    fi
+    # 备选方案：/dev/urandom
+    if [ -r "/dev/urandom" ]; then
+        pass=$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c "$length")
+        echo "$pass" && return
+    fi
+    # 最后的备选方案
+    pass=$(echo "$(date +%s%N)${RANDOM}${RANDOM}" | md5sum | head -c "$length")
+    echo "$pass"
 }
 
 _set_vncserver() {
     local id="$1"
     local account="$2"
     local vnc_users=/etc/sysconfig/vncusers
-    if grep -q ":${id}=${account}=" $vnc_users; then
+    if grep -q "^:${id}=${account}=" $vnc_users; then
         echo "found :${id}=${account}= in $vnc_users"
     else
         _msg log "not found :${id}=${account}= in $vnc_users, insert it..."
@@ -380,8 +369,8 @@ main() {
     [ "$change_password" = 1 ] && _change_user_password
     [ "$disable_user" = 1 ] && _disable_user
     [ "$remove_user" = 1 ] && _remove_user
-    [ "$backup_push" = 1 ] && _backup push
-    [ "$backup_pull" = 1 ] && _backup pull
+    [ "$backup_push" = 1 ] && _backup_rsync push
+    [ "$backup_pull" = 1 ] && _backup_rsync pull
     [ "$backup_borg" = 1 ] && _backup_borg "$borg_host" "$borg_remote_path" "${borg_local_path[@]}"
     [ "$set_vnc" = 1 ] && _set_vncserver "${set_vnc_args[@]}"
     [ "$get_help" = 1 ] && _get_help
