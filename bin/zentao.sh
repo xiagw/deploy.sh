@@ -109,12 +109,24 @@ EOF
     fi
 
     # 第一步：处理所有 closed 状态的项目
-    while IFS=';' read -r id name status; do
+    while IFS= read -r -d '' record; do
+        # 使用 base64 编码避免任何字符引起的问题
+        IFS=$'\t' read -r id encoded_name status <<<"$record"
+        # 解码项目名称
+        name=$(echo "$encoded_name" | base64 -d)
         [[ "$status" != 'closed' ]] && continue
         # 不足3位数前面补0
         printf -v id "%03d" "$id"
-        # 转换名称中的空格和斜杠为短横线
-        name="${name//[ \/]/-}"
+        # 转换名称中的特殊字符为短横线
+        name="${name//[[:space:][:punct:]]/-}"
+        # 移除连续的短横线
+        while [[ $name =~ -- ]]; do
+            name="${name//--/-}"
+        done
+        # 移除首尾的短横线
+        name="${name#-}"
+        name="${name%-}"
+
         # 获取源目录列表
         mapfile -t source_dirs < <(find "$doing_path/" -mindepth 1 -maxdepth 1 -name "${id}-*" -type d)
         # 如果有源目录存在
@@ -134,15 +146,27 @@ EOF
             done
         fi
         # sleep 3
-    done < <(jq -r '.[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
+    done < <(jq -r '.[] | [.id, (.name | @base64), .status] | join("\t") + "\u0000"' "$get_project_json")
 
     # 第二步：处理其他状态的项目
-    while IFS=';' read -r id name status; do
+    while IFS= read -r -d '' record; do
+        # 使用 base64 编码避免任何字符引起的问题
+        IFS=$'\t' read -r id encoded_name status <<<"$record"
+        # 解码项目名称
+        name=$(echo "$encoded_name" | base64 -d)
         [[ "$status" == 'closed' ]] && continue
         # 不足3位数前面补0
         printf -v id "%03d" "$id"
-        # 转换名称中的空格和斜杠为短横线
-        name="${name//[ \/]/-}"
+        # 转换名称中的特殊字符为短横线
+        name="${name//[[:space:][:punct:]]/-}"
+        # 移除连续的短横线
+        while [[ $name =~ -- ]]; do
+            name="${name//--/-}"
+        done
+        # 移除首尾的短横线
+        name="${name#-}"
+        name="${name%-}"
+
         dest_path="$doing_path/${id}-${name}"
         mkdir -p "$dest_path"
         # 获取源目录列表（排除目标目录）
@@ -159,7 +183,7 @@ EOF
             done < <(find "$doing_path/" -mindepth 1 -maxdepth 1 -name "${id}-*" -type d ! -path "$dest_path")
         fi
         # sleep 3
-    done < <(jq -r '.[] | (.id|tostring) + ";" + .name + ";" + .status' "$get_project_json")
+    done < <(jq -r '.[] | [.id, (.name | @base64), .status] | join("\t") + "\u0000"' "$get_project_json")
 
     rm -f "$get_project_json"
 }
