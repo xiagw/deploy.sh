@@ -113,6 +113,8 @@ EOF
         [[ "$status" != 'closed' ]] && continue
         # 不足3位数前面补0
         printf -v id "%03d" "$id"
+        # 转换名称中的空格和斜杠为短横线
+        name="${name//[ \/]/-}"
         # 获取源目录列表
         mapfile -t source_dirs < <(find "$doing_path/" -mindepth 1 -maxdepth 1 -name "${id}-*" -type d)
         # 如果有源目录存在
@@ -139,6 +141,8 @@ EOF
         [[ "$status" == 'closed' ]] && continue
         # 不足3位数前面补0
         printf -v id "%03d" "$id"
+        # 转换名称中的空格和斜杠为短横线
+        name="${name//[ \/]/-}"
         dest_path="$doing_path/${id}-${name}"
         mkdir -p "$dest_path"
         # 获取源目录列表（排除目标目录）
