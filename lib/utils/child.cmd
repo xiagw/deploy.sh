@@ -56,13 +56,12 @@ if not exist "%REST_FILE%" (
     powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
     "$startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
     $shutdown = $startup.AddMinutes(-120); ^
-    $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff'); ^
-    " > "%REST_FILE%"
+    Set-Content -Path '%REST_FILE%' -Value $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline"
 )
 
 :: 执行所有时间检查
 powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
-" $error.clear(); ^
+"$error.clear(); ^
 try { ^
     $result = @{}; ^
     $now = Get-Date; ^
@@ -71,7 +70,7 @@ try { ^
     $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
     $result.play_minutes = [Math]::Round(($now - $startup).TotalMinutes); ^
     if($startup -le $shutdown) { ^
-        $now.ToString('yyyy/MM/dd HH:mm:ss.ff') > '%PLAY_FILE%'; ^
+        Set-Content -Path '%PLAY_FILE%' -Value $now.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
         $result.play_minutes = 0; ^
     } ^
     foreach($k in $result.Keys) { Write-Output ('##' + $k + '=' + $result[$k]) } ^
