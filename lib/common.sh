@@ -769,7 +769,8 @@ get_github_latest_download() {
     # 获取最新版本信息并处理可能的错误
     local release_info
     release_info=$(curl -sS -H "Accept: application/vnd.github.v3+json" "$api_url")
-    if [ $? -ne 0 ] || [ -z "$release_info" ]; then
+    ret=$?
+    if [ $ret -ne 0 ] || [ -z "$release_info" ]; then
         _msg warning "Failed to fetch release info from GitHub API"
         echo "https://github.com/$repo/archive/refs/heads/master.tar.gz"
         return
@@ -1082,4 +1083,48 @@ _compress_document() {
         return 1
         ;;
     esac
+}
+
+_install_k9s() {
+    if [ "$1" != "upgrade" ] && command -v k9s >/dev/null; then
+        return
+    fi
+    _msg green "Installing k9s..."
+
+    # 获取最新版本下载链接
+    local download_url
+    download_url=$(get_github_latest_download "derailed/k9s" || return 1)
+    if [[ "$download_url" != *.deb ]]; then
+        _msg error "Failed to get k9s DEB download URL"
+        return 1
+    fi
+
+    # 创建临时文件
+    local temp_file
+    temp_file=$(mktemp)
+
+    # 下载deb包
+    _msg info "Downloading k9s..."
+    if ! curl -fsSL -o "$temp_file" "$download_url"; then
+        _msg error "Failed to download k9s"
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # 安装deb包
+    _msg info "Installing k9s package..."
+    if ! $use_sudo dpkg -i "$temp_file"; then
+        _msg error "Failed to install k9s package"
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # 清理临时文件
+    rm -f "$temp_file"
+
+    # 显示版本信息
+    _msg green "Showing version"
+    k9s version
+
+    _msg success "k9s installed successfully!"
 }
