@@ -62,6 +62,12 @@ try { ^
     Write-Host ('错误: ' + $_.Exception.Message); ^
 }"
 
+:: 从环境变量获取值
+for /f "tokens=*" %%a in ('echo %curr_hour%') do set curr_hour=%%a
+for /f "tokens=*" %%a in ('echo %weekday%') do set weekday=%%a
+for /f "tokens=*" %%a in ('echo %rest_elapsed%') do set rest_elapsed=%%a
+for /f "tokens=*" %%a in ('echo %play_elapsed%') do set play_elapsed=%%a
+
 call :TRIGGER
 
 :: 检查关机条件
