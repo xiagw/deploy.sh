@@ -131,11 +131,8 @@ if "%DEBUG_MODE%"=="1" (
     exit /b 0
 )
 :: 执行关机
+call :LOG "执行关机命令: %~1"
 shutdown /s /t %DELAY_SECONDS% /c "%~1，系统将在%DELAY_SECONDS%秒后关机" >nul 2>&1
-if !ERRORLEVEL! neq 0 (
-    call :LOG "执行关机命令失败"
-    exit /b 1
-)
 exit /b 0
 
 :: 定义一个记录日志的函数
