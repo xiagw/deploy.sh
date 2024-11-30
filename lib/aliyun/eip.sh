@@ -134,7 +134,7 @@ eip_delete() {
 
     echo "删除 EIP："
     local result
-    result=$(aliyun --profile "${profile:-}" vpc ReleaseEipAddress --AllocationId "$eip_id")
+    result=$(aliyun --profile "${profile:-}" vpc ReleaseEipAddress --RegionId "$region" --AllocationId "$eip_id")
     local status=$?
 
 

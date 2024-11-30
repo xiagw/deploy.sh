@@ -233,10 +233,7 @@ ecs_create() {
     if [ -z "$instance_type" ]; then
         local instance_type_list
         instance_type_list=$(aliyun --profile "${profile:-}" ecs DescribeInstanceTypes \
-            --RegionId "$region" \
-            --MinimumCpuCoreCount 2 \
-            --MaximumCpuCoreCount 8 \
-            --MinimumMemorySize 8 |
+            --RegionId "$region" |
             jq -r '.InstanceTypes.InstanceType[] | "\(.InstanceTypeId) \(.CpuCoreCount)核 \(.MemorySize)GB"')
         local selected_instance_type
         selected_instance_type=$(select_with_fzf "选择实例类型" "$instance_type_list")
