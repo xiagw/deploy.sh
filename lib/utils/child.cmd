@@ -49,7 +49,6 @@ if "%DEBUG_MODE%"=="1" (
 call :TRIGGER
 
 :: 如果开机时间文件不存在就创建，如果关机时间文件不存在，先创建（设置为启动时间的120分钟前）
-if not exist "%REST_FILE%" (
 powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
 "$error.clear(); ^
 try { ^
