@@ -31,7 +31,6 @@ powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
 "$error.clear(); ^
 try { ^
     $now = Get-Date; ^
-    # 设置环境变量
     [Environment]::SetEnvironmentVariable('curr_hour', $now.Hour, 'Process'); ^
     $weekday = [int]$now.DayOfWeek; ^
     if ($weekday -eq 0) { $weekday = 7 }; ^
@@ -54,13 +53,13 @@ try { ^
     } ^
     [Environment]::SetEnvironmentVariable('play_elapsed', $play_elapsed, 'Process'); ^
     if ($env:DEBUG_MODE -eq '1') { ^
-        Write-Host 'curr_hour=' $env:curr_hour; ^
-        Write-Host 'weekday=' $env:weekday; ^
-        Write-Host 'rest_elapsed=' $env:rest_elapsed; ^
-        Write-Host 'play_elapsed=' $env:play_elapsed; ^
+        Write-Host ('curr_hour=' + $env:curr_hour); ^
+        Write-Host ('weekday=' + $env:weekday); ^
+        Write-Host ('rest_elapsed=' + $env:rest_elapsed); ^
+        Write-Host ('play_elapsed=' + $env:play_elapsed); ^
     } ^
 } catch { ^
-    Write-Host ('错误: ' + $_.Exception.Message) ^
+    Write-Host ('错误: ' + $_.Exception.Message); ^
 }"
 
 call :TRIGGER
