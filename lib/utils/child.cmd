@@ -30,11 +30,11 @@ echo.%1| findstr /i "^server$ ^s$" >nul && goto :START_SERVER
 powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
 "$error.clear(); ^
 try { ^
+    $result = @{}; ^
     $now = Get-Date; ^
-    [Environment]::SetEnvironmentVariable('curr_hour', $now.Hour, 'Process'); ^
-    $weekday = [int]$now.DayOfWeek; ^
-    if ($weekday -eq 0) { $weekday = 7 }; ^
-    [Environment]::SetEnvironmentVariable('weekday', $weekday, 'Process'); ^
+    $result.curr_hour = $now.Hour; ^
+    $result.weekday = [int]$now.DayOfWeek; ^
+    if ($result.weekday -eq 0) { $result.weekday = 7 }; ^
     if(-not (Test-Path '%PLAY_FILE%')) { ^
         Set-Content -Path '%PLAY_FILE%' -Value $now.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
     } ^
@@ -44,54 +44,50 @@ try { ^
         Set-Content -Path '%REST_FILE%' -Value $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
     } ^
     $shutdown = Get-Date (Get-Content '%REST_FILE%'); ^
-    [Environment]::SetEnvironmentVariable('rest_elapsed', [Math]::Round(($now - $shutdown).TotalMinutes), 'Process'); ^
+    $result.rest_elapsed = [Math]::Round(($now - $shutdown).TotalMinutes); ^
     $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
-    $play_elapsed = [Math]::Round(($now - $startup).TotalMinutes); ^
+    $result.play_elapsed = [Math]::Round(($now - $startup).TotalMinutes); ^
     if($startup -le $shutdown) { ^
         Set-Content -Path '%PLAY_FILE%' -Value $now.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
-        $play_elapsed = 0; ^
+        $result.play_elapsed = 0; ^
     } ^
-    [Environment]::SetEnvironmentVariable('play_elapsed', $play_elapsed, 'Process'); ^
-    if ($env:DEBUG_MODE -eq '1') { ^
-        Write-Host ('curr_hour=' + $env:curr_hour); ^
-        Write-Host ('weekday=' + $env:weekday); ^
-        Write-Host ('rest_elapsed=' + $env:rest_elapsed); ^
-        Write-Host ('play_elapsed=' + $env:play_elapsed); ^
-    } ^
+    foreach($k in $result.Keys) { Write-Output ('##' + $k + '=' + $result[$k]) } ^
 } catch { ^
-    Write-Host ('错误: ' + $_.Exception.Message); ^
-}"
+    Write-Output ('错误: ' + $_.Exception.Message) ^
+} ^
+" > "%DEBUG_FILE%"
 
-:: 从环境变量获取值
-for /f "tokens=*" %%a in ('echo %curr_hour%') do set curr_hour=%%a
-for /f "tokens=*" %%a in ('echo %weekday%') do set weekday=%%a
-for /f "tokens=*" %%a in ('echo %rest_elapsed%') do set rest_elapsed=%%a
-for /f "tokens=*" %%a in ('echo %play_elapsed%') do set play_elapsed=%%a
+:: 读取结果
+if "%DEBUG_MODE%"=="1" ( type "%DEBUG_FILE%" )
+for /f "tokens=1,2 delims==" %%a in ('type "%DEBUG_FILE%" ^| findstr "##"') do (set "%%a=%%b")
+del /Q /F "%DEBUG_FILE%" 2>nul
 
+:: 检查远程关机命令
 call :TRIGGER
 
-:: 检查关机条件
-if %curr_hour% GEQ %WORK_HOUR_21% (
-    call :DO_SHUTDOWN "现在是%WORK_HOUR_21%点后，立刻关机"
+:: 添加时间检查
+if !##curr_hour! GEQ %WORK_HOUR_21% (
+    call :DO_SHUTDOWN "晚上%WORK_HOUR_21%点后不允许使用电脑"
     exit /b
 )
-if %curr_hour% LSS %WORK_HOUR_8% (
-    call :DO_SHUTDOWN "现在是%WORK_HOUR_8%点前，立刻关机"
+if !##curr_hour! LSS %WORK_HOUR_8% (
+    call :DO_SHUTDOWN "早上%WORK_HOUR_8%点前不允许使用电脑"
     exit /b
 )
-if %weekday% LEQ 5 (
-    if %curr_hour% GEQ %WORK_HOUR_17% (
-        call :DO_SHUTDOWN "现在是工作日%WORK_HOUR_17%点后，立刻关机"
+if !##weekday! LEQ 5 (
+    if !##curr_hour! GEQ %WORK_HOUR_17% (
+        call :DO_SHUTDOWN "工作日%WORK_HOUR_17%点后不允许使用电脑"
         exit /b
     )
 )
 
-if %rest_elapsed% LSS %REST_MINUTES% (
+:: 检查关机条件
+if !##rest_elapsed! LSS %REST_MINUTES% (
     call :DO_SHUTDOWN "距离上次关机未满%REST_MINUTES%分钟，立刻关机"
     exit /b
 )
-
-if %play_elapsed% GEQ %PLAY_MINUTES% (
+:: 检查开机时长
+if !##play_elapsed! GEQ %PLAY_MINUTES% (
     if "%DEBUG_MODE%"=="1" (
         call :LOG "DEBUG模式: 开机时间超过%PLAY_MINUTES%分钟，立刻关机"
     ) else (
