@@ -17,7 +17,7 @@ set "REST_MINUTES=120"
 set "WORK_HOUR_8=8"
 set "WORK_HOUR_17=17"
 set "WORK_HOUR_21=21"
-set "DELAY_SECONDS=60"
+set "DELAY_SECONDS=40"
 set "URL_HOST=http://192.168.5.1"
 set "URL_PORT=8899"
 
@@ -53,29 +53,37 @@ if not exist "%PLAY_FILE%" ( echo %DATE% %TIME% > "%PLAY_FILE%" )
 
 :: 如果关机时间文件不存在，先创建（设置为启动时间的120分钟前）
 if not exist "%REST_FILE%" (
-    powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command "$startup = Get-Date (Get-Content '%PLAY_FILE%'); $shutdown = $startup.AddMinutes(-120); $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff')" > "%REST_FILE%"
+    powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
+    $shutdown = $startup.AddMinutes(-120); ^
+    $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff'); ^
+    " > "%REST_FILE%"
 )
 
 :: 执行所有时间检查
-powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command "$error.clear(); try { $result = @{}; $now = Get-Date; $shutdown = Get-Date (Get-Content '%REST_FILE%'); $result.rest_minutes = [Math]::Round(($now - $shutdown).TotalMinutes); $startup = Get-Date (Get-Content '%PLAY_FILE%'); $result.play_minutes = [Math]::Round(($now - $startup).TotalMinutes); $result.need_update = if($startup -lt $shutdown) { '1' } else { '0' }; foreach($k in $result.Keys) { Write-Output ('##' + $k + '=' + $result[$k]) } } catch { Write-Output ('错误: ' + $_.Exception.Message) }" > "%DEBUG_FILE%"
+powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
+" $error.clear(); ^
+try { ^
+    $result = @{}; ^
+    $now = Get-Date; ^
+    $shutdown = Get-Date (Get-Content '%REST_FILE%'); ^
+    $result.rest_minutes = [Math]::Round(($now - $shutdown).TotalMinutes); ^
+    $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
+    $result.play_minutes = [Math]::Round(($now - $startup).TotalMinutes); ^
+    if($startup -le $shutdown) { ^
+        $now.ToString('yyyy/MM/dd HH:mm:ss.ff') > '%PLAY_FILE%'; ^
+        $result.play_minutes = 0; ^
+    } ^
+    foreach($k in $result.Keys) { Write-Output ('##' + $k + '=' + $result[$k]) } ^
+} catch { ^
+    Write-Output ('错误: ' + $_.Exception.Message) ^
+} ^
+" > "%DEBUG_FILE%"
 
 :: 读取结果
 if "%DEBUG_MODE%"=="1" ( type "%DEBUG_FILE%" )
 for /f "tokens=1,2 delims==" %%a in ('type "%DEBUG_FILE%" ^| findstr "##"') do (set "%%a=%%b")
 del /Q /F "%DEBUG_FILE%" 2>nul
-
-:: 更新启动时间
-if !##need_update! EQU 1 (
-    if "%DEBUG_MODE%"=="1" (
-        call :LOG "DEBUG模式: 需要更新启动时间文件"
-    ) else (
-        echo %DATE% %TIME% > "%PLAY_FILE%"
-        if !ERRORLEVEL! neq 0 (
-            call :LOG "无法更新启动时间文件"
-            exit /b 1
-        )
-    )
-)
 
 :: 检查关机条件
 if !##rest_minutes! LSS %REST_MINUTES% (
@@ -86,7 +94,7 @@ if !##rest_minutes! LSS %REST_MINUTES% (
 :: 检查开机时长
 if !##play_minutes! GEQ %PLAY_MINUTES% (
     if "%DEBUG_MODE%"=="1" (
-        call :LOG "DEBUG模式: 开机时间超过%PLAY_MINUTES%分钟，更新关机时间文件"
+        call :LOG "DEBUG模式: 开机时间超过%PLAY_MINUTES%分钟，立刻关机"
     ) else (
         echo %DATE% %TIME% > "%REST_FILE%"
     )
