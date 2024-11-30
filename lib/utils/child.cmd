@@ -44,12 +44,12 @@ try { ^
         Set-Content -Path '%REST_FILE%' -Value $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
     } ^
     $shutdown = Get-Date (Get-Content '%REST_FILE%'); ^
-    $result.rest_minutes = [Math]::Round(($now - $shutdown).TotalMinutes); ^
+    $result.rest_elapsed = [Math]::Round(($now - $shutdown).TotalMinutes); ^
     $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
-    $result.play_minutes = [Math]::Round(($now - $startup).TotalMinutes); ^
+    $result.play_elapsed = [Math]::Round(($now - $startup).TotalMinutes); ^
     if($startup -le $shutdown) { ^
         Set-Content -Path '%PLAY_FILE%' -Value $now.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
-        $result.play_minutes = 0; ^
+        $result.play_elapsed = 0; ^
     } ^
     foreach($k in $result.Keys) { Write-Output ('##' + $k + '=' + $result[$k]) } ^
 } catch { ^
@@ -65,13 +65,13 @@ del /Q /F "%DEBUG_FILE%" 2>nul
 call :TRIGGER
 
 :: 检查关机条件
-if !##rest_minutes! LSS %REST_MINUTES% (
+if !##rest_elapsed! LSS %REST_MINUTES% (
     call :DO_SHUTDOWN "距离上次关机未满%REST_MINUTES%分钟，立刻关机"
     exit /b
 )
 
 :: 检查开机时长
-if !##play_minutes! GEQ %PLAY_MINUTES% (
+if !##play_elapsed! GEQ %PLAY_MINUTES% (
     if "%DEBUG_MODE%"=="1" (
         call :LOG "DEBUG模式: 开机时间超过%PLAY_MINUTES%分钟，立刻关机"
     ) else (
