@@ -23,6 +23,7 @@ set "URL_PORT=8899"
 
 echo.%1| findstr /i "^debug$ ^d$" >nul && set "DEBUG_MODE=1"
 echo.%1| findstr /i "^reset$ ^r$" >nul && goto :RESET
+echo.%1| findstr /i "^upgrade$ ^u$" >nul && goto :UPGRADE
 echo.%1| findstr /i "^install$ ^i$" >nul && goto :INSTALL_TASK
 echo.%1| findstr /i "^server$ ^s$" >nul && goto :START_SERVER
 
@@ -207,6 +208,24 @@ try { ^
         $listener.Close(); ^
     } ^
 }"
+exit /b 0
+
+:UPGRADE
+:: 下载最新版本的脚本
+curl.exe -Lo "%~f0.new" "https://gitee.com/xiagw/deploy.sh/raw/main/lib/utils/child.cmd"
+if %ERRORLEVEL% NEQ 0 (
+    call :LOG "下载新版本失败"
+    del /F /Q "%~f0.new" 2>nul
+    exit /b 1
+)
+:: 替换旧文件
+move /Y "%~f0.new" "%~f0" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    call :LOG "更新文件失败"
+    del /F /Q "%~f0.new" 2>nul
+    exit /b 1
+)
+call :LOG "更新成功完成"
 exit /b 0
 
 :END
