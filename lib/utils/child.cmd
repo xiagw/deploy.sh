@@ -48,23 +48,21 @@ if "%DEBUG_MODE%"=="1" (
 
 call :TRIGGER
 
-:: 如果启动时间文件不存在，先创建
-if not exist "%PLAY_FILE%" ( echo %DATE% %TIME% > "%PLAY_FILE%" )
-
-:: 如果关机时间文件不存在，先创建（设置为启动时间的120分钟前）
+:: 如果开机时间文件不存在就创建，如果关机时间文件不存在，先创建（设置为启动时间的120分钟前）
 if not exist "%REST_FILE%" (
-    powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
-    $shutdown = $startup.AddMinutes(-120); ^
-    Set-Content -Path '%REST_FILE%' -Value $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline"
-)
-
-:: 执行所有时间检查
 powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
 "$error.clear(); ^
 try { ^
     $result = @{}; ^
     $now = Get-Date; ^
+    if(-not (Test-Path '%PLAY_FILE%')) { ^
+        Set-Content -Path '%PLAY_FILE%' -Value $now.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
+    } ^
+    if(-not (Test-Path '%REST_FILE%')) { ^
+        $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
+        $shutdown = $startup.AddMinutes(-120); ^
+        Set-Content -Path '%REST_FILE%' -Value $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
+    } ^
     $shutdown = Get-Date (Get-Content '%REST_FILE%'); ^
     $result.rest_minutes = [Math]::Round(($now - $shutdown).TotalMinutes); ^
     $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
