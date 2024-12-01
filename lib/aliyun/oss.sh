@@ -661,7 +661,7 @@ oss_batch_delete() {
     result=$(ossutil --profile "${profile:-}" \
         --endpoint "$endpoint_url" \
         rm "$bucket_path" \
-        --all-versions -r -f --job 50 \
+        --all-versions -r -f \
         --include-from "$file_list" \
         --metadata-include "x-oss-storage-class=$storage_class")
 
