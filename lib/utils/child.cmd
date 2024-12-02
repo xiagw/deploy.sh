@@ -1,7 +1,7 @@
 @echo off
 :: [保留文件头部注释段不删除]
 :: GBK编码，CRLF换行    curl.exe -Lo child.cmd https://gitee.com/xiagw/deploy.sh/raw/main/lib/utils/child.cmd
-:: 需求描述：关机前60秒倒计时；每天21:00-08:00时间段和工作日17:00后关机；每次只能开机50分钟，关机后120分钟内不能开机
+:: 需求描述：关机前40秒倒计时；每天21:00-08:00时间段和工作日17:00后关机；每次只能开机50分钟，每次关机后120分钟内不能开机
 setlocal EnableDelayedExpansion
 
 :: 设置基础文件名和路径
@@ -14,9 +14,6 @@ set "PLAY_FILE=%BASE_PATH%_play.txt"
 set "REST_FILE=%BASE_PATH%_rest.txt"
 set "PLAY_MINUTES=50"
 set "REST_MINUTES=120"
-set "WORK_HOUR_8=8"
-set "WORK_HOUR_17=17"
-set "WORK_HOUR_21=21"
 set "DELAY_SECONDS=40"
 set "URL_HOST=http://192.168.5.1"
 set "URL_PORT=8899"
@@ -41,7 +38,7 @@ try { ^
     } ^
     if(-not (Test-Path '%REST_FILE%')) { ^
         $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
-        $shutdown = $startup.AddMinutes(-120); ^
+        $shutdown = $startup.AddMinutes(-%REST_MINUTES%); ^
         Set-Content -Path '%REST_FILE%' -Value $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
     } ^
     $shutdown = Get-Date (Get-Content '%REST_FILE%'); ^
@@ -67,17 +64,17 @@ del /Q /F "%DEBUG_FILE%" 2>nul
 call :TRIGGER
 
 :: 添加时间检查
-if !##curr_hour! GEQ %WORK_HOUR_21% (
-    call :DO_SHUTDOWN "晚上%WORK_HOUR_21%点后不允许使用电脑"
+if !##curr_hour! GEQ 21 (
+    call :DO_SHUTDOWN "晚上21点后不允许使用电脑"
     exit /b
 )
-if !##curr_hour! LSS %WORK_HOUR_8% (
-    call :DO_SHUTDOWN "早上%WORK_HOUR_8%点前不允许使用电脑"
+if !##curr_hour! LSS 8 (
+    call :DO_SHUTDOWN "早上8点前不允许使用电脑"
     exit /b
 )
 if !##weekday! LEQ 5 (
-    if !##curr_hour! GEQ %WORK_HOUR_17% (
-        call :DO_SHUTDOWN "工作日%WORK_HOUR_17%点后不允许使用电脑"
+    if !##curr_hour! GEQ 17 (
+        call :DO_SHUTDOWN "工作日17点后不允许使用电脑"
         exit /b
     )
 )
@@ -89,11 +86,7 @@ if !##rest_elapsed! LSS %REST_MINUTES% (
 )
 :: 检查开机时长
 if !##play_elapsed! GEQ %PLAY_MINUTES% (
-    if "%DEBUG_MODE%"=="1" (
-        call :LOG "DEBUG模式: 开机时间超过%PLAY_MINUTES%分钟，立刻关机"
-    ) else (
-        echo %DATE% %TIME% > "%REST_FILE%"
-    )
+    echo %DATE% %TIME% > "%REST_FILE%"
     call :DO_SHUTDOWN "开机时间超过%PLAY_MINUTES%分钟，立刻关机"
     exit /b
 )
