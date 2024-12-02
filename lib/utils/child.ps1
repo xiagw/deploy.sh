@@ -1,4 +1,3 @@
-
 function Show-Notification {
     [cmdletbinding()]
     Param (
@@ -32,70 +31,76 @@ function Write-Log {
     Param ([string]$LogString)
     $LogTime = (Get-Date).toString("yyyy/MM/dd HH:mm:ss")
     $LogMessage = "$LogTime $LogString"
+    # Write-Output $LogMessage
     Add-Content $LogFile -value $LogMessage
 }
 
 function Invoke-Poweroff {
-    Write-Output "正在关机 - 休息2小时" | Show-Notification
-    # Start-Sleep -Seconds 30
-    Write-Log "Shutdown."
-    shutdown.exe /s /t 30 /f
-    # Stop-Computer -Force
+    param ([string]$reason = "正在关机")
+    # Write-Output $reason | Show-Notification
+    Write-Log $reason
+    shutdown.exe /s /t 40 /f /c $reason
 }
 
-# $AppPath = Get-Location
-$PlayMinutes = 45
-$RestMinutes = 120
+## 需求描述：关机前40秒倒计时；每天21:00-08:00时间段和工作日17:00后关机；每次只能开机50分钟，每次关机后120分钟内不能开机
+$playMinutes = 50
+$restMinutes = 120
 $AppPath = $PSScriptRoot
-$PlayFile = Join-Path $AppPath "child.play"
-$RestFile = Join-Path $AppPath "child.rest"
-$DisableFile = Join-Path $AppPath "child.disable"
-$ForceFile = Join-Path $AppPath "child.force"
+$PlayFile = Join-Path $AppPath "child_play.txt"
+$RestFile = Join-Path $AppPath "child_rest.txt"
+$DisableFile = Join-Path $AppPath "child_disable.txt"
 $LogFile = Join-Path $AppPath "child.log"
 
 # Cancel shutdown
-if (Test-Path $DisableFile) {
+if (Test-Path $DisableFile) { return }
+
+$currentTime = Get-Date
+$currentHour = (Get-Date -Uformat %H%M)
+
+## 夜间时段判断(21:00-08:00)
+if ($currentHour -lt 800 -or $currentHour -gt 2100) {
+    Invoke-Poweroff -reason "晚上21点到早上8点期间不能使用电脑"
     return
 }
 
-## study mode, program with vscode, but no minecraft
-
-## homework mode, week 1-5, after 19:30, always shutdown
-if ( ((Get-Date -Uformat %w) -lt 6) -and ((Get-Date -Uformat %H%M) -gt 1930) ) {
-    if (Test-Path $ForceFile) {
-        Write-Output ""
-    }
-    else {
-        Invoke-Poweroff
-        return
-    }
+## 工作日17:00后判断
+if ((Get-Date).DayOfWeek -in 1..5 -and $currentHour -gt 1700) {
+    Invoke-Poweroff -reason "工作日17点后不能使用电脑"
+    return
 }
 
-# Check if it's time to rest
+## 如果有rest文件，则检查文件内时间是否为120分钟前
 if (Test-Path $RestFile) {
-    $RestTime = (Get-Item $RestFile).LastWriteTime
-    if ((Get-Date).AddMinutes(-$RestMinutes) -gt $RestTime) {
-        Remove-Item $RestFile, $PlayFile -Force -ErrorAction SilentlyContinue
-    }
-    else {
-        Invoke-Poweroff
-        return
-    }
-}
+    $lastStopTime = Get-Date (Get-Content $RestFile)
+    $timeDiff = ($currentTime - $lastStopTime).TotalMinutes
 
-# (Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime
-#### play #####################################
-if (Test-Path $PlayFile) {
-    $timePlayFile = (Get-Item $PlayFile).LastWriteTime
-    if ((Get-Date).AddMinutes(-$restMinutes) -gt $timePlayFile) {
-        New-Item -Path $PlayFile -Type File -Force
+    if ($timeDiff -lt $restMinutes) {
+        Invoke-Poweroff -reason "休息时间未到，还需要休息 $([math]::Round($restMinutes - $timeDiff)) 分钟"
         return
-    }
-    if ((Get-Date).AddMinutes(-$playMinutes) -gt $timePlayFile) {
-        New-Item -Path $RestFile -Type File -Force
-        Invoke-Poweroff
     }
 }
 else {
-    New-Item -Path $PlayFile -Type File -Force
+    # 创建休息文件，内容为120分钟前的时间
+    $initialRestTime = $currentTime.AddMinutes(-$restMinutes)
+    Set-Content -Path $RestFile -Value $initialRestTime.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline
+}
+
+## 如果有play文件，则检查文件内时间是否为50分钟前
+if (Test-Path $PlayFile) {
+    $playStartTime = Get-Date (Get-Content $PlayFile)
+    $playDuration = ($currentTime - $playStartTime).TotalMinutes
+    ## 如果play文件内时间为120分钟前，则设置为当前时间
+    if ($playDuration -gt $restMinutes) {
+        Set-Content -Path $PlayFile -Value $currentTime.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline
+        return
+    }
+    if ($playDuration -gt $playMinutes) {
+        Set-Content -Path $RestFile -Value $currentTime.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline
+        Invoke-Poweroff -reason "已超过允许使用时间 $playMinutes 分钟"
+        return
+    }
+}
+else {
+    # 创建play文件，内容为当前时间
+    Set-Content -Path $PlayFile -Value $currentTime.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline
 }

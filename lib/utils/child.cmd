@@ -25,6 +25,7 @@ echo.%1| findstr /i "^install$ ^i$" >nul && goto :INSTALL_TASK
 echo.%1| findstr /i "^server$ ^s$" >nul && goto :START_SERVER
 
 :: 执行所有时间检查
+:: powershell -NoLogo -NonInteractive -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%~f0"
 powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
 "$error.clear(); ^
 try { ^
@@ -37,15 +38,14 @@ try { ^
         Set-Content -Path '%PLAY_FILE%' -Value $now.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
     } ^
     if(-not (Test-Path '%REST_FILE%')) { ^
-        $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
-        $shutdown = $startup.AddMinutes(-%REST_MINUTES%); ^
+        $shutdown = $now.AddMinutes(-%REST_MINUTES%); ^
         Set-Content -Path '%REST_FILE%' -Value $shutdown.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
     } ^
     $shutdown = Get-Date (Get-Content '%REST_FILE%'); ^
     $result.rest_elapsed = [Math]::Round(($now - $shutdown).TotalMinutes); ^
     $startup = Get-Date (Get-Content '%PLAY_FILE%'); ^
     $result.play_elapsed = [Math]::Round(($now - $startup).TotalMinutes); ^
-    if($startup -le $shutdown) { ^
+    if($result.play_elapsed -gt %REST_MINUTES%) { ^
         Set-Content -Path '%PLAY_FILE%' -Value $now.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline; ^
         $result.play_elapsed = 0; ^
     } ^
