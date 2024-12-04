@@ -487,7 +487,7 @@ generate_large_files_list() {
     temp_file=$(mktemp)
 
     # 常见的大文件类型
-    for ext in mp3 mp4 avi mov wmv flv mkv webm jpg jpeg png gif bmp tiff webp psd ai zip rar 7z tar gz iso dmg pdf doc docx ppt pptx xls xlsx; do
+    for ext in mp3 mp4 avi mov wmv flv mkv webm jpg jpeg png gif bmp tiff webp psd ai zip rar 7z tar gz iso dmg pdf doc docx ppt pptx xls xlsx tif jfif m4v 3gp wof ttf heic fbx woff wav hdr; do
         echo "*.$ext"
         echo "*.${ext^^}"
     done >"$temp_file"
@@ -707,7 +707,7 @@ analyze_logs_for_status() {
     local bucket_path=$1
     local log_file=$2
     local status_codes=$3
-    local file_types=${4:-"mp3,mp4,avi,mov,wmv,flv,mkv,webm,jpg,jpeg,png,gif,bmp,tiff,webp,psd,ai,zip,rar,7z,tar,gz,iso,dmg,pdf,doc,docx,ppt,pptx,xls,xlsx"}
+    local file_types=${4:-"mp3,mp4,avi,mov,wmv,flv,mkv,webm,jpg,jpeg,png,gif,bmp,tif,tiff,wof,tof,heic,webp,psd,ai,zip,rar,7z,tar,gz,iso,dmg,pdf,doc,docx,ppt,pptx,xls,xlsx,fbx"}
     local domain=${5:-""}
     local temp_dir
     temp_dir=$(mktemp -d)
