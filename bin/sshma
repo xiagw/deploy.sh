@@ -2,15 +2,9 @@
 # -*- coding: utf-8 -*-
 # shellcheck disable=SC2016
 
-# 初始化命令
-_init_cmd() {
-    local cmd="$1"
-    command -v "g$cmd" || command -v "$cmd" || return 1
-}
-
 # 全局变量定义
 SCRIPT_NAME=$(basename "$0")
-SCRIPT_PATH=$(dirname "$(_init_cmd readlink)" -f "$0")
+SCRIPT_PATH=$(dirname "$(readlink -f "$0")")
 SSH_CONFIG_FILE="${HOME}/.ssh/config"
 AWK_SCRIPT=$(mktemp)
 
@@ -60,7 +54,7 @@ trap 'rm -f "$AWK_SCRIPT"' EXIT
 # 辅助函数
 _msg() {
     local type="$1" text="$2" now
-    now=$("$(_init_cmd date)" +"%Y-%m-%d %H:%M:%S")
+    now=$(date +"%Y-%m-%d %H:%M:%S")
 
     case "$type" in
     error) printf "\033[31m[%s] [ERROR] %s\033[0m\n" "$now" "$text" >&2 ;;
@@ -94,8 +88,6 @@ _parse_connection_string() {
     local conn_str="$1"
     if [[ "$conn_str" =~ ^([^@]+)@([^:]+)(:([0-9]+))?$ ]]; then
         echo "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]:-22}"
-    else
-        return 1
     fi
 }
 
@@ -111,7 +103,7 @@ _list_hosts() {
     local host="$2"
 
     # 默认列出主机
-    "$(_init_cmd awk)" -v format="$format" -v mode="list" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE"
+    awk -v format="$format" -v mode="list" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE"
 }
 
 _add_host() {
@@ -151,7 +143,7 @@ _add_host() {
 
     # 构建配置（移到选项处理之后）
     config=("### ${alias_name} begin$([ $use_byobu -eq 1 ] && echo ' byobu')" "${config[@]}")
-    config=("${config[@]}" "Host $alias_name")
+    config+=("Host $alias_name")
     config+=("    HostName $host_ip")
     config+=("    User $user")
     [[ "$port" != "22" ]] && config+=("    Port $port")
@@ -185,8 +177,7 @@ _remove_host() {
     fi
 
     # 使用 awk 删除配置块
-    "$(_init_cmd awk)" -v host="$alias_name" -v mode="remove" \
-        -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE" >"$SSH_CONFIG_FILE.tmp" &&
+    awk -v host="$alias_name" -v mode="remove" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE" >"$SSH_CONFIG_FILE.tmp" &&
         mv "$SSH_CONFIG_FILE.tmp" "$SSH_CONFIG_FILE"
 
     # 验证删除是否成功
@@ -206,9 +197,9 @@ _connect_host() {
     [ -z "$alias_name" ] && return 1
 
     local use_byobu=
-    if "$(_init_cmd grep)" -B1 "^Host\s\+${alias_name}$" "$SSH_CONFIG_FILE" | "$(_init_cmd grep)" -q "byobu"; then
+    if grep -B1 "^Host\s\+${alias_name}$" "$SSH_CONFIG_FILE" | grep -q "byobu"; then
         use_byobu=byobu
-        uname -a | "$(_init_cmd grep)" -i -q 'iphone.*ish' && use_byobu=
+        uname -a | grep -i -q 'iphone.*ish' && use_byobu=
     fi
 
     _msg info "Connecting to $alias_name..."
