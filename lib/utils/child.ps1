@@ -1,3 +1,7 @@
+param (
+    [switch]$Debug
+)
+
 function Show-Notification {
     [cmdletbinding()]
     Param (
@@ -29,17 +33,21 @@ function Show-Notification {
 
 function Write-Log {
     Param ([string]$LogString)
-    $LogTime = (Get-Date).toString("yyyy/MM/dd HH:mm:ss")
-    $LogMessage = "$LogTime $LogString"
-    # Write-Output $LogMessage
-    Add-Content $LogFile -value $LogMessage
+    Add-Content $LogFile -value "$(Get-Date): $LogString"
+    if ($Debug) {
+        Write-Host "$(Get-Date): $LogString"
+    }
 }
 
 function Invoke-Poweroff {
     param ([string]$reason = "正在关机")
     # Write-Output $reason | Show-Notification
     Write-Log $reason
-    shutdown.exe /s /t 40 /f /c $reason
+    if ($Debug) {
+        Write-Host "Debug模式: 模拟关机操作，原因: $reason" -ForegroundColor Yellow
+    } else {
+        shutdown.exe /s /t 40 /f /c $reason
+    }
 }
 
 ## 需求描述：关机前40秒倒计时；每天21:00-08:00时间段和工作日17:00后关机；每次只能开机50分钟，每次关机后120分钟内不能开机
@@ -55,7 +63,7 @@ $LogFile = Join-Path $AppPath "child.log"
 if (Test-Path $DisableFile) { return }
 
 $currentTime = Get-Date
-$currentHour = (Get-Date -Uformat %H%M)
+$currentHour = $currentTime.ToString('HHmm')
 
 ## 夜间时段判断(21:00-08:00)
 if ($currentHour -lt 800 -or $currentHour -gt 2100) {
@@ -73,34 +81,39 @@ if ((Get-Date).DayOfWeek -in 1..5 -and $currentHour -gt 1700) {
 if (Test-Path $RestFile) {
     $lastStopTime = Get-Date (Get-Content $RestFile)
     $timeDiff = ($currentTime - $lastStopTime).TotalMinutes
-
+    if ($Debug) {
+        Write-Host "休息时间检查: 上次停止时间 $lastStopTime, 已休息 $timeDiff 分钟" -ForegroundColor Cyan
+    }
     if ($timeDiff -lt $restMinutes) {
-        Invoke-Poweroff -reason "休息时间未到，还需要休息 $([math]::Round($restMinutes - $timeDiff)) 分钟"
+        Invoke-Poweroff -reason "还需要休息 $([math]::Round($restMinutes - $timeDiff)) 分钟"
         return
     }
 }
 else {
     # 创建休息文件，内容为120分钟前的时间
     $initialRestTime = $currentTime.AddMinutes(-$restMinutes)
-    Set-Content -Path $RestFile -Value $initialRestTime.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline
+    Write-TimeFile -FilePath $RestFile -TimeValue $initialRestTime
 }
 
 ## 如果有play文件，则检查文件内时间是否为50分钟前
 if (Test-Path $PlayFile) {
     $playStartTime = Get-Date (Get-Content $PlayFile)
     $playDuration = ($currentTime - $playStartTime).TotalMinutes
+    if ($Debug) {
+        Write-Host "使用时间检查: 开始时间 $playStartTime, 已使用 $playDuration 分钟" -ForegroundColor Cyan
+    }
     ## 如果play文件内时间为120分钟前，则设置为当前时间
     if ($playDuration -gt $restMinutes) {
-        Set-Content -Path $PlayFile -Value $currentTime.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline
+        Write-TimeFile -FilePath $PlayFile -TimeValue $currentTime
         return
     }
     if ($playDuration -gt $playMinutes) {
-        Set-Content -Path $RestFile -Value $currentTime.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline
+        Write-TimeFile -FilePath $RestFile -TimeValue $currentTime
         Invoke-Poweroff -reason "已超过允许使用时间 $playMinutes 分钟"
         return
     }
 }
 else {
     # 创建play文件，内容为当前时间
-    Set-Content -Path $PlayFile -Value $currentTime.ToString('yyyy/MM/dd HH:mm:ss.ff') -NoNewline
+    Write-TimeFile -FilePath $PlayFile -TimeValue $currentTime
 }
