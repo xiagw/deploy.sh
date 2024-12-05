@@ -86,7 +86,7 @@ if !##rest_elapsed! LSS %REST_MINUTES% (
 )
 :: 检查开机时长
 if !##play_elapsed! GEQ %PLAY_MINUTES% (
-    echo %DATE% %TIME% > "%REST_FILE%"
+    echo %DATE:~0,10% %TIME% > "%REST_FILE%"
     call :DO_SHUTDOWN "开机时间超过%PLAY_MINUTES%分钟，立刻关机"
     exit /b
 )
@@ -115,6 +115,7 @@ if "%DEBUG_MODE%"=="1" (
     call :LOG "DEBUG模式: 触发关机条件: %~1"
     call :LOG "DEBUG模式: 显示启动时间文件内容"
     type "%PLAY_FILE%"
+    echo.
     call :LOG "DEBUG模式: 显示关机时间文件内容"
     type "%REST_FILE%"
     exit /b 0
@@ -134,8 +135,13 @@ if "%DEBUG_MODE%"=="1" (
 exit /b 0
 
 :TRIGGER
-curl.exe -fssSL -X POST %URL_HOST%/trigger | findstr /i "rest" >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
+for /f "delims=" %%a in ('curl.exe -fssSL -X POST %URL_HOST%/trigger') do set "RESPONSE=%%a"
+echo.!RESPONSE! | findstr /i "play" >nul 2>&1
+if !ERRORLEVEL! EQU 0 (
+    exit /b 1
+)
+echo.!RESPONSE! | findstr /i "rest" >nul 2>&1
+if !ERRORLEVEL! EQU 0 (
     call :DO_SHUTDOWN "收到远程关机命令"
     exit /b 0
 )
