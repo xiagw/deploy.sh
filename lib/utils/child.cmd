@@ -61,7 +61,7 @@ for /f "tokens=1,2 delims==" %%a in ('type "%DEBUG_FILE%" ^| findstr "##"') do (
 del /Q /F "%DEBUG_FILE%" 2>nul
 
 :: 检查远程关机命令
-call :TRIGGER
+:: call :TRIGGER
 
 :: 添加时间检查
 if !##curr_hour! GEQ 21 (
@@ -72,7 +72,7 @@ if !##curr_hour! LSS 8 (
     call :DO_SHUTDOWN "早上8点前不允许使用电脑"
     exit /b
 )
-if !##weekday! LEQ 5 (
+if !##weekday! LEQ 4 (
     if !##curr_hour! GEQ 17 (
         call :DO_SHUTDOWN "工作日17点后不允许使用电脑"
         exit /b
