@@ -12,6 +12,7 @@ set "LOGFILE=%BASE_PATH%.log"
 set "DEBUG_FILE=%BASE_PATH%_debug.txt"
 set "PLAY_FILE=%BASE_PATH%_play.txt"
 set "REST_FILE=%BASE_PATH%_rest.txt"
+set "DISABLE_FILE=%BASE_PATH%_disable.txt"
 set "PLAY_MINUTES=50"
 set "REST_MINUTES=120"
 set "DELAY_SECONDS=40"
@@ -23,6 +24,8 @@ echo.%1| findstr /i "^reset$ ^r$" >nul && goto :RESET
 echo.%1| findstr /i "^upgrade$ ^u$" >nul && goto :UPGRADE
 echo.%1| findstr /i "^install$ ^i$" >nul && goto :INSTALL_TASK
 echo.%1| findstr /i "^server$ ^s$" >nul && goto :START_SERVER
+
+if exist "%DISABLE_FILE%" ( exit /b 0 )
 
 :: 执行所有时间检查
 :: powershell -NoLogo -NonInteractive -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%~f0"
@@ -72,7 +75,7 @@ if !##curr_hour! LSS 8 (
     call :DO_SHUTDOWN "早上8点前不允许使用电脑"
     exit /b
 )
-if !##weekday! LEQ 4 (
+if !##weekday! LSS 5 (
     if !##curr_hour! GEQ 17 (
         call :DO_SHUTDOWN "工作日17点后不允许使用电脑"
         exit /b

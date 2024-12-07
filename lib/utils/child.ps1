@@ -31,6 +31,14 @@ function Show-Notification {
     $Notifier.Show($Toast);
 }
 
+function Write-TimeFile {
+    param (
+        [string]$FilePath,
+        [DateTime]$TimeValue = (Get-Date)
+    )
+    Set-Content -Path $FilePath -Value $TimeValue.ToString('yyyy-MM-dd HH:mm:ss')
+}
+
 function Write-Log {
     Param ([string]$LogString)
     Add-Content $LogFile -value "$(Get-Date): $LogString"
@@ -63,16 +71,16 @@ $LogFile = Join-Path $AppPath "child.log"
 if (Test-Path $DisableFile) { return }
 
 $currentTime = Get-Date
-$currentHour = $currentTime.ToString('HHmm')
+$currentHour = [int]$currentTime.ToString('HH')
 
 ## 夜间时段判断(21:00-08:00)
-if ($currentHour -lt 800 -or $currentHour -gt 2100) {
+if ($currentHour -lt 8 -or $currentHour -ge 21) {
     Invoke-Poweroff -reason "晚上21点到早上8点期间不能使用电脑"
     return
 }
 
 ## 工作日17:00后判断
-if ((Get-Date).DayOfWeek -in 1..5 -and $currentHour -gt 1700) {
+if ((Get-Date).DayOfWeek -in 1..4 -and $currentHour -ge 17) {
     Invoke-Poweroff -reason "工作日17点后不能使用电脑"
     return
 }
@@ -91,8 +99,7 @@ if (Test-Path $RestFile) {
 }
 else {
     # 创建休息文件，内容为120分钟前的时间
-    $initialRestTime = $currentTime.AddMinutes(-$restMinutes)
-    Write-TimeFile -FilePath $RestFile -TimeValue $initialRestTime
+    Write-TimeFile -FilePath $RestFile -TimeValue $currentTime.AddMinutes(-$restMinutes)
 }
 
 ## 如果有play文件，则检查文件内时间是否为50分钟前
@@ -104,16 +111,16 @@ if (Test-Path $PlayFile) {
     }
     ## 如果play文件内时间为120分钟前，则设置为当前时间
     if ($playDuration -gt $restMinutes) {
-        Write-TimeFile -FilePath $PlayFile -TimeValue $currentTime
+        Write-TimeFile -FilePath $PlayFile
         return
     }
     if ($playDuration -gt $playMinutes) {
-        Write-TimeFile -FilePath $RestFile -TimeValue $currentTime
+        Write-TimeFile -FilePath $RestFile
         Invoke-Poweroff -reason "已超过允许使用时间 $playMinutes 分钟"
         return
     }
 }
 else {
     # 创建play文件，内容为当前时间
-    Write-TimeFile -FilePath $PlayFile -TimeValue $currentTime
+    Write-TimeFile -FilePath $PlayFile
 }
