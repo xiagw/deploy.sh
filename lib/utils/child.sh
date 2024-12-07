@@ -22,14 +22,15 @@ _validate_time_format() {
 
 _get_minutes_elapsed() {
     local type=$1
+    local file=$2
     local current_time
     local time_str
     local time_seconds
 
     if [[ ${type} == "play" ]]; then
-        time_str=$(awk -F= '/^play_time=/{print $2}' "${file_status}")
+        time_str=$(awk -F= '/^play_time=/{print $2}' "${file}")
     else
-        time_str=$(awk -F= '/^rest_time=/{print $2}' "${file_status}")
+        time_str=$(awk -F= '/^rest_time=/{print $2}' "${file}")
     fi
 
     if [[ -z ${time_str} ]] || ! _validate_time_format "${time_str}"; then
@@ -44,11 +45,9 @@ _get_minutes_elapsed() {
 
 _do_shutdown() {
     local reason=$1
+
     if [[ ${debug_mod:-0} == 1 ]]; then
         _log "DEBUG模式: 触发关机条件: ${reason}"
-        if [[ -f ${file_status} ]]; then
-            _log "DEBUG模式: 显示状态文件内容: $(cat "${file_status}")"
-        fi
         return 0
     fi
 
@@ -65,13 +64,11 @@ _check_time_limits() {
 
     # 检查21:00-08:00时间段
     if ((curr_hour >= WORK_HOUR_21)) || ((curr_hour < WORK_HOUR_8)); then
-        _do_shutdown "现在是禁止使用时间段"
         return 1
     fi
 
     # 检查工作日17:00后限制
-    if ((weekday <= 5)) && ((curr_hour >= WORK_HOUR_17)); then
-        _do_shutdown "现在是工作日${WORK_HOUR_17}点后"
+    if ((weekday < 5)) && ((curr_hour >= WORK_HOUR_17)); then
         return 1
     fi
 
@@ -79,6 +76,7 @@ _check_time_limits() {
 }
 
 _remote_trigger() {
+    local file=$1
     if curl -fssSL -X POST "${URL_HOST}/trigger" 2>/dev/null | grep -qi "rest"; then
         _do_shutdown "收到远程关机命令"
         return 0
@@ -87,8 +85,9 @@ _remote_trigger() {
 }
 
 _reset() {
-    if [[ -f ${file_status} ]]; then
-        rm -f "${file_status}" || return 1
+    local file=$1
+    if [[ -f ${file} ]]; then
+        rm -f "${file}" || return 1
     fi
     sudo shutdown -c || true
     return 0
@@ -109,47 +108,38 @@ main() {
     DELAY_SECONDS=60
     URL_HOST="http://192.168.5.1"
 
-    # 文件路径
-    file_status="${SCRIPT_PATH}/${SCRIPT_NAME}.status"
-
-    # 命令处理
-    case $1 in
-    reset | r) _reset && return ;;
-    debug | d) debug_mod=1 ;;
-    esac
-
-    # 检查时间限制
-    _check_time_limits || return
-
-    # 远程触发检查
-    _remote_trigger
-
     # 初始化状态文件
-    if [[ ! -f ${file_status} ]]; then
+    file_status="${SCRIPT_PATH}/${SCRIPT_NAME}.status"
+    if [[ -f ${file_status} ]]; then
+        if [[ ${debug_mod:-0} == 1 ]]; then
+            _log "DEBUG模式: 显示状态文件内容: $(cat "${file_status}")"
+        fi
+    else
         {
             echo "play_time=$(date +"%F %T")"
             echo "rest_time=$(date -d "120 minutes ago" +"%F %T")"
-        } > "${file_status}"
+        } >"${file_status}"
+    fi
+
+    # 命令处理
+    case $1 in
+    reset | r) _reset "${file_status}" && return ;;
+    debug | d) debug_mod=1 ;;
+    esac
+
+    # 远程触发检查
+    _remote_trigger "${file_status}"
+
+    # 检查时间段限制
+    if ! _check_time_limits "${file_status}"; then
+        _do_shutdown "现在是禁止时间段21:00-08:00或工作日17:00后"
+        return
     fi
 
     # 检查时间限制
     local rest_elapsed play_elapsed
-    rest_elapsed=$(_get_minutes_elapsed "rest")
-    play_elapsed=$(_get_minutes_elapsed "play")
-
-    # 检查是否需要更新启动时间
-    local play_time rest_time
-    play_time=$(awk -F= '/^play_time=/{print $2}' "${file_status}")
-    rest_time=$(awk -F= '/^rest_time=/{print $2}' "${file_status}")
-
-    if [[ -n ${play_time} && -n ${rest_time} ]]; then
-        play_timestamp=$(date +%s -d "${play_time}")
-        rest_timestamp=$(date +%s -d "${rest_time}")
-        if ((play_timestamp < rest_timestamp)); then
-            _log "更新启动时间: $(date +"%F %T") ， before: ${play_time}"
-            sed -i "s/^play_time=.*/play_time=$(date +"%F %T")/" "${file_status}"
-        fi
-    fi
+    rest_elapsed=$(_get_minutes_elapsed "rest" "${file_status}")
+    play_elapsed=$(_get_minutes_elapsed "play" "${file_status}")
 
     # 检查关机条件
     if ((rest_elapsed < REST_MINUTES)); then
@@ -157,8 +147,15 @@ main() {
         return
     fi
 
-    # 检查开机时长
+    # 检查是否需要更新启动时间，大于等于120分钟则更新状态文件的启动时间
+    if ((play_elapsed >= REST_MINUTES)); then
+        sed -i "s/^play_time=.*/play_time=$(date +"%F %T")/" "${file_status}"
+        return
+    fi
+
+    # 检查开机时长，大于等于50分钟则关机
     if ((play_elapsed >= PLAY_MINUTES)); then
+        # 关机时更新状态文件的关机时间
         sed -i "s/^rest_time=.*/rest_time=$(date +"%F %T")/" "${file_status}"
         _do_shutdown "开机时间超过${PLAY_MINUTES}分钟"
         return
