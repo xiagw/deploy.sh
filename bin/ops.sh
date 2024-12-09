@@ -237,7 +237,7 @@ process_wechat_file() {
         scp "$file" "$host"
     done
 
-    cmd="$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")"
+    cmd="$(command -v ossutil || command -v ossutil64 || (command -v aliyun >/dev/null 2>&1 && echo "aliyun oss"))"
     $cmd cp "$file" "oss://${wechat_bucket_name:? undefined wechat_bucket_name}/" -f
 
     sleep 2
