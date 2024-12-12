@@ -474,7 +474,7 @@ ack_auto_scale() {
     if [[ -f $lock_file ]]; then
         # 检查锁文件是否过期（超过冷却时间）
         if [[ $(stat -c %Y "$lock_file") -gt $(date -d "$COOLDOWN_MINUTES minutes ago" +%s) ]]; then
-            echo "另一个扩缩容进程正在运行..." >&2
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 另一个扩缩容进程正在运行..." >&2
             return 1
         else
             # 删除过期的锁文件
@@ -525,7 +525,7 @@ ack_auto_scale() {
     # 检查是否需要扩容
     if ((cpu > pod_cpu_warn && mem > pod_mem_warn)); then
         kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-        scale_deployment "过载" "扩容到" $((pod_total + SCALE_CHANGE))
+        scale_deployment "过载" "扩容" $((pod_total + SCALE_CHANGE))
         return
     fi
 
@@ -538,6 +538,6 @@ ack_auto_scale() {
     # 检查是否需要缩容
     if ((pod_total > node_fixed && cpu < pod_cpu_normal && mem < pod_mem_normal)); then
         kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-        scale_deployment "空闲" "缩容到" $node_fixed
+        scale_deployment "空闲" "缩容" $node_fixed
     fi
 }
