@@ -139,8 +139,9 @@ ack_create() {
     # 获取VPC信息
     local vpc_id
     vpc_id=$(get_vpc_id)
-    if [ $? -ne 0 ]; then
-        return 1
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        return $ret
     fi
 
     # 获取交换机信息
@@ -178,7 +179,8 @@ ack_create() {
         --is-enterprise-security-group true \
         --cloud-monitor-flags 1)
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "ACK 集群创建请求已提交："
         echo "$result" | jq '.'
 
@@ -187,7 +189,7 @@ ack_create() {
         cluster_id=$(echo "$result" | jq -r '.ClusterId')
 
         echo "等待集群创建完成..."
-        local max_wait_time=1800  # 30分钟
+        local max_wait_time=1800 # 30分钟
         local start_time
         start_time=$(date +%s)
 
@@ -283,7 +285,8 @@ ack_update() {
         --ClusterId "$cluster_id" \
         --name "$new_name")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "集群更新成功："
         echo "$result" | jq '.'
     else
@@ -305,7 +308,8 @@ ack_detail() {
     local result
     result=$(aliyun --profile "${profile:-}" cs DescribeClusterDetail --ClusterId "$cluster_id")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
     else
         echo "错误：无法获取集群详情。"
@@ -368,7 +372,8 @@ ack_node_add() {
         --ClusterId "$cluster_id" \
         --count "$count")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "节点添加请求已提交："
         echo "$result" | jq '.'
     else
@@ -402,7 +407,8 @@ ack_node_remove() {
         --nodes "[$node_id]" \
         --release-node true)
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "节点移除请求已提交："
         echo "$result" | jq '.'
     else
@@ -427,7 +433,8 @@ ack_get_kubeconfig() {
         --ClusterId "$cluster_id" \
         --PrivateIpAddress "$private")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "$result" | jq -r '.config'
     else
         echo "错误：无法获取 kubeconfig。"
@@ -465,8 +472,14 @@ ack_auto_scale() {
 
     # 检查锁文件
     if [[ -f $lock_file ]]; then
-        echo "另一个扩缩容进程正在运行..." >&2
-        return 1
+        # 检查锁文件是否过期（超过冷却时间）
+        if [[ $(stat -c %Y "$lock_file") -gt $(date -d "$COOLDOWN_MINUTES minutes ago" +%s) ]]; then
+            echo "另一个扩缩容进程正在运行..." >&2
+            return 1
+        else
+            # 删除过期的锁文件
+            rm -f "$lock_file"
+        fi
     fi
 
     # 计算阈值
