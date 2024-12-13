@@ -9,9 +9,10 @@ show_rds_help() {
     echo "  create <名称> <引擎> <版本> <规格> [地域] - 创建 RDS 实例"
     echo "  update <实例ID> <新名称> [地域]          - 更新 RDS 实例"
     echo "  delete <实例ID> [地域]                   - 删除 RDS 实例"
-    echo "  account-create <实例ID> <账号> <密码> [描述] [权限]  - 创建数据库账号"
+    echo "  account-create <实例ID> <账号> <密码> [描述] - 创建数据库账号"
     echo "  account-delete <实例ID> <账号>           - 删除数据库账号"
     echo "  account-list <实例ID>                    - 列出数据库账号"
+    echo "  account-grant <实例ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
     echo "  db-list <实例ID>                         - 列出数据库"
     echo "  db-create <实例ID> <数据库名> [字符集]    - 创建数据库"
     echo "  db-delete <实例ID> <数据库名>            - 删除数据库"
@@ -21,9 +22,10 @@ show_rds_help() {
     echo "  $0 rds create my-rds MySQL 8.0 rds.mysql.t1.small"
     echo "  $0 rds update rm-uf6wjk5xxxxxxx new-name"
     echo "  $0 rds delete rm-uf6wjk5xxxxxxx"
-    echo "  $0 rds account-create rm-uf6wjk5xxxxxxx myuser mypassword '测试账号' ReadWrite"
+    echo "  $0 rds account-create rm-uf6wjk5xxxxxxx myuser mypassword '测试账号'"
     echo "  $0 rds account-delete rm-uf6wjk5xxxxxxx myuser"
     echo "  $0 rds account-list rm-uf6wjk5xxxxxxx"
+    echo "  $0 rds account-grant rm-uf6wjk5xxxxxxx myuser mydb ReadWrite"
     echo "  $0 rds db-list rm-uf6wjk5xxxxxxx"
     echo "  $0 rds db-create rm-uf6wjk5xxxxxxx mydb utf8mb4"
     echo "  $0 rds db-delete rm-uf6wjk5xxxxxxx mydb"
@@ -44,6 +46,7 @@ handle_rds_commands() {
     db-list) rds_db_list "$@" ;;
     db-create) rds_db_create "$@" ;;
     db-delete) rds_db_delete "$@" ;;
+    account-grant) rds_account_grant "$@" ;;
     *)
         echo "错误：未知的 RDS 操作：$operation" >&2
         show_rds_help
@@ -137,11 +140,10 @@ rds_account_create() {
     local account_name=$2
     local password=${3:-$(_get_random_password 2>/dev/null)}
     local description=${4:-"Created by CLI"}
-    local privilege=${5:-ReadWrite}
 
     if [ -z "$instance_id" ] || [ -z "$account_name" ] || [ -z "$password" ]; then
         echo "错误：实例ID、账号名和密码不能为空。" >&2
-        echo "用法：rds account-create <实例ID> <账号> <密码> [描述] [权限]" >&2
+        echo "用法：rds account-create <实例ID> <账号> <密码> [描述]" >&2
         return 1
     fi
 
@@ -182,8 +184,6 @@ rds_account_create() {
     echo "实例ID: $instance_id"
     echo "账号名: $account_name"
     echo "描述: $description"
-    echo "权限: $privilege"
-    echo "数据库: $account_name"
 
     local result
     result=$(aliyun --profile "${profile:-}" rds CreateAccount \
@@ -193,7 +193,8 @@ rds_account_create() {
         --AccountDescription "$description" \
         --AccountType Normal)
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "账号创建成功："
         echo "$result" | jq '.'
 
@@ -201,21 +202,9 @@ rds_account_create() {
         echo "等待账号创建完成..."
         sleep 5
 
-        # 设置账号权限（只授权同名数据库）
-        echo "设置账号权限..."
-        local grant_result
-        grant_result=$(aliyun --profile "${profile:-}" rds GrantAccountPrivilege \
-            --DBInstanceId "$instance_id" \
-            --AccountName "$account_name" \
-            --DBName "$account_name" \
-            --AccountPrivilege "$privilege")
-
-        if [ $? -eq 0 ]; then
-            echo "权限设置成功。"
-            echo "账号 $account_name 已被授予 $privilege 权限，可访问数据库 $account_name"
-        else
-            echo "警告：权限设置失败。"
-            echo "$grant_result"
+        # 自动设置默认权限
+        if ! rds_account_grant "$instance_id" "$account_name" "$account_name" "ReadWrite"; then
+            echo "警告：默认权限设置失败，请手动设置权限。"
         fi
     else
         echo "错误：账号创建失败。"
@@ -249,7 +238,8 @@ rds_account_delete() {
         --DBInstanceId "$instance_id" \
         --AccountName "$account_name")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "账号删除成功。"
         log_delete_operation "${profile:-}" "$region" "rds" "$account_name" "RDS账号" "成功"
     else
@@ -451,7 +441,8 @@ rds_db_delete() {
         --DBInstanceId "$instance_id" \
         --DBName "$db_name")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "数据库删除成功。"
         log_delete_operation "${profile:-}" "$region" "rds" "$db_name" "数据库" "成功"
     else
@@ -461,4 +452,43 @@ rds_db_delete() {
     fi
 
     log_result "${profile:-}" "$region" "rds" "db-delete" "$result"
+}
+
+# 新增：设置账号数据库权限函数
+rds_account_grant() {
+    local instance_id=$1
+    local account_name=$2
+    local db_name=$3
+    local privilege=${4:-ReadWrite}
+
+    if [ -z "$instance_id" ] || [ -z "$account_name" ] || [ -z "$db_name" ]; then
+        echo "错误：实例ID、账号名和数据库名不能为空。" >&2
+        echo "用法：rds account-grant <实例ID> <账号> <数据库名> [权限]" >&2
+        return 1
+    fi
+
+    echo "设置账号权限："
+    echo "实例ID: $instance_id"
+    echo "账号名: $account_name"
+    echo "数据库: $db_name"
+    echo "权限: $privilege"
+
+    local result
+    result=$(aliyun --profile "${profile:-}" rds GrantAccountPrivilege \
+        --DBInstanceId "$instance_id" \
+        --AccountName "$account_name" \
+        --DBName "$db_name" \
+        --AccountPrivilege "$privilege")
+
+    ret=$?
+    if [ $ret -eq 0 ]; then
+        echo "权限设置成功。"
+        echo "账号 $account_name 已被授予 $privilege 权限，可访问数据库 $db_name"
+    else
+        echo "错误：权限设置失败。"
+        echo "$result"
+        return 1
+    fi
+
+    log_result "${profile:-}" "$region" "rds" "account-grant" "$result"
 }
