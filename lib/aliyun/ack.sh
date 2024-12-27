@@ -474,9 +474,10 @@ ack_auto_scale() {
     if [[ -f $lock_file ]]; then
         # 检查锁文件是否过期（超过冷却时间）
         if [[ $(stat -c %Y "$lock_file") -gt $(date -d "$COOLDOWN_MINUTES minutes ago" +%s) ]]; then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 另一个扩缩容进程正在运行..." >&2
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$COOLDOWN_MINUTES 分钟）内，跳过操作..." >&2
             return 1
         else
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的锁文件..." >&2
             # 删除过期的锁文件
             rm -f "$lock_file"
         fi
