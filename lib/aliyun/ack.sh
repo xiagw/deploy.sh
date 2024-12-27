@@ -459,7 +459,7 @@ ack_auto_scale() {
     local CPU_NORMAL_FACTOR=500 # CPU 正常阈值因子
     local MEM_NORMAL_FACTOR=500 # 内存正常阈值因子
     local SCALE_CHANGE=2        # 每次扩缩容的节点数量
-    local COOLDOWN_MINUTES=4    # 冷却时间（分钟）
+    local COOLDOWN_MINUTES=5    # 冷却时间（分钟）
 
     # 获取节点和 Pod 信息
     local node_names
@@ -504,11 +504,13 @@ ack_auto_scale() {
 
         if kubectl -n "$namespace" scale --replicas="$new_total" deploy "$deployment"; then
             if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 120s; then
-                touch "$lock_file"
                 local result="成功"
             else
                 local result="失败"
             fi
+
+            # 创建锁文件防止频繁操作
+            touch "$lock_file"
 
             # 记录操作日志
             local msg_body
