@@ -485,6 +485,8 @@ ack_auto_scale() {
                 return 0
             fi
         fi
+        # 如果锁文件不存在，返回 1（false）【实际测试了bash必须存在这个return 1，否则就算文件不存在也会返回0】
+        return 1
     }
 
     # 检查扩容冷却期
