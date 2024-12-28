@@ -446,7 +446,8 @@ ack_get_kubeconfig() {
 ack_auto_scale() {
     local deployment=$1
     local namespace=${2:-main}
-    local lock_file="/tmp/lock.scale.$deployment"
+    local lock_file_up="/tmp/lock.scale.up.$deployment"
+    local lock_file_down="/tmp/lock.scale.down.$deployment"
 
     if [ -z "$deployment" ]; then
         echo "错误：部署名称不能为空。" >&2
@@ -454,34 +455,94 @@ ack_auto_scale() {
     fi
 
     # 定义常量
-    local CPU_WARN_FACTOR=1000  # CPU 警告阈值因子
-    local MEM_WARN_FACTOR=1200  # 内存警告阈值因子
-    local CPU_NORMAL_FACTOR=500 # CPU 正常阈值因子
-    local MEM_NORMAL_FACTOR=500 # 内存正常阈值因子
-    local SCALE_CHANGE=2        # 每次扩缩容的节点数量
-    local COOLDOWN_MINUTES=5    # 冷却时间（分钟）
+    local CPU_WARN_FACTOR=1000          # CPU 警告阈值因子
+    local MEM_WARN_FACTOR=1200          # 内存警告阈值因子
+    local CPU_NORMAL_FACTOR=500         # CPU 正常阈值因子
+    local MEM_NORMAL_FACTOR=500         # 内存正常阈值因子
+    local SCALE_CHANGE=2                # 每次扩缩容的节点数量
+    local COOLDOWN_MINUTES_SCALE_UP=1   # 扩容冷却时间（分钟）
+    local COOLDOWN_MINUTES_SCALE_DOWN=5 # 缩容冷却时间（分钟）
+
+    # 检查锁文件和冷却时间
+    check_cooldown() {
+        local action=$1
+        local lock_file=$2
+        local cooldown_minutes=$3
+
+        if [[ "$action" == "up" ]]; then
+            action_name="扩容"
+        else
+            action_name="缩容"
+        fi
+
+        if [[ -f $lock_file ]]; then
+            if [[ $(stat -c %Y "$lock_file") -lt $(date -d "$cooldown_minutes minutes ago" +%s) ]]; then
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的 ${action_name} 锁文件..." >&2
+                rm -f "$lock_file"
+                return 1
+            else
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过 ${action_name} 操作..." >&2
+                return 0
+            fi
+        fi
+    }
+
+    # 检查扩容冷却期
+    if check_cooldown "up" "$lock_file_up" $COOLDOWN_MINUTES_SCALE_UP; then
+        return
+    fi
+
+    # 检查缩容冷却期
+    if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
+        return
+    fi
+
+    # 扩缩容函数
+    scale_deployment() {
+        local action=$1
+        local new_total=$2
+        local lock_file=$3
+
+        if [[ "$action" == "up" ]]; then
+            action_name="扩容"
+            load_status="过载"
+        else
+            action_name="缩容"
+            load_status="空闲"
+        fi
+
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 当前处于 ${load_status} 状态，即将执行 ${action_name} 操作"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 将应用 ${deployment} 的副本数调整为 ${new_total}"
+
+        if kubectl -n "$namespace" scale --replicas="$new_total" deployment "$deployment"; then
+            if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 120s; then
+                local result="成功"
+            else
+                local result="失败"
+            fi
+
+            # 创建对应的锁文件防止频繁操作
+            touch "$lock_file"
+
+            # 记录操作日志
+            local msg_body
+            msg_body="[$(date '+%Y-%m-%d %H:%M:%S')] 自动扩缩容: 应用 ${deployment} ${load_status}, ${action_name} 到 ${new_total} 个副本，结果: ${result}"
+            echo "$msg_body"
+            log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
+            _notify_wecom "${WECOM_KEY:-}" "$msg_body"
+        else
+            echo "扩缩容操作失败" >&2
+            return 1
+        fi
+    }
 
     # 获取节点和 Pod 信息
-    local node_names
-    readarray -t node_names < <(kubectl get nodes -o name)
-    local node_total=${#node_names[@]}
-    local node_fixed=$((node_total - 1)) # 实际节点数 = 所有节点数 - 虚拟节点 1 个
+    local node_total
+    node_total=$(kubectl get nodes -o name | grep -c "^")
+    local node_fixed=$((node_total - 1)) # 实际节点数 = 所有节点数 - 1 个虚拟节点
 
     local pod_total
     pod_total=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" | grep -c "$deployment")
-
-    # 检查锁文件
-    if [[ -f $lock_file ]]; then
-        # 检查锁文件是否过期（超过冷却时间）
-        if [[ $(stat -c %Y "$lock_file") -gt $(date -d "$COOLDOWN_MINUTES minutes ago" +%s) ]]; then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$COOLDOWN_MINUTES 分钟）内，跳过操作..." >&2
-            return 1
-        else
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的锁文件..." >&2
-            # 删除过期的锁文件
-            rm -f "$lock_file"
-        fi
-    fi
 
     # 计算阈值
     local pod_cpu_warn=$((pod_total * CPU_WARN_FACTOR))
@@ -494,53 +555,16 @@ ack_auto_scale() {
     read -r cpu mem < <(kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment" |
         awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}')
 
-    # 扩缩容函数
-    scale_deployment() {
-        local load_status=$1
-        local action=$2
-        local new_total=$3
-
-        echo "执行${action}操作：当前状态 - $load_status"
-        echo "将部署 $deployment 的副本数调整为 $new_total"
-
-        if kubectl -n "$namespace" scale --replicas="$new_total" deploy "$deployment"; then
-            if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 120s; then
-                local result="成功"
-            else
-                local result="失败"
-            fi
-
-            # 创建锁文件防止频繁操作
-            touch "$lock_file"
-
-            # 记录操作日志
-            local msg_body
-            msg_body="[$(date '+%Y-%m-%d %H:%M:%S')] 自动扩缩容: 应用 $deployment $load_status, $action $new_total; 结果: $result"
-            echo "$msg_body"
-            log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
-            _notify_wecom "${WECOM_KEY:-}" "$msg_body"
-        else
-            echo "扩缩容操作失败" >&2
-            return 1
-        fi
-    }
-
     # 检查是否需要扩容
     if ((cpu > pod_cpu_warn && mem > pod_mem_warn)); then
         kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-        scale_deployment "过载" "扩容" $((pod_total + SCALE_CHANGE))
-        return
-    fi
-
-    # 检查冷却期
-    if [[ -f "$lock_file" && $(stat -c %Y "$lock_file") -gt $(date -d "$COOLDOWN_MINUTES minutes ago" +%s) ]]; then
-        echo "在冷却期内，跳过扩缩容操作"
+        scale_deployment "up" $((pod_total + SCALE_CHANGE)) "$lock_file_up"
         return
     fi
 
     # 检查是否需要缩容
     if ((pod_total > node_fixed && cpu < pod_cpu_normal && mem < pod_mem_normal)); then
         kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-        scale_deployment "空闲" "缩容" $node_fixed
+        scale_deployment "down" $node_fixed "$lock_file_down"
     fi
 }
