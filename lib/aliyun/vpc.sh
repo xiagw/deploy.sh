@@ -229,7 +229,8 @@ vpc_delete() {
     # 首先检查 VPC 是否存在
     local vpc_info
     vpc_info=$(aliyun --profile "${profile:-}" vpc DescribeVpcs --VpcId "$vpc_id" --RegionId "$region")
-    if [ $? -ne 0 ] || [ "$(echo "$vpc_info" | jq '.Vpcs.Vpc | length')" -eq 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ] || [ "$(echo "$vpc_info" | jq '.Vpcs.Vpc | length')" -eq 0 ]; then
         echo "错误：VPC $vpc_id 不存在或无法访问。" >&2
         return 1
     fi
@@ -302,7 +303,8 @@ get_vpc_id() {
 vpc_vswitch_list() {
     local vpc_id
     vpc_id=$(get_vpc_id "$1")
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         return 1
     fi
 
@@ -403,7 +405,8 @@ vpc_vswitch_create() {
     local vpc_id
     if [ -z "$1" ] || [ "$1" = "--auto" ]; then
         vpc_id=$(get_vpc_id)
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             return 1
         fi
         shift
@@ -435,7 +438,8 @@ vpc_vswitch_create() {
     if [ -z "$zone" ]; then
         echo "未指定可用区，正在获取可用区列表..."
         zone=$(select_zone)
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             return 1
         fi
     fi
@@ -454,7 +458,8 @@ vpc_vswitch_create() {
         --VSwitchName "$name" \
         --CidrBlock "$cidr")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "交换机创建成功："
         echo "$result" | jq '.'
     else
@@ -479,7 +484,8 @@ vpc_vswitch_update() {
         --VSwitchId "$vswitch_id" \
         --VSwitchName "$new_name")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "交换机更新成功："
         echo "$result" | jq '.'
     else
@@ -508,9 +514,9 @@ vpc_vswitch_delete() {
     echo "删除交换机："
     local result
     result=$(aliyun --profile "${profile:-}" vpc DeleteVSwitch --VSwitchId "$vswitch_id" --RegionId "$region")
-    local status=$?
+    ret=$?
 
-    if [ $status -eq 0 ]; then
+    if [ $ret -eq 0 ]; then
         echo "交换机删除成功。"
         log_delete_operation "${profile:-}" "$region" "vpc" "$vswitch_id" "交换机" "成功"
     else
@@ -526,7 +532,8 @@ vpc_vswitch_delete() {
 vpc_sg_list() {
     local vpc_id
     vpc_id=$(get_vpc_id "$1")
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         return 1
     fi
 
@@ -568,7 +575,8 @@ vpc_sg_list() {
 vpc_sg_create() {
     local vpc_id
     vpc_id=$(get_vpc_id "$1")
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         return 1
     fi
 
@@ -581,7 +589,8 @@ vpc_sg_create() {
         --SecurityGroupName "$name" \
         --Description "$description")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "安全组创建成功："
         echo "$result" | jq '.'
     else
@@ -601,7 +610,8 @@ vpc_sg_update() {
         --SecurityGroupName "$new_name" \
         --Description "$new_description")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "安全组更新成功："
         echo "$result" | jq '.'
     else
@@ -624,9 +634,9 @@ vpc_sg_delete() {
     echo "删除安全组："
     local result
     result=$(aliyun --profile "${profile:-}" ecs DeleteSecurityGroup --SecurityGroupId "$sg_id" --RegionId "$region")
-    local status=$?
+    ret=$?
 
-    if [ $status -eq 0 ]; then
+    if [ $ret -eq 0 ]; then
         echo "安全组删除成功。"
         log_delete_operation "${profile:-}" "$region" "vpc" "$sg_id" "安全组" "成功"
     else
@@ -677,7 +687,8 @@ vpc_sg_rule_add() {
         --Priority 1 \
         --Description "$description")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "安全组规则添加成功："
         echo "$result" | jq '.'
     else
@@ -701,7 +712,8 @@ vpc_sg_rule_update() {
         --Policy accept \
         --Priority 1)
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "安全组规则更新成功："
         echo "$result" | jq '.'
     else
@@ -748,9 +760,9 @@ vpc_sg_rule_delete() {
             --SecurityGroupId "$sg_id" \
             --SecurityGroupRuleId.1 "$rule_id")
     fi
-    local status=$?
+    ret=$?
 
-    if [ $status -eq 0 ]; then
+    if [ $ret -eq 0 ]; then
         echo "安全组规则删除成功。"
         log_delete_operation "${profile:-}" "$region" "vpc" "$rule_id" "安全组规则" "成功"
     else

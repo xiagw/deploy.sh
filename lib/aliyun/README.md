@@ -50,17 +50,17 @@
 
 1. 支持多配置文件管理：
 ```bash
-./aliyun2.sh config create <配置名> <AccessKey> <SecretKey> [RegionId]
-./aliyun2.sh config list
-./aliyun2.sh config update <配置名> <AccessKey> <SecretKey> [RegionId]
-./aliyun2.sh config delete <配置名>
+./main.sh config create <配置名> <AccessKey> <SecretKey> [RegionId]
+./main.sh config list
+./main.sh config update <配置名> <AccessKey> <SecretKey> [RegionId]
+./main.sh config delete <配置名>
 ```
 
 ## 使用方法
 
 基本用法：
 ```bash
-./aliyun2.sh [--profile <配置名>] [--region <地域>] <服务> <操作> [参数...]
+./main.sh [--profile <配置名>] [--region <地域>] <服务> <操作> [参数...]
 ```
 
 常用示例：
@@ -68,45 +68,45 @@
 1. ECS实例管理：
 ```bash
 # 列出所有ECS实例
-./aliyun2.sh ecs list
+./main.sh ecs list
 
 # 创建ECS实例（交互式）
-./aliyun2.sh ecs create [实例名称]
+./main.sh ecs create [实例名称]
 
 # 启动/停止实例
-./aliyun2.sh ecs start <实例ID>
-./aliyun2.sh ecs stop <实例ID>
+./main.sh ecs start <实例ID>
+./main.sh ecs stop <实例ID>
 
 # SSH密钥对管理
-./aliyun2.sh ecs key-list
-./aliyun2.sh ecs key-create <密钥名称>
-./aliyun2.sh ecs key-import <密钥名称> github:<用户名>
+./main.sh ecs key-list
+./main.sh ecs key-create <密钥名称>
+./main.sh ecs key-import <密钥名称> github:<用户名>
 ```
 
 2. 网络资源管理：
 ```bash
 # VPC操作
-./aliyun2.sh vpc list
-./aliyun2.sh vpc create <名称>
+./main.sh vpc list
+./main.sh vpc create <名称>
 
 # EIP操作
-./aliyun2.sh eip list
-./aliyun2.sh eip create <带宽>
+./main.sh eip list
+./main.sh eip create <带宽>
 ```
 
 3. 费用查询：
 ```bash
 # 查询账户余额
-./aliyun2.sh balance list
+./main.sh balance list
 
 # 查询每日费用
-./aliyun2.sh cost daily [YYYY-MM-DD]
+./main.sh cost daily [YYYY-MM-DD]
 ```
 
 4. 查看所有资源：
 ```bash
 # 列出所有服务的资源
-./aliyun2.sh list-all
+./main.sh list-all
 ```
 
 ## 输出格式
@@ -118,8 +118,8 @@
 
 示例：
 ```bash
-./aliyun2.sh ecs list json
-./aliyun2.sh ecs list tsv
+./main.sh ecs list json
+./main.sh ecs list tsv
 ```
 
 ## 日志记录
@@ -137,5 +137,5 @@
 
 每个服务都有详细的帮助信息，可通过以下方式查看：
 ```bash
-./aliyun2.sh <服务> help
+./main.sh <服务> help
 ```

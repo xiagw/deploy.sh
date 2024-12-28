@@ -388,7 +388,6 @@ oss_bind_domain() {
     echo "成功获取 CNAME 令牌：$token"
 
     echo "正在自动添加 TXT 记录..."
-    set -x
     dns_create "${domain#*.}" "${domain%%.*}" "TXT" "$token"
 
     echo "请等待 DNS 记录生效，这可能需要几分钟时间..."
