@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2086,SC2029,SC2154
 # -*- coding: utf-8 -*-
 #
 # Unified operations script for project management and SSL deployment
@@ -117,7 +118,8 @@ find_and_sync_files() {
                 if scp "$src" "${target_host}:~/${remote_dest}"; then
                     # SSH 到远程主机并使用 sudo cp 移动文件
                     ssh "$target_host" "sudo cp ~/${remote_dest} ${target_base_path}${dest} && rm ~/${remote_dest}"
-                    if [[ $? -eq 0 ]]; then
+                    ret=$?
+                    if [[ $ret -eq 0 ]]; then
                         sync_status=0
                         echo "通过 HOME 目录同步成功"
                         ssh "$target_host" "cd docker/laradock && docker compose exec nginx nginx -s reload"
