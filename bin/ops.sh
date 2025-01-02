@@ -180,9 +180,9 @@ search_project_files() {
 
     # 直接使用 $CMD_CAT，不需要额外的模式检查
     if [ -n "$search_pattern" ]; then
-        selected_dir=$(find "${active_dir}" -maxdepth 1 -type d -iname "*${search_pattern}*" | fzf --height=50%)
+        selected_dir=$(find ${active_dir} -maxdepth 1 -type d -iname "*${search_pattern}*" | fzf --height=50%)
     else
-        selected_dir=$(find "${active_dir}" -maxdepth 1 -type d | fzf --height=50%)
+        selected_dir=$(find ${active_dir} -maxdepth 1 -type d | fzf --height=50%)
     fi
 
     echo "Selected directory: ${selected_dir:? selected_dir must be set}"
