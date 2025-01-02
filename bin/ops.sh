@@ -180,9 +180,9 @@ search_project_files() {
 
     # 直接使用 $CMD_CAT，不需要额外的模式检查
     if [ -n "$search_pattern" ]; then
-        selected_dir=$(find ${active_dir} -maxdepth 1 -type d -iname "*${search_pattern}*" | fzf --height=50%)
+        selected_dir=$(find "${active_dir}" -maxdepth 1 -type d -iname "*${search_pattern}*" | fzf --height=50%)
     else
-        selected_dir=$(find $active_dir -maxdepth 1 -type d | fzf --height=50%)
+        selected_dir=$(find "${active_dir}" -maxdepth 1 -type d | fzf --height=50%)
     fi
 
     echo "Selected directory: ${selected_dir:? selected_dir must be set}"
@@ -230,40 +230,29 @@ deploy_ssl() {
 }
 
 # 添加微信验证文件处理函数
-process_wechat_file() {
-    local file="$1"
-    # sudo chmod 644 "$file"
-    for host in "${wechat_host_path[@]:? undefined wechat_host_path}"; do
-        scp "$file" "$host"
-    done
-
-    cmd="$(command -v ossutil || command -v ossutil64 || (command -v aliyun >/dev/null 2>&1 && echo "aliyun oss"))"
-    $cmd cp "$file" "oss://${wechat_bucket_name:? undefined wechat_bucket_name}/" -f
-
-    sleep 2
-    uri=${file##*/}
-    if [[ ${#wechat_urls[@]:-0} -eq 0 ]]; then
-        echo "Warning: wechat_urls array is empty or not defined" >&2
-        return 1
-    fi
-
-    c_total=${#wechat_urls[@]}
-    c=0
-    for url in "${wechat_urls[@]}"; do
-        curl -x '' -fsSL "${url}/${uri}" && ((++c))
-    done
-
-    if [[ "$c" -ge "$c_total" ]]; then
-        sudo rm -f "$file"
-    fi
-}
-
 deploy_wechat() {
-    local find_dir=${wechat_dir:? undefined wechat_dir}
-    cd "$find_dir" || return 1
+    cd "${wechat_dir:? undefined wechat_dir}" || return 1
     for file in *.txt *.TXT; do
         [ -f "$file" ] || continue
-        process_wechat_file "$file"
+        for host in "${wechat_host_path[@]:? undefined wechat_host_path}"; do
+            scp "$file" "$host"
+        done
+
+        cmd="$(command -v ossutil || command -v ossutil64 || (command -v aliyun >/dev/null 2>&1 && echo "aliyun oss"))"
+        $cmd cp "$file" "oss://${wechat_bucket_name:? undefined wechat_bucket_name}/" -f
+
+        sleep 5
+        uri=${file##*/}
+
+        c_total=${#wechat_urls[@]}
+        c=0
+        for url in "${wechat_urls[@]}"; do
+            curl -x '' -fsSL "${url}/${uri}" && ((++c))
+        done
+
+        if [[ "$c" -ge "$c_total" ]]; then
+            sudo rm -f "$file"
+        fi
     done
 }
 
