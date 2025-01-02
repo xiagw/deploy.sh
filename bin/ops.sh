@@ -231,15 +231,17 @@ deploy_ssl() {
 
 # 添加微信验证文件处理函数
 deploy_wechat() {
+    local c c_total
     cd "${wechat_dir:? undefined wechat_dir}" || return 1
     for file in *.txt *.TXT; do
         [ -f "$file" ] || continue
+        ## 同步到服务器
         for host in "${wechat_host_path[@]:? undefined wechat_host_path}"; do
             scp "$file" "$host"
         done
 
-        cmd="$(command -v ossutil || command -v ossutil64 || (command -v aliyun >/dev/null 2>&1 && echo "aliyun oss"))"
-        $cmd cp "$file" "oss://${wechat_bucket_name:? undefined wechat_bucket_name}/" -f
+        ## 同步到OSS
+        $CMD_OSS cp "$file" "oss://${wechat_bucket_name:? undefined wechat_bucket_name}/" -f
 
         sleep 5
         uri=${file##*/}
