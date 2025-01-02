@@ -232,7 +232,7 @@ deploy_ssl() {
 # 添加微信验证文件处理函数
 process_wechat_file() {
     local file="$1"
-    sudo chmod 644 "$file"
+    # sudo chmod 644 "$file"
     for host in "${wechat_host_path[@]:? undefined wechat_host_path}"; do
         scp "$file" "$host"
     done
@@ -242,6 +242,11 @@ process_wechat_file() {
 
     sleep 2
     uri=${file##*/}
+    if [[ ${#wechat_urls[@]:-0} -eq 0 ]]; then
+        echo "Warning: wechat_urls array is empty or not defined" >&2
+        return 1
+    fi
+
     c_total=${#wechat_urls[@]}
     c=0
     for url in "${wechat_urls[@]}"; do
@@ -292,7 +297,7 @@ main() {
     if [ "$CMD_CAT" = "bat" ] || [ "$CMD_CAT" = "batcat" ]; then
         CMD_CAT="$CMD_CAT --paging=never --color=always --style=full --theme=Dracula --wrap=auto --tabs=2"
     fi
-    command -v fzf || { echo "Error: fzf is required" >&2 && exit 1; }
+    command -v fzf >/dev/null 2>&1 || { echo "Error: fzf is required" >&2 && exit 1; }
     CMD_OSS=$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")
 
     SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
