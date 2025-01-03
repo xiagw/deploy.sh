@@ -24,6 +24,7 @@ echo.%1| findstr /i "^reset$ ^r$" >nul && goto :RESET
 echo.%1| findstr /i "^upgrade$ ^u$" >nul && goto :UPGRADE
 echo.%1| findstr /i "^install$ ^i$" >nul && goto :INSTALL_TASK
 echo.%1| findstr /i "^server$ ^s$" >nul && goto :START_SERVER
+echo.%1| findstr /i "^disable$ ^x$" >nul && goto :DISABLE
 
 if exist "%DISABLE_FILE%" ( exit /b 0 )
 
@@ -97,9 +98,14 @@ if !##play_elapsed! GEQ %PLAY_MINUTES% (
 goto :END
 
 :: 以下是函数
+:DISABLE
+echo %DATE:~0,10% %TIME% > "%DISABLE_FILE%"
+call :LOG "已禁用定时关机功能"
+exit /b 0
+
 :RESET
 shutdown /a
-del /Q /F "%PLAY_FILE%" "%REST_FILE%"
+del /Q /F "%PLAY_FILE%" "%REST_FILE%" "%DISABLE_FILE%"
 goto :END
 
 :INSTALL_TASK
