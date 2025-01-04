@@ -516,15 +516,15 @@ ack_auto_scale() {
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 当前处于 ${load_status} 状态，即将执行 ${action_name} 操作"
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 将应用 ${deployment} 的副本数调整为 ${new_total}"
 
+        # 创建对应的锁文件防止频繁操作
+        touch "$lock_file"
+
         if kubectl -n "$namespace" scale --replicas="$new_total" deployment "$deployment"; then
-            if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 120s; then
+            if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 60s; then
                 local result="成功"
             else
                 local result="失败"
             fi
-
-            # 创建对应的锁文件防止频繁操作
-            touch "$lock_file"
 
             # 记录操作日志
             local msg_body
