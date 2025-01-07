@@ -568,14 +568,13 @@ ack_auto_scale() {
     if ((cpu < pod_cpu_normal && mem < pod_mem_normal)); then
         if ((pod_total > node_fixed)); then
             kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-            scale_deployment "down" $node_fixed "$lock_file_down"
+            scale_deployment "down" $((node_fixed - 1)) "$lock_file_down"
             return
         fi
         ## 检查是否有pod运行在虚拟节点，如果有则执行 kubectl rollout restart 命令
         local pod_on_virtual_node
         pod_on_virtual_node=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" -o jsonpath='{range .items[?(@.spec.nodeName=="virtual-kubelet-cn-hangzhou-k")]}{.metadata.name}{"\n"}{end}')
         if [ -n "$pod_on_virtual_node" ]; then
-            scale_deployment "down" $((node_fixed - 1)) "$lock_file_down"
             echo "警告：以下pod运行在虚拟节点上：$pod_on_virtual_node ，即将重启"
             kubectl -n "$namespace" patch deployment "$deployment" -p '{"spec":{"strategy":{"rollingUpdate":{"maxUnavailable":"25%"}}}}'
             kubectl -n "$namespace" rollout restart deployment "$deployment"
