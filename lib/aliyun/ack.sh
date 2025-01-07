@@ -569,6 +569,7 @@ ack_auto_scale() {
         if ((pod_total > node_fixed)); then
             kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
             scale_deployment "down" $node_fixed "$lock_file_down"
+            return
         fi
         ## 检查是否有pod运行在虚拟节点，如果有则执行 kubectl rollout restart 命令
         local pod_on_virtual_node
