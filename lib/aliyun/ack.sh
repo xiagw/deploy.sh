@@ -560,6 +560,7 @@ ack_auto_scale() {
     # 检查是否需要扩容
     if ((cpu > pod_cpu_warn && mem > pod_mem_warn)); then
         kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
+        ## 扩容数量每次增加2，应对突发流量
         scale_deployment "up" $((pod_total + SCALE_CHANGE)) "$lock_file_up"
         return
     fi
@@ -568,10 +569,11 @@ ack_auto_scale() {
     if ((cpu < pod_cpu_normal && mem < pod_mem_normal)); then
         if ((pod_total > node_fixed)); then
             kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-            ## workloadspread 已经设置最大pod数量为ECS节点池中节点的数量，
-            ## 当执行 helm 部署时，pod数量超过节点数量，会自动扩容到虚拟节点
-            ## 为了避免扩容到虚拟节点，所以这里需要缩容到ECS节点池中节点的数量减1，
-            scale_deployment "down" $((node_fixed - 1)) "$lock_file_down"
+            ## 1，已经配置了 workloadspread ，且已经设置最大pod数量为ECS节点池中节点的数量，
+            ## 2，当执行 helm 部署时，pod数量超过节点数量，会自动扩容到虚拟节点，但是不希望helm部署到虚拟节点，
+            ## 3，为了避免扩容到虚拟节点，所以这里需要缩容到ECS节点池中节点的数量少1个，
+            ## 4，缩容时不要骤减pod数量，所以这里需要缩容数量逐步减1，
+            scale_deployment "down" $((pod_total - SCALE_CHANGE)) "$lock_file_down"
             return
         fi
         ## 检查是否有pod运行在虚拟节点，如果有则执行 kubectl rollout restart 命令
