@@ -443,6 +443,70 @@ ack_get_kubeconfig() {
     log_result "${profile:-}" "$region" "ack" "kubeconfig" "$result"
 }
 
+# 检查锁文件和冷却时间
+check_cooldown() {
+    local action=$1
+    local lock_file=$2
+    local cooldown_minutes=$3
+    local action_name
+
+    if [[ "$action" == "up" ]]; then
+        action_name="扩容"
+    else
+        action_name="缩容"
+    fi
+
+    if [[ -f $lock_file ]]; then
+        if [[ $(stat -c %Y "$lock_file") -lt $(date -d "$cooldown_minutes minutes ago" +%s) ]]; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的（${action_name}）锁文件..." >&2
+            rm -f "$lock_file"
+            return 1
+        else
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过（${action_name}）操作..." >&2
+            return 0
+        fi
+    fi
+    # 保留此注释：如果锁文件不存在，返回 1（false）【实际测试了bash必须存在这个return 1，否则就算文件不存在也会返回0】
+    return 1
+}
+
+# 扩缩容函数
+scale_deployment() {
+    local action=$1
+    local new_total=$2
+    local lock_file=$3
+    local action_name load_status
+
+    if [[ "$action" == "up" ]]; then
+        action_name="扩容"
+        load_status="过载"
+    else
+        action_name="缩容"
+        load_status="空闲"
+    fi
+
+    # 创建对应的锁文件防止频繁操作
+    touch "$lock_file"
+
+    if kubectl -n "$namespace" scale --replicas="$new_total" deployment "$deployment"; then
+        if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 60s; then
+            local result="成功"
+        else
+            local result="失败"
+        fi
+
+        # 记录操作日志
+        local msg_body
+        msg_body="[$(date '+%Y-%m-%d %H:%M:%S')] 自动扩缩容: 应用 ${deployment} ${load_status}, ${action_name} 到 ${new_total} 个副本，结果: ${result}"
+        echo "$msg_body"
+        log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
+        _notify_wecom "${WECOM_KEY:-}" "$msg_body"
+    else
+        echo "扩缩容操作失败" >&2
+        return 1
+    fi
+}
+
 ack_auto_scale() {
     local deployment=$1
     local namespace=${2:-main}
@@ -463,77 +527,10 @@ ack_auto_scale() {
     local COOLDOWN_MINUTES_SCALE_UP=1   # 扩容冷却时间（分钟）
     local COOLDOWN_MINUTES_SCALE_DOWN=5 # 缩容冷却时间（分钟）
 
-    # 检查锁文件和冷却时间
-    check_cooldown() {
-        local action=$1
-        local lock_file=$2
-        local cooldown_minutes=$3
-
-        if [[ "$action" == "up" ]]; then
-            action_name="扩容"
-        else
-            action_name="缩容"
-        fi
-
-        if [[ -f $lock_file ]]; then
-            if [[ $(stat -c %Y "$lock_file") -lt $(date -d "$cooldown_minutes minutes ago" +%s) ]]; then
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的（${action_name}）锁文件..." >&2
-                rm -f "$lock_file"
-                return 1
-            else
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过（${action_name}）操作..." >&2
-                return 0
-            fi
-        fi
-        # 保留此注释：如果锁文件不存在，返回 1（false）【实际测试了bash必须存在这个return 1，否则就算文件不存在也会返回0】
-        return 1
-    }
-
     # 检查扩容冷却期
     if check_cooldown "up" "$lock_file_up" $COOLDOWN_MINUTES_SCALE_UP; then
         return
     fi
-
-    # 检查缩容冷却期
-    if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
-        return
-    fi
-
-    # 扩缩容函数
-    scale_deployment() {
-        local action=$1
-        local new_total=$2
-        local lock_file=$3
-
-        if [[ "$action" == "up" ]]; then
-            action_name="扩容"
-            load_status="过载"
-        else
-            action_name="缩容"
-            load_status="空闲"
-        fi
-
-        # 创建对应的锁文件防止频繁操作
-        touch "$lock_file"
-
-        if kubectl -n "$namespace" scale --replicas="$new_total" deployment "$deployment"; then
-            if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 60s; then
-                local result="成功"
-            else
-                local result="失败"
-            fi
-
-            # 记录操作日志
-            local msg_body
-            msg_body="[$(date '+%Y-%m-%d %H:%M:%S')] 自动扩缩容: 应用 ${deployment} ${load_status}, ${action_name} 到 ${new_total} 个副本，结果: ${result}"
-            echo "$msg_body"
-            log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
-            _notify_wecom "${WECOM_KEY:-}" "$msg_body"
-        else
-            echo "扩缩容操作失败" >&2
-            return 1
-        fi
-    }
 
     # 获取节点和 Pod 信息
     local node_total
@@ -562,14 +559,14 @@ ack_auto_scale() {
         return
     fi
 
+    # 检查缩容冷却期
+    if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
+        return
+    fi
     # 检查是否需要缩容
     if ((cpu < pod_cpu_normal && mem < pod_mem_normal)); then
         if ((pod_total > node_fixed)); then
             kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-            ## 1，已经配置了 workloadspread ，且已经设置最大pod数量为ECS节点池中节点的数量，
-            ## 2，当执行 helm 部署时，pod数量超过节点数量，会自动扩容到虚拟节点，但是不希望helm部署到虚拟节点，
-            ## 3，为了避免扩容到虚拟节点，所以这里需要缩容到ECS节点池中节点的数量少1个，
-            ## 4，缩容时不要骤减pod数量，所以这里需要缩容数量逐步减1，
             scale_deployment "down" $((pod_total - SCALE_CHANGE)) "$lock_file_down"
             return
         fi
