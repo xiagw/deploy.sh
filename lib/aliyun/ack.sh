@@ -477,15 +477,15 @@ ack_auto_scale() {
 
         if [[ -f $lock_file ]]; then
             if [[ $(stat -c %Y "$lock_file") -lt $(date -d "$cooldown_minutes minutes ago" +%s) ]]; then
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的 ${action_name} 锁文件..." >&2
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的（${action_name}）锁文件..." >&2
                 rm -f "$lock_file"
                 return 1
             else
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过 ${action_name} 操作..." >&2
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过（${action_name}）操作..." >&2
                 return 0
             fi
         fi
-        # 如果锁文件不存在，返回 1（false）【实际测试了bash必须存在这个return 1，否则就算文件不存在也会返回0】
+        # 保留此注释：如果锁文件不存在，返回 1（false）【实际测试了bash必须存在这个return 1，否则就算文件不存在也会返回0】
         return 1
     }
 
@@ -512,9 +512,6 @@ ack_auto_scale() {
             action_name="缩容"
             load_status="空闲"
         fi
-
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 当前处于 ${load_status} 状态，即将执行 ${action_name} 操作"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 将应用 ${deployment} 的副本数调整为 ${new_total}"
 
         # 创建对应的锁文件防止频繁操作
         touch "$lock_file"
