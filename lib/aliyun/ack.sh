@@ -458,11 +458,11 @@ check_cooldown() {
 
     if [[ -f $lock_file ]]; then
         if [[ $(stat -c %Y "$lock_file") -lt $(date -d "$cooldown_minutes minutes ago" +%s) ]]; then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的（${action_name}）锁文件..." >&2
+            # echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的（${action_name}）锁文件..." >&2
             rm -f "$lock_file"
             return 1
         else
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过（${action_name}）操作..." >&2
+            # echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过（${action_name}）操作..." >&2
             return 0
         fi
     fi
