@@ -552,7 +552,7 @@ ack_auto_scale() {
         awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}')
 
     # 检查是否需要扩容
-    if ((cpu > pod_cpu_warn && mem > pod_mem_warn)); then
+    if ((cpu > pod_cpu_warn || mem > pod_mem_warn)); then
         kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
         ## 扩容数量每次增加2，应对突发流量
         scale_deployment "up" $((pod_total + SCALE_CHANGE)) "$lock_file_up"
