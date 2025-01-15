@@ -519,7 +519,7 @@ ack_auto_scale() {
     fi
 
     # 定义常量
-    local CPU_WARN_FACTOR=1000          # CPU 警告阈值因子
+    local CPU_WARN_FACTOR=1500          # CPU 警告阈值因子
     local MEM_WARN_FACTOR=1200          # 内存警告阈值因子
     local CPU_NORMAL_FACTOR=500         # CPU 正常阈值因子
     local MEM_NORMAL_FACTOR=500         # 内存正常阈值因子
