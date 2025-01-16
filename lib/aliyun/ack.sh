@@ -488,23 +488,25 @@ scale_deployment() {
     # 创建对应的锁文件防止频繁操作
     touch "$lock_file"
 
-    if kubectl -n "$namespace" scale --replicas="$new_total" deployment "$deployment"; then
-        if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 60s; then
-            local result="成功"
-        else
-            local result="失败"
-        fi
-
-        # 记录操作日志
-        local msg_body
-        msg_body="[$(date '+%Y-%m-%d %H:%M:%S')] 自动扩缩容: 应用 ${deployment} ${load_status}, ${action_name} 到 ${new_total} 个副本，结果: ${result}"
-        echo "$msg_body"
-        log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
-        _notify_wecom "${WECOM_KEY:-}" "$msg_body"
-    else
+    if ! kubectl -n "$namespace" scale --replicas="$new_total" deployment "$deployment"; then
         echo "扩缩容操作失败" >&2
         return 1
     fi
+
+    local msg_body
+    msg_body="[$(date '+%Y-%m-%d %H:%M:%S')], 应用 ${deployment} ${load_status}, ${action_name} 到 ${new_total} 个副本"
+    echo "$msg_body"
+
+    if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 60s; then
+        local result="成功"
+    else
+        local result="失败"
+    fi
+
+    # 记录操作日志
+    msg_body="${msg_body}，结果: ${result}"
+    log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
+    _notify_wecom "${WECOM_KEY:-}" "$msg_body"
 }
 
 ack_auto_scale() {
