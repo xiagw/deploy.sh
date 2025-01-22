@@ -2,13 +2,13 @@
 
 _msg() {
     case "${1:-}" in
-        log)
-            shift
-            echo "[$(date +%Y%m%d-%u-%T.%3N)] - [RUN] $*" >>"$me_log"
-            ;;
-        *)
-            echo "[$(date +%Y%m%d-%u-%T.%3N)] - [RUN] $*"
-            ;;
+    log)
+        shift
+        echo "[$(date +%Y%m%d-%u-%T.%3N)] - [RUN] $*" >>"$me_log"
+        ;;
+    *)
+        echo "[$(date +%Y%m%d-%u-%T.%3N)] - [RUN] $*"
+        ;;
     esac
 }
 
@@ -33,13 +33,12 @@ _start_java() {
     ## 启动方式一， jar 内置配置(profile)文件 yml，
     ## Dockerfile ARG MVN_PROFILE=test （此处对应 git 分支名） 镜像内生成文件 profile.<分支名>
     # Find profile
-    local profile_name=""
-    for file in "$app_path"/profile.*; do
-        [[ -f "$file" ]] || continue
-        profile_name="--spring.profiles.active=${file##*.}"
+    local profile_file
+    profile_file=$(find "$app_path" -maxdepth 1 -name "profile.*" -type f -print -quit)
+    if [[ -f "$profile_file" ]]; then
+        profile_name="--spring.profiles.active=${profile_file##*.}"
         _msg "Found profile: $profile_name"
-        break
-    done
+    fi
 
     # Find JAR and YML files
     local jars=("$app_path"/*.jar)
@@ -57,12 +56,12 @@ _start_java() {
         if [ -n "$profile_name" ]; then
             start_command+=" $profile_name"
         elif [ -f "${ymls[$i]}" ]; then
-        ## 配置文件 yml 在 jar 包外，非内置.自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
+            ## 配置文件 yml 在 jar 包外，非内置.自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
             start_command+=" -Dspring.config.location=${ymls[$i]}"
         fi
 
         _msg "Starting Java application: $start_command"
-        eval "$start_command" >>"$me_log" 2>&1 &
+        $JAVA_OPTS -jar "$jar" ${profile_name:+"$profile_name"} ${ymls[$i]:+"-Dspring.config.location=${ymls[$i]}"} >>"$me_log" 2>&1 &
         pids+=("$!")
     done
 
