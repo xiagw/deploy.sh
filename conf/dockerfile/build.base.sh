@@ -13,10 +13,16 @@ _build() {
             --build-arg PHP_VERSION="$v"
         )
         ;;
-    redis | nginx)
+    redis)
         cmd_opt+=(
             -f Dockerfile."$v"
             --tag "$reg":laradock-"$v"
+        )
+        ;;
+    nginx)
+        cmd_opt+=(
+            -f Dockerfile."$v"
+            --tag "$reg":"$v"-alpine-base
         )
         ;;
     mysql-5.7 | mysql-8.0 | mysql-8.4)

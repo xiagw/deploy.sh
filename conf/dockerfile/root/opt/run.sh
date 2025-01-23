@@ -51,17 +51,19 @@ _start_java() {
     for jar in "${jars[@]}"; do
         [ -f "$jar" ] || continue
         ((++i))
-        local start_command="$JAVA_OPTS -jar $jar"
+        _msg "Processing JAR: $(basename "$jar")"
 
         if [ -n "$profile_name" ]; then
-            start_command+=" $profile_name"
+            _msg "Starting with profile: $profile_name"
+            $JAVA_OPTS -jar "$jar" "$profile_name" >>"$me_log" 2>&1 &
         elif [ -f "${ymls[$i]}" ]; then
+            _msg "Starting with config: ${ymls[$i]}"
             ## 配置文件 yml 在 jar 包外，非内置.自动探测 yml 文件, 按文件名自动排序,对应关系 axxx.jar--axxx.yml, bxxx.jar--bxxx.yml
-            start_command+=" -Dspring.config.location=${ymls[$i]}"
+            $JAVA_OPTS -jar "$jar" "-Dspring.config.location=${ymls[$i]}" >>"$me_log" 2>&1 &
+        else
+            _msg "Starting without external config"
+            $JAVA_OPTS -jar "$jar" >>"$me_log" 2>&1 &
         fi
-
-        _msg "Starting Java application: $start_command"
-        $JAVA_OPTS -jar "$jar" ${profile_name:+"$profile_name"} ${ymls[$i]:+"-Dspring.config.location=${ymls[$i]}"} >>"$me_log" 2>&1 &
         pids+=("$!")
     done
 
