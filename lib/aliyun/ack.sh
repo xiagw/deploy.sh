@@ -507,6 +507,7 @@ scale_deployment() {
     msg_body="${msg_body}，结果: ${result}"
     log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
     _notify_wecom "${WECOM_KEY:-}" "$msg_body"
+    echo ""
 }
 
 ack_auto_scale() {
@@ -555,6 +556,7 @@ ack_auto_scale() {
 
     # 检查是否需要扩容
     if ((cpu > pod_cpu_warn || mem > pod_mem_warn)); then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')], 当前CPU求和: $cpu, 内存求和: $mem"
         kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
         ## 扩容数量每次增加2，应对突发流量
         scale_deployment "up" $((pod_total + SCALE_CHANGE)) "$lock_file_up"
