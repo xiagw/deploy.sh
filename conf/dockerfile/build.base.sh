@@ -4,38 +4,39 @@ set -xe
 
 _build() {
     local v="$1"
+    local reg=registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5
     case "$v" in
     5.6 | 7.1 | 7.3 | 7.4 | 8.1 | 8.2 | 8.3)
         cmd_opt+=(
             -f Dockerfile.php.base
-            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-php-fpm-"$v"
+            --tag "$reg":laradock-php-fpm-"$v"
             --build-arg PHP_VERSION="$v"
         )
         ;;
     redis | nginx)
         cmd_opt+=(
-            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
             -f Dockerfile."$v"
+            --tag "$reg":laradock-"$v"
         )
         ;;
     mysql-5.7 | mysql-8.0 | mysql-8.4)
         cmd_opt+=(
             -f Dockerfile.mysql
-            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
+            --tag "$reg":laradock-"$v"
             --build-arg MYSQL_VERSION="${v#*-}"
         )
         ;;
     spring-8 | spring-17 | spring-21)
         cmd_opt+=(
             -f Dockerfile.java.base
-            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
+            --tag "$reg":laradock-"$v"
             --build-arg JDK_VERSION="${v#*-}"
         )
         ;;
     nodejs-18 | nodejs-20 | nodejs-21)
         cmd_opt+=(
             -f Dockerfile.node.base
-            --tag registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:laradock-"$v"
+            --tag "$reg":laradock-"$v"
             --build-arg NODE_VERSION="${v#*-}"
         )
         ;;
@@ -50,7 +51,6 @@ _build() {
     "${cmd_opt[@]}" "$me_path/"
 }
 
-cmd_opt=()
 cmd_opt+=(
     $(if command -v docker; then
         echo build
@@ -77,7 +77,9 @@ all)
     done
     ;;
 *)
-    arg=$(echo "${args[@]}" | sed 's/\ /\n/g' | fzf)
+    if [ -z "$arg" ]; then
+        arg=$(echo "${args[@]}" | sed 's/\ /\n/g' | fzf)
+    fi
     _build "$arg"
     ;;
 esac
