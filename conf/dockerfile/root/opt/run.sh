@@ -213,6 +213,20 @@ _check_jemalloc() {
     done
 }
 
+_handle_log() {
+    while true; do
+        for log_file in "$me_log" "$app_path"/log/*.log; do
+            [ -f "$log_file" ] || continue
+            file_size=$(stat -c%s "$log_file" 2>/dev/null || stat -f%z "$log_file" 2>/dev/null)
+            if [ "${file_size:-0}" -gt 1073741824 ]; then
+                _msg "Clearing log file $log_file (size: $file_size bytes)"
+                : > "$log_file"
+            fi
+        done
+        sleep 300
+    done
+}
+
 _kill() {
     _msg "receive SIGTERM, kill ${pids[*]}"
     for pid in "${pids[@]}"; do
@@ -268,6 +282,9 @@ main() {
     pids+=("$!")
 
     # _check_jemalloc &
+    ## 增加一个函数处理log
+    _handle_log &
+    pids+=("$!")
 
     ## 识别中断信号，停止 java 进程
     trap _kill HUP INT PIPE QUIT TERM
