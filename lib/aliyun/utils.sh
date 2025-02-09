@@ -386,12 +386,34 @@ validate_params() {
         ;;
     balance)
         case "$operation" in
-        list) [[ ${#params[@]} -le 1 ]] || {
-            echo "错误：参数错误。用法：$0 balance list [format]" >&2
-            return 1
-        } ;;
+        list)
+            [[ ${#params[@]} -le 1 ]] || {
+                echo "错误：参数错误。用法：$0 balance list [format]" >&2
+                return 1
+            }
+            ;;
+        check)
+            [[ ${#params[@]} -le 2 ]] || {
+                echo "错误：参数错误。用法：$0 balance check [余额阈值] [日消费阈值]" >&2
+                return 1
+            }
+            # 如果提供了参数，验证是否为数字
+            if [[ ${#params[@]} -ge 1 ]]; then
+                [[ ${params[0]} =~ ^[0-9]+$ ]] || {
+                    echo "错误：余额阈值必须为数字。" >&2
+                    return 1
+                }
+            fi
+            if [[ ${#params[@]} -eq 2 ]]; then
+                [[ ${params[1]} =~ ^[0-9]+$ ]] || {
+                    echo "错误：日消费阈值必须为数字。" >&2
+                    return 1
+                }
+            fi
+            ;;
         *)
             echo "错误：未知的 Balance 操作：$operation" >&2
+            show_balance_help
             return 1
             ;;
         esac
@@ -580,11 +602,14 @@ query_account_balance() {
 show_balance_help() {
     echo "账户余额操作："
     echo "  list [format]            - 查询账户余额，format 可选 human/json/tsv"
+    echo "  check [3000] [150]      - 检查账户余额并在低于阈值时发出告警"
     echo
     echo "示例："
     echo "  $0 balance list          # 人类可读格式"
     echo "  $0 balance list json     # JSON 格式"
     echo "  $0 balance list tsv      # TSV 格式"
+    echo "  $0 balance check         # 检查余额并告警"
+    echo "  $0 balance check 3000 150 # 检查余额并告警，设置阈值"
 }
 
 handle_balance_commands() {
@@ -593,12 +618,56 @@ handle_balance_commands() {
 
     case "$operation" in
     list) query_account_balance "$@" ;;
+    check) balance_check "$@" ;;
     *)
         echo "错误：未知的余额操作：$operation" >&2
         show_balance_help
         exit 1
         ;;
     esac
+}
+
+balance_check() {
+    local current_balance alarm_balance alarm_daily yesterday current_month daily_spending msg_body
+
+    alarm_balance=${1:-${ENV_ALARM_ALIYUN_BALANCE:-3000}}
+    alarm_daily=${2:-${ENV_ALARM_ALIYUN_DAILY:-150}}
+    yesterday=$(date +%F -d yesterday)
+    current_month=$(date +%Y-%m -d yesterday)
+
+    echo "Checking balance for profile: $profile"
+
+    # 检查当前余额
+    current_balance=$(aliyun -p "$profile" bssopenapi QueryAccountBalance 2>/dev/null |
+        jq -r '.Data.AvailableAmount | gsub(","; "")')
+    if [[ -z "$current_balance" ]]; then
+        echo "Warning: Failed to retrieve balance for profile $profile"
+        return 1
+    fi
+
+    echo "Current balance: $current_balance"
+    if ((${current_balance%.*} < ${alarm_balance%.*})); then
+        msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
+        _notify_wecom "${WECOM_KEY_ALARM}" "$msg_body"
+    fi
+
+    # 检查昨日消费
+    daily_spending=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
+        --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
+        jq -r '.Data.Items.Item[].CashAmount | tostring | gsub(","; "")')
+
+    echo "Yesterday's spending: $daily_spending"
+    if ((${daily_spending%.*} > ${alarm_daily%.*})); then
+        msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f , 超过告警阈值：%.2f" "$profile" "$daily_spending" "${alarm_daily}")
+        _notify_wecom "${WECOM_KEY_ALARM}" "$msg_body"
+    fi
+
+    if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${arg_renew_cert:-false}; then
+        return 0
+    fi
+    if ${exec_single_job:-false}; then
+        exit 0
+    fi
 }
 
 list_all_services() {
@@ -750,4 +819,3 @@ handle_cost_commands() {
         ;;
     esac
 }
-
