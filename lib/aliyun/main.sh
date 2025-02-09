@@ -50,7 +50,7 @@ main() {
         esac
     done
     # shellcheck source=/dev/null
-    [ -f "${SCRIPT_DATA}/aliyun2.sh.env" ] && source "${SCRIPT_DATA}/aliyun2.sh.env"
+    [ -f "${SCRIPT_DATA}/aliyun.sh.env" ] && source "${SCRIPT_DATA}/aliyun.sh.env"
 
     check_dependencies
 
