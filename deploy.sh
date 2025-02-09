@@ -955,55 +955,6 @@ _renew_ssl_certificates() {
     fi
 }
 
-_check_aliyun_account_balance() {
-    ${github_action:-false} && return 0
-    _msg step "[finance] Check Aliyun account balance"
-
-    local current_balance alarm_balance alarm_daily yesterday current_month daily_spending
-
-    alarm_balance=${ENV_ALARM_ALIYUN_BALANCE:-3000}
-    alarm_daily=${ENV_ALARM_ALIYUN_DAILY:-100}
-    yesterday=$(date +%F -d yesterday)
-    current_month=$(date +%Y-%m -d yesterday)
-
-    for profile in "${ENV_ALARM_ALIYUN_PROFILE[@]}"; do
-        _msg info "Checking balance for profile: $profile"
-
-        # 检查当前余额
-        current_balance=$(aliyun -p "$profile" bssopenapi QueryAccountBalance 2>/dev/null |
-            jq -r '.Data.AvailableAmount | gsub(","; "")')
-        if [[ -z "$current_balance" ]]; then
-            _msg warn "Failed to retrieve balance for profile $profile"
-            continue
-        fi
-
-        _msg green "Current balance: $current_balance"
-        if ((${current_balance%.*} < ${alarm_balance%.*})); then
-            g_msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
-            _notify_wecom "${ENV_ALARM_WECOM_KEY}" "$g_msg_body"
-        fi
-
-        # 检查昨日消费
-        daily_spending=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
-            --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
-            jq -r '.Data.Items.Item[].CashAmount | tostring | gsub(","; "")')
-
-        _msg red "Yesterday's spending: $daily_spending"
-        if ((${daily_spending%.*} > ${alarm_daily%.*})); then
-            g_msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f , 超过告警阈值：%.2f" "$profile" "$daily_spending" "${alarm_daily}")
-            _notify_wecom "${ENV_ALARM_WECOM_KEY}" "$g_msg_body"
-        fi
-    done
-
-    _msg time "[finance] completed"
-    if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${arg_renew_cert:-false}; then
-        return 0
-    fi
-    if ${exec_single_job:-false}; then
-        exit 0
-    fi
-}
-
 _is_china() {
     if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} || grep -q 'ENV_IN_CHINA=true' "$SCRIPT_ENV"; then
         return 0
@@ -1590,7 +1541,6 @@ Parameters:
     --create-k8s             Create K8s cluster with Terraform.
 
     # Miscellaneous
-    --get-balance            Get balance from Aliyun.
     --disable-inject         Disable file injection.
     -r, --renew-cert         Renew all the certs.
 EOF
@@ -1635,7 +1585,6 @@ _parse_args() {
         --create-helm) arg_create_helm=true && exec_single_job=true && exec_inject_files=false && helm_dir="$2" && shift ;;
         --create-k8s) create_k8s_with_terraform=true ;;
         # Miscellaneous
-        --get-balance) arg_get_balance=true && exec_single_job=true ;;
         --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true && exec_single_job=true ;;
         *) _usage && exit 1 ;;
@@ -1749,12 +1698,6 @@ main() {
 
     ## setup ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     _setup_deployment_environment >/dev/null
-
-    ## get balance of aliyun / 获取 aliyun 账户现金余额
-    # echo "MAN_GET_BALANCE: ${MAN_GET_BALANCE:-false}"
-    if [[ "${MAN_GET_BALANCE:-false}" == true ]] || ${arg_get_balance:-false}; then
-        _check_aliyun_account_balance
-    fi
 
     ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
     # echo "MAN_RENEW_CERT: ${MAN_RENEW_CERT:-false}"
