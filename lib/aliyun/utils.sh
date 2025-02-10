@@ -630,8 +630,8 @@ handle_balance_commands() {
 balance_check() {
     local current_balance alarm_balance alarm_daily yesterday current_month daily_spending msg_body
 
-    alarm_balance=${1:-${ENV_ALARM_ALIYUN_BALANCE:-3000}}
-    alarm_daily=${2:-${ENV_ALARM_ALIYUN_DAILY:-150}}
+    alarm_balance=${1:-${ALARM_ALIYUN_BALANCE:-3000}}
+    alarm_daily=${2:-${ALARM_ALIYUN_DAILY:-150}}
     yesterday=$(date +%F -d yesterday)
     current_month=$(date +%Y-%m -d yesterday)
 

@@ -46,7 +46,7 @@ handle_ack_commands() {
     node-add) ack_node_add "$@" ;;
     node-remove) ack_node_remove "$@" ;;
     kubeconfig) ack_get_kubeconfig "$@" ;;
-    auto-scale) ack_auto_scale "$@" ;;
+    auto-scale) ack_auto_scale "$@" >>"${SCRIPT_LOG:-/tmp/ack_auto_scale.log}" ;;
     *)
         echo "错误：未知的 ACK 操作：$operation" >&2
         show_ack_help
@@ -465,9 +465,9 @@ check_cooldown() {
             # echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过（${action_name}）操作..." >&2
             return 0
         fi
+    else
+        return 1
     fi
-    # 保留此注释：如果锁文件不存在，返回 1（false）【实际测试了bash必须存在这个return 1，否则就算文件不存在也会返回0】
-    return 1
 }
 
 # 扩缩容函数
