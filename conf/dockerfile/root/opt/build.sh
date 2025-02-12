@@ -164,7 +164,7 @@ _build_php() {
 
     # Upgrade and install PHP packages
     $cmd_pkg upgrade -yqq
-    $cmd_pkg_opt php"${PHP_VERSION}" php"${PHP_VERSION}"-{bcmath,bz2,curl,fpm,gd,gmp,imagick,intl,mbstring,mongodb,msgpack,mysql,redis,soap,sqlite3,xml,xmlrpc,zip}
+    $cmd_pkg_opt libpq-dev php"${PHP_VERSION}" php"${PHP_VERSION}"-{bcmath,bz2,curl,fpm,gd,gmp,imagick,intl,mbstring,mongodb,msgpack,mysql,redis,soap,sqlite3,xml,xmlrpc,zip}
 
     # Install and configure web server
     case "$PHP_VERSION" in
