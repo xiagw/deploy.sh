@@ -210,7 +210,7 @@ cdn_pay() {
     )"
 
     # 检查账户余额是否充足
-    if ((available_balance < balance_threshold + package_unit_price)); then
+    if ((available_balance < (balance_threshold + package_unit_price))); then
         echo "[CDN] 账户余额 $available_balance 元不足，无法购买资源包。"
         return 1
     fi
