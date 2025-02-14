@@ -12,7 +12,7 @@
 
 ## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
 
-_is_in_demo_mode() {
+is_demo_mode() {
     local skip_msg="$1"
     if grep -qE '=your_(password|username)' "$SCRIPT_ENV"; then
         _msg purple "Found default docker credentials, skipping $skip_msg ..."
@@ -21,7 +21,7 @@ _is_in_demo_mode() {
     return 1
 }
 
-_test_unit() {
+test_unit() {
     local test_scripts=("$gitlab_project_dir/tests/unit_test.sh" "$SCRIPT_DATA/tests/unit_test.sh")
 
     for test_script in "${test_scripts[@]}"; do
@@ -38,7 +38,7 @@ _test_unit() {
     _msg purple "No unit test script found. Skipping unit tests."
 }
 
-_test_function() {
+test_function() {
     local test_scripts=("$gitlab_project_dir/tests/func_test.sh" "$SCRIPT_DATA/tests/func_test.sh")
 
     for test_script in "${test_scripts[@]}"; do
@@ -56,7 +56,7 @@ _test_function() {
     _msg purple "No functional test script found. Skipping functional tests."
 }
 
-_run_sonarqube_analysis() {
+run_sonarqube_analysis() {
     local sonar_url="${ENV_SONAR_URL:?empty}"
     local sonar_conf="$gitlab_project_dir/sonar-project.properties"
 
@@ -93,7 +93,7 @@ EOF
     _msg time "[quality] Code quality check with SonarQube completed"
 }
 
-_run_zap_scan() {
+run_zap_scan() {
     local target_url="${ENV_TARGET_URL}"
     local zap_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
     local zap_options="${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
@@ -111,7 +111,7 @@ _run_zap_scan() {
 }
 # _security_scan_zap "http://example.com" "my/zap-image" "-t http://example.com -r report.html -x report.xml"
 
-_run_vulmap_scan() {
+run_vulmap_scan() {
     # https://github.com/zhzyker/vulmap
     # $build_cmd run --rm -ti vulmap/vulmap  python vulmap.py -u https://www.example.com
     local config_file="$SCRIPT_DATA/config.cfg"
@@ -129,8 +129,8 @@ _run_vulmap_scan() {
     fi
 }
 
-# _check_gitleaks /path/to/repo /path/to/config.toml
-_check_gitleaks() {
+# check_gitleaks /path/to/repo /path/to/config.toml
+check_gitleaks() {
     local path="$1"
     local config_file="$2"
     local gitleaks_image="zricethezav/gitleaks:v7.5.0"
@@ -143,7 +143,7 @@ _check_gitleaks() {
         $gitleaks_cmd
 }
 
-_deploy_flyway_docker() {
+deploy_flyway_docker() {
     local vol_conf="${gitlab_project_dir}/flyway_conf:/flyway/conf"
     local vol_sql="${gitlab_project_dir}/flyway_sql:/flyway/sql"
     local run="$build_cmd run --rm -v ${vol_conf} -v ${vol_sql} flyway/flyway"
@@ -168,7 +168,7 @@ _deploy_flyway_docker() {
     _msg time "[database] Deploy SQL files with Flyway"
 }
 
-_deploy_flyway_helm_job() {
+deploy_flyway_helm() {
     _msg step "[database] Deploy SQL with Flyway (Helm job)"
 
     if ${github_action:-false}; then
@@ -198,7 +198,7 @@ _deploy_flyway_helm_job() {
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
 # git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
 
-_login_docker_registry() {
+docker_login() {
     ${github_action:-false} && return 0
     local lock_login_registry="$SCRIPT_DATA/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
     local time_last
@@ -220,7 +220,7 @@ _login_docker_registry() {
         fi
         ;;
     *)
-        _is_in_demo_mode "docker-login" && return 0
+        is_demo_mode "docker-login" && return 0
 
         if [[ -f "$lock_login_registry" ]]; then
             return 0
@@ -236,7 +236,7 @@ _login_docker_registry() {
     esac
 }
 
-_get_docker_context() {
+get_docker_context() {
     ## use local context / 使用本地 context
     [[ ${ENV_DOCKER_CONTEXT:-local} == local ]] && return
 
@@ -296,11 +296,11 @@ _get_docker_context() {
     echo "$build_cmd"
 }
 
-_build_image() {
+build_image() {
     ${github_action:-false} && return 0
     _msg step "[image] build container image"
 
-    _get_docker_context
+    get_docker_context
 
     ## build from Dockerfile.base
     local registry_base
@@ -354,10 +354,10 @@ _build_image() {
     fi
 }
 
-_push_image() {
+push_image() {
     _msg step "[image] Pushing container image"
-    _is_in_demo_mode "push-image" && return 0
-    _login_docker_registry
+    is_demo_mode "push-image" && return 0
+    docker_login
 
     local push_error=false
 
@@ -560,7 +560,7 @@ _deploy_to_kubernetes() {
         return
     fi
     _msg step "[deploy] deploy k8s with helm"
-    _is_in_demo_mode "deploy-helm" && return 0
+    is_demo_mode "deploy-helm" && return 0
     _format_release_name
 
     ## finding helm files folder / 查找 helm 文件目录
@@ -1725,19 +1725,19 @@ main() {
     ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
     if ${exec_single_job:-false}; then
         _msg green "exec single jobs..."
-        ${arg_code_quality:-false} && _run_sonarqube_analysis
+        ${arg_code_quality:-false} && run_sonarqube_analysis
         ${arg_code_style:-false} && {
             [[ -f "$code_style_sh" ]] && source "$code_style_sh"
         }
-        ${arg_test_unit:-false} && _test_unit
-        ${arg_deploy_flyway:-false} && _deploy_flyway_docker
-        # ${exec_deploy_flyway:-false} && _deploy_flyway_helm_job
-        ${exec_deploy_flyway:-false} && _deploy_flyway_docker
+        ${arg_test_unit:-false} && test_unit
+        ${arg_deploy_flyway:-false} && deploy_flyway_docker
+        # ${exec_deploy_flyway:-false} && deploy_flyway_helm
+        ${exec_deploy_flyway:-false} && deploy_flyway_docker
         ${arg_build_langs:-false} && {
             [[ -f "$build_langs_sh" ]] && source "$build_langs_sh"
         }
-        ${arg_build_image:-false} && _build_image
-        ${arg_push_image:-false} && _push_image
+        ${arg_build_image:-false} && build_image
+        ${arg_push_image:-false} && push_image
         ${arg_deploy_functions:-false} && _deploy_to_aliyun_functions
         ${arg_create_helm:-false} && _create_helm_chart "${helm_dir}"
         ${arg_deploy_k8s:-false} && _deploy_to_kubernetes
@@ -1745,7 +1745,7 @@ main() {
         ${arg_deploy_rsync:-false} && _deploy_rsync
         ${arg_deploy_ftp:-false} && _deploy_ftp
         ${arg_deploy_sftp:-false} && _deploy_sftp
-        ${arg_test_function:-false} && _test_function
+        ${arg_test_function:-false} && test_function
 
         _msg green "exec single jobs...end"
         ${github_action:-false} || return 0
@@ -1757,7 +1757,7 @@ main() {
     _msg step "[quality] check code with sonarqube"
     echo "MAN_SONAR: ${MAN_SONAR:-false}"
     if [[ "${MAN_SONAR:-false}" == true ]]; then
-        _run_sonarqube_analysis
+        run_sonarqube_analysis
     else
         echo "<skip>"
     fi
@@ -1780,18 +1780,18 @@ main() {
     _msg step "[test] unit test"
     echo "MAN_UNIT_TEST: ${MAN_UNIT_TEST:-false}"
     if [[ "${MAN_UNIT_TEST:-false}" == true ]]; then
-        _test_unit
+        test_unit
     else
         echo "<skip>"
     fi
 
     ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
     _msg step "[database] deploy SQL files with flyway"
-    # ${ENV_FLYWAY_HELM_JOB:-false} && _deploy_flyway_helm_job
-    # ${exec_deploy_flyway:-false} && _deploy_flyway_helm_job
+    # ${ENV_FLYWAY_HELM_JOB:-false} && deploy_flyway_helm
+    # ${exec_deploy_flyway:-false} && deploy_flyway_helm
     echo "MAN_FLYWAY: ${MAN_FLYWAY:-false}"
     if [[ "${MAN_FLYWAY:-false}" == true ]] || ${exec_deploy_flyway:-false}; then
-        _deploy_flyway_docker
+        deploy_flyway_docker
     else
         echo '<skip>'
     fi
@@ -1807,11 +1807,11 @@ main() {
             _msg time "not found $build_langs_sh"
         fi
     fi
-    ${exec_build_image:-false} && _build_image
+    ${exec_build_image:-false} && build_image
     ${exit_directly:-false} && return
 
     ## push image
-    ${exec_push_image:-false} && _push_image
+    ${exec_push_image:-false} && push_image
 
     ## deploy k8s
     ${exec_deploy_k8s:-false} && _deploy_to_kubernetes
@@ -1831,7 +1831,7 @@ main() {
     _msg step "[test] function test"
     echo "MAN_FUNCTION_TEST: ${MAN_FUNCTION_TEST:-false}"
     if [[ "${MAN_FUNCTION_TEST:-false}" == true ]]; then
-        _test_function
+        test_function
     else
         echo "<skip>"
     fi
@@ -1840,7 +1840,7 @@ main() {
     _msg step "[security] ZAP scan"
     echo "MAN_SCAN_ZAP: ${MAN_SCAN_ZAP:-false}"
     if [[ "${MAN_SCAN_ZAP:-false}" == true ]]; then
-        _run_zap_scan
+        run_zap_scan
     else
         echo '<skip>'
     fi
@@ -1848,7 +1848,7 @@ main() {
     _msg step "[security] vulmap scan"
     echo "MAN_SCAN_VULMAP: ${MAN_SCAN_VULMAP:-false}"
     if [[ "${MAN_SCAN_VULMAP:-false}" == true ]]; then
-        _run_vulmap_scan
+        run_vulmap_scan
     else
         echo '<skip>'
     fi
