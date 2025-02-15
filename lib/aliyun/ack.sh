@@ -563,6 +563,9 @@ ack_auto_scale() {
         return
     fi
 
+    if check_cooldown "down" "$lock_file_up" $COOLDOWN_MINUTES_SCALE_DOWN; then
+        return
+    fi
     # 检查缩容冷却期
     if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
         return
