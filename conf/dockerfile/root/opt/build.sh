@@ -389,7 +389,7 @@ _build_mysql() {
     if mysqld --version | grep '8\..\.'; then
         cp -f "$me_path"/my.8.cnf $my_cnf
     else
-        cp -f "$me_path"/my.cnf $my_cnf
+        cp -f "$me_path"/my.5.cnf $my_cnf
     fi
     chmod 0444 $my_cnf
     if [ "$MYSQL_SLAVE" = 'true' ]; then
