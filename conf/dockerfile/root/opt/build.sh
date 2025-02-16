@@ -177,6 +177,13 @@ _build_php() {
         ;;
     esac
 
+    # apt update && apt install -y libpq-dev # php"${PHP_VERSION}"-dev
+    # pecl channel-update pecl.php.net
+    # pecl install -D 'enable-sockets="no" enable-openssl="no" enable-http2="no" enable-mysqlnd="no" enable-swoole-json="no" enable-swoole-curl="no" enable-cares="no"' swoole-4.8.13
+    # pecl install -D 'enable-sockets="no" enable-openssl="no" enable-http2="no" enable-mysqlnd="no" enable-swoole-json="no" enable-swoole-curl="no" enable-cares="no"' swoole-5.1.6
+    # echo "extension=swoole.so" > /etc/php/"${PHP_VERSION}"/mods-available/swoole.ini
+    # phpenmod swoole
+
     # Configure PHP-FPM
     sed -i \
         -e '/fpm.sock/s/^/;/' \
