@@ -474,19 +474,19 @@ check_cooldown() {
 scale_deployment() {
     local action=$1
     local new_total=$2
-    local lock_file=$3
+    local lock_file_up=$3
+    local lock_file_down=$4
     local action_name load_status
 
     if [[ "$action" == "up" ]]; then
         action_name="扩容"
         load_status="过载"
+        touch "$lock_file_up" "$lock_file_down"
     else
         action_name="缩容"
         load_status="空闲"
+        touch "$lock_file_down"
     fi
-
-    # 创建对应的锁文件防止频繁操作
-    touch "$lock_file"
 
     if ! kubectl -n "$namespace" scale --replicas="$new_total" deployment "$deployment"; then
         echo "扩缩容操作失败" >&2
@@ -559,13 +559,10 @@ ack_auto_scale() {
         echo "[$(date '+%Y-%m-%d %H:%M:%S')], 当前CPU求和: $cpu, 内存求和: $mem"
         kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
         ## 扩容数量每次增加2，应对突发流量
-        scale_deployment "up" $((pod_total + SCALE_CHANGE)) "$lock_file_up"
+        scale_deployment "up" $((pod_total + SCALE_CHANGE)) "$lock_file_up" "$lock_file_down"
         return
     fi
 
-    if check_cooldown "down" "$lock_file_up" $COOLDOWN_MINUTES_SCALE_DOWN; then
-        return
-    fi
     # 检查缩容冷却期
     if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
         return
@@ -574,7 +571,7 @@ ack_auto_scale() {
     if ((cpu < pod_cpu_normal)); then
         if ((pod_total > node_fixed)); then
             kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-            scale_deployment "down" $((pod_total - SCALE_CHANGE)) "$lock_file_down"
+            scale_deployment "down" $((pod_total - SCALE_CHANGE)) "$lock_file_up" "$lock_file_down"
             return
         fi
         ## 检查是否有pod运行在虚拟节点，如果有则执行 kubectl rollout restart 命令
