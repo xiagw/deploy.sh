@@ -955,7 +955,7 @@ _renew_ssl_certificates() {
     fi
 }
 
-_is_china() {
+is_china() {
     if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} || grep -q 'ENV_IN_CHINA=true' "$SCRIPT_ENV"; then
         return 0
     fi
@@ -1686,7 +1686,7 @@ main() {
     ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab
     ${ENV_INSTALL_JMETER:-false} && _install_jmeter
     ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
-    ${ENV_INSTALL_DOCKER:-false} && _install_docker "$(_is_china && echo "--mirror Aliyun")"
+    ${ENV_INSTALL_DOCKER:-false} && _install_docker "$(is_china && echo "--mirror Aliyun")"
     ${ENV_INSTALL_PODMAN:-false} && _install_podman
     ${ENV_INSTALL_CRON:-false} && _install_cron
 
