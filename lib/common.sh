@@ -751,6 +751,7 @@ get_github_latest_download() {
     arch=$(echo "$arch" | tr '[:upper:]' '[:lower:]')
     case "$arch" in
     x86_64 | x64 | amd64) arch="amd64" ;; # 把 amd64 也放在这里
+    64) arch="64" ;;
     x86 | 386) arch="386" ;;
     aarch64 | arm64) arch="arm64" ;; # 把 arm64 也放在这里
     armv*) ;;                        # 保持原样 armv6/armv7 等
