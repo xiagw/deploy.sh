@@ -15,6 +15,8 @@ show_ecs_help() {
     echo "  key-delete <密钥对名称> [region]               - 删除 SSH 密钥对"
     echo "  start  <实例ID> [region]                      - 启动 ECS 实例"
     echo "  stop   <实例ID> [region]                      - 停止 ECS 实例（节省停机模式）"
+    echo "  key-attach <实例ID> <密钥对名称> [region]        - 绑定 SSH 密钥对到实例"
+    echo "  key-detach <实例ID> <密钥对名称> [region]        - 解绑实例的 SSH 密钥对"
     echo
     echo "示例："
     echo "  $0 ecs list"
@@ -28,6 +30,8 @@ show_ecs_help() {
     echo "  $0 ecs key-delete my-key"
     echo "  $0 ecs start i-bp67acfmxazb4ph****"
     echo "  $0 ecs stop i-bp67acfmxazb4ph****"
+    echo "  $0 ecs key-attach i-bp67acfmxazb4ph**** my-key"
+    echo "  $0 ecs key-detach i-bp67acfmxazb4ph**** my-key"
 }
 
 handle_ecs_commands() {
@@ -45,6 +49,8 @@ handle_ecs_commands() {
     key-delete) ecs_key_delete "$@" ;;
     start) ecs_start "$@" ;;
     stop) ecs_stop "$@" ;;
+    key-attach) ecs_key_attach "$@" ;;
+    key-detach) ecs_key_detach "$@" ;;
     *)
         echo "错误：未知的 ECS 操作：$operation" >&2
         show_ecs_help
@@ -450,6 +456,62 @@ ecs_key_delete() {
 
     echo "$result" | jq '.'
     log_result "$profile" "$region" "ecs" "key-delete" "$result"
+}
+
+# 添加绑定SSH密钥对到实例的函数
+ecs_key_attach() {
+    local instance_id=$1
+    local key_pair_name=$2
+
+    if [ -z "$instance_id" ] || [ -z "$key_pair_name" ]; then
+        echo "错误：实例ID和密钥对名称都不能为空。" >&2
+        return 1
+    fi
+
+    echo "绑定 SSH 密钥对到实例："
+    local result
+    result=$(aliyun --profile "${profile:-}" ecs AttachKeyPair \
+        --RegionId "$region" \
+        --InstanceIds "['$instance_id']" \
+        --KeyPairName "$key_pair_name")
+
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
+        echo "SSH 密钥对绑定成功。"
+        echo "$result" | jq '.'
+    else
+        echo "错误：SSH 密钥对绑定失败。"
+        echo "$result"
+    fi
+    log_result "$profile" "$region" "ecs" "key-attach" "$result"
+}
+
+# 添加解绑实例SSH密钥对的函数
+ecs_key_detach() {
+    local instance_id=$1
+    local key_pair_name=$2
+
+    if [ -z "$instance_id" ] || [ -z "$key_pair_name" ]; then
+        echo "错误：实例ID和密钥对名称都不能为空。" >&2
+        return 1
+    fi
+
+    echo "解绑实例的 SSH 密钥对："
+    local result
+    result=$(aliyun --profile "${profile:-}" ecs DetachKeyPair \
+        --RegionId "$region" \
+        --InstanceIds "['$instance_id']" \
+        --KeyPairName "$key_pair_name")
+
+    return_code=$?
+    if [ $return_code -eq 0 ]; then
+        echo "SSH 密钥对解绑成功。"
+        echo "$result" | jq '.'
+    else
+        echo "错误：SSH 密钥对解绑失败。"
+        echo "$result"
+    fi
+    log_result "$profile" "$region" "ecs" "key-detach" "$result"
 }
 
 get_supported_disk_categories() {
