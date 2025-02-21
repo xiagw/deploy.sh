@@ -1459,7 +1459,7 @@ _setup_git_repo() {
     git_repo_dir="${SCRIPT_BUILDS}/${git_repo_group}/${git_repo_name%.git}"
     mkdir -p "$git_repo_dir"
 
-    if [ -d "$git_repo_dir" ]; then
+    if [ -d "$git_repo_dir/.git" ]; then
         echo "Updating existing repo: $git_repo_dir"
         git -C "$git_repo_dir" fetch --quiet || return 1
         git -C "$git_repo_dir" checkout --quiet "${arg_git_clone_branch:-main}" || {
