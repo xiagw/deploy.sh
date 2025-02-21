@@ -1474,6 +1474,7 @@ _setup_git_repo() {
             return 1
         }
     fi
+    cd "$git_repo_dir" || return 1
 }
 
 _setup_kubernetes_cluster() {
