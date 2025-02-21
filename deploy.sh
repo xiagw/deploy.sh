@@ -1431,10 +1431,6 @@ _determine_deployment_method() {
 
 _setup_svn_repo() {
     ${checkout_with_svn:-false} || return 0
-    if [[ ! -d "$SCRIPT_BUILDS" ]]; then
-        echo "Not found $SCRIPT_BUILDS, create it..."
-        mkdir -p "$SCRIPT_BUILDS"
-    fi
     local svn_repo_name
     svn_repo_name=$(basename "$svn_url")
     local svn_repo_dir
@@ -1457,13 +1453,11 @@ _setup_svn_repo() {
 
 _setup_git_repo() {
     ${arg_git_clone:-false} || return 0
-    if [[ ! -d "$SCRIPT_BUILDS" ]]; then
-        echo "Not found $SCRIPT_BUILDS, create it..."
-        mkdir -p "$SCRIPT_BUILDS"
-    fi
-    local git_repo_name
+    local git_repo_name git_repo_group git_repo_dir
+    git_repo_group="$(basename "$(dirname "$arg_git_clone_url")")"
     git_repo_name="$(basename $arg_git_clone_url)"
-    local git_repo_dir="${SCRIPT_BUILDS}/${git_repo_name%.git}"
+    git_repo_dir="${SCRIPT_BUILDS}/${git_repo_group}/${git_repo_name%.git}"
+    mkdir -p "$git_repo_dir"
 
     if [ -d "$git_repo_dir" ]; then
         echo "Updating existing repo: $git_repo_dir"
