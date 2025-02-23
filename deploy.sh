@@ -1442,21 +1442,22 @@ _determine_deployment_method() {
 
 _setup_svn_repo() {
     ${checkout_with_svn:-false} || return 0
-    local svn_repo_name
-    svn_repo_name=$(basename "$svn_url")
-    local svn_repo_dir
+
+    local svn_repo_url svn_repo_name svn_repo_dir
+    svn_repo_url="${1:-}"
+    svn_repo_name=$(basename "$svn_repo_url")
     svn_repo_dir="${SCRIPT_BUILDS}/${svn_repo_name}"
 
-    if [ -d "$svn_repo_dir" ]; then
+    if [ -d "$svn_repo_dir/.svn" ]; then
         echo "Updating existing repo: $svn_repo_dir"
         (cd "$svn_repo_dir" && svn update) || {
-            echo "Failed to update svn repo: $svn_url"
+            echo "Failed to update svn repo: $svn_repo_url"
             return 1
         }
     else
-        echo "Checking out new repo: $svn_url"
-        svn checkout "$svn_url" "$svn_repo_dir" || {
-            echo "Failed to checkout svn repo: $svn_url"
+        echo "Checking out new repo: $svn_repo_url"
+        svn checkout "$svn_repo_url" "$svn_repo_dir" || {
+            echo "Failed to checkout svn repo: $svn_repo_url"
             return 1
         }
     fi
@@ -1570,7 +1571,7 @@ _parse_args() {
         # Repository operations
         --git-clone) arg_git_clone=true && arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
-        --svn-checkout) checkout_with_svn=true && svn_url="${2:?empty svn url}" && shift ;;
+        --svn-checkout) checkout_with_svn=true && arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build and push
         --build-langs) arg_build_langs=true && exec_single_job=true ;;
         --build-docker) arg_build_image=true && exec_single_job=true && build_cmd=$(command -v docker || echo docker) ;;
@@ -1664,7 +1665,7 @@ main() {
     _setup_git_repo "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
 
     ## svn checkout repo / 克隆 svn 仓库
-    _setup_svn_repo
+    _setup_svn_repo "${arg_svn_checkout_url:-}"
 
     ## run deploy.sh by hand / 手动执行 deploy.sh 时假定的 gitlab 配置
     _initialize_gitlab_variables
