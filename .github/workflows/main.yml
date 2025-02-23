@@ -8,12 +8,13 @@
 name: Github Actions Status
 
 # on: pull_request
-# on:
-#   push:
-#     branches:
-#       - master
-#       - main
-on: push
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
 
 jobs:
 
@@ -25,7 +26,11 @@ jobs:
         uses: actions/checkout@main
 
       - name: Build the Docker image
-        run: docker build . --file docs/Dockerfile --tag xiagw/deploy
+        run: |
+          cp ./docs/Dockerfile ./Dockerfile
+          cp ./docs/.dockerignore ./
+          docker build --tag xiagw/deploy .
+          # docker push xiagw/deploy
 
       # - name: Run the Anchore scan action itself with GitHub Advanced Security code scanning integration enabled
       #   uses: anchore/scan-action@main
