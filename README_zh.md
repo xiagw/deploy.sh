@@ -14,7 +14,7 @@
 # 英文 [README.md](README.md)
 
 # 描述信息
-deploy.sh 是一个强大而灵活的持续集成/持续发布系统，旨在简化和自动化软件开发流程。它支持多种开发语言和部署方式，可以单独运行或与其他CI/CD工具集成，支持手动和自动发布，支持GitLab, GitLab-Runner, Jenkins, crontab, Screen/tmux 等多种运行方式，是大中小企业开发团队的理想选择。
+deploy.sh 是一个强大而灵活的持续集成/发布系统，旨在简化和自动化软件开发流程。它支持多种开发语言和部署方式，可以单独运行或与其他CI/CD工具集成，支持手动和自动发布，支持GitLab, GitLab-Runner, Gitea/Act_Runner, Jenkins, crontab, Screen/tmux 等多种运行方式，是大中小企业开发团队的理想选择。
 
 # 功能支持
 - 代码格式规范: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
