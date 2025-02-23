@@ -1455,24 +1455,26 @@ _setup_svn_repo() {
 
 _setup_git_repo() {
     ${arg_git_clone:-false} || return 0
-    local git_repo_name git_repo_group git_repo_dir
-    git_repo_group="$(basename "$(dirname "$arg_git_clone_url")")"
-    git_repo_name="$(basename $arg_git_clone_url)"
+
+    local git_repo_url git_repo_branch git_repo_group git_repo_name git_repo_dir
+    git_repo_url="${1:-}"
+    git_repo_branch="${2:-main}"
+    git_repo_group="$(basename "$(dirname "$git_repo_url")")"
+    git_repo_name="$(basename $git_repo_url)"
     git_repo_dir="${SCRIPT_BUILDS}/${git_repo_group}/${git_repo_name%.git}"
     mkdir -p "$git_repo_dir"
 
     if [ -d "$git_repo_dir/.git" ]; then
-        echo "Updating existing repo: $git_repo_dir"
-        git -C "$git_repo_dir" fetch --quiet || return 1
-        git -C "$git_repo_dir" checkout --quiet "${arg_git_clone_branch:-main}" || {
-            echo "Failed to checkout ${arg_git_clone_branch:-main}"
-            return 1
-        }
-        git -C "$git_repo_dir" pull --quiet || return 1
+        echo "Updating existing repo: $git_repo_dir, branch: ${git_repo_branch}"
+        cd "$git_repo_dir" || return 1
+        git clean -fxd
+        git fetch --quiet
+        git checkout --quiet "${git_repo_branch}"
+        git pull --quiet
     else
-        echo "Cloning git repo: $arg_git_clone_url"
-        git clone --quiet -b "${arg_git_clone_branch:-main}" "$arg_git_clone_url" "$git_repo_dir" || {
-            echo "Failed to clone git repo: $arg_git_clone_url"
+        echo "Cloning git repo: $git_repo_url, branch: ${git_repo_branch}"
+        git clone --quiet -b "${git_repo_branch}" "$git_repo_url" "$git_repo_dir" || {
+            echo "Failed to clone git repo: $git_repo_url"
             return 1
         }
     fi
@@ -1650,7 +1652,7 @@ main() {
     _setup_environment
 
     ## git clone repo / 克隆 git 仓库
-    _setup_git_repo
+    _setup_git_repo "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
 
     ## svn checkout repo / 克隆 svn 仓库
     _setup_svn_repo
