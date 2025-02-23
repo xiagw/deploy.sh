@@ -1322,9 +1322,18 @@ _setup_deployment_environment() {
 _initialize_gitlab_variables() {
     # Set default values for GitLab CI variables
     gitlab_project_dir=${CI_PROJECT_DIR:-$PWD}
-    gitlab_project_name=${CI_PROJECT_NAME:-${gitlab_project_dir##*/}}
-    # read -rp "Enter gitlab project namespace: " -e -i 'root' gitlab_project_namespace
-    gitlab_project_namespace=${CI_PROJECT_NAMESPACE:-root}
+    ## gitea action 使用 GITHUB_REPOSITORY 变量
+    if [[ -n "${GITHUB_REPOSITORY}" ]]; then
+        gitlab_project_name=${GITHUB_REPOSITORY##*/}
+    else
+        gitlab_project_name=${CI_PROJECT_NAME:-${gitlab_project_dir##*/}}
+    fi
+    ## gitea action 使用 GITHUB_REPOSITORY_OWNER 变量
+    if [[ -n "${GITHUB_REPOSITORY_OWNER}" ]]; then
+        gitlab_project_namespace=${GITHUB_REPOSITORY_OWNER}
+    else
+        gitlab_project_namespace=${CI_PROJECT_NAMESPACE:-root}
+    fi
     # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
     gitlab_project_path=${CI_PROJECT_PATH:-$gitlab_project_namespace/$gitlab_project_name}
     gitlab_project_path_slug=${CI_PROJECT_PATH_SLUG:-${gitlab_project_path//[.\/]/-}}
