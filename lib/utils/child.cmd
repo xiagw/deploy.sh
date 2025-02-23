@@ -99,6 +99,7 @@ goto :END
 
 :: 以下是函数
 :DISABLE
+shutdown /a
 echo %DATE:~0,10% %TIME% > "%DISABLE_FILE%"
 call :LOG "已禁用定时关机功能"
 exit /b 0
