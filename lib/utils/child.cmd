@@ -14,7 +14,7 @@ set "PLAY_FILE=%BASE_PATH%_play.txt"
 set "REST_FILE=%BASE_PATH%_rest.txt"
 set "DISABLE_FILE=%BASE_PATH%_disable.txt"
 set "PLAY_MINUTES=50"
-set "REST_MINUTES=120"
+set "REST_MINUTES=90"
 set "DELAY_SECONDS=40"
 set "URL_HOST=http://192.168.5.1"
 set "URL_PORT=8899"
@@ -69,7 +69,7 @@ del /Q /F "%DEBUG_FILE%" 2>nul
 
 :: 添加时间检查
 if !##curr_hour! GEQ 21 (
-    call :DO_SHUTDOWN "晚上21点后不允许使用电脑"
+    call :DO_SHUTDOWN "晚上不允许使用电脑"
     exit /b
 )
 if !##curr_hour! LSS 8 (
@@ -78,7 +78,7 @@ if !##curr_hour! LSS 8 (
 )
 if !##weekday! LSS 5 (
     if !##curr_hour! GEQ 17 (
-        call :DO_SHUTDOWN "工作日17点后不允许使用电脑"
+        call :DO_SHUTDOWN "工作日不允许使用电脑"
         exit /b
     )
 )
