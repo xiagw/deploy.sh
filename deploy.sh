@@ -603,10 +603,8 @@ _deploy_to_kubernetes() {
     $kubectl_opt -n "${env_namespace}" get pod | awk '/Evicted/ {print $1}' | xargs -t -r $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
 
     ## 检测 helm upgrade 状态
-    local health_check_result
-    health_check_result="$($kubectl_opt -n "${env_namespace}" rollout status deployment "${release_name}" --timeout 120s)"
-    if echo "$health_check_result" | grep -q 'timed.*out'; then
-        deploy_result=1
+    $kubectl_opt -n "${env_namespace}" rollout status deployment "${release_name}" --timeout 120s >/dev/null || deploy_result=1
+    if [[ "$deploy_result" -eq 1 ]]; then
         echo "此处探测超时，无法判断应用是否正常，需要检查k8s内容器状态和日志是否正常"
     fi
 

@@ -20,3 +20,4 @@ data/**
 
 ## custome folder
 tmp/
+.cursor/
