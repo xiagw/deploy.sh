@@ -101,12 +101,13 @@ EOF
     fi
 }
 
-_add_user_to_groups() {
+_add_account_to_groups() {
     local user_name="$1"
     local user_id level
     local tmp_groups="/tmp/gitlab_groups_${gitlab_profile}.txt"
 
     _msg "add user [$user_name] to groups..."
+    return
     user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
     # Cache group list to temporary file, guest 10, reporter 20, deveop 30, maintain 40
     $cmd_gitlab group list --skip-groups 2 --top-level-only 1 |
@@ -130,7 +131,7 @@ _add_user_to_groups() {
     rm -f "$tmp_groups"
 }
 
-_update_user_password() {
+_update_account_password() {
     local user_name="$1"
     local gitlab_domain="$2"
     local password_rand="$3"
@@ -154,6 +155,7 @@ _add_account() {
     local password_rand
 
     password_rand=$(_get_random_password 2>/dev/null)
+    return
     ## check if user exists
     if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -w "$user_name"; then
         if _get_yes_no "User [$user_name] exists, update $user_name password?"; then
@@ -187,26 +189,106 @@ _common_lib() {
 }
 
 _print_usage() {
-    echo "Usage: $0 [options]"
-    echo "  -d, --domain <domain>           gitlab domain"
-    echo "  -u, --username <username>       add or update gitlab account"
-    echo "  -p, --profile <profile>         select gitlab profile"
-    echo "  -i, --install                   install gitlab-runner"
-    echo "  -h, --help                      print this help message"
+    echo "Usage: $0 <command> [options]"
+    echo
+    echo "Commands:"
+    echo "  runner     Manage gitlab runner"
+    echo
+    echo "Runner Commands:"
+    echo "  runner install    Install and configure gitlab runner"
+    echo
+    echo "Global Options:"
+    echo "  -p, --profile <profile>    Select gitlab profile"
+    echo "  -h, --help                 Print this help message"
 }
 
-_parse_args() {
+# Process only global options and save command for later execution
+_process_global_options() {
+    [ $# -eq 0 ] && _print_usage && exit 1
     while [ "$#" -gt 0 ]; do
         case "$1" in
-        -u | --username) user_name=$2 && shift 1 ;;
-        -d | --domain) gitlab_domain=$2 && shift 1 ;;
-        -i | --install) install_runner=true ;;
-        -p | --profile) gitlab_profile=$2 && shift 1 ;;
+        -d | --domain) gitlab_domain=$2 && shift ;;
+        -a | --account) gitlab_account=$2 && shift ;;
+        -p | --profile) gitlab_profile=$2 && shift ;;
         -h | --help) _print_usage && exit 0 ;;
-        *) echo "Unknown option: $1" && _print_usage && exit 1 ;;
+        # user) action=$2 && shift ;;
+        *) args+=("$1") ;;
         esac
         shift
     done
+}
+
+# Setup GitLab configuration
+_setup_gitlab_config() {
+    if [[ -f "$HOME/.python-gitlab.cfg" ]]; then
+        gitlab_python_config="$HOME/.python-gitlab.cfg"
+    elif [[ -f "$HOME/.config/python-gitlab.cfg" ]]; then
+        gitlab_python_config="$HOME/.config/python-gitlab.cfg"
+    fi
+
+    if [ -z "$gitlab_profile" ]; then
+        mapfile -t profiles < <(grep -E '^\[.*\]$' "$gitlab_python_config" | sed 's/\[\|\]//g' | grep -v '^global$')
+
+        if [ "${#profiles[@]}" -eq 0 ]; then
+            echo "Error: No gitlab profiles found in $gitlab_python_config" >&2
+            exit 1
+        elif [ "${#profiles[@]}" -eq 1 ]; then
+            gitlab_profile="${profiles[0]}"
+        else
+            gitlab_profile=$(printf '%s\n' "${profiles[@]}" | fzf --prompt="Select gitlab profile: " --height=60%)
+        fi
+    fi
+
+    if [ -f "$SCRIPT_ENV" ]; then
+        . "$SCRIPT_ENV" "$gitlab_profile"
+    fi
+
+    cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
+}
+
+_format_table() {
+    local header="$1"
+    local jq_filter="$2"
+    shift 2
+    $cmd_gitlab "$@" | jq -r "$jq_filter" |
+        (echo -e "$header" && cat) |
+        column -t -s $'\t'
+}
+
+# Execute the saved command
+_execute_command() {
+    case "${args[0]}" in
+    runner) _install_gitlab_runner ;;
+    user)
+        case "${args[1]}" in
+        list)
+            _format_table "ID\tUsername\tName\tEmail\tState" \
+                '.[] | [.id, .username, .name, .email, .state] | @tsv' \
+                "${args[@]}"
+            ;;
+        create)
+            _add_account "$gitlab_account" "$gitlab_domain" "${args[@]}"
+            _add_account_to_groups "$gitlab_account" "${args[@]}"
+            ;;
+        update) _update_account_password "$gitlab_account" "$gitlab_domain" ;;
+        esac
+        ;;
+    project)
+        case "${args[1]}" in
+        list)
+            _format_table "ID\tProject\tDescription\tURL\tVisibility" \
+                '.[] | [.id, .path_with_namespace, .description // "-", .web_url, .visibility] | @tsv' \
+                "${args[@]}" --no-get-all
+            ;;
+        *)
+            $cmd_gitlab "${args[@]}"
+            ;;
+        esac
+        ;;
+    *)
+        $cmd_gitlab "${args[@]}"
+        ;;
+    esac
 }
 
 main() {
@@ -218,49 +300,14 @@ main() {
 
     _common_lib
 
-    _parse_args "$@"
+    # 1. Process global options and save command for later
+    _process_global_options "$@"
 
-    if ${install_runner:-false}; then
-        _install_gitlab_runner
-        return
-    fi
+    # 2. Setup GitLab configuration and define cmd_gitlab
+    _setup_gitlab_config
 
-    ## python-gitlab config
-    if [[ -f "$HOME/.python-gitlab.cfg" ]]; then
-        gitlab_python_config="$HOME/.python-gitlab.cfg"
-    elif [[ -f "$HOME/.config/python-gitlab.cfg" ]]; then
-        gitlab_python_config="$HOME/.config/python-gitlab.cfg"
-    fi
-    if [ -z "$gitlab_profile" ]; then
-        # 获取所有profiles并存入数组
-        mapfile -t profiles < <(grep -E '^\[.*\]$' "$gitlab_python_config" | sed 's/\[\|\]//g' | grep -v '^global$')
-
-        # 检查profiles数量
-        if [ "${#profiles[@]}" -eq 0 ]; then
-            echo "Error: No gitlab profiles found in $gitlab_python_config" >&2
-            return 1
-        elif [ "${#profiles[@]}" -eq 1 ]; then
-            # 只有一个profile时，直接使用
-            gitlab_profile="${profiles[0]}"
-        else
-            # 多个profiles时，使用fzf让用户选择
-            gitlab_profile=$(printf '%s\n' "${profiles[@]}" | fzf --prompt="Select gitlab profile: " --height=60%)
-        fi
-    fi
-    if [ -f "$SCRIPT_ENV" ]; then
-        . "$SCRIPT_ENV" "$gitlab_profile"
-    fi
-
-    cmd_gitlab="gitlab --gitlab $gitlab_profile -o json"
-
-    [[ -z "$user_name" ]] && read -rp 'Enter gitlab username: ' user_name
-    [[ -z "$gitlab_domain" ]] && read -rp 'Enter gitlab domain: ' gitlab_domain
-
-    _add_account "${user_name:? ERR: empty username}" "${gitlab_domain:? ERR: empty domain name}"
-
-    _add_user_to_groups "$user_name"
-
-    # _new_element_user
+    # 3. Execute the command now that cmd_gitlab is defined
+    _execute_command
 }
 
 main "$@"
