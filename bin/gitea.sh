@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090
 # -*- coding: utf-8 -*-
 
 # Gitea API 操作脚本
 # 功能：创建用户和删除项目
 
-SCRIPT_NAME=$(basename "$0")
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-SCRIPT_DATA="$(dirname "$SCRIPT_DIR")/data"
-SCRIPT_LOG="$SCRIPT_DATA/${SCRIPT_NAME}.log"
-SCRIPT_ENV="$SCRIPT_DATA/${SCRIPT_NAME}.env"
-
-# 创建数据目录（如果不存在）
-[ -d "$SCRIPT_DATA" ] || mkdir -p "$SCRIPT_DATA"
-
-# 配置变量
-GITEA_URL=
-GITEA_TOKEN=
-
-# 如果存在环境配置文件则加载
-[ -f "$SCRIPT_ENV" ] && . "$SCRIPT_ENV"
+_common_lib() {
+    common_lib="$(dirname "$SCRIPT_DIR")/lib/common.sh"
+    if [ ! -f "$common_lib" ]; then
+        common_lib='/tmp/common.sh'
+        include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
+        [ -f "$common_lib" ] || curl -fsSL "$include_url" >"$common_lib"
+    fi
+    # shellcheck source=/dev/null
+    . "$common_lib"
+}
 
 # 日志函数
 log() {
@@ -28,7 +24,6 @@ log() {
 }
 
 # 辅助函数
-generate_password() { LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+' </dev/urandom | head -c 14; }
 get_domain_from_url() { echo "$1" | sed -E 's|^https?://([^@]+@)?||' | cut -d'/' -f1 | sed -E 's|^[^.]+\.||'; }
 
 # HTTP请求函数
@@ -232,7 +227,7 @@ process_command() {
                 return 1
             }
             [ -z "$password" ] && {
-                password=$(generate_password)
+                password=$(_get_random_password)
                 log "INFO" "Generated random password: $password"
             }
             [ -z "$email" ] && {
@@ -343,16 +338,26 @@ parse_args() {
 
 # 主函数
 main() {
+    SCRIPT_NAME=$(basename "$0")
+    SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+    SCRIPT_DATA="$(dirname "$SCRIPT_DIR")/data"
+    SCRIPT_LOG="$SCRIPT_DATA/${SCRIPT_NAME}.log"
+    SCRIPT_ENV="$SCRIPT_DATA/${SCRIPT_NAME}.env"
+    [ -d "$SCRIPT_DATA" ] || mkdir -p "$SCRIPT_DATA"
+    # 配置变量 GITEA_URL= GITEA_TOKEN=
+    [ -f "$SCRIPT_ENV" ] && . "$SCRIPT_ENV"
+
+    _common_lib
     check_dependencies
 
     if [ -z "$GITEA_TOKEN" ]; then
         log "ERROR" "Please set GITEA_TOKEN variable in $SCRIPT_ENV"
-        exit 1
+        return 1
     fi
 
     if [ $# -lt 1 ]; then
         show_usage
-        exit 1
+        return 1
     fi
 
     local command=$1 subcommand=$2

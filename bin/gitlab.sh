@@ -107,7 +107,6 @@ _add_account_to_groups() {
     local tmp_groups="/tmp/gitlab_groups_${gitlab_profile}.txt"
 
     _msg "add user [$user_name] to groups..."
-    return
     user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
     # Cache group list to temporary file, guest 10, reporter 20, deveop 30, maintain 40
     $cmd_gitlab group list --skip-groups 2 --top-level-only 1 |
@@ -155,7 +154,6 @@ _add_account() {
     local password_rand
 
     password_rand=$(_get_random_password 2>/dev/null)
-    return
     ## check if user exists
     if $cmd_gitlab user list --username "$user_name" | jq -r '.[].name' | grep -q -w "$user_name"; then
         if _get_yes_no "User [$user_name] exists, update $user_name password?"; then
