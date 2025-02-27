@@ -563,10 +563,9 @@ _deploy_via_rsync_ssh() {
     _msg step "[deploy] deploy files with rsync+ssh"
     ## rsync exclude some files / rsync 排除某些文件
     rsync_exclude="${gitlab_project_dir}/rsync.exclude"
-    [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${SCRIPT_CONF_PATH}/rsync.exclude"
+    [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${SCRIPT_PATH}/conf/rsync.exclude"
 
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
-    # grep "^${gitlab_project_path}:${env_namespace}" "$SCRIPT_CONF" | awk -F: '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10}' "$SCRIPT_CONF"
     conf_line="$(jq -c ".[] | select (.project == \"${gitlab_project_path}\") | .branchs[] | select (.branch == \"${env_namespace}\") | .hosts[]" "$SCRIPT_CONF" | wc -l)"
     if [ "$conf_line" -eq 0 ]; then
         _msg warn "[deploy] not config $SCRIPT_CONF"
@@ -618,9 +617,9 @@ _deploy_via_rsync_ssh() {
         ## rsync to remote server / rsync 到远程服务器
         ${rsync_opt} -e "$ssh_opt" "${rsync_src}" "${ssh_host}:${rsync_dest}"
 
-        if [ -f "$SCRIPT_DATA_BIN/deploy.custom.sh" ]; then
+        if [ -f "${SCRIPT_DATA}/bin/deploy.custom.sh" ]; then
             _msg time "custom deploy..."
-            bash "$SCRIPT_DATA_BIN/deploy.custom.sh" ${ssh_host} ${rsync_dest}
+            bash "${SCRIPT_DATA}/bin/deploy.custom.sh" ${ssh_host} ${rsync_dest}
             _msg time "custom deploy."
         fi
 
@@ -739,7 +738,7 @@ $(if [ -n "${test_result}" ]; then echo "Test_Result: ${test_result}" else :; fi
         # mogaal/sendemail: lightweight, command line SMTP email client
         # https://github.com/mogaal/sendemail
         _msg time "notify to Email"
-        "$SCRIPT_BIN/sendEmail" \
+        "${SCRIPT_PATH}/bin/sendEmail" \
             -s "$ENV_EMAIL_SERVER" \
             -f "$ENV_EMAIL_FROM" \
             -xu "$ENV_EMAIL_USERNAME" \
@@ -1098,16 +1097,16 @@ _inject_project_files() {
     ## 项目代码库内已存在的 Dockerfile
     local project_dockerfile="${gitlab_project_dir}/Dockerfile"
     ## 打包镜像时注入的 Dockerfile 优先查找 data/ 目录 其次查找 conf/ 目录
-    local inject_dockerfile_1="${SCRIPT_DATA_DOCKERFILE}/Dockerfile.${project_lang}"
-    local inject_dockerfile_2="${SCRIPT_DOCKERFILE}/Dockerfile.${project_lang}"
+    local inject_dockerfile_1="${SCRIPT_DATA}/dockerfile/Dockerfile.${project_lang}"
+    local inject_dockerfile_2="${SCRIPT_PATH}/conf/dockerfile/Dockerfile.${project_lang}"
     ## 打包镜像时注入的 root/opt/ 目录
-    local inject_root_path="${SCRIPT_DOCKERFILE}/root"
+    local inject_root_path="${SCRIPT_PATH}/conf/dockerfile/root"
     ## 打包镜像时注入的 settings.xml 文件
-    local inject_setting="${SCRIPT_DATA_DOCKERFILE}/settings.xml"
+    local inject_setting="${SCRIPT_DATA}/dockerfile/settings.xml"
     ## 打包镜像时注入的 .dockerignore 文件
-    local inject_dockerignore="${SCRIPT_DOCKERFILE}/.dockerignore"
+    local inject_dockerignore="${SCRIPT_PATH}/conf/dockerfile/.dockerignore"
     ## 打包镜像时注入的 /opt/init.sh 文件 容器启动时初始化配置文件 init.sh 可以注入 /etc/hosts 等配置
-    local inject_init="${SCRIPT_DATA_DOCKERFILE}"/init.sh
+    local inject_init="${SCRIPT_DATA}/dockerfile/init.sh"
     ## replace code files / 替换代码文件
     if [ -d "$inject_code_path_branch" ]; then
         _msg warning "found $inject_code_path_branch, sync to ${gitlab_project_dir}/"
@@ -1379,7 +1378,7 @@ _setup_svn_repo() {
     local svn_repo_url svn_repo_name svn_repo_dir
     svn_repo_url="${1:-}"
     svn_repo_name=$(basename "$svn_repo_url")
-    svn_repo_dir="${SCRIPT_BUILDS}/${svn_repo_name}"
+    svn_repo_dir="${SCRIPT_PATH}/builds/${svn_repo_name}"
 
     if [ -d "$svn_repo_dir/.svn" ]; then
         echo "Updating existing repo: $svn_repo_dir"
@@ -1404,7 +1403,7 @@ _setup_git_repo() {
     git_repo_branch="${2:-main}"
     git_repo_group="$(basename "$(dirname "$git_repo_url")")"
     git_repo_name="$(basename $git_repo_url)"
-    git_repo_dir="${SCRIPT_BUILDS}/${git_repo_group}/${git_repo_name%.git}"
+    git_repo_dir="${SCRIPT_PATH}/builds/${git_repo_group}/${git_repo_name%.git}"
     mkdir -p "$git_repo_dir"
 
     if [ -d "$git_repo_dir/.git" ]; then
@@ -1545,31 +1544,24 @@ main() {
     _msg step "[deploy] BEGIN"
     ## Process parameters / 处理传入的参数
     _parse_args "$@"
-
-    SCRIPT_CONF_PATH="${SCRIPT_PATH}/conf"
-    SCRIPT_BIN="${SCRIPT_PATH}/bin"
     SCRIPT_LIB="${SCRIPT_PATH}/lib"
     SCRIPT_DATA="${SCRIPT_PATH}/data"
-    SCRIPT_DATA_BIN="${SCRIPT_DATA}/bin"
-    SCRIPT_BUILDS="${SCRIPT_PATH}/builds"
     SCRIPT_LOG="${SCRIPT_DATA}/${SCRIPT_NAME}.log"
     SCRIPT_CONF="${SCRIPT_DATA}/deploy.json"
     SCRIPT_ENV="${SCRIPT_DATA}/deploy.env"
-    SCRIPT_DOCKERFILE="${SCRIPT_CONF_PATH}/dockerfile"
-    SCRIPT_DATA_DOCKERFILE="${SCRIPT_DATA}/dockerfile"
 
-    mkdir -p "${SCRIPT_DATA_BIN}"
+    mkdir -p "${SCRIPT_DATA}/bin"
 
     # Copy config files if they don't exist
-    [[ -f "$SCRIPT_CONF" ]] || cp -v "${SCRIPT_CONF_PATH}/example-deploy.json" "$SCRIPT_CONF"
-    [[ -f "$SCRIPT_ENV" ]] || cp -v "${SCRIPT_CONF_PATH}/example-deploy.env" "$SCRIPT_ENV"
+    [[ -f "$SCRIPT_CONF" ]] || cp -v "${SCRIPT_PATH}/conf/example-deploy.json" "$SCRIPT_CONF"
+    [[ -f "$SCRIPT_ENV" ]] || cp -v "${SCRIPT_PATH}/conf/example-deploy.env" "$SCRIPT_ENV"
 
     # Set PATH
     declare -a paths_append=(
         "/usr/local/sbin"
         "/snap/bin"
-        "$SCRIPT_BIN"
-        "$SCRIPT_DATA_BIN"
+        "${SCRIPT_PATH}/bin"
+        "${SCRIPT_DATA}/bin"
         "$SCRIPT_DATA/.acme.sh"
         "$HOME/.local/bin"
         "$HOME/.acme.sh"
