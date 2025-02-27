@@ -38,6 +38,87 @@ http_request() {
     curl "${curl_args[@]}" "${GITEA_URL}${endpoint}"
 }
 
+# GitLab API 请求函数
+gitlab_http_request() {
+    local method=$1 endpoint=$2
+    local curl_args=(-s -X "$method" -H "PRIVATE-TOKEN: ${gitlab_token}")
+
+    curl "${curl_args[@]}" "${gitlab_url%/}/api/v4${endpoint}"
+}
+
+# Gitea 添加协作者
+add_gitea_collaborator() {
+    local owner=$1 repo=$2 username=$3 permission=${4:-write}
+    log "INFO" "Adding collaborator $username to $owner/$repo with permission $permission"
+
+    local data="{\"permission\": \"${permission}\"}"
+    local response
+    response=$(http_request "PUT" "/api/v1/repos/${owner}/${repo}/collaborators/${username}" "$data")
+
+    if [ -z "$response" ]; then
+        log "INFO" "Successfully added collaborator $username to $owner/$repo"
+        return 0
+    else
+        log "ERROR" "Failed to add collaborator $username to $owner/$repo"
+        log "ERROR" "Response: $response"
+        return 1
+    fi
+}
+
+# 同步 GitLab 成员到 Gitea
+sync_gitlab_members() {
+    local owner=$1 repo=$2 gitlab_project_id=$3
+    log "INFO" "Syncing members from GitLab project $gitlab_project_id to Gitea repo $owner/$repo"
+
+    # 获取 GitLab 项目成员
+    local members
+    members=$(gitlab_http_request "GET" "/projects/${gitlab_project_id}/members/all")
+
+    if [ -z "$members" ] || ! echo "$members" | jq -e '.' >/dev/null 2>&1; then
+        log "ERROR" "Failed to get GitLab project members"
+        return 1
+    fi
+
+    # 遍历成员并添加到 Gitea
+    echo "$members" | jq -r '.[] | select(.state=="active") | "\(.username) \(.access_level)"' | while read -r username access_level; do
+        local permission="write"
+        # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
+        if [ "$access_level" -ge 40 ]; then
+            permission="admin"
+        elif [ "$access_level" -le 20 ]; then
+            permission="read"
+        fi
+
+        add_gitea_collaborator "$owner" "$repo" "$username" "$permission"
+    done
+}
+
+# 获取gitlab 的member 并设置 gitea 的协作者
+sync_members_from_gitlab() {
+    local owner=$1 repo=$2 gitlab_url=$3 gitlab_token=$4
+
+    log "INFO" "Starting member sync from GitLab to Gitea"
+
+    # 从 GitLab URL 提取项目 ID 或路径
+    local gitlab_project_path
+    gitlab_project_path=$(echo "$gitlab_url" | sed -E 's|^https?://[^/]+/||' | sed 's|\.git$||')
+
+    # 获取项目 ID
+    local project_info
+    project_info=$(gitlab_http_request "GET" "/projects/$(echo "$gitlab_project_path" | jq -Rr '@uri')")
+
+    if [ -z "$project_info" ] || ! echo "$project_info" | jq -e '.id' >/dev/null 2>&1; then
+        log "ERROR" "Failed to get GitLab project information"
+        return 1
+    fi
+
+    local project_id
+    project_id=$(echo "$project_info" | jq -r '.id')
+
+    # 同步成员
+    sync_gitlab_members "$owner" "$repo" "$project_id"
+}
+
 # 检查依赖
 check_dependencies() {
     for cmd in curl jq git; do
@@ -53,7 +134,7 @@ create_user() {
     local username=$1 password=$2 email=$3
     log "INFO" "Creating user: $username"
 
-    local data="{\"email\":\"${email}\",\"username\":\"${username}\",\"password\":\"${password}\",\"language\":\"zh-CN\"}"
+    local data="{\"email\":\"${email}\",\"username\":\"${username}\",\"password\":\"${password}\",\"language\":\"zh-CN\",\"restricted\":true,\"visibility\":\"limited\",\"must_change_password\":false}"
     local response
     response=$(http_request "POST" "/api/v1/admin/users" "$data")
 
@@ -115,6 +196,7 @@ list_repos() {
     log "INFO" "Listing repositories for owner: $owner"
     http_request "GET" "/api/v1/users/${owner}/repos" | jq -r '.[] | "\(.id)\t\(.name)\t\(.description)"'
 }
+
 
 # 迁移操作
 migrate_from_gitlab() {
@@ -297,11 +379,12 @@ process_command() {
 parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
+        -p) gitea_profile=$2 && shift ;;
         -u | --username)
             username=$2
             shift
             ;;
-        -p | --password)
+        -s | --password)
             password=$2
             shift
             ;;
@@ -364,6 +447,7 @@ main() {
     shift 2
 
     parse_args "$@"
+    [ -f "$SCRIPT_ENV" ] && . "$SCRIPT_ENV" "$gitea_profile"
     process_command "$command" "$subcommand" || show_usage
 }
 
