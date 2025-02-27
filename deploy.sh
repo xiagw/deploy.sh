@@ -143,56 +143,6 @@ check_gitleaks() {
         $gitleaks_cmd
 }
 
-deploy_flyway_docker() {
-    local vol_conf="${gitlab_project_dir}/flyway_conf:/flyway/conf"
-    local vol_sql="${gitlab_project_dir}/flyway_sql:/flyway/sql"
-    local run="$build_cmd run --rm -v ${vol_conf} -v ${vol_sql} flyway/flyway"
-
-    # SSH port-forward if needed
-    [ -f "$SCRIPT_BIN/sshme" ] && source "$SCRIPT_BIN/sshme" port ssh_host ssh_forward_port
-
-    # Execute Flyway
-    if $run info | grep '^|' | grep -vE 'Category.*Version|Versioned.*Success|Versioned.*Deleted|DELETE.*Success'; then
-        $run repair
-        if $run migrate; then
-            _msg green "Flyway migrate result = OK"
-        else
-            _msg error "Flyway migrate result = FAIL"
-            return 1
-        fi
-        $run info | tail -n 10
-    else
-        _msg warning "No SQL migrations to apply."
-    fi
-
-    _msg time "[database] Deploy SQL files with Flyway"
-}
-
-deploy_flyway_helm() {
-    _msg step "[database] Deploy SQL with Flyway (Helm job)"
-
-    if ${github_action:-false}; then
-        _msg info "Skipping Flyway deployment in GitHub Actions"
-        return 0
-    fi
-
-    echo "Image tag for Flyway: $image_tag_flyway"
-
-    if ! $build_cmd build $build_cmd_opt --tag "${image_tag_flyway}" -f "${gitlab_project_dir}/Dockerfile.flyway" "${gitlab_project_dir}/"; then
-        _msg error "Failed to build Flyway image"
-        return 1
-    fi
-
-    if $run_cmd_root "$image_tag_flyway"; then
-        _msg green "Flyway migration successful"
-    else
-        _msg error "Flyway migration failed"
-        return 1
-    fi
-
-    _msg time "[database] Completed SQL deployment with Flyway (Helm job)"
-}
-
 # python-gitlab list all projects / 列出所有项目
 # gitlab -o json -f path_with_namespace project list --page 1 --per-page 5 | jq -r '.[].path_with_namespace'
 # 解决 Encountered 1 file(s) that should have been pointers, but weren't
@@ -303,13 +253,7 @@ build_image() {
     get_docker_context
 
     ## build from Dockerfile.base
-    local registry_base
-    if [[ -z "$ENV_DOCKER_REGISTRY_BASE" ]]; then
-        _msg warn "ENV_DOCKER_REGISTRY_BASE is undefined, using $ENV_DOCKER_REGISTRY instead."
-        registry_base=$ENV_DOCKER_REGISTRY
-    else
-        registry_base=$ENV_DOCKER_REGISTRY_BASE
-    fi
+    local registry_base=${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
         if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
             _msg info "Found ${gitlab_project_dir}/build.base.sh, running it..."
@@ -327,7 +271,6 @@ build_image() {
                 _msg error "Failed to push base image"
                 return 1
             }
-
         fi
         _msg time "[image] build base image"
         exit_directly=true
@@ -362,19 +305,20 @@ push_image() {
     local push_error=false
 
     # Push main image
-    if ! $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
-        push_error=true
-    else
+    if $build_cmd push $quiet_flag "${ENV_DOCKER_REGISTRY}:${image_tag}"; then
         $build_cmd rmi "${ENV_DOCKER_REGISTRY}:${image_tag}" >/dev/null
-    fi
-
-    # Push Flyway image if enabled
-    if ${ENV_FLYWAY_HELM_JOB:-false}; then
-        $build_cmd push $quiet_flag "$image_tag_flyway" || push_error=true
+    else
+        push_error=true
     fi
 
     # Check for errors
-    $push_error && _msg error "got an error here, probably caused by network..."
+    if $push_error; then
+        _msg error "Image push failed: network connectivity issue detected"
+        _msg error "Please verify:"
+        _msg error "  - Network connection is stable"
+        _msg error "  - Docker registry (${ENV_DOCKER_REGISTRY}) is accessible"
+        _msg error "  - Docker credentials are valid"
+    fi
 
     _msg time "[image] Image push completed"
 }
@@ -598,29 +542,20 @@ _deploy_to_kubernetes() {
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${image_tag}" >/dev/null
 
-    ## Clean up rs 0 0 / 清理 rs 0 0
-    $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs -t -r $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
-    $kubectl_opt -n "${env_namespace}" get pod | awk '/Evicted/ {print $1}' | xargs -t -r $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
-
     ## 检测 helm upgrade 状态
     $kubectl_opt -n "${env_namespace}" rollout status deployment "${release_name}" --timeout 120s >/dev/null || deploy_result=1
     if [[ "$deploy_result" -eq 1 ]]; then
-        echo "此处探测超时，无法判断应用是否正常，需要检查k8s内容器状态和日志是否正常"
+        _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
     fi
+    ## Clean up rs 0 0 / 清理 rs 0 0
+    $kubectl_opt -n "${env_namespace}" get rs | awk '/.*0\s+0\s+0/ {print $1}' | xargs -t -r $kubectl_opt -n "${env_namespace}" delete rs >/dev/null 2>&1 || true
+    $kubectl_opt -n "${env_namespace}" get pod | awk '/Evicted/ {print $1}' | xargs -t -r $kubectl_opt -n "${env_namespace}" delete pod 2>/dev/null || true
 
     if [ -f "$gitlab_project_dir/deploy.custom.sh" ]; then
         _msg time "custom deploy."
         source "$gitlab_project_dir/deploy.custom.sh"
     fi
 
-    ## helm install flyway jobs / helm 安装 flyway 任务
-    if ${ENV_FLYWAY_HELM_JOB:-false} && [[ -d "${SCRIPT_CONF_PATH}"/helm/flyway ]]; then
-        $helm_opt upgrade flyway "${SCRIPT_CONF_PATH}/helm/flyway/" --install --history-max 1 \
-            --namespace "${env_namespace}" --create-namespace \
-            --set image.repository="${ENV_DOCKER_REGISTRY}" \
-            --set image.tag="${gitlab_project_name}-flyway-${gitlab_commit_short_sha}" \
-            --set image.pullPolicy='Always' >/dev/null
-    fi
     _msg time "[deploy] deploy k8s with helm"
 }
 
@@ -1531,7 +1466,6 @@ Parameters:
     # Deployment
     --deploy-k8s             Deploy to Kubernetes.
     --deploy-functions       Deploy to Aliyun Functions.
-    --deploy-flyway          Deploy database with Flyway.
     --deploy-rsync-ssh       Deploy using rsync over SSH.
     --deploy-rsync           Deploy to rsync server.
     --deploy-ftp             Deploy to FTP server.
@@ -1578,7 +1512,6 @@ _parse_args() {
         # Deployment
         --deploy-k8s) arg_deploy_k8s=true && exec_single_job=true ;;
         --deploy-functions) arg_deploy_functions=true && exec_single_job=true ;;
-        --deploy-flyway) arg_deploy_flyway=true && exec_single_job=true ;;
         --deploy-rsync-ssh) arg_deploy_rsync_ssh=true && exec_single_job=true ;;
         --deploy-rsync) arg_deploy_rsync=true && exec_single_job=true ;;
         --deploy-ftp) arg_deploy_ftp=true && exec_single_job=true ;;
@@ -1681,7 +1614,6 @@ main() {
     fi
 
     image_tag="${gitlab_commit_short_sha}-$(date +%s%3N)"
-    image_tag_flyway="${ENV_DOCKER_REGISTRY:?undefine}:${gitlab_project_name}-flyway-${gitlab_commit_short_sha}"
     ## install acme.sh/aws/kube/aliyun/python-gitlab/flarectl 安装依赖命令/工具
     ${ENV_INSTALL_AWS:-false} && _install_aws
     ${ENV_INSTALL_ALIYUN:-false} && _install_aliyun_cli
@@ -1737,9 +1669,6 @@ main() {
             [[ -f "$code_style_sh" ]] && source "$code_style_sh"
         }
         ${arg_test_unit:-false} && test_unit
-        ${arg_deploy_flyway:-false} && deploy_flyway_docker
-        # ${exec_deploy_flyway:-false} && deploy_flyway_helm
-        ${exec_deploy_flyway:-false} && deploy_flyway_docker
         ${arg_build_langs:-false} && {
             [[ -f "$build_langs_sh" ]] && source "$build_langs_sh"
         }
@@ -1790,17 +1719,6 @@ main() {
         test_unit
     else
         echo "<skip>"
-    fi
-
-    ## use flyway deploy sql file / 使用 flyway 发布 sql 文件
-    _msg step "[database] deploy SQL files with flyway"
-    # ${ENV_FLYWAY_HELM_JOB:-false} && deploy_flyway_helm
-    # ${exec_deploy_flyway:-false} && deploy_flyway_helm
-    echo "MAN_FLYWAY: ${MAN_FLYWAY:-false}"
-    if [[ "${MAN_FLYWAY:-false}" == true ]] || ${exec_deploy_flyway:-false}; then
-        deploy_flyway_docker
-    else
-        echo '<skip>'
     fi
 
     ## generate api docs / 利用 apidoc 产生 api 文档
