@@ -146,17 +146,13 @@ check_dependencies() {
 # 用户操作
 create_user() {
     local username=$1 password=$2 email=$3
-    log "INFO" "Creating user: $username"
 
     local data="{\"email\":\"${email}\",\"username\":\"${username}\",\"password\":\"${password}\",\"language\":\"zh-CN\",\"restricted\":true,\"visibility\":\"limited\",\"must_change_password\":false}"
     local response
     response=$(gitea_http_request "POST" "/api/v1/admin/users" "$data")
 
     if echo "$response" | jq -e '.id' >/dev/null; then
-        log "INFO" "User created successfully: $username"
-        log "INFO" "Username: $username"
-        log "INFO" "Password: $password"
-        log "INFO" "Email: $email"
+        log "INFO" "User created successfully: $username / $password / $email"
         return 0
     else
         log "ERROR" "Failed to create user: $username"
@@ -277,6 +273,46 @@ migrate_from_gitlab() {
     fi
 }
 
+# 使用 python-gitlab CLI 批量迁移
+migrate_all_from_gitlab() {
+    log "INFO" "Starting batch migration from GitLab using python-gitlab CLI with profile: $GITLAB_PROFILE"
+
+    # 获取所有用户
+    log "INFO" "Getting GitLab users list"
+    gitlab --gitlab "$GITLAB_PROFILE" -o json user list --get-all |
+        jq -r '.[] | select(.username != "runner" and .username != "ghost" and .username != "root" and (.username | test(".*-bot$") | not)) | "\(.username)\t\(.email)"' |
+        while IFS=$'\t' read -r user_name user_email; do
+            # 迁移用户，使用随机密码
+            local random_password
+            random_password=$(_get_random_password)
+
+            # 如果邮箱为空，使用默认邮箱
+            if [ -z "$user_email" ]; then
+                local domain
+                domain=$(get_domain_from_url "$GITEA_URL")
+                user_email="${user_name}@${domain}"
+            fi
+
+            # 创建用户
+            create_user "$user_name" "$random_password" "$user_email"
+
+            # 获取用户的项目并迁移
+            log "INFO" "Processing projects for user: $user_name"
+            gitlab --gitlab "$GITLAB_PROFILE" -o json project list --sudo "$user_name" --owned=True --get-all |
+                jq -r '.[] | .path_with_namespace' |
+                while read -r line; do
+                    log "INFO" "Migrating project: $line"
+                    project_name="${line##*/}"
+                    migrate_from_gitlab "$user_name" "$project_name" true
+                    # 添加延迟以避免API限制
+                    sleep 2
+                done
+                sleep 600
+        done
+
+    log "INFO" "Batch migration completed"
+}
+
 # 显示使用帮助
 show_usage() {
     cat <<EOF
@@ -287,10 +323,10 @@ Note: Options MUST be specified AFTER the command and subcommand.
 Commands:
     user     Manage users (create|list|delete)
     repo     Manage repositories (list|delete)
-    migrate  Migrate repositories from other platforms (gitlab)
+    migrate  Migrate repositories from other platforms (gitlab|all-gitlab)
 
 Options: (must be after command and subcommand)
-    -P, --profile <profile>      Gitea profile configuration to use
+    -P, --profile <profile>       ENV profile configuration
     -u, --username <username>     Username for user operations
     -p, --password <password>     Password for user create (auto-generated if not provided)
     -e, --email <email>           Email for user create (auto-generated if not provided)
@@ -314,6 +350,8 @@ Examples:
     # GitLab migration
     $SCRIPT_NAME migrate gitlab -o john123 -r myrepo --local   # Migrate using local Git
     $SCRIPT_NAME migrate gitlab -o john123 -r myrepo           # Migrate using API
+    $SCRIPT_NAME migrate all-gitlab                            # Migrate all repositories from GitLab (default profile)
+    $SCRIPT_NAME migrate all-gitlab -P env_profile                  # Migrate all repositories from GitLab using custom profile
 EOF
 }
 
@@ -369,6 +407,9 @@ process_command() {
         gitlab)
             migrate_from_gitlab "$owner" "$repo" "${local_mode:-false}"
             ;;
+        all-gitlab)
+            migrate_all_from_gitlab
+            ;;
         *)
             return 1
             ;;
@@ -385,7 +426,7 @@ process_command() {
 parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
-        -P | --profile) gitea_profile=$2 && shift ;;
+        -P | --profile) env_profile=$2 && shift ;;
         -u | --username) username=$2 && shift ;;
         -p | --password) password=$2 && shift ;;
         -e | --email) email=$2 && shift ;;
@@ -412,6 +453,7 @@ main() {
     # GITEA_TOKEN=     # Gitea访问令牌
     # GITLAB_URL=      # GitLab仓库URL（迁移时需要）
     # GITLAB_TOKEN=    # GitLab访问令牌（可选）
+    # GITLAB_PROFILE=  # GitLab配置文件名称（默认：smartind）
     [ -f "$SCRIPT_ENV" ] && . "$SCRIPT_ENV"
 
     _common_lib
@@ -426,7 +468,7 @@ main() {
     shift 2
 
     parse_args "$@"
-    [ -f "$SCRIPT_ENV" ] && . "$SCRIPT_ENV" "$gitea_profile"
+    [ -f "$SCRIPT_ENV" ] && . "$SCRIPT_ENV" "$env_profile"
     process_command "$command" "$subcommand" || show_usage
 }
 
