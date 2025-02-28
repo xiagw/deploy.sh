@@ -257,7 +257,8 @@ build_image() {
     if [[ -f "${gitlab_project_dir}/Dockerfile.base" ]]; then
         if [[ -f "${gitlab_project_dir}/build.base.sh" ]]; then
             _msg info "Found ${gitlab_project_dir}/build.base.sh, running it..."
-            bash "${gitlab_project_dir}/build.base.sh"
+            ${debug_on:-false} && debug_flag="-x" || debug_flag=""
+            bash $debug_flag "${gitlab_project_dir}/build.base.sh"
         else
             local base_tag="${registry_base}:${gitlab_project_name}-${gitlab_project_branch}"
             _msg info "Building base image: $base_tag"
