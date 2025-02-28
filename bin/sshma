@@ -18,10 +18,17 @@ BEGIN {
 # 列出主机
 function list_hosts() {
     if ($1 == "Host" && $2 !~ /\*/) {
+        current_host = $2
         if (format == "plain") {
-            print $2
-        } else {
-            printf "  %d) %s\n", ++count, $2
+            if (hostnames[current_host] != "") {
+                print current_host
+            }
+        }
+    }
+    if ($1 == "HostName") {
+        hostnames[current_host] = $2
+        if (format != "plain") {
+            printf "  %d) %-20s %s\n", ++count, current_host, $2
         }
     }
 }
