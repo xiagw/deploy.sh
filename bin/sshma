@@ -20,9 +20,7 @@ function list_hosts() {
     if ($1 == "Host" && $2 !~ /\*/) {
         current_host = $2
         if (format == "plain") {
-            if (hostnames[current_host] != "") {
-                print current_host
-            }
+            print current_host
         }
     }
     if ($1 == "HostName") {
@@ -106,11 +104,7 @@ _check_config() {
 }
 
 _list_hosts() {
-    local format="${1:-pretty}"
-    local host="$2"
-
-    # 默认列出主机
-    awk -v format="$format" -v mode="list" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE"
+    awk -v format="${1:-pretty}" -v mode="list" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE"
 }
 
 _add_host() {

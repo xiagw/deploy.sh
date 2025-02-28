@@ -244,7 +244,11 @@ _build_node() {
     chown -R node:node /.cache /app
 
     # Update npm and install cnpm if in China
-    npm install -g npm
+    if node -v | grep -E 'v1[0-9]\.'; then
+      npm install -g npm@10.8
+    else
+      npm install -g npm
+    fi
     _is_china && npm install -g cnpm
 
     _check_run_sh
