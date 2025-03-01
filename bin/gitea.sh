@@ -31,7 +31,7 @@ get_domain_from_url() {
 # HTTP请求函数
 gitea_http_request() {
     local method=$1 endpoint=$2 data=${3:-}
-    local curl_args=(curl -s -X "$method" -H "accept: application/json" -H "Authorization: token ${GITEA_TOKEN}")
+    local curl_args=(curl -fsSL -X "$method" -H "accept: application/json" -H "Authorization: token ${GITEA_TOKEN}")
 
     if [ "$method" = "POST" ] || [ "$method" = "PUT" ]; then
         curl_args+=(-H "Content-Type: application/json" -d "$data")
@@ -43,13 +43,9 @@ gitea_http_request() {
 # GitLab API 请求函数
 gitlab_http_request() {
     local method=$1 endpoint=$2
-    local curl_args=(
-        --request "$method"
-        --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}"
-        --url "${GITLAB_URL%/}/api/v4${endpoint}"
-    )
+    local curl_args=(curl -fsSL --request "$method" --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}")
 
-    curl "${curl_args[@]}"
+    "${curl_args[@]}" --url "${GITLAB_URL%/}/api/v4${endpoint}"
 }
 
 # Gitea 添加协作者
@@ -76,7 +72,7 @@ sync_gitlab_members() {
     log "INFO" "Syncing members from GitLab project $gitlab_project_id to Gitea repo $owner/$repo"
 
     # 获取 GitLab 项目成员
-    members=$(gitlab_http_request "GET" "/projects/${gitlab_project_id}/members/all")
+    members=$(gitlab --gitlab "$GITLAB_PROFILE" -o json project-member-all list --project-id "$gitlab_project_id")
 
     if [ -z "$members" ] || ! echo "$members" | jq -e '.' >/dev/null 2>&1; then
         log "ERROR" "Failed to get GitLab project members"
@@ -84,31 +80,27 @@ sync_gitlab_members() {
     fi
 
     # 遍历成员并添加到 Gitea
-    echo "$members" | jq -r '.[] | select(.state=="active") | "\(.username) \(.access_level)"' |
-        while read -r username access_level; do
-            local permission="write"
-            # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
-            if [ "$access_level" -ge 40 ]; then
-                permission="admin"
-            elif [ "$access_level" -le 20 ]; then
-                permission="read"
-            fi
+    while read -r username access_level; do
+        local permission="write"
+        # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
+        if [ "$access_level" -ge 40 ]; then
+            permission="admin"
+        elif [ "$access_level" -le 20 ]; then
+            permission="read"
+        fi
 
-            add_gitea_collaborator "$owner" "$repo" "$username" "$permission"
-        done
+        add_gitea_collaborator "$owner" "$repo" "$username" "$permission"
+    done < <(echo "$members" | jq -r '.[] | select(.state=="active") | "\(.username) \(.access_level)"')
 }
 
 # 获取 GitLab 项目 ID
 get_gitlab_project_id() {
-    local owner=$1 repo=$2
-    local project_path="${owner}/${repo}"
+    local project_path=$1 encoded_path project_info
 
     # URL encode the project path
-    local encoded_path
     encoded_path=$(echo "$project_path" | jq -Rr '@uri')
 
     # 获取项目信息
-    local project_info
     project_info=$(gitlab_http_request "GET" "/projects/${encoded_path}")
 
     if [ -z "$project_info" ] || ! echo "$project_info" | jq -e '.id' >/dev/null 2>&1; then
@@ -122,13 +114,12 @@ get_gitlab_project_id() {
 
 # 获取gitlab 的member 并设置 gitea 的协作者
 sync_members_from_gitlab() {
-    local owner=$1 repo=$2
+    local owner=$1 repo=$2 project_id
 
     echo "Starting member sync from GitLab to Gitea"
 
     # 获取项目 ID
-    local project_id
-    project_id=$(get_gitlab_project_id "$owner" "$repo") || return 1
+    project_id=$(get_gitlab_project_id "$owner/$repo") || return 1
 
     # 同步成员
     sync_gitlab_members "$owner" "$repo" "$project_id"
@@ -158,12 +149,11 @@ check_user_exists() {
 
 # 获取 GitLab 用户的 SSH keys
 get_gitlab_ssh_keys() {
-    local username=$1 response user_id
-    response=$(gitlab_http_request "GET" "/users?username=${username}")
-    user_id=$(echo "$response" | jq -r '.[0].id')
+    local username=$1 user_id
+    user_id=$(gitlab --gitlab "$GITLAB_PROFILE" -o json user list --username "$username" | jq -r '.[0].id')
 
     if [ -n "$user_id" ] && [ "$user_id" != "null" ]; then
-        gitlab_http_request "GET" "/users/${user_id}/keys"
+        gitlab --gitlab "$GITLAB_PROFILE" -o json user-key list --user-id "$user_id"
     else
         log "ERROR" "Failed to find GitLab user: $username"
         return 1
@@ -172,8 +162,8 @@ get_gitlab_ssh_keys() {
 
 # 导入 SSH key 到 Gitea
 import_ssh_key_to_gitea() {
-    local username=$1 title=$2 key=$3 response
-    local data="{\"key\": \"${key}\", \"title\": \"${title}\", \"read_only\": false}"
+    local username=$1 title=$2 key=$3 response data
+    data='{"key": "'${key}'", "title": "'${title}'", "read_only": false}'
     response=$(gitea_http_request "POST" "/api/v1/admin/users/${username}/keys" "$data")
 
     if echo "$response" | jq -e '.id' >/dev/null; then
@@ -218,11 +208,11 @@ create_user() {
     ssh_keys=$(get_gitlab_ssh_keys "$username")
 
     if [ -n "$ssh_keys" ] && [ "$ssh_keys" != "[]" ]; then
-        echo "$ssh_keys" | jq -c '.[]' | while read -r key_data; do
+        while read -r key_data; do
             title=$(echo "$key_data" | jq -r '.title')
             key=$(echo "$key_data" | jq -r '.key')
-            import_ssh_key_to_gitea "$username" "$title" "$key"
-        done
+            import_ssh_key_to_gitea "$username" "${title:-$RANDOM}" "$key"
+        done < <(echo "$ssh_keys" | jq -c '.[]')
     else
         log "INFO" "No SSH keys found for user: $username"
     fi
@@ -273,22 +263,30 @@ list_repos() {
 
 # 迁移操作
 migrate_from_gitlab() {
-    local owner=$1 repo=$2 local_mode=${3:-false} temp_dir auth_str response
+    local project_path=$1 local_mode=${2:-false} temp_dir auth_str response repo_name owner
 
-    log "INFO" "Migrating repository from GitLab to Gitea"
+    # 解析项目路径
+    repo_name=$(basename "$project_path" .git)
+    # 使用参数展开提取最左边的 owner
+    owner=${project_path%%/*}
+
+    echo "Migrating repository from GitLab to Gitea"
+    echo "Project path: $project_path"
+    echo "Owner or Group: $owner"
+    echo "Repository name: $repo_name"
 
     if [ "$local_mode" = true ]; then
         # 本地Git方式迁移
         temp_dir=$(mktemp -d)
-        log "INFO" "Using temporary directory: $temp_dir"
+        echo "Using temporary directory: $temp_dir"
 
-        # 构建克隆URL  git@git.flyh6.com:back-java/jykt-shop.git
-        local clone_url=git@${GITLAB_URL#https://}:${owner}/${repo}.git
-        log "INFO" "Cloning from: $clone_url"
+        # 构建克隆URL
+        local clone_url=git@${GITLAB_URL#https://}:${project_path}
+        echo "Cloning from: $clone_url"
 
-        # 克隆和推送 git@git.smartind.cn:yangwenguang/sima_8x.git
+        # 克隆和推送
         if git clone --mirror "$clone_url" "$temp_dir/repo.git"; then
-            gitea_url="https://${owner}:${GITEA_TOKEN}@${GITEA_URL#https://}/${owner}/${repo}.git"
+            gitea_url="https://${owner}:${GITEA_TOKEN}@${GITEA_URL#https://}/${owner}/${repo_name}.git"
 
             (cd "$temp_dir/repo.git" && git push --mirror "$gitea_url")
             local push_status=$?
@@ -296,9 +294,9 @@ migrate_from_gitlab() {
             rm -rf "$temp_dir"
 
             if [ $push_status -eq 0 ]; then
-                log "INFO" "Repository migrated successfully: $owner/$repo"
-                log "INFO" "Repository URL: ${GITEA_URL}/${owner}/${repo}"
-                sync_members_from_gitlab "$owner" "$repo"
+                log "INFO" "Repository migrated successfully: $owner/$repo_name"
+                log "INFO" "Repository URL: ${GITEA_URL}/${owner}/${repo_name}"
+                sync_members_from_gitlab "$owner" "$repo_name"
                 return 0
             fi
         else
@@ -315,7 +313,7 @@ migrate_from_gitlab() {
             \"description\": \"Migrated from GitLab\",
             \"mirror\": false,
             \"private\": true,
-            \"repo_name\": \"${repo}\",
+            \"repo_name\": \"${repo_name}\",
             \"service\": \"gitlab\",
             \"uid\": 0,
             \"username\": \"${owner}\",
@@ -327,11 +325,11 @@ migrate_from_gitlab() {
         response=$(gitea_http_request "POST" "/api/v1/repos/migrate" "$data")
 
         if echo "$response" | jq -e '.id' >/dev/null; then
-            log "INFO" "Repository migrated successfully: $owner/$repo"
-            sync_members_from_gitlab "$owner" "$repo"
+            log "INFO" "Repository migrated successfully: $owner/$repo_name"
+            sync_members_from_gitlab "$owner" "$repo_name"
             return 0
         else
-            log "ERROR" "Failed to migrate repository: $owner/$repo"
+            log "ERROR" "Failed to migrate repository: $owner/$repo_name"
             log "ERROR" "Response: $response"
             return 1
         fi
@@ -344,8 +342,8 @@ migrate_all_from_gitlab() {
 
     # 获取所有用户
     echo "Getting GitLab users list"
-    local users_data
-    users_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json user list --get-all)
+    local users_data projects_data project_path
+    users_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json user list --get-all | jq -c '[.[] | select(.username | test("^(runner|ghost|.*-bot)$") | not) | {username: .username, email: .email}]')
 
     # 第一步：创建所有用户
     echo "Step 1: Creating all users"
@@ -360,14 +358,24 @@ migrate_all_from_gitlab() {
         [[ "$user_name" =~ ^(runner|ghost|.*-bot)$ ]] && continue
 
         echo "Processing projects for user: $user_name"
-        local projects_data
         projects_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json project list --sudo "$user_name" --owned=True --get-all)
 
-        while read -r line; do
-            [ -z "$line" ] && continue
-            echo "Migrating project: $line"
-            project_name="${line##*/}"
-            migrate_from_gitlab "$user_name" "$project_name" true
+        while read -r project_path; do
+            [ -z "$project_path" ] && continue
+            echo "Migrating project: $project_path"
+
+            # 移除可能的 .git 后缀
+            project_path="${project_path%.git}"
+
+            # 处理项目路径
+            if [[ "$project_path" == *"/"* ]]; then
+                # 对于 group/subgroup/project 格式，使用完整路径
+                migrate_from_gitlab "$project_path" true
+            else
+                # 对于简单项目，使用 user_name/project 格式
+                migrate_from_gitlab "${user_name}/${project_path}" true
+            fi
+
             # 添加延迟以避免API限制
             sleep 2
         done < <(jq -r '.[] | .path_with_namespace' <<<"$projects_data")
@@ -394,6 +402,7 @@ Options: (must be after command and subcommand)
     -e, --email <email>          Email for user create (auto-generated if not provided)
     -o, --owner <owner>          Owner for repo operations
     -r, --repo <repo>            Repository name
+    --path <path>                Full repository path (for GitLab migration, e.g., group/subgroup/project)
     --local                      Use local git commands for migration instead of API
     -h, --help                   Show this help message
 
@@ -410,11 +419,29 @@ Examples:
     $SCRIPT_NAME repo delete -o john123 -r myrepo              # Delete a repository
 
     # GitLab migration
-    $SCRIPT_NAME migrate gitlab -o john123 -r myrepo --local   # Migrate using local Git
-    $SCRIPT_NAME migrate gitlab -o john123 -r myrepo           # Migrate using API
-    $SCRIPT_NAME migrate all-gitlab                            # Migrate all repositories from GitLab (default profile)
-    $SCRIPT_NAME migrate all-gitlab -p env_profile             # Migrate all repositories from GitLab using custom profile
+    $SCRIPT_NAME migrate gitlab --path front-web/huang/project --local   # Migrate using local Git with subgroups
+    $SCRIPT_NAME migrate gitlab -o john123 -r myrepo                    # Simple migration using API
+    $SCRIPT_NAME migrate all-gitlab                                     # Migrate all repositories from GitLab (default profile)
+    $SCRIPT_NAME migrate all-gitlab -p env_profile                      # Migrate all repositories from GitLab using custom profile
 EOF
+}
+
+# 解析命令行参数
+parse_args() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -p | --profile) env_profile=$2 && shift ;;
+        -u | --username) username=$2 && shift ;;
+        -e | --email) email=$2 && shift ;;
+        -o | --owner) owner=$2 && shift ;;
+        -r | --repo) repo=$2 && shift ;;
+        --path) project_path=$2 && shift ;;
+        --local) local_mode=true ;;
+        -h | --help) show_usage && exit 0 ;;
+        *) break ;;
+        esac
+        shift
+    done
 }
 
 # 命令处理
@@ -457,7 +484,14 @@ process_command() {
     migrate)
         case $subcommand in
         gitlab)
-            migrate_from_gitlab "$owner" "$repo" "${local_mode:-false}"
+            if [ -n "$project_path" ]; then
+                migrate_from_gitlab "$project_path" "${local_mode:-false}"
+            elif [ -n "$owner" ] && [ -n "$repo" ]; then
+                migrate_from_gitlab "${owner}/${repo}" "${local_mode:-false}"
+            else
+                log "ERROR" "Missing required parameters. Either provide --path or both -o and -r"
+                return 1
+            fi
             ;;
         all-gitlab)
             migrate_all_from_gitlab
@@ -472,23 +506,6 @@ process_command() {
         return 1
         ;;
     esac
-}
-
-# 解析命令行参数
-parse_args() {
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-        -p | --profile) env_profile=$2 && shift ;;
-        -u | --username) username=$2 && shift ;;
-        -e | --email) email=$2 && shift ;;
-        -o | --owner) owner=$2 && shift ;;
-        -r | --repo) repo=$2 && shift ;;
-        --local) local_mode=true ;;
-        -h | --help) show_usage && exit 0 ;;
-        *) break ;;
-        esac
-        shift
-    done
 }
 
 # 主函数
