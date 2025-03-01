@@ -231,6 +231,54 @@ deploy_ssl() {
     echo "同步完成"
 }
 
+# Docker image management functions
+copy_docker_image() {
+    local source_image="$1"
+    local target_registry="$2"
+
+    if [[ -z "$source_image" || -z "$target_registry" ]]; then
+        echo "Error: Missing required parameters"
+        echo "Usage: copy_docker_image source_image target_registry"
+        echo "Example: copy_docker_image nginx:latest registry.example.com"
+        return 1
+    fi
+
+    # Extract image name and tag from source_image
+    local image_name
+    local image_tag
+    if [[ "$source_image" == *":"* ]]; then
+        image_name="${source_image%:*}"
+        image_tag="${source_image#*:}"
+    else
+        image_name="$source_image"
+        image_tag="latest"
+    fi
+
+    # Convert slashes to hyphens in image name
+    image_name="${image_name//\//-}"
+
+    # Construct target image path
+    local target="${target_registry}:${image_name}-${image_tag}"
+
+    echo "Copying multi-arch image from Docker Hub to custom registry..."
+    echo "Source: ${source_image}"
+    echo "Target: ${target}"
+
+    # Copy all available platforms
+    if ! skopeo copy --multi-arch index-only "docker://docker.io/${source_image}" "docker://${target}"; then
+        echo "Failed to copy multi-arch image"
+        return 1
+    fi
+
+    echo "Successfully copied multi-arch image ${source_image} to ${target}"
+    return 0
+}
+
+# Example usage:
+# copy_docker_image "nginx:latest" "registry.example.com"        # -> registry.example.com:nginx-latest
+# copy_docker_image "ubuntu:22.04" "registry.example.com"       # -> registry.example.com:ubuntu-22.04
+# copy_docker_image "bitnami/nginx:latest" "registry.example.com" # -> registry.example.com:bitnami-nginx-latest
+
 # 添加微信验证文件处理函数
 deploy_wechat() {
     local c c_total
@@ -269,6 +317,7 @@ Commands:
     search [DIR] [PATTERN]      Search project files
     keys [FILE] [BUCKET/PATH]   Sync SSH public keys to OSS storage
     wechat                      Process WeChat verification files
+    docker SOURCE TARGET        Copy Docker image from source to target registry
     help                        Display this help message
 
 Options for search command:
@@ -281,6 +330,7 @@ Examples:
     ${SCRIPT_NAME} search /path/to/active pattern
     ${SCRIPT_NAME} keys /path/to/ssh-keys.txt bucket/path
     ${SCRIPT_NAME} wechat
+    ${SCRIPT_NAME} docker nginx:latest registry.example.com
 EOF
 }
 
@@ -327,6 +377,10 @@ main() {
         ;;
     wechat)
         deploy_wechat
+        ;;
+    docker)
+        shift
+        copy_docker_image "$@"
         ;;
     *)
         echo "Unknown command: $1" >&2
