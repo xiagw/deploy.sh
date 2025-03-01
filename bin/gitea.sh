@@ -286,7 +286,7 @@ migrate_from_gitlab() {
 
         # 克隆和推送
         if git clone --mirror "$clone_url" "$temp_dir/repo.git"; then
-            gitea_url="https://${owner}:${GITEA_TOKEN}@${GITEA_URL#https://}/${owner}/${repo_name}.git"
+            gitea_url="https://root:${GITEA_TOKEN}@${GITEA_URL#https://}/${owner}/${repo_name}.git"
 
             (cd "$temp_dir/repo.git" && git push --mirror "$gitea_url")
             local push_status=$?
