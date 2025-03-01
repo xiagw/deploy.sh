@@ -167,11 +167,11 @@ import_ssh_key_to_gitea() {
     response=$(gitea_http_request "POST" "/api/v1/admin/users/${username}/keys" "$data")
 
     if echo "$response" | jq -e '.id' >/dev/null; then
-        log "INFO" "SSH key imported successfully for user: $username"
+        echo "SSH key imported successfully for user: $username"
         return 0
     else
-        log "ERROR" "Failed to import SSH key for user: $username"
-        log "ERROR" "Response: $response"
+        echo "Failed to import SSH key for user: $username"
+        echo "Response: $response"
         return 1
     fi
 }
@@ -207,7 +207,7 @@ create_user() {
     # 获取并导入 SSH keys
     ssh_keys=$(get_gitlab_ssh_keys "$username")
 
-    if [ -n "$ssh_keys" ] && [ "$ssh_keys" != "[]" ]; then
+    if echo "$ssh_keys" | jq -e '.[].id' >/dev/null 2>&1; then
         while read -r key_data; do
             title=$(echo "$key_data" | jq -r '.title')
             key=$(echo "$key_data" | jq -r '.key')
@@ -343,14 +343,15 @@ migrate_all_from_gitlab() {
     # 获取所有用户
     echo "Getting GitLab users list"
     local users_data projects_data project_path
-    users_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json user list --get-all | jq -c '[.[] | select(.username | test("^(runner|ghost|.*-bot)$") | not) | {username: .username, email: .email}]')
+    users_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json user list --get-all |
+        jq -r '[.[] | select(.username | test("^(runner|ghost|.*-bot)$") | not)] | .[] | "\(.username)\t\(.email)"')
 
     # 第一步：创建所有用户
     echo "Step 1: Creating all users"
     while IFS=$'\t' read -r user_name user_email; do
         [[ "$user_name" =~ ^(runner|ghost|.*-bot)$ ]] && continue
         create_user "$user_name" "$user_email"
-    done < <(jq -r '.[] | "\(.username)\t\(.email)"' <<<"$users_data")
+    done < <(echo "$users_data")
 
     # 第二步：迁移所有仓库
     echo "Step 2: Migrating all repositories"
@@ -358,7 +359,8 @@ migrate_all_from_gitlab() {
         [[ "$user_name" =~ ^(runner|ghost|.*-bot)$ ]] && continue
 
         echo "Processing projects for user: $user_name"
-        projects_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json project list --sudo "$user_name" --owned=True --get-all)
+        projects_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json project list --sudo "$user_name" --owned=True --get-all |
+            jq -r '.[] | select(.archived == false and .path_with_namespace != null) | .path_with_namespace')
 
         while read -r project_path; do
             [ -z "$project_path" ] && continue
@@ -378,8 +380,9 @@ migrate_all_from_gitlab() {
 
             # 添加延迟以避免API限制
             sleep 2
-        done < <(jq -r '.[] | .path_with_namespace' <<<"$projects_data")
-    done < <(jq -r '.[] | "\(.username)\t\(.email)"' <<<"$users_data")
+        done < <(echo "$projects_data")
+
+    done < <(echo "$users_data")
 
     log "INFO" "Batch migration completed"
 }
