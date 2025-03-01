@@ -24,18 +24,20 @@ log() {
 }
 
 # 辅助函数
-get_domain_from_url() { echo "$1" | sed -E 's|^https?://([^@]+@)?||' | cut -d'/' -f1 | sed -E 's|^[^.]+\.||'; }
+get_domain_from_url() {
+    echo "$1" | sed -E 's|^https?://([^@]+@)?||' | cut -d'/' -f1 | sed -E 's|^[^.]+\.||'
+}
 
 # HTTP请求函数
 gitea_http_request() {
     local method=$1 endpoint=$2 data=${3:-}
-    local curl_args=(-s -X "$method" -H "accept: application/json" -H "Authorization: token ${GITEA_TOKEN}")
+    local curl_args=(curl -s -X "$method" -H "accept: application/json" -H "Authorization: token ${GITEA_TOKEN}")
 
     if [ "$method" = "POST" ] || [ "$method" = "PUT" ]; then
         curl_args+=(-H "Content-Type: application/json" -d "$data")
     fi
 
-    curl "${curl_args[@]}" "${GITEA_URL:-}${endpoint}"
+    "${curl_args[@]}" "${GITEA_URL:-}${endpoint}"
 }
 
 # GitLab API 请求函数
@@ -52,11 +54,10 @@ gitlab_http_request() {
 
 # Gitea 添加协作者
 add_gitea_collaborator() {
-    local owner=$1 repo=$2 username=$3 permission=${4:-write}
-    log "INFO" "Adding collaborator $username to $owner/$repo with permission $permission"
+    local owner=$1 repo=$2 username=$3 permission=${4:-write} response
+    echo "Adding collaborator $username to $owner/$repo with permission: $permission"
 
-    local data="{\"permission\": \"${permission}\"}"
-    local response
+    local data='{"permission": "'${permission}'"}'
     response=$(gitea_http_request "PUT" "/api/v1/repos/${owner}/${repo}/collaborators/${username}" "$data")
 
     if [ -z "$response" ]; then
@@ -71,11 +72,10 @@ add_gitea_collaborator() {
 
 # 同步 GitLab 成员到 Gitea
 sync_gitlab_members() {
-    local owner=$1 repo=$2 gitlab_project_id=$3
+    local owner=$1 repo=$2 gitlab_project_id=$3 members
     log "INFO" "Syncing members from GitLab project $gitlab_project_id to Gitea repo $owner/$repo"
 
     # 获取 GitLab 项目成员
-    local members
     members=$(gitlab_http_request "GET" "/projects/${gitlab_project_id}/members/all")
 
     if [ -z "$members" ] || ! echo "$members" | jq -e '.' >/dev/null 2>&1; then
@@ -84,17 +84,18 @@ sync_gitlab_members() {
     fi
 
     # 遍历成员并添加到 Gitea
-    echo "$members" | jq -r '.[] | select(.state=="active") | "\(.username) \(.access_level)"' | while read -r username access_level; do
-        local permission="write"
-        # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
-        if [ "$access_level" -ge 40 ]; then
-            permission="admin"
-        elif [ "$access_level" -le 20 ]; then
-            permission="read"
-        fi
+    echo "$members" | jq -r '.[] | select(.state=="active") | "\(.username) \(.access_level)"' |
+        while read -r username access_level; do
+            local permission="write"
+            # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
+            if [ "$access_level" -ge 40 ]; then
+                permission="admin"
+            elif [ "$access_level" -le 20 ]; then
+                permission="read"
+            fi
 
-        add_gitea_collaborator "$owner" "$repo" "$username" "$permission"
-    done
+            add_gitea_collaborator "$owner" "$repo" "$username" "$permission"
+        done
 }
 
 # 获取 GitLab 项目 ID
@@ -123,7 +124,7 @@ get_gitlab_project_id() {
 sync_members_from_gitlab() {
     local owner=$1 repo=$2
 
-    log "INFO" "Starting member sync from GitLab to Gitea"
+    echo "Starting member sync from GitLab to Gitea"
 
     # 获取项目 ID
     local project_id
@@ -143,26 +144,93 @@ check_dependencies() {
     done
 }
 
-# 用户操作
-create_user() {
-    local username=$1 password=$2 email=$3
-
-    local data="{\"email\":\"${email}\",\"username\":\"${username}\",\"password\":\"${password}\",\"language\":\"zh-CN\",\"restricted\":true,\"visibility\":\"limited\",\"must_change_password\":false}"
-    local response
-    response=$(gitea_http_request "POST" "/api/v1/admin/users" "$data")
+# 检查用户是否存在
+check_user_exists() {
+    local username=$1 response
+    response=$(gitea_http_request "GET" "/api/v1/users/${username}")
 
     if echo "$response" | jq -e '.id' >/dev/null; then
-        log "INFO" "User created successfully: $username / $password / $email"
+        return 0 # 用户存在
+    else
+        return 1 # 用户不存在
+    fi
+}
+
+# 获取 GitLab 用户的 SSH keys
+get_gitlab_ssh_keys() {
+    local username=$1 response user_id
+    response=$(gitlab_http_request "GET" "/users?username=${username}")
+    user_id=$(echo "$response" | jq -r '.[0].id')
+
+    if [ -n "$user_id" ] && [ "$user_id" != "null" ]; then
+        gitlab_http_request "GET" "/users/${user_id}/keys"
+    else
+        log "ERROR" "Failed to find GitLab user: $username"
+        return 1
+    fi
+}
+
+# 导入 SSH key 到 Gitea
+import_ssh_key_to_gitea() {
+    local username=$1 title=$2 key=$3 response
+    local data="{\"key\": \"${key}\", \"title\": \"${title}\", \"read_only\": false}"
+    response=$(gitea_http_request "POST" "/api/v1/admin/users/${username}/keys" "$data")
+
+    if echo "$response" | jq -e '.id' >/dev/null; then
+        log "INFO" "SSH key imported successfully for user: $username"
         return 0
     else
-        log "ERROR" "Failed to create user: $username"
+        log "ERROR" "Failed to import SSH key for user: $username"
         log "ERROR" "Response: $response"
         return 1
     fi
 }
 
+# 用户操作
+create_user() {
+    local username=$1 email=$2 domain password response data ssh_keys title key
+
+    # 先检查用户是否存在
+    if check_user_exists "$username"; then
+        echo "User already exists: $username"
+    else
+        # 如果邮箱为空，使用默认邮箱
+        if [ -z "$email" ]; then
+            domain=$(get_domain_from_url "$GITEA_URL")
+            email="${username}@${domain}"
+        fi
+
+        # 生成随机密码
+        password=$(_get_random_password)
+
+        data='{"email":"'${email}'","username":"'${username}'","password":"'${password}'","language":"zh-CN","restricted":true,"visibility":"limited","must_change_password":false}'
+        response=$(gitea_http_request "POST" "/api/v1/admin/users" "$data")
+
+        if ! echo "$response" | jq -e '.id' >/dev/null; then
+            log "ERROR" "Failed to create user: $username"
+            log "ERROR" "Response: $response"
+            return 1
+        fi
+        log "INFO" "User created successfully: $username / $password / $email"
+    fi
+
+    # 获取并导入 SSH keys
+    ssh_keys=$(get_gitlab_ssh_keys "$username")
+
+    if [ -n "$ssh_keys" ] && [ "$ssh_keys" != "[]" ]; then
+        echo "$ssh_keys" | jq -c '.[]' | while read -r key_data; do
+            title=$(echo "$key_data" | jq -r '.title')
+            key=$(echo "$key_data" | jq -r '.key')
+            import_ssh_key_to_gitea "$username" "$title" "$key"
+        done
+    else
+        log "INFO" "No SSH keys found for user: $username"
+    fi
+
+    return 0
+}
+
 list_users() {
-    log "INFO" "Listing users"
     gitea_http_request "GET" "/api/v1/admin/users" | jq -r '.[] | "\(.id)\t\(.username)\t\(.email)"' | column -t -s $'\t'
 }
 
@@ -205,13 +273,12 @@ list_repos() {
 
 # 迁移操作
 migrate_from_gitlab() {
-    local owner=$1 repo=$2 local_mode=${3:-false}
+    local owner=$1 repo=$2 local_mode=${3:-false} temp_dir auth_str response
 
     log "INFO" "Migrating repository from GitLab to Gitea"
 
     if [ "$local_mode" = true ]; then
         # 本地Git方式迁移
-        local temp_dir
         temp_dir=$(mktemp -d)
         log "INFO" "Using temporary directory: $temp_dir"
 
@@ -241,7 +308,6 @@ migrate_from_gitlab() {
         return 1
     else
         # API方式迁移
-        local auth_str=""
         [ -n "$GITLAB_TOKEN" ] && auth_str="\"auth_token\": \"${GITLAB_TOKEN}\","
 
         local data="{
@@ -258,7 +324,6 @@ migrate_from_gitlab() {
             \"language\": \"zh-CN\"
         }"
 
-        local response
         response=$(gitea_http_request "POST" "/api/v1/repos/migrate" "$data")
 
         if echo "$response" | jq -e '.id' >/dev/null; then
@@ -275,40 +340,38 @@ migrate_from_gitlab() {
 
 # 使用 python-gitlab CLI 批量迁移
 migrate_all_from_gitlab() {
-    log "INFO" "Starting batch migration from GitLab using python-gitlab CLI with profile: $GITLAB_PROFILE"
+    echo "Starting batch migration from GitLab using python-gitlab CLI with profile: $GITLAB_PROFILE"
 
     # 获取所有用户
-    log "INFO" "Getting GitLab users list"
-    gitlab --gitlab "$GITLAB_PROFILE" -o json user list --get-all |
-        jq -r '.[] | select(.username != "runner" and .username != "ghost" and .username != "root" and (.username | test(".*-bot$") | not)) | "\(.username)\t\(.email)"' |
-        while IFS=$'\t' read -r user_name user_email; do
-            # 迁移用户，使用随机密码
-            local random_password
-            random_password=$(_get_random_password)
+    echo "Getting GitLab users list"
+    local users_data
+    users_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json user list --get-all)
 
-            # 如果邮箱为空，使用默认邮箱
-            if [ -z "$user_email" ]; then
-                local domain
-                domain=$(get_domain_from_url "$GITEA_URL")
-                user_email="${user_name}@${domain}"
-            fi
+    # 第一步：创建所有用户
+    echo "Step 1: Creating all users"
+    while IFS=$'\t' read -r user_name user_email; do
+        [[ "$user_name" =~ ^(runner|ghost|.*-bot)$ ]] && continue
+        create_user "$user_name" "$user_email"
+    done < <(jq -r '.[] | "\(.username)\t\(.email)"' <<<"$users_data")
 
-            # 创建用户
-            create_user "$user_name" "$random_password" "$user_email"
+    # 第二步：迁移所有仓库
+    echo "Step 2: Migrating all repositories"
+    while IFS=$'\t' read -r user_name user_email; do
+        [[ "$user_name" =~ ^(runner|ghost|.*-bot)$ ]] && continue
 
-            # 获取用户的项目并迁移
-            log "INFO" "Processing projects for user: $user_name"
-            gitlab --gitlab "$GITLAB_PROFILE" -o json project list --sudo "$user_name" --owned=True --get-all |
-                jq -r '.[] | .path_with_namespace' |
-                while read -r line; do
-                    log "INFO" "Migrating project: $line"
-                    project_name="${line##*/}"
-                    migrate_from_gitlab "$user_name" "$project_name" true
-                    # 添加延迟以避免API限制
-                    sleep 2
-                done
-                sleep 600
-        done
+        echo "Processing projects for user: $user_name"
+        local projects_data
+        projects_data=$(gitlab --gitlab "$GITLAB_PROFILE" -o json project list --sudo "$user_name" --owned=True --get-all)
+
+        while read -r line; do
+            [ -z "$line" ] && continue
+            echo "Migrating project: $line"
+            project_name="${line##*/}"
+            migrate_from_gitlab "$user_name" "$project_name" true
+            # 添加延迟以避免API限制
+            sleep 2
+        done < <(jq -r '.[] | .path_with_namespace' <<<"$projects_data")
+    done < <(jq -r '.[] | "\(.username)\t\(.email)"' <<<"$users_data")
 
     log "INFO" "Batch migration completed"
 }
@@ -326,19 +389,18 @@ Commands:
     migrate  Migrate repositories from other platforms (gitlab|all-gitlab)
 
 Options: (must be after command and subcommand)
-    -P, --profile <profile>       ENV profile configuration
+    -p, --profile <profile>       ENV profile configuration
     -u, --username <username>     Username for user operations
-    -p, --password <password>     Password for user create (auto-generated if not provided)
-    -e, --email <email>           Email for user create (auto-generated if not provided)
-    -o, --owner <owner>           Owner for repo operations
-    -r, --repo <repo>             Repository name
-    --local                       Use local git commands for migration instead of API
-    -h, --help                    Show this help message
+    -e, --email <email>          Email for user create (auto-generated if not provided)
+    -o, --owner <owner>          Owner for repo operations
+    -r, --repo <repo>            Repository name
+    --local                      Use local git commands for migration instead of API
+    -h, --help                   Show this help message
 
 Examples:
     # User management
     $SCRIPT_NAME user create -u john123                           # Create user with auto-generated password
-    $SCRIPT_NAME user create -u john123 -p mypass123 -e john@example.com  # Create user with specific password and email
+    $SCRIPT_NAME user create -u john123 -e john@example.com       # Create user with specific email
     $SCRIPT_NAME user list                                        # List all users
     $SCRIPT_NAME user delete -u john123                          # Delete a user
 
@@ -351,7 +413,7 @@ Examples:
     $SCRIPT_NAME migrate gitlab -o john123 -r myrepo --local   # Migrate using local Git
     $SCRIPT_NAME migrate gitlab -o john123 -r myrepo           # Migrate using API
     $SCRIPT_NAME migrate all-gitlab                            # Migrate all repositories from GitLab (default profile)
-    $SCRIPT_NAME migrate all-gitlab -P env_profile                  # Migrate all repositories from GitLab using custom profile
+    $SCRIPT_NAME migrate all-gitlab -p env_profile             # Migrate all repositories from GitLab using custom profile
 EOF
 }
 
@@ -367,17 +429,7 @@ process_command() {
                 log "ERROR" "Missing required username parameter"
                 return 1
             }
-            [ -z "$password" ] && {
-                password=$(_get_random_password)
-                log "INFO" "Generated random password: $password"
-            }
-            [ -z "$email" ] && {
-                local domain
-                domain=$(get_domain_from_url "$GITEA_URL")
-                email="${username}@${domain}"
-                log "INFO" "Using default email: $email"
-            }
-            create_user "$username" "$password" "$email"
+            create_user "$username" "$email"
             ;;
         list) list_users ;;
         delete)
@@ -426,9 +478,8 @@ process_command() {
 parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
-        -P | --profile) env_profile=$2 && shift ;;
+        -p | --profile) env_profile=$2 && shift ;;
         -u | --username) username=$2 && shift ;;
-        -p | --password) password=$2 && shift ;;
         -e | --email) email=$2 && shift ;;
         -o | --owner) owner=$2 && shift ;;
         -r | --repo) repo=$2 && shift ;;
