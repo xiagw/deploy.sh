@@ -222,6 +222,18 @@ migrate_from_gitlab() {
     log "INFO" "Owner or Group: $owner_or_group"
     log "INFO" "Repository name: $repo_name"
 
+    # 检查 Gitea 上是否已存在同名仓库
+    local existing_repos
+    existing_repos=$(gitea_http_request "GET" "/api/v1/repos/search?q=${repo_name}" |
+        jq -r '.data[] | "\(.owner.username)/\(.name)"')
+    if [ -n "$existing_repos" ]; then
+        if echo "$existing_repos" | grep -q "^${owner_or_group}/${repo_name}$"; then
+            log "ERROR" "Repository ${owner_or_group}/${repo_name} already exists in Gitea"
+            return 1
+        fi
+        log "WARN" "Proceeding with migration as target ${owner_or_group}/${repo_name} is not in conflict"
+    fi
+
     if [ "$api_mode" = true ]; then
         # API方式迁移
         log "INFO" "Using API migration mode"
