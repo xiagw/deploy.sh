@@ -1270,25 +1270,31 @@ _initialize_gitlab_variables() {
     # read -rp "Enter gitlab project path: [root/git-repo] " -e -i 'root/xxx' gitlab_project_path
     gitlab_project_path=${CI_PROJECT_PATH:-$gitlab_project_namespace/$gitlab_project_name}
     gitlab_project_path_slug=${CI_PROJECT_PATH_SLUG:-${gitlab_project_path//[.\/]/-}}
-    # read -t 5 -rp "Enter branch name: " -e -i 'develop' gitlab_project_branch
+
     # Determine branch name
-    if [ -d .git ]; then
-        default_branch=$(git rev-parse --abbrev-ref HEAD)
-    else
-        default_branch=dev
-    fi
-    gitlab_project_branch=${CI_COMMIT_REF_NAME:-$default_branch}
-    gitlab_project_branch=${gitlab_project_branch:-develop}
+    gitlab_project_branch=""
+    # Check each source in sequence
+    while [ -z "$gitlab_project_branch" ]; do
+        [ -n "${CI_COMMIT_REF_NAME}" ] && gitlab_project_branch=${CI_COMMIT_REF_NAME} && break
+        [ -n "${GITHUB_REF_NAME}" ] && gitlab_project_branch=${GITHUB_REF_NAME} && break
+        [ -d .git ] && gitlab_project_branch=$(git rev-parse --abbrev-ref HEAD) && break
+        # If we reach here, all sources failed, use default
+        gitlab_project_branch=main
+        break
+    done
     [[ "${gitlab_project_branch}" == HEAD ]] && gitlab_project_branch=main
 
     # Get commit SHA
-    if [ -d .git ]; then
-        default_sha=$(git rev-parse --short HEAD)
-    else
-        default_sha=1234567
-    fi
-    gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA:-$default_sha}
-    [[ -z "$gitlab_commit_short_sha" ]] && gitlab_commit_short_sha=1234567
+    gitlab_commit_short_sha=""
+    # Check each source in sequence
+    while [ -z "$gitlab_commit_short_sha" ]; do
+        [ -n "${CI_COMMIT_SHORT_SHA}" ] && gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA} && break
+        [ -n "${GITHUB_SHA}" ] && gitlab_commit_short_sha=${GITHUB_SHA} && break
+        [ -d .git ] && gitlab_commit_short_sha="$(git rev-parse --short HEAD)" && break
+        # If we reach here, all sources failed, so generate a random 7-digit hex
+        gitlab_commit_short_sha=$(LC_ALL=C head -c20 /dev/urandom | od -An -tx1 | LC_ALL=C tr -d ' \n' | head -c8)
+        break
+    done
 
     # Set other GitLab variables
     gitlab_project_id=${CI_PROJECT_ID:-1234}
@@ -1307,7 +1313,7 @@ _initialize_gitlab_variables() {
         if [[ -n "$cron_save_file" ]]; then
             cron_save_id="${cron_save_file##*.}"
             if [[ "${gitlab_commit_short_sha}" == "$cron_save_id" ]]; then
-                _msg warn "no code change found, <skip>."
+                _msg warn "No code changes detected. Skipping execution."
                 exit 0
             else
                 rm -f "${SCRIPT_DATA}/crontab.${gitlab_project_id}".*
@@ -1453,6 +1459,7 @@ Parameters:
     --in-china               Set ENV_IN_CHINA to true.
 
     # Repository operations
+    --gitea                  Use Gitea with GITHUB_* variables.
     --git-clone URL          Clone git repo URL to builds/REPO_NAME.
     --git-clone-branch NAME  Specify git branch (default: main).
     --svn-checkout URL       Checkout SVN repository.
@@ -1500,6 +1507,22 @@ _parse_args() {
         --cron | --loop) run_with_crontab=true ;;
         --github-action) set -x && debug_on=true && github_action=true ;;
         --in-china) sed -i -e '/ENV_IN_CHINA=/s/false/true/' $SCRIPT_ENV ;;
+        ## gitea variables
+        --gitea)
+            arg_git_clone=true
+            # Check if ENV_GITEA_SERVER is defined, otherwise use a default or GITHUB_SERVER_URL
+            if [[ -z "${ENV_GITEA_SERVER}" ]]; then
+                # Try to use GITHUB_SERVER_URL if available, otherwise use a default
+                if [[ -n "${GITHUB_SERVER_URL}" ]]; then
+                    ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
+                else
+                    ENV_GITEA_SERVER="gitea.example.com"
+                    _msg warn "ENV_GITEA_SERVER not defined, using default: ${ENV_GITEA_SERVER}"
+                fi
+            fi
+            arg_git_clone_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
+            arg_git_clone_branch="${GITHUB_REF_NAME}"
+            ;;
         # Repository operations
         --git-clone) arg_git_clone=true && arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
