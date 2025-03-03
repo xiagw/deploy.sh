@@ -213,8 +213,11 @@ _set_package_manager() {
 }
 
 _install_packages() {
+    local use_china_mirror="${1:-false}"
+    shift
     [ "$#" -eq 0 ] && return 0
-    _is_china && _set_mirror os
+    _check_sudo >/dev/null || true
+    $use_china_mirror && _set_mirror os
     if [[ "${apt_update:-0}" -eq 1 ]]; then
         $cmd_pkg update -yqq
         apt_update=0
@@ -433,10 +436,20 @@ _install_flarectl() {
         return
     fi
     _msg green "Installing flarectl"
-    local ver='0.107.0'
+    local ver='0.115.0'
     local temp_file
     temp_file="$(mktemp)"
-    local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_linux_amd64.tar.gz"
+
+    # 检查系统类型
+    _check_distribution
+    local os
+    case "$OSTYPE" in
+        darwin*) os="darwin" ;;
+        linux*) os="linux" ;;
+        *) _msg error "Unsupported operating system: $OSTYPE" && return 1 ;;
+    esac
+
+    local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_${os}_amd64.tar.gz"
 
     if curl -fsSLo "$temp_file" $url; then
         _msg green "Extracting flarectl to /tmp"
@@ -444,36 +457,13 @@ _install_flarectl() {
         _msg green "Installing to /usr/local/bin/flarectl"
         $use_sudo install -m 0755 /tmp/flarectl /usr/local/bin/flarectl
         _msg success "flarectl installed successfully"
+        _msg green "Showing version"
+        flarectl -version
     else
         _msg error "failed to download and install flarectl"
         return 1
     fi
     rm -f "$temp_file" /tmp/flarectl
-}
-
-_install_jq_cli() {
-    if [ "$1" != "upgrade" ] && command -v jq >/dev/null; then
-        return
-    fi
-
-    _msg green "Installing jq cli..."
-    case "$lsb_dist" in
-    debian | ubuntu | linuxmint | linux)
-        $use_sudo apt-get update -qq
-        $use_sudo apt-get install -yqq jq >/dev/null
-        ;;
-    centos | amzn | rhel | fedora)
-        $use_sudo yum install -y jq >/dev/null
-        ;;
-    alpine)
-        $use_sudo apk add --no-cache jq >/dev/null
-        ;;
-    *)
-        echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
-        _msg error "Unsupported. exit."
-        return 1
-        ;;
-    esac
 }
 
 _install_kubectl() {
@@ -515,13 +505,18 @@ _install_helm() {
 }
 
 _install_tencent_cli() {
-    if [ "$1" != "upgrade" ] && command -v tccli >/dev/null; then
+    local flag="$1" use_china_mirror=${2:-false}
+    if [ "$flag" != "upgrade" ] && python3 -m pip show --quiet tccli >/dev/null 2>&1 && command -v tccli >/dev/null; then
         return
     fi
     _msg green "install tencent cli..."
-    _is_china && _set_mirror python
+    $use_china_mirror && _set_mirror python
     python3 -m pip install tccli
     _msg green "Showing version"
+    if ! command -v tccli >/dev/null; then
+        _msg warning "tccli command not found in PATH after installation"
+        return 1
+    fi
     tccli --version
 }
 
@@ -565,30 +560,39 @@ _install_aws() {
 }
 
 _install_python_gitlab() {
-    if [ "$1" != "upgrade" ] && command -v gitlab >/dev/null; then
+    local flag="$1" use_china_mirror=${2:-false}
+    if [ "$flag" != "upgrade" ] && python3 -m pip show --quiet python-gitlab >/dev/null 2>&1 && command -v gitlab >/dev/null; then
         return
     fi
     _msg green "Installing python3 gitlab api..."
-    _is_china && _set_mirror python
+    $use_china_mirror && _set_mirror python
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg green "python-gitlab is installed successfully"
+        if ! command -v gitlab >/dev/null; then
+            _msg warning "gitlab command not found in PATH, it should be in ~/.local/bin/"
+            return 1
+        fi
         _msg green "Showing version"
-        /root/.local/bin/gitlab --version
+        gitlab --version
     else
         _msg error "failed to install python-gitlab"
+        return 1
     fi
 }
 
 _install_python_element() {
-    if [ "$1" != "upgrade" ] && python3 -m pip list 2>/dev/null | grep -q matrix-nio; then
+    local flag="$1" use_china_mirror=${2:-false}
+    # matrix-nio 是一个库，不提供命令行工具，所以只需要检查包是否安装
+    if [ "$flag" != "upgrade" ] && python3 -m pip show --quiet matrix-nio >/dev/null 2>&1; then
         return
     fi
     _msg green "Installing python3 element api..."
-    _is_china && _set_mirror python
+    $use_china_mirror && _set_mirror python
     if python3 -m pip install --user --upgrade matrix-nio; then
         _msg green "matrix-nio is installed successfully"
     else
         _msg error "failed to install matrix-nio"
+        return 1
     fi
 }
 
@@ -617,21 +621,12 @@ _install_podman() {
     podman --version
 }
 
-_install_cron() {
-    if [ "$1" != "upgrade" ] && command -v crontab &>/dev/null; then
-        return
-    fi
-    _msg green "Installing cron"
-    $use_sudo apt-get update -qq
-    $use_sudo apt-get install -yqq cron >/dev/null
-}
-
 _notify_wecom() {
     local wecom_key="$1"
-    local g_msg_body="$2"
+    local wecom_msg="$2"
     local wecom_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wecom_key}"
     curl -fsSL -X POST -H 'Content-Type: application/json' \
-        -d '{"msgtype": "text", "text": {"content": "'"${g_msg_body:-g_msg_body undefined}"'"}}' "$wecom_api"
+        -d '{"msgtype": "text", "text": {"content": "'"${wecom_msg:-wecom_msg undefined}"'"}}' "$wecom_api"
     echo
 }
 
@@ -875,11 +870,11 @@ _compress_pdf_with_gs() {
 
     # 验证兼容性级别参数
     case "$compatibility" in
-        1.4|1.5|1.6|1.7) ;;
-        *)
-            _msg warning "Invalid compatibility level: $compatibility, using 1.4"
-            compatibility="1.4"
-            ;;
+    1.4 | 1.5 | 1.6 | 1.7) ;;
+    *)
+        _msg warning "Invalid compatibility level: $compatibility, using 1.4"
+        compatibility="1.4"
+        ;;
     esac
 
     # 设置压缩质量参数
@@ -890,49 +885,49 @@ _compress_pdf_with_gs() {
     local mono_image_quality
 
     case "$quality" in
-        screen-hq)  # 新增：高质量图片的 screen 模式
-            resolution=150      # 提高分辨率到150dpi
-            image_downsample=150
-            color_image_quality=60  # 提高图片质量到60%
-            gray_image_quality=60
-            mono_image_quality=60
-            ;;
-        screen)  # 最大压缩率
-            resolution=72
-            image_downsample=72
-            color_image_quality=25
-            gray_image_quality=25
-            mono_image_quality=25
-            ;;
-        ebook)   # 平衡模式
-            resolution=150
-            image_downsample=150
-            color_image_quality=60
-            gray_image_quality=60
-            mono_image_quality=60
-            ;;
-        printer) # 较好质量
-            resolution=300
-            image_downsample=300
-            color_image_quality=90
-            gray_image_quality=90
-            mono_image_quality=90
-            ;;
-        prepress) # 最佳质量
-            resolution=600
-            image_downsample=600
-            color_image_quality=100
-            gray_image_quality=100
-            mono_image_quality=100
-            ;;
-        *)
-            _msg warning "Invalid quality level: $quality, using ebook"
-            resolution=150
-            image_downsample=150
-            color_image_quality=60
-            gray_image_quality=60
-            mono_image_quality=60
-            ;;
+    screen-hq)         # 新增：高质量图片的 screen 模式
+        resolution=150 # 提高分辨率到150dpi
+        image_downsample=150
+        color_image_quality=60 # 提高图片质量到60%
+        gray_image_quality=60
+        mono_image_quality=60
+        ;;
+    screen) # 最大压缩率
+        resolution=72
+        image_downsample=72
+        color_image_quality=25
+        gray_image_quality=25
+        mono_image_quality=25
+        ;;
+    ebook) # 平衡模式
+        resolution=150
+        image_downsample=150
+        color_image_quality=60
+        gray_image_quality=60
+        mono_image_quality=60
+        ;;
+    printer) # 较好质量
+        resolution=300
+        image_downsample=300
+        color_image_quality=90
+        gray_image_quality=90
+        mono_image_quality=90
+        ;;
+    prepress) # 最佳质量
+        resolution=600
+        image_downsample=600
+        color_image_quality=100
+        gray_image_quality=100
+        mono_image_quality=100
+        ;;
+    *)
+        _msg warning "Invalid quality level: $quality, using ebook"
+        resolution=150
+        image_downsample=150
+        color_image_quality=60
+        gray_image_quality=60
+        mono_image_quality=60
+        ;;
     esac
 
     gs -sDEVICE=pdfwrite \
@@ -978,7 +973,7 @@ _compress_pdf_with_gs() {
 
     # 格式化持续时间
     local hours=$((duration / 3600))
-    local minutes=$(( (duration % 3600) / 60 ))
+    local minutes=$(((duration % 3600) / 60))
     local seconds=$((duration % 60))
     local time_str=""
     [ $hours -gt 0 ] && time_str="${hours}h"
@@ -1016,7 +1011,8 @@ _compress_document() {
     local input_file="$1"
     local output_file="${2:-}"
     local quality="${3:-ebook}"
-    local compatibility="${4:-1.4}"  # 新增参数
+    local compatibility="${4:-1.4}" # 新增参数
+    local use_china_mirror="${5:-false}"
 
     # 检查输入文件是否存在
     if [ ! -f "$input_file" ]; then
@@ -1027,7 +1023,7 @@ _compress_document() {
     # 检查必要的命令
     if ! _check_commands gs libreoffice; then
         _msg info "Installing required packages..."
-        _install_packages ghostscript libreoffice
+        _install_packages "$use_china_mirror" ghostscript libreoffice
     fi
 
     # 获取文件扩展名

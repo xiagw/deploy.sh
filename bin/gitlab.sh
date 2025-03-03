@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=1090
 
-_new_element_user() {
+new_element_user() {
     cd ~/src/matrix-docker-ansible-deploy || exit 1
     # file_secret=inventory/host_vars/matrix.example.com/user_pass.txt
     _msg log "$SCRIPT_LOG" "username=${user_name} / password=${password_rand}"
@@ -10,7 +10,7 @@ _new_element_user() {
     # ansible-playbook -i inventory/hosts setup.yml --extra-vars='username=fangzheng password=Eefaiyau6de1' --tags=update-user-password
 }
 
-_install_gitlab_runner() {
+install_gitlab_runner() {
     local user_name user_home repo_url
 
     # Install latest gitlab-runner if needed
@@ -101,7 +101,7 @@ EOF
     fi
 }
 
-_add_account_to_groups() {
+add_account_to_groups() {
     local user_name="$1" user_id level
 
     _msg "add user [$user_name] to groups..."
@@ -120,7 +120,7 @@ _add_account_to_groups() {
     )
 }
 
-_update_account_password() {
+update_account_password() {
     local user_name="$1"
     local gitlab_domain="$2"
     local password_rand="$3"
@@ -138,7 +138,7 @@ _update_account_password() {
     return 0
 }
 
-_add_account() {
+add_account() {
     local user_name="$1"
     local gitlab_domain="$2"
     local password_rand
@@ -162,7 +162,7 @@ _add_account() {
     _notify_wecom "${gitlab_wecom_key:? ERR: empty wecom_key}" "$send_msg"
 }
 
-_common_lib() {
+common_lib() {
     local common_lib
     common_lib="$(dirname "$SCRIPT_DIR")/lib/common.sh"
     # 1. First check /lib/ directory
@@ -178,7 +178,7 @@ _common_lib() {
     . "$common_lib"
 }
 
-_print_usage() {
+print_usage() {
     echo "Usage: $0 <command> [options]"
     echo
     echo "Commands:"
@@ -193,14 +193,14 @@ _print_usage() {
 }
 
 # Process only global options and save command for later execution
-_process_global_options() {
-    [ $# -eq 0 ] && _print_usage && exit 1
+process_global_options() {
+    [ $# -eq 0 ] && print_usage && exit 1
     while [ "$#" -gt 0 ]; do
         case "$1" in
         -d | --domain) gitlab_domain=$2 && shift ;;
         -a | --account) gitlab_account=$2 && shift ;;
         -p | --profile) gitlab_profile=$2 && shift ;;
-        -h | --help) _print_usage && exit 0 ;;
+        -h | --help) print_usage && exit 0 ;;
         # user) action=$2 && shift ;;
         *) args+=("$1") ;;
         esac
@@ -209,7 +209,7 @@ _process_global_options() {
 }
 
 # Setup GitLab configuration
-_setup_gitlab_config() {
+setup_gitlab_config() {
     gitlab_python_config="$HOME/.python-gitlab.cfg"
     if [[ ! -f "$gitlab_python_config" ]]; then
         gitlab_python_config="$HOME/.config/python-gitlab.cfg"
@@ -229,7 +229,7 @@ _setup_gitlab_config() {
     fi
 }
 
-_format_table() {
+format_table() {
     local header="$1"
     local jq_filter="$2"
     shift 2
@@ -238,7 +238,7 @@ _format_table() {
         column -t -s $'\t'
 }
 
-_check_large_repos() {
+check_large_repos() {
     local size_threshold="${1:-50}" response path repo_size storage_size
     # Convert MB to bytes: size_threshold * 1024 * 1024
     local threshold_bytes=$((size_threshold * 1024 * 1024))
@@ -275,37 +275,57 @@ _check_large_repos() {
     _msg time "Results saved to $SCRIPT_LOG"
 }
 
+# GitLab API 请求函数
+gitlab_http_request() {
+    local method=$1 endpoint=$2
+    [ -z "$GITLAB_TOKEN" ] && {
+        log "ERROR" "GITLAB_TOKEN is not set"
+        return 1
+    }
+    local curl_args=(curl -fsSL --request "$method" --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}")
+
+    "${curl_args[@]}" --url "${GITLAB_URL%/}/api/v4${endpoint}"
+}
+
+delete_project_path() {
+    local path="${1:? ERROR: empty path}" encoded_path id
+    encoded_path=$(echo "$path" | jq -Rr '@uri')
+    # 获取 GitLab 项目 ID
+    id=$(gitlab_http_request "GET" "/projects/${encoded_path}" | jq -r '.id // empty')
+
+    $cmd_gitlab project delete --id "${id:? ERROR: empty id}"
+}
+
 # Execute the saved command
-_execute_command() {
+execute_command() {
     case "${args[0]}" in
-    runner) _install_gitlab_runner ;;
+    runner) install_gitlab_runner ;;
     user)
         case "${args[1]}" in
         list)
-            _format_table "ID\tUsername\tName\tEmail\tState" \
+            format_table "ID\tUsername\tName\tEmail\tState" \
                 '.[] | [.id, .username, .name, .email, .state] | @tsv' \
                 "${args[@]}"
             ;;
         create)
-            _add_account "$gitlab_account" "$gitlab_domain" "${args[@]}"
-            _add_account_to_groups "$gitlab_account" "${args[@]}"
+            add_account "$gitlab_account" "$gitlab_domain" "${args[@]}"
+            add_account_to_groups "$gitlab_account" "${args[@]}"
             ;;
         update)
             password_rand=$(_get_random_password 2>/dev/null)
-            _update_account_password "$gitlab_account" "$gitlab_domain" "$password_rand"
+            update_account_password "$gitlab_account" "$gitlab_domain" "$password_rand"
             ;;
         esac
         ;;
     project)
         case "${args[1]}" in
         list)
-            _format_table "ID\tProject\tDescription\tURL\tVisibility" \
+            format_table "ID\tProject\tDescription\tURL\tVisibility" \
                 '.[] | [.id, .path_with_namespace, .description // "-", .web_url, .visibility] | @tsv' \
                 "${args[@]}" --no-get-all
             ;;
-        size)
-            _check_large_repos "${args[2]:-50}"
-            ;;
+        size) check_large_repos "${args[2]:-50}" ;;
+        did) delete_project_path "${args[2]}" ;;
         *)
             $cmd_gitlab "${args[@]}"
             ;;
@@ -324,16 +344,16 @@ main() {
     SCRIPT_LOG="$SCRIPT_DATA/${SCRIPT_NAME}.log"
     SCRIPT_ENV="$SCRIPT_DATA/${SCRIPT_NAME}.env"
 
-    _common_lib
+    common_lib
 
     # 1. Process global options and save command for later
-    _process_global_options "$@"
+    process_global_options "$@"
 
     # 2. Setup GitLab configuration and define cmd_gitlab
-    _setup_gitlab_config
+    setup_gitlab_config
 
     # 3. Execute the command now that cmd_gitlab is defined
-    _execute_command
+    execute_command
 }
 
 main "$@"

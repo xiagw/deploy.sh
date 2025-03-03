@@ -5,7 +5,103 @@
 # OSS (对象存储服务) 相关函数
 
 # 在文件开头添加全局变量
-endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
+endpoint_url=""
+
+import_ossutil_config() {
+    local profile_name=${1:-default}
+    local force=${2:-false}
+
+    # 检查 aliyun cli 配置文件是否存在
+    local aliyun_config_file="$HOME/.aliyun/config.json"
+    if [ ! -f "$aliyun_config_file" ]; then
+        echo "错误：找不到 aliyun cli 配置文件：$aliyun_config_file" >&2
+        return 1
+    fi
+
+    # 检查 jq 命令是否可用
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "错误：需要安装 jq 命令来解析 JSON 配置文件" >&2
+        return 1
+    fi
+
+    # 从 aliyun cli 配置文件中读取指定 profile 的配置
+    local config
+    config=$(jq -r --arg profile "$profile_name" '.profiles[] | select(.name == $profile)' "$aliyun_config_file")
+    if [ -z "$config" ]; then
+        echo "错误：在 aliyun cli 配置中找不到指定的 profile：$profile_name" >&2
+        return 1
+    fi
+
+    # 提取配置信息
+    local access_key_id
+    local access_key_secret
+    local region
+    access_key_id=$(echo "$config" | jq -r '.access_key_id')
+    access_key_secret=$(echo "$config" | jq -r '.access_key_secret')
+    region=$(echo "$config" | jq -r '.region_id')
+
+    # 确保 ossutil 配置目录存在
+    local ossutil_config_file="$HOME/.ossutilconfig"
+
+    # 创建临时文件
+    local temp_config
+    temp_config=$(mktemp)
+
+    # 如果配置文件已存在，先读取现有配置
+    if [ -f "$ossutil_config_file" ]; then
+        cp "$ossutil_config_file" "$temp_config"
+    else
+        # 如果文件不存在，创建基本结构
+        cat >"$temp_config" <<EOF
+[Credentials]
+language=CH
+EOF
+    fi
+
+    # 检查是否已存在相同的 profile
+    if grep -q "\\[${profile_name}\\]" "$temp_config" && [ "$force" != "true" ]; then
+        echo "警告：ossutil 配置文件中已存在 profile '${profile_name}'"
+        read -r -p "是否覆盖现有配置？[y/N] " response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "操作已取消"
+            rm -f "$temp_config"
+            return 1
+        fi
+    fi
+
+    # 如果是默认配置，更新 [Credentials] 部分
+    if [ "$profile_name" = "default" ]; then
+        sed -i.bak '/^\[Credentials\]/,/^\[.*\]/{/^\[Credentials\]/!{/^\[.*\]/!d}}' "$temp_config"
+        sed -i.bak "/^\[Credentials\]/a\\
+endpoint=oss-${region}.aliyuncs.com\\
+accessKeyID=${access_key_id}\\
+accessKeySecret=${access_key_secret}" "$temp_config"
+    else
+        # 删除已存在的同名配置（如果存在）
+        sed -i.bak "/^\[${profile_name}\]/,/^\[.*\]/d" "$temp_config"
+        # 添加新的配置
+        cat >>"$temp_config" <<EOF
+
+[profile ${profile_name}]
+region=${region}
+endpoint=oss-${region}.aliyuncs.com
+accessKeyID=${access_key_id}
+accessKeySecret=${access_key_secret}
+EOF
+    fi
+
+    # 删除备份文件
+    rm -f "${temp_config}.bak"
+
+    # 移动临时文件到目标位置
+    mv "$temp_config" "$ossutil_config_file"
+
+    # 设置配置文件权限
+    chmod 600 "$ossutil_config_file"
+
+    echo "已成功将 aliyun cli profile '${profile_name}' 导入到 ossutil 配置"
+    echo "配置文件位置：$ossutil_config_file"
+}
 
 show_oss_help() {
     cat <<'EOF'
@@ -15,6 +111,10 @@ OSS (对象存储服务) 操作
   -in, --internal     使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）
 
 命令：
+  import [profile] [--force]
+                      从 aliyun cli 配置导入到 ossutil 配置
+                      profile: 要导入的配置文件名称（默认：default）
+                      --force: 强制覆盖现有配置
   list   [region]     列出 OSS 存储桶
   create <存储桶名称> [region]
                       创建 OSS 存储桶
@@ -51,6 +151,11 @@ logs 命令选项：
   --target-bucket NAME     指定目标存储桶（用于自动处理分析结果）
 
 示例：
+配置导入：
+  $0 oss import                  # 导入默认配置
+  $0 oss import prod            # 导入指定的配置
+  $0 oss import prod --force    # 强制覆盖现有配置
+
 基本操作：
   $0 oss list              # 列出所有存储桶
   $0 oss --internal list   # 使用内网列出所有存储桶
@@ -101,12 +206,26 @@ handle_oss_commands() {
         shift
     done
 
+    # 确保 endpoint_url 使用正确的 region
+    endpoint_url=${endpoint_url:-"http://oss-${region:-cn-hangzhou}.aliyuncs.com"}
+
     # 如果没有指定操作，默认为 list
     operation=${operation:-list}
 
     # 根据操作调用相应的函数
     case "$operation" in
-    list) oss_list "${args[@]}" ;;
+    import)
+        local profile="default"
+        local force=false
+        for arg in "${args[@]}"; do
+            case "$arg" in
+            --force) force=true ;;
+            *) profile="$arg" ;;
+            esac
+        done
+        import_ossutil_config "$profile" "$force"
+        ;;
+    list | ls) oss_list "${args[@]}" ;;
     create) oss_create "${args[@]}" ;;
     delete) oss_delete "${args[@]}" ;;
     bind-domain) oss_bind_domain "${args[@]}" ;;
@@ -136,6 +255,9 @@ oss_parse_cdn_logs() {
     local domain=""
     local default_file_types_file=""
     local target_bucket=""
+
+    # 确保使用正确的 endpoint
+    endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
 
     # 解析参数
     while [[ $# -gt 0 ]]; do
@@ -268,6 +390,7 @@ oss_list() {
 oss_create() {
     local bucket_name=$1
     echo "创建 OSS 存储桶："
+    endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     local result
     result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" mb "oss://$bucket_name")
     echo "$result"
@@ -277,6 +400,7 @@ oss_create() {
 # 修改 oss_delete 函数，添加 endpoint 支持
 oss_delete() {
     local bucket_name=$1
+    endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     echo "警告：您即将删除 OSS 存储桶：$bucket_name"
     read -r -p "请输入 'YES' 以确认删除操作: " confirm
 
@@ -503,6 +627,9 @@ oss_batch_copy() {
     local storage_class="IA"
     local force=false
 
+    # 确保使用正确的 endpoint
+    endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
+
     # 定义使用说明
     local usage="用法: $0 oss batch-copy <源路径> <目标路径> [-l|--file-list FILE] [-s|--storage-class TYPE] [-f|--force]
 源路径和目标路径格式：
@@ -595,6 +722,9 @@ oss_batch_delete() {
     local file_list=""
     local storage_class="IA"
     local force=false
+
+    # 确保使用正确的 endpoint
+    endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
 
     # 定义使用说明
     local usage="用法: $0 oss batch-delete <oss://存储桶/路径> [-l|--file-list FILE] [-s|--storage-class TYPE] [-f|--force]"
@@ -1007,6 +1137,9 @@ set_object_standard() {
     local uris_file=$1
     local bucket_name=$2
     local storage_class=${3:-Standard}
+
+    # 确保使用正确的 endpoint
+    endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
 
     # 如果只提供了文件名，则在 oss_logs 目录下查找
     if [[ ! -f "$uris_file" && ! "$uris_file" =~ ^/ ]]; then
