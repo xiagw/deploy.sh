@@ -46,6 +46,7 @@ get_domain_from_url() {
 # HTTP请求函数
 gitea_http_request() {
     local method=$1 endpoint=$2 data=${3:-}
+    [ -z "$GITEA_TOKEN" ] && { log "ERROR" "GITEA_TOKEN is not set"; return 1; }
     local curl_args=(curl -fsSL -X "$method" -H "accept: application/json" -H "Authorization: token ${GITEA_TOKEN}")
 
     if [ "$method" = "POST" ] || [ "$method" = "PUT" ]; then
@@ -58,6 +59,7 @@ gitea_http_request() {
 # GitLab API 请求函数
 gitlab_http_request() {
     local method=$1 endpoint=$2
+    [ -z "$GITLAB_TOKEN" ] && { log "ERROR" "GITLAB_TOKEN is not set"; return 1; }
     local curl_args=(curl -fsSL --request "$method" --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}")
 
     "${curl_args[@]}" --url "${GITLAB_URL%/}/api/v4${endpoint}"
@@ -216,6 +218,9 @@ list_repos() {
 # 迁移操作
 migrate_from_gitlab() {
     local owner_or_group=$1 repo_name=$2 project_path=$3 api_mode=${4:-false} temp_dir auth_str response push_status
+
+    [ -z "$GITEA_URL" ] && { log "ERROR" "GITEA_URL is not set"; return 1; }
+    [ -z "$GITLAB_URL" ] && { log "ERROR" "GITLAB_URL is not set"; return 1; }
 
     log "INFO" "Migrating repository from GitLab to Gitea"
     log "INFO" "Project path: $project_path"
