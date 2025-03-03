@@ -176,11 +176,16 @@ _add_account() {
 }
 
 _common_lib() {
+    local common_lib
     common_lib="$(dirname "$SCRIPT_DIR")/lib/common.sh"
+    # 1. First check /lib/ directory
     if [ ! -f "$common_lib" ]; then
+        # 2. Then check /tmp directory
         common_lib='/tmp/common.sh'
-        include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
-        [ -f "$common_lib" ] || curl -fsSL "$include_url" >"$common_lib"
+        if [ ! -f "$common_lib" ]; then
+            # 3. Download if not found
+            curl -fsSL "https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh" >"$common_lib"
+        fi
     fi
     # shellcheck source=/dev/null
     . "$common_lib"
@@ -274,7 +279,7 @@ _check_large_repos() {
             continue
         fi
         # Convert to MB only for display
-        echo "${id}:${path}, repository_size: $((repo_size/1024/1024))MB, storage_size: $((storage_size/1024/1024))MB" >>"$SCRIPT_LOG"
+        echo "${id}:${path}, repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB" >>"$SCRIPT_LOG"
     done < <($cmd_gitlab project list --get-all | jq -r '.[].id')
 
     _msg time "Results saved to $SCRIPT_LOG"
