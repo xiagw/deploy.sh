@@ -264,11 +264,11 @@ _get_random_password() {
     while [ -z "$password_rand" ] || [ "${#password_rand}" -lt "$bits" ]; do
         ((++count))
         case $count in
-        1) password_rand="$(strings /dev/urandom | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
-        2) password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
-        3) password_rand="$(dd if=/dev/urandom bs=1 count=15 | base64 | head -c"$bits" 2>/dev/null)" ;;
-        4) password_rand=$(openssl rand -base64 20 | tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null) ;;
-        5) password_rand="$(echo "$RANDOM$(date)$RANDOM" | $cmd_hash | base64 | head -c"$bits" 2>/dev/null)" ;;
+        1) password_rand="$(LC_ALL=C strings /dev/urandom | LC_ALL=C tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
+        2) password_rand="$(LC_ALL=C head /dev/urandom | LC_ALL=C tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
+        3) password_rand="$(LC_ALL=C dd if=/dev/urandom bs=1 count=50 status=none 2>/dev/null | LC_ALL=C base64 | head -c"$bits" 2>/dev/null)" ;;
+        4) password_rand=$(openssl rand -base64 50 | LC_ALL=C tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null) ;;
+        5) password_rand="$(echo "$RANDOM$(date)$RANDOM" | $cmd_hash | LC_ALL=C base64 | head -c"$bits" 2>/dev/null)" ;;
         *) echo "${password_rand:?Failed-to-generate-password}" && return 1 ;;
         esac
     done
