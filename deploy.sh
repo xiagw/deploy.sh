@@ -1289,8 +1289,8 @@ _initialize_gitlab_variables() {
     # Check each source in sequence
     while [ -z "$gitlab_commit_short_sha" ]; do
         [ -n "${CI_COMMIT_SHORT_SHA}" ] && gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA} && break
-        [ -n "${GITHUB_SHA}" ] && gitlab_commit_short_sha=${GITHUB_SHA} && break
-        [ -d .git ] && gitlab_commit_short_sha="$(git rev-parse --short HEAD)" && break
+        [ -n "${GITHUB_SHA}" ] && gitlab_commit_short_sha=${GITHUB_SHA:0:8} && break
+        [ -d .git ] && gitlab_commit_short_sha="$(git rev-parse HEAD | head -c8)" && break
         # If we reach here, all sources failed, so generate a random 7-digit hex
         gitlab_commit_short_sha=$(LC_ALL=C head -c20 /dev/urandom | od -An -tx1 | LC_ALL=C tr -d ' \n' | head -c8)
         break
