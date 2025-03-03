@@ -702,7 +702,7 @@ _notify_feishu() {
 }
 
 _deploy_notify() {
-    msg_describe="${msg_describe:-$(if [ -d .git ]; then git --no-pager log --no-merges --oneline -1; else echo 'not-git'; fi)}"
+    msg_describe="${msg_describe:-$(if git rev-parse --git-dir >/dev/null 2>&1; then git --no-pager log --no-merges --oneline -1; else echo 'not-git'; fi)}"
 
     g_msg_body="
 [Gitlab Deploy]
@@ -1277,7 +1277,7 @@ _initialize_gitlab_variables() {
     while [ -z "$gitlab_project_branch" ]; do
         [ -n "${CI_COMMIT_REF_NAME}" ] && gitlab_project_branch=${CI_COMMIT_REF_NAME} && break
         [ -n "${GITHUB_REF_NAME}" ] && gitlab_project_branch=${GITHUB_REF_NAME} && break
-        [ -d .git ] && gitlab_project_branch=$(git rev-parse --abbrev-ref HEAD) && break
+        git rev-parse --git-dir >/dev/null 2>&1 && gitlab_project_branch=$(git rev-parse --abbrev-ref HEAD) && break
         # If we reach here, all sources failed, use default
         gitlab_project_branch=main
         break
@@ -1290,7 +1290,7 @@ _initialize_gitlab_variables() {
     while [ -z "$gitlab_commit_short_sha" ]; do
         [ -n "${CI_COMMIT_SHORT_SHA}" ] && gitlab_commit_short_sha=${CI_COMMIT_SHORT_SHA} && break
         [ -n "${GITHUB_SHA}" ] && gitlab_commit_short_sha=${GITHUB_SHA:0:8} && break
-        [ -d .git ] && gitlab_commit_short_sha="$(git rev-parse HEAD | head -c8)" && break
+        git rev-parse --git-dir >/dev/null 2>&1 && gitlab_commit_short_sha="$(git rev-parse HEAD | head -c8)" && break
         # If we reach here, all sources failed, so generate a random 7-digit hex
         gitlab_commit_short_sha=$(LC_ALL=C head -c20 /dev/urandom | od -An -tx1 | LC_ALL=C tr -d ' \n' | head -c8)
         break
@@ -1408,14 +1408,23 @@ _setup_git_repo() {
     local git_repo_url git_repo_branch git_repo_group git_repo_name git_repo_dir
     git_repo_url="${1:-}"
     git_repo_branch="${2:-main}"
-    git_repo_group="$(basename "$(dirname "$git_repo_url")")"
-    git_repo_name="$(basename $git_repo_url)"
-    git_repo_dir="${SCRIPT_PATH}/builds/${git_repo_group}/${git_repo_name%.git}"
+
+    # Extract the full group path and repo name from different URL formats
+    if [[ $git_repo_url =~ ^git@ ]]; then
+        # Handle SSH format: git@host:group/name.git
+        git_repo_full_path="${git_repo_url#*:}"
+    else
+        # Handle URL format: (https|ssh)://host/group/name.git
+        git_repo_full_path="${git_repo_url#*://*/}"
+    fi
+
+    git_repo_name="$(basename "$git_repo_full_path" .git)"
+    git_repo_group="$(dirname "$git_repo_full_path")"
+    git_repo_dir="${SCRIPT_PATH}/builds/${git_repo_group}/${git_repo_name}"
     mkdir -p "$git_repo_dir"
 
-    if [ -d "$git_repo_dir/.git" ]; then
+    if cd "$git_repo_dir" && git rev-parse --git-dir >/dev/null 2>&1; then
         echo "Updating existing repo: $git_repo_dir, branch: ${git_repo_branch}"
-        cd "$git_repo_dir" || return 1
         git clean -fxd
         git fetch --quiet
         git checkout --quiet "${git_repo_branch}"
@@ -1426,8 +1435,8 @@ _setup_git_repo() {
             echo "Failed to clone git repo: $git_repo_url"
             return 1
         }
+        cd "$git_repo_dir" || return 1
     fi
-    cd "$git_repo_dir" || return 1
 }
 
 _setup_kubernetes_cluster() {
