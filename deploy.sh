@@ -1422,7 +1422,7 @@ _setup_git_repo() {
         git pull --quiet
     else
         echo "Cloning git repo: $git_repo_url, branch: ${git_repo_branch}"
-        git clone --quiet -b "${git_repo_branch}" "$git_repo_url" "$git_repo_dir" || {
+        git clone --quiet --depth 1 -b "${git_repo_branch}" "$git_repo_url" "$git_repo_dir" || {
             echo "Failed to clone git repo: $git_repo_url"
             return 1
         }
