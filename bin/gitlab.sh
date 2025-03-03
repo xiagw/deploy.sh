@@ -253,6 +253,33 @@ _format_table() {
         column -t -s $'\t'
 }
 
+_check_large_repos() {
+    local size_threshold="${1:-50}" response path repo_size storage_size
+    # Convert MB to bytes: size_threshold * 1024 * 1024
+    local threshold_bytes=$((size_threshold * 1024 * 1024))
+
+    _msg step "[check] checking repository sizes (>${size_threshold}MB)..."
+    _msg time "Repositories larger than ${size_threshold}MB:" >>"$SCRIPT_LOG"
+
+    # Get all project IDs directly with jq and process through stdin
+    while read -r id; do
+        # Get project statistics using curl
+        response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/${id}?statistics=true")
+        repo_size=$(echo "$response" | jq -r '.statistics.repository_size // 0')
+        storage_size=$(echo "$response" | jq -r '.statistics.storage_size // 0')
+        path=$(echo "$response" | jq -r '.path_with_namespace')
+
+        # Direct size comparison in bytes
+        if [ "$storage_size" -lt "$threshold_bytes" ]; then
+            continue
+        fi
+        # Convert to MB only for display
+        echo "${id}:${path}, repository_size: $((repo_size/1024/1024))MB, storage_size: $((storage_size/1024/1024))MB" >>"$SCRIPT_LOG"
+    done < <($cmd_gitlab project list --get-all | jq -r '.[].id')
+
+    _msg time "Results saved to $SCRIPT_LOG"
+}
+
 # Execute the saved command
 _execute_command() {
     case "${args[0]}" in
@@ -277,6 +304,9 @@ _execute_command() {
             _format_table "ID\tProject\tDescription\tURL\tVisibility" \
                 '.[] | [.id, .path_with_namespace, .description // "-", .web_url, .visibility] | @tsv' \
                 "${args[@]}" --no-get-all
+            ;;
+        size)
+            _check_large_repos "${args[2]:-50}"
             ;;
         *)
             $cmd_gitlab "${args[@]}"
