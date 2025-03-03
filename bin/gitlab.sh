@@ -253,7 +253,7 @@ _check_large_repos() {
     }
 
     _msg step "[check] checking repository sizes (>${size_threshold}MB)..."
-    _msg time "Repositories larger than ${size_threshold}MB:" >>"$SCRIPT_LOG"
+    _msg time "Check repositories larger than ${size_threshold}MB (profile: ${gitlab_profile:-default}):" >>"$SCRIPT_LOG"
 
     # Get all project IDs directly with jq and process through stdin
     while read -r id; do
@@ -269,7 +269,7 @@ _check_large_repos() {
         fi
 
         # Convert to MB only for display
-        echo "${id}:${path}, repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB" >>"$SCRIPT_LOG"
+        echo "${id} ${path} repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB" >>"$SCRIPT_LOG"
     done < <($cmd_gitlab project list --get-all | jq -r '.[].id')
 
     _msg time "Results saved to $SCRIPT_LOG"
