@@ -165,6 +165,7 @@ _check_cmd() {
         local updated=0
         for c in "$@"; do
             if ! command -v "$c" &>/dev/null; then
+                _check_sudo
                 if [[ $updated -eq 0 && "${apt_update:-0}" -eq 1 ]]; then
                     ${cmd_pkg-} update -yqq
                     updated=1
@@ -225,12 +226,12 @@ _install_packages() {
 _check_sudo() {
     ${already_check_sudo:-false} && return 0
     if ! _check_root; then
-        if ! $use_sudo -l -U "$USER" &>/dev/null; then
-            _msg error "User $USER has no sudo permissions."
-            _msg info "Please run visudo with root, and set sudo for ${USER}."
+        if ! sudo -l -U "$USER" &>/dev/null; then
+            _msg error "Permission denied: $USER lacks sudo privileges"
+            _msg info "Action required: Configure sudo access via visudo"
             return 1
         fi
-        _msg success "User $USER has sudo permissions."
+        _msg success "Sudo privileges confirmed for $USER"
     fi
 
     if _set_package_manager; then
