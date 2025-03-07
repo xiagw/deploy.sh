@@ -121,7 +121,7 @@ parse_command_args() {
         -v | --version) echo "Version: 1.0" && exit 0 ;;
         -d | --debug) DEBUG_ON=true ;;
         --cron | --loop) run_with_crontab=true ;;
-        --github-action) DEBUG_ON=true && GITHUB_ACTION=true ;;
+        --github-action) DEBUG_ON=true && export GH_ACTION=true ;;
         --in-china) sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV" ;;
         ## gitea variables
         --gitea)
@@ -213,7 +213,7 @@ main() {
     G_CONF="${G_DATA}/deploy.json"
     G_ENV="${G_DATA}/deploy.env"
 
-    # Source required modules
+    ## 加载所需的模块文件
     source "$G_LIB/config.sh"
     source "$G_LIB/common.sh"
     source "$G_LIB/notify.sh"
@@ -229,71 +229,73 @@ main() {
 
     _msg step "[deploy] BEGIN"
 
-    ## Process parameters / 处理传入的参数
+    ## 解析和处理命令行参数
     parse_command_args "$@"
 
+    ## 复制示例配置文件（deploy.json、deploy.env）到data目录
     config_deploy_depend file
 
+    ## 添加必要的二进制文件目录到PATH环境变量
     config_deploy_depend path
 
-    ## check OS version/type/install command/install software / 检查系统版本/类型/安装命令/安装软件
+    ## 检测操作系统版本、类型，安装必要的命令和软件
     system_check
 
-    # Remove the wrapper function and its call
+    ## Git仓库克隆
     if [ -n "${arg_git_clone_url}" ]; then
         setup_git_repo "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
     fi
 
-    ## svn checkout repo / 克隆 svn 仓库
+    ## SVN仓库检出
     if [ -n "${arg_svn_checkout_url}" ]; then
         setup_svn_repo "${arg_svn_checkout_url:-}"
     fi
 
-    ## run deploy.sh by hand / 手动执行 deploy.sh 时假定的 gitlab 配置
+    ## 设置手动执行deploy.sh时的GitLab默认配置
     config_deploy_vars
 
-    ## source ENV, get global variables / 获取 ENV_ 开头的所有全局变量
+    ## 导入所有以ENV_开头的全局变量
     source "$G_ENV"
 
-    # Cloud Service Tools
+    ## 云服务工具安装
     ([ "${ENV_DOCKER_LOGIN_TYPE:-}" = aws ] || ${ENV_INSTALL_AWS:-false}) && _install_aws
     ${ENV_INSTALL_ALIYUN:-false} && _install_aliyun_cli
 
-    # Basic Tools
+    ## 基础工具安装
     ${ENV_INSTALL_JQ:-false} && { command -v jq &>/dev/null || _install_packages "$(is_china)" jq; }
     ${ENV_INSTALL_CRON:-false} && { command -v crontab &>/dev/null || _install_packages "$(is_china)" cron; }
 
-    # Infrastructure Tools
+    ## 基础设施工具安装
     ${ENV_INSTALL_TERRAFORM:-false} && _install_terraform
     ${ENV_INSTALL_KUBECTL:-false} && _install_kubectl
     ${ENV_INSTALL_HELM:-false} && _install_helm
 
-    # Integration Tools
+    ## 集成工具安装
     ${ENV_INSTALL_PYTHON_ELEMENT:-false} && _install_python_element "$@" "$(is_china)"
     ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab "$@" "$(is_china)"
     ${ENV_INSTALL_JMETER:-false} && _install_jmeter
     ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
 
-    # Container Tools
+    ## 容器工具安装
     ${ENV_INSTALL_DOCKER:-false} && _install_docker "$(is_china && echo "--mirror Aliyun" || echo "")"
     ${ENV_INSTALL_PODMAN:-false} && _install_podman
 
-    ## clean up disk space / 清理磁盘空间
+    ## 系统维护：清理磁盘空间
     system_clean_disk
 
-    ## create k8s / 创建 kubernetes 集群
+    ## Kubernetes集群创建
     ${create_k8s_with_terraform:-false} && kube_setup_terraform
 
-    # Set up kubectl and helm 位置不能前移
+    ## 注意：Kubernetes配置初始化，此步骤位置不可调整
     kube_config_init "$G_NAMESPACE"
 
-    ## setup ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
+    ## 设置ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     config_deploy_depend env >/dev/null
 
-    ## renew cert with acme.sh / 使用 acme.sh 重新申请证书
+    ## 使用acme.sh更新SSL证书
     system_cert_renew "${arg_renew_cert:-false}"
 
-    ## probe program lang / 探测项目的程序语言
+    ## 探测项目的程序语言
     _msg step "[language] probe program language"
     repo_lang=$(repo_language_detect)
     _msg info "Detected program language: ${repo_lang}"
@@ -324,7 +326,7 @@ main() {
         ${arg_code_style:-false} && style_check "$repo_lang"
         ${arg_test_unit:-false} && handle_test unit
         ${arg_apidoc:-false} && generate_apidoc
-        ${arg_build_langs:-false} && build_lang "$repo_lang"
+        ${arg_build_langs:-false} && build_lang "$repo_lang" "$arg_deploy_method"
         ${arg_build_image:-false} && build_image "$G_QUIET" "$G_IMAGE_TAG"
         ${arg_push_image:-false} && push_image
         ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
@@ -333,7 +335,7 @@ main() {
         ${arg_security_zap:-false} && analysis_zap
         ${arg_security_vulmap:-false} && analysis_vulmap
         _msg green "exec single jobs...end"
-        ${GITHUB_ACTION:-false} || return 0
+        ${GH_ACTION:-false} || return 0
     fi
     ################################################################################
 

@@ -181,8 +181,14 @@ setup_git_repo() {
 
     # Extract the full group path and repo name from different URL formats
     if [[ $git_repo_url =~ ^git@ ]]; then
-        # Handle SSH format: git@host:group/name.git
-        git_repo_full_path="${git_repo_url#*:}"
+        # Handle SSH format: git@host:port/group/name.git or git@host:group/name.git
+        if [[ $git_repo_url =~ ^git@[^:]+:[0-9]+/ ]]; then
+            # Has port number
+            git_repo_full_path=$(echo "$git_repo_url" | sed -E 's|^git@[^:]+:[0-9]+/(.+)|\1|')
+        else
+            # No port number
+            git_repo_full_path="${git_repo_url#*:}"
+        fi
     else
         # Handle URL format: (https|ssh)://host/group/name.git
         git_repo_full_path="${git_repo_url#*://*/}"
@@ -193,7 +199,7 @@ setup_git_repo() {
     git_repo_dir="${G_PATH}/builds/${git_repo_group}/${git_repo_name}"
     mkdir -p "$git_repo_dir"
 
-    if cd "$git_repo_dir" && git rev-parse --git-dir >/dev/null 2>&1; then
+    if [ -d "${git_repo_dir}/.git" ] && cd "$git_repo_dir" && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ "$(git rev-parse --git-dir)" = ".git" ]; then
         _msg step "Updating existing repo: $git_repo_dir, branch: ${git_repo_branch}"
         git clean -fxd
         git fetch --quiet

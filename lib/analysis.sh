@@ -144,7 +144,7 @@ sonar.import_unknown_files=true
 EOF
     fi
 
-    ${GITHUB_ACTION:-false} && return 0
+    ${GH_ACTION:-false} && return 0
 
     if ! $DOCKER_RUN -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$G_REPO_DIR":/usr/src sonarsource/sonar-scanner-cli; then
         _msg error "SonarQube scan failed"

@@ -43,7 +43,7 @@ deploy_aliyun_functions() {
     local lang="${1:?'lang parameter is required'}"
     _install_aliyun_cli
     format_release_name
-    ${GITHUB_ACTION:-false} && return 0
+    ${GH_ACTION:-false} && return 0
     ${ENV_ENABLE_FUNC:-false} || {
         _msg time "!!! disable deploy to functions3.0 aliyun !!!"
         return 0
@@ -55,7 +55,7 @@ deploy_aliyun_functions() {
     local functions_conf_tmpl="$G_DATA/aliyun.functions.${lang}.json"
     local functions_conf="$G_DATA/aliyun.functions.json"
     if [ -f "$functions_conf_tmpl" ]; then
-        TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_TAG=${G_IMAGE_TAG} envsubst <$functions_conf_tmpl >$functions_conf
+        TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_TAG=${G_IMAGE_TAG} envsubst <"$functions_conf_tmpl" >"$functions_conf"
     else
         functions_conf="$(mktemp)"
         cat >"$functions_conf" <<EOF
@@ -221,7 +221,7 @@ deploy_to_kubernetes() {
     fi
 
     echo "helm upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${G_NAMESPACE} --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${G_IMAGE_TAG}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
-    ${GITHUB_ACTION:-false} && return 0
+    ${GH_ACTION:-false} && return 0
 
     ## helm install / helm 安装  --atomic
     $HELM_OPT upgrade --install --history-max 1 \
@@ -232,7 +232,7 @@ deploy_to_kubernetes() {
         --set image.tag="${G_IMAGE_TAG}" >/dev/null
 
     ## 检测 helm upgrade 状态
-    echo "Checking deployment status for ${release_name} in namespace ${G_NAMESPACE}..."
+    echo "Checking deployment status for ${release_name} in namespace ${G_NAMESPACE}, timeout 120s..."
     $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null || deploy_result=1
     if [[ "$deploy_result" -eq 1 ]]; then
         _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"

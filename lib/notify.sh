@@ -73,7 +73,7 @@ handle_notify() {
     echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
 
     # Check if notification should be sent
-    ${GITHUB_ACTION:-false} && deploy_result=0
+    ${GH_ACTION:-false} && deploy_result=0
     ((deploy_result)) && exec_deploy_notify=true
     ${ENV_ENABLE_MSG:-false} || exec_deploy_notify=false
     [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false

@@ -11,7 +11,7 @@
 # PHP Style Check
 check_php_style() {
     _msg step 'code style [PHP Code Sniffer], < standard=PSR12 >...'
-    [[ "${GITHUB_ACTION:-0}" -eq 1 ]] && return 0
+    [[ "${GH_ACTION:-0}" -eq 1 ]] && return 0
 
     if ! docker images | grep -q 'deploy/phpcs'; then
         DOCKER_BUILDKIT=1 docker build ${G_QUIET} -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null

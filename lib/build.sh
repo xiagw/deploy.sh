@@ -97,7 +97,7 @@ build_node() {
     [ ! -d "${G_REPO_DIR}/node_modules" ] && yarn_install=true
 
     _msg step "[build] yarn install"
-    ${GITHUB_ACTION:-false} && return 0
+    ${GH_ACTION:-false} && return 0
 
     # Custom build check
     if [ -f "$G_REPO_DIR/build.custom.sh" ]; then

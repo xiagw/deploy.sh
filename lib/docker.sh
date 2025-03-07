@@ -6,7 +6,7 @@
 # Handles Docker login, context management, image building and pushing
 
 docker_login() {
-    ${GITHUB_ACTION:-false} && return 0
+    ${GH_ACTION:-false} && return 0
     local lock_login_registry="$G_DATA/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
     local time_last
 
@@ -104,7 +104,7 @@ get_docker_context() {
 }
 
 build_image() {
-    ${GITHUB_ACTION:-false} && return 0
+    [ "${GH_ACTION:-false}" = "true" ] && return 0
     _msg step "[image] build container image"
 
     get_docker_context

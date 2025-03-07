@@ -254,8 +254,8 @@ system_cert_renew() {
     local action="${1:-false}"
     # Check if certificate renewal is needed
     if [[ "${MAN_RENEW_CERT:-false}" != true ]] &&
-       ! ${GITHUB_ACTION:-false} &&
-       ! ${action:-false}; then
+       [[ "${GH_ACTION:-false}" = false ]] &&
+       [[ "${action:-false}" = false ]]; then
         return 0
     fi
 
@@ -367,7 +367,7 @@ system_cert_renew() {
     fi
     _msg time "[cert] completed"
 
-    if ${GITHUB_ACTION:-false}; then
+    if ${GH_ACTION:-false}; then
         return 0
     fi
     if ${exec_single_job:-false}; then
