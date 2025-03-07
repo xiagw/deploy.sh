@@ -1,112 +1,143 @@
-[
-    {
-        "project": "root/deploy.sh",
-        "branchs": [
-            {
-                "branch": "develop",
-                "hosts": [
-                    {
-                        "ssh_host": "dev@192.168.100.102",
-                        "ssh_port": "22",
-                        "rsync_src": "",
-                        "rsync_dest": "",
-                        "db_host": "",
-                        "db_user": "",
-                        "db_name": "",
-                        "helm_dir": ""
-                    },
-                    {
-                        "ssh_host": "dev@192.168.100.103",
-                        "ssh_port": "22",
-                        "rsync_src": "",
-                        "rsync_dest": "",
-                        "db_host": "",
-                        "db_user": "",
-                        "db_name": "",
-                        "helm_dir": ""
-                    }
-                ]
-            },
-            {
-                "branch": "main",
-                "hosts": [
-                    {
-                        "ssh_host": "prod@192.168.100.104",
-                        "ssh_port": "2222",
-                        "rsync_src": "/www/main/src",
-                        "rsync_dest": "/www/main/dest",
-                        "db_host": "",
-                        "db_user": "",
-                        "db_name": "",
-                        "helm_dir": ""
-                    },
-                    {
-                        "ssh_host": "prod@192.168.100.105",
-                        "ssh_port": "2222",
-                        "rsync_src": "/www/main/src",
-                        "rsync_dest": "/www/main/dest",
-                        "db_host": "",
-                        "db_user": "",
-                        "db_name": "",
-                        "helm_dir": ""
-                    }
-                ]
-            }
-        ]
+{
+    "version": "1.0",
+    "documentation": {
+        "description": "部署配置文件，用于定义项目的部署环境和目标主机",
+        "project_format": {
+            "project": "项目路径格式：namespace/project_name",
+            "branchs": "分支配置数组，支持多个分支",
+            "hosts": "主机配置数组，支持多个目标主机"
+        },
+        "host_format": {
+            "ssh_host": "SSH主机地址，格式：user@host",
+            "ssh_port": "SSH端口，默认22",
+            "rsync_src": "rsync源目录，相对于项目根目录",
+            "rsync_dest": "rsync目标目录，绝对路径",
+            "db_host": "数据库主机地址",
+            "db_user": "数据库用户名",
+            "db_name": "数据库名称",
+            "helm_dir": "Helm配置目录"
+        },
+        "environment": {
+            "develop": "开发环境，用于测试和开发",
+            "main": "生产环境，用于正式部署"
+        }
     },
-    {
-        "project": "root/project0",
-        "branchs": [
-            {
-                "branch": "develop",
-                "hosts": [
-                    {
-                        "ssh_host": "dev@192.168.100.102",
-                        "ssh_port": "22",
-                        "rsync_src": "/www/develop/src",
-                        "rsync_dest": "/www/develop/dest",
-                        "db_host": "",
-                        "db_user": "",
-                        "db_name": "",
-                        "helm_dir": ""
-                    },
-                    {
-                        "ssh_host": "dev@192.168.100.103",
-                        "ssh_port": "22",
-                        "rsync_src": "/www/develop/src",
-                        "rsync_dest": "/www/develop/dest",
-                        "db_host": "",
-                        "db_user": "",
-                        "db_name": "",
-                        "helm_dir": ""
-                    }
-                ]
-            },
-            {
-                "branch": "main",
-                "hosts": [
-                    {
-                        "ssh_host": "prod@192.168.100.104",
-                        "ssh_port": "2222",
-                        "rsync_src": "/www/main/src",
-                        "rsync_dest": "/www/main/dest",
-                        "db_host": "",
-                        "db_user": "",
-                        "db_name": "",
-                        "helm_dir": ""
-                    },
-                    {
-                        "ssh_host": "prod@192.168.100.105",
-                        "ssh_port": "2222",
-                        "rsync_src": "/www/main/src",
-                        "rsync_dest": "/www/main/dest",
-                        "db_host": "",
-                        "db_user": "",
-                        "db_name": "",
-                        "helm_dir": ""
-                    }
-                ]
-            }
-        ]
-    }
-]
+    "projects": [
+        {
+            "project": "root/deploy.sh",
+            "description": "部署脚本项目",
+            "branchs": [
+                {
+                    "branch": "develop",
+                    "description": "开发环境配置",
+                    "hosts": [
+                        {
+                            "ssh_host": "dev1@192.168.100.102",
+                            "ssh_port": "22",
+                            "rsync_src": "dist1",
+                            "rsync_dest": "/www/develop/dest1",
+                            "db_host": "m01.example.com",
+                            "db_user": "dev1",
+                            "db_name": "dev1",
+                            "helm_dir": "/runner/data/helm/owner/repo1"
+                        },
+                        {
+                            "ssh_host": "dev2@192.168.100.103",
+                            "ssh_port": "222",
+                            "rsync_src": "dist2",
+                            "rsync_dest": "/www/develop/dest2",
+                            "db_host": "m02.example.com",
+                            "db_user": "dev2",
+                            "db_name": "dev2",
+                            "helm_dir": "/runner/data/helm/owner/repo2"
+                        }
+                    ]
+                },
+                {
+                    "branch": "main",
+                    "description": "生产环境配置",
+                    "hosts": [
+                        {
+                            "ssh_host": "prod@192.168.100.104",
+                            "ssh_port": "2222",
+                            "rsync_src": "/www/main/src",
+                            "rsync_dest": "/www/main/dest",
+                            "db_host": "mm01.example.com",
+                            "db_user": "prod1",
+                            "db_name": "prod1",
+                            "helm_dir": "/runner/data/helm/owner/repo11"
+                        },
+                        {
+                            "ssh_host": "prod2@192.168.100.105",
+                            "ssh_port": "2222",
+                            "rsync_src": "/www/main/src",
+                            "rsync_dest": "/www/main/dest",
+                            "db_host": "mm01.example.com",
+                            "db_user": "prod2",
+                            "db_name": "prod2",
+                            "helm_dir": "/runner/data/helm/owner/repo22"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "project": "root/project0",
+            "description": "示例项目",
+            "branchs": [
+                {
+                    "branch": "develop",
+                    "description": "开发环境配置",
+                    "hosts": [
+                        {
+                            "ssh_host": "dev@192.168.100.102",
+                            "ssh_port": "22",
+                            "rsync_src": "/www/develop/src",
+                            "rsync_dest": "/www/develop/dest",
+                            "db_host": "",
+                            "db_user": "",
+                            "db_name": "",
+                            "helm_dir": ""
+                        },
+                        {
+                            "ssh_host": "dev@192.168.100.103",
+                            "ssh_port": "22",
+                            "rsync_src": "/www/develop/src",
+                            "rsync_dest": "/www/develop/dest",
+                            "db_host": "",
+                            "db_user": "",
+                            "db_name": "",
+                            "helm_dir": ""
+                        }
+                    ]
+                },
+                {
+                    "branch": "main",
+                    "description": "生产环境配置",
+                    "hosts": [
+                        {
+                            "ssh_host": "prod@192.168.100.104",
+                            "ssh_port": "2222",
+                            "rsync_src": "/www/main/src",
+                            "rsync_dest": "/www/main/dest",
+                            "db_host": "",
+                            "db_user": "",
+                            "db_name": "",
+                            "helm_dir": ""
+                        },
+                        {
+                            "ssh_host": "prod@192.168.100.105",
+                            "ssh_port": "2222",
+                            "rsync_src": "/www/main/src",
+                            "rsync_dest": "/www/main/dest",
+                            "db_host": "",
+                            "db_user": "",
+                            "db_name": "",
+                            "helm_dir": ""
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

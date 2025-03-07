@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://github.com/xiagw/deploy.sh/raw/main/docs/logo.png" alt="deploy.sh" width="200">
+  <img src="https://github.com/xiagw/deploy.sh/raw/main/docs/img/logo.png" alt="deploy.sh" width="200">
   <br>deploy.sh<br>
 </h1>
 
@@ -215,7 +215,7 @@ If you find this project helpful, consider making a small donation to support it
 
 | Alipay | WeChat Pay |
 | ---- | ---- |
-| <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/pay-alipay.jpg width="200" height="200"> | <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/pay-wechatpay.jpg width="200" height="200"> |
+| <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/img/pay-alipay.jpg width="200" height="200"> | <img src=https://github.com/xiagw/deploy.sh/raw/main/docs/img/pay-wechatpay.jpg width="200" height="200"> |
 
 ### Digital Currency:
 **BitCoin**

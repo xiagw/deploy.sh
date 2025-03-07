@@ -1,0 +1,35 @@
+# .gitea/workflows/ci.yaml
+name: Gitea Actions
+run-name: ${{ gitea.actor }} is Gitea Actions 🚀
+on:
+  push:
+    branches:
+      - dev
+      - develop
+      - sit
+      - uat
+      - testing
+      - release
+      - master
+      - main
+  pull_request:
+    branches:
+      - dev
+      - develop
+      - sit
+      - uat
+      - testing
+      - release
+      - master
+      - main
+# on:
+#   schedule:
+#     - cron: '30 5 * * 1,3'
+#     - cron: '30 5 * * 2,4'
+
+jobs:
+  Single-Deploy-Job:
+    runs-on: my_host
+    steps:
+      - name: deploy.sh
+        run: $HOME/runner/deploy.sh --gitea

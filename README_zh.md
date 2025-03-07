@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://gitee.com/xiagw/deploy.sh/raw/main/docs/logo.png" alt="deploy.sh" width="200">
+  <img src="https://gitee.com/xiagw/deploy.sh/raw/main/docs/img/logo.png" alt="deploy.sh" width="200">
   <br>deploy.sh<br>
 </h1>
 
@@ -204,8 +204,8 @@ cache_m -- pri --> db_m[mysql cluster];
 假如您觉得这个项目对您有用，望不吝捐赠一下。支持 支付宝/微信支付/数字币支付 等方式。
 
 <div style="display: flex; justify-content: space-around;">
-  <img src=docs/pay-alipay.jpg width="200" height="200" alt="Alipay">
-  <img src=docs/pay-wechatpay.jpg width="200" height="200" alt="WeChat Pay">
+  <img src=docs/img/pay-alipay.jpg width="200" height="200" alt="Alipay">
+  <img src=docs/img/pay-wechatpay.jpg width="200" height="200" alt="WeChat Pay">
 </div>
 
 ### 数字币:
