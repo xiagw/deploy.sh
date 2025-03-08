@@ -24,7 +24,7 @@
     },
     "projects": [
         {
-            "project": "root/deploy.sh",
+            "project": "root/runner",
             "description": "部署脚本项目",
             "branchs": [
                 {
@@ -82,7 +82,7 @@
             ]
         },
         {
-            "project": "root/project0",
+            "project": "root/example0",
             "description": "示例项目",
             "branchs": [
                 {

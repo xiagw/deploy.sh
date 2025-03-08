@@ -79,9 +79,8 @@ Parameters:
 
     # Build and push
     --build-langs            Build all languages.
-    --build-docker           Build image with Docker.
-    --build-podman           Build image with Podman.
-    --push-image             Push image.
+    --build-docker          Build image with Docker/Podman.
+    --push-image            Push image to registry.
 
     # Deployment
     --deploy-k8s             Deploy to Kubernetes.
@@ -112,50 +111,25 @@ EOF
 parse_command_args() {
     ## Enable debug mode if CI_DEBUG_TRACE is true
     [[ ${CI_DEBUG_TRACE:-false} == true ]] && DEBUG_ON=true
-    DOCKER=$(command -v podman || command -v docker || echo docker)
 
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
         # Basic options
         -h | --help) _usage && exit 0 ;;
-        -v | --version) echo "Version: 1.0" && exit 0 ;;
+        -v | --version) echo "Version: 5.0.0" && exit 0 ;;
         -d | --debug) DEBUG_ON=true ;;
         --cron | --loop) run_with_crontab=true ;;
         --github-action) DEBUG_ON=true && export GH_ACTION=true ;;
-        --in-china) sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV" ;;
+        --in-china) arg_in_china=true ;;
         ## gitea variables
-        --gitea)
-            # Check if ENV_GITEA_SERVER is defined, otherwise use a default or GITHUB_SERVER_URL
-            if [[ -z "${ENV_GITEA_SERVER}" ]]; then
-                # Try to use GITHUB_SERVER_URL if available, otherwise use a default
-                if [[ -n "${GITHUB_SERVER_URL}" ]]; then
-                    ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
-                else
-                    ENV_GITEA_SERVER="gitea.example.com"
-                    _msg warn "ENV_GITEA_SERVER not defined, using default: ${ENV_GITEA_SERVER}"
-                fi
-            fi
-            arg_git_clone_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
-            arg_git_clone_branch="${GITHUB_REF_NAME}"
-            ;;
+        --gitea) arg_gitea=true ;;
         # Repository operations
         --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build and push
         --build-langs) arg_build_langs=true && exec_single_job=true ;;
-        --build-docker)
-            arg_build_image=true
-            exec_single_job=true
-            DOCKER=$(command -v docker || return 1)
-            ;;
-        --build-podman)
-            arg_build_image=true
-            exec_single_job=true
-            DOCKER=$(command -v podman || return 1)
-            DOCKER_OPT='--force-rm --format=docker'
-            echo "$DOCKER $DOCKER_OPT" >/dev/null
-            ;;
+        --build-docker) arg_build_image=true && exec_single_job=true ;;
         --push-image) arg_push_image=true && exec_single_job=true ;;
         # Deployment
         --deploy-k8s) arg_deploy_method=helm && exec_single_job=true ;;
@@ -213,6 +187,9 @@ main() {
     G_CONF="${G_DATA}/deploy.json"
     G_ENV="${G_DATA}/deploy.env"
 
+    ## 解析和处理命令行参数
+    parse_command_args "$@"
+
     ## 加载所需的模块文件
     source "$G_LIB/config.sh"
     source "$G_LIB/common.sh"
@@ -228,9 +205,6 @@ main() {
     source "$G_LIB/build.sh"
 
     _msg step "[deploy] BEGIN"
-
-    ## 解析和处理命令行参数
-    parse_command_args "$@"
 
     ## 复制示例配置文件（deploy.json、deploy.env）到data目录
     config_deploy_depend file
@@ -257,13 +231,42 @@ main() {
     ## 导入所有以ENV_开头的全局变量
     source "$G_ENV"
 
+    ## 处理 --in-china 参数
+    ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
+
+    ## 处理构建工具选择
+    DOCKER=$(command -v podman || command -v docker || echo docker)
+    if ${arg_build_image:-false}; then
+        if command -v docker >/dev/null 2>&1; then
+            DOCKER=$(command -v docker)
+        elif command -v podman >/dev/null 2>&1; then
+            DOCKER=$(command -v podman)
+            DOCKER_OPT='--force-rm --format=docker'
+        else
+            _msg error "Neither docker nor podman found"
+            return 1
+        fi
+    fi
+    ## 处理 --gitea 参数
+    if ${arg_gitea:-false}; then
+        if [[ -z "${ENV_GITEA_SERVER}" ]]; then
+            if [[ -n "${GITHUB_SERVER_URL}" ]]; then
+                ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
+            else
+                ENV_GITEA_SERVER="gitea.example.com"
+                _msg warn "ENV_GITEA_SERVER not defined, using default: ${ENV_GITEA_SERVER}"
+            fi
+        fi
+        arg_git_clone_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
+        arg_git_clone_branch="${GITHUB_REF_NAME}"
+    fi
+
+    ## 基础工具安装
+    command -v jq &>/dev/null || _install_packages "$(is_china)" jq
+
     ## 云服务工具安装
     ([ "${ENV_DOCKER_LOGIN_TYPE:-}" = aws ] || ${ENV_INSTALL_AWS:-false}) && _install_aws
     ${ENV_INSTALL_ALIYUN:-false} && _install_aliyun_cli
-
-    ## 基础工具安装
-    ${ENV_INSTALL_JQ:-false} && { command -v jq &>/dev/null || _install_packages "$(is_china)" jq; }
-    ${ENV_INSTALL_CRON:-false} && { command -v crontab &>/dev/null || _install_packages "$(is_china)" cron; }
 
     ## 基础设施工具安装
     ${ENV_INSTALL_TERRAFORM:-false} && _install_terraform
@@ -299,6 +302,7 @@ main() {
     _msg step "[language] probe program language"
     repo_lang=$(repo_language_detect)
     _msg info "Detected program language: ${repo_lang}"
+
     # 设置构建参数
     DOCKER_RUN0="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 0:0"
     DOCKER_RUN="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 1000:1000"
@@ -350,7 +354,7 @@ main() {
     ## build
     build_lang "$repo_lang" "$arg_deploy_method"
     ## build docker image
-    build_image
+    ${arg_build_image:-false} && build_image
     push_image
     ## deploy
     handle_deploy "$arg_deploy_method" "$repo_lang"

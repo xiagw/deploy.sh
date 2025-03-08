@@ -11,7 +11,8 @@
 #   1 if execution should be skipped
 check_crontab_execution() {
     local script_data="$1" repo_id="$2" commit_sha="$3"
-
+## Install crontab if not exists
+    command -v crontab &>/dev/null || _install_packages "$(is_china)" cron
     [[ -z "$script_data" || -z "$repo_id" || -z "$commit_sha" ]] && {
         _msg error "Missing required parameters for check_crontab_execution"
         return 1
