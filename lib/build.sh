@@ -216,6 +216,31 @@ build_php() {
     _msg stepend "[build] php build"
 }
 
+# Shell Build
+build_shell() {
+    _msg step "[build] shell build"
+    ${DEBUG_ON} && return 0
+    local exit_code=0 script s=0
+    command -v shellcheck >/dev/null 2>&1 && sc=true
+    command -v shfmt >/dev/null 2>&1 && sf=true
+    # Process shell scripts
+    while IFS= read -r script; do
+        _msg info "Processing: ${script}"
+
+        $sc && shellcheck "$script" || exit_code=$?
+        $sf && shfmt -d "$script" || exit_code=$?
+        # chmod 750 "$script"
+    done < <(find "$G_REPO_DIR" -type f -name "*.sh") || true
+
+    if [ $exit_code -eq 0 ]; then
+        _msg info "All shell scripts passed checks"
+    else
+        _msg error "Some shell scripts failed checks"
+    fi
+    _msg stepend "[build] shell build"
+    return $exit_code
+}
+
 # Main build function that determines which specific builder to run
 build_lang() {
     local lang="$1"
@@ -231,6 +256,7 @@ build_lang() {
     docker) build_docker ;;
     django) build_django ;;
     php) build_php ;;
+    shell) build_shell ;;
     *) _msg warn "No build function available for language: $lang" ;;
     esac
 }

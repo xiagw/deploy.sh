@@ -101,6 +101,7 @@ get_docker_context() {
 
     DOCKER="${DOCKER:+"$DOCKER "}--context $selected_context"
     echo "$DOCKER"
+    export DOCKER
 }
 
 build_image() {
@@ -119,8 +120,7 @@ build_image() {
         else
             local base_tag="${registry_base}:${G_REPO_NAME}-${G_REPO_BRANCH}"
             _msg info "Building base image: $base_tag"
-            $DOCKER build $DOCKER_OPT \
-                --tag "$base_tag" $BUILD_ARG \
+            $DOCKER build $BUILD_ARG --tag "$base_tag" \
                 -f "${G_REPO_DIR}/Dockerfile.base" "${G_REPO_DIR}" || {
                 _msg error "Failed to build base image"
                 return 1
@@ -134,8 +134,7 @@ build_image() {
         return
     fi
 
-    $DOCKER build $DOCKER_OPT \
-        --tag "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" $BUILD_ARG \
+    $DOCKER build $BUILD_ARG --tag "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
         "${G_REPO_DIR}" || {
         _msg error "Failed to build image"
         return 1

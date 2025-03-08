@@ -132,14 +132,14 @@ parse_command_args() {
         --build-docker) arg_flags["build_image"]=1 ;;
         --push-image) arg_flags["push_image"]=1 ;;
         # Deployment
-        --deploy-k8s) arg_flags["deploy_k8s"]=1 ;;
-        --deploy-docker) arg_flags["deploy_docker"]=1 ;;
-        --deploy-aliyun-func) arg_flags["deploy_aliyun_func"]=1 ;;
-        --deploy-aliyun-oss) arg_flags["deploy_aliyun_oss"]=1 ;;
-        --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 ;;
-        --deploy-rsync) arg_flags["deploy_rsync"]=1 ;;
-        --deploy-ftp) arg_flags["deploy_ftp"]=1 ;;
-        --deploy-sftp) arg_flags["deploy_sftp"]=1 ;;
+        --deploy-k8s) deploy_method=deploy_k8s ;;
+        --deploy-docker) deploy_method=deploy_docker ;;
+        --deploy-aliyun-func) deploy_method=deploy_aliyun_func ;;
+        --deploy-aliyun-oss) deploy_method=deploy_aliyun_oss ;;
+        --deploy-rsync-ssh) deploy_method=deploy_rsync_ssh ;;
+        --deploy-rsync) deploy_method=deploy_rsync ;;
+        --deploy-ftp) deploy_method=deploy_ftp ;;
+        --deploy-sftp) deploy_method=deploy_sftp ;;
         # Testing and quality
         --test-unit) arg_flags["test_unit"]=1 ;;
         --apidoc) arg_flags["apidoc"]=1 ;;
@@ -150,7 +150,7 @@ parse_command_args() {
         --security-vulmap) arg_flags["security_vulmap"]=1 ;;
         # Kubernetes operations
         --create-helm)
-            arg_create_helm=1
+            arg_create_helm=true
             disable_inject_action=true
             helm_dir="$2"
             shift
@@ -164,7 +164,7 @@ parse_command_args() {
         shift
     done
 
-    ## 检查是否所有参数都未被设置，如果是则全部设置为1
+    ## 检查是否有参数则部分设1，没有任何参数则全部设置为1
     local all_zero=true
     for key in "${!arg_flags[@]}"; do
         if [[ "${arg_flags[$key]}" -eq 1 ]]; then
@@ -207,14 +207,6 @@ main() {
         ["build_langs"]=0
         ["build_image"]=0
         ["push_image"]=0
-        ["deploy_k8s"]=0
-        ["deploy_docker"]=0
-        ["deploy_aliyun_func"]=0
-        ["deploy_aliyun_oss"]=0
-        ["deploy_rsync_ssh"]=0
-        ["deploy_rsync"]=0
-        ["deploy_ftp"]=0
-        ["deploy_sftp"]=0
         ["test_unit"]=0
         ["apidoc"]=0
         ["test_func"]=0
@@ -269,6 +261,7 @@ main() {
 
     ## 处理 --in-china 参数
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
+    ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
 
     ## 处理 --gitea 参数
     if ${arg_gitea:-false}; then
@@ -333,7 +326,7 @@ main() {
             DOCKER=$(command -v docker)
         elif command -v podman >/dev/null 2>&1; then
             DOCKER=$(command -v podman)
-            DOCKER_OPT='--force-rm --format=docker'
+            BUILD_ARG="--force-rm --format=docker"
         else
             _msg error "Neither docker nor podman found"
             return 1
@@ -342,27 +335,29 @@ main() {
     # 设置构建参数
     DOCKER_RUN0="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 0:0"
     DOCKER_RUN="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 1000:1000"
-    DOCKER_OPT="${DOCKER_OPT:+"$DOCKER_OPT "}$ENV_ADD_HOST $G_QUIET"
-    ${DEBUG_ON:-false} && DOCKER_OPT+=" --progress plain"
-    BUILD_ARG="${BUILD_ARG:+"$BUILD_ARG "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-    [ -n "${ENV_DOCKER_MIRROR}" ] && BUILD_ARG+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR} --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+    BUILD_ARG+=" $ENV_ADD_HOST $G_QUIET --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+        BUILD_ARG+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR} --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+    fi
+    if ${DEBUG_ON:-false}; then
+        BUILD_ARG+=" --progress plain"
+    fi
     if [ "$repo_lang" = java ]; then
         BUILD_ARG+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
-        ${DEBUG_ON:-false} && BUILD_ARG+=" --build-arg MVN_DEBUG=on"
+        if ${DEBUG_ON:-false}; then
+            BUILD_ARG+=" --build-arg MVN_DEBUG=on"
+        fi
     fi
+    export DOCKER_RUN0 DOCKER_RUN BUILD_ARG
 
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
     # Skip injection if disabled
     repo_inject_file "$repo_lang" "${disable_inject_action:-false}" "${disable_inject_on_env:-false}"
 
-    ## probe deploy method / 探测文件并确定发布方式
-    deploy_method=$(handle_deploy probe)
-
     ################################################################################
     ## 根据 arg_flags 执行相应的任务
     _msg green "executing tasks..."
 
-    [[ "${arg_create_helm:-0}" -eq 1 ]] && create_helm_chart "${helm_dir}"
     # 代码质量和风格检查
     [[ ${arg_flags["code_quality"]} -eq 1 ]] && analysis_sonarqube
     [[ ${arg_flags["code_style"]} -eq 1 ]] && style_check "$repo_lang"
@@ -373,8 +368,13 @@ main() {
     # API文档生成
     [[ ${arg_flags["apidoc"]} -eq 1 ]] && generate_apidoc
 
+    ## probe deploy method / 探测文件并确定发布方式
+    if [ -z "${deploy_method}" ]; then
+        deploy_method=$(handle_deploy probe)
+    fi
+
     # 构建相关任务
-    if [[ "${deploy_method}" =~ ^(helm|docker)$ ]]; then
+    if [[ "${deploy_method}" =~ ^(deploy_k8s|deploy_docker)$ ]]; then
         [[ ${arg_flags["build_image"]} -eq 1 ]] && build_image "$G_QUIET" "$G_IMAGE_TAG"
         [[ ${arg_flags["push_image"]} -eq 1 ]] && push_image
     else
@@ -382,23 +382,6 @@ main() {
     fi
 
     # 部署相关任务
-    if [[ "${deploy_method}" = helm ]]; then
-        [[ ${arg_flags["deploy_k8s"]} -eq 1 ]] && deploy_method=helm
-    elif [[ "${deploy_method}" = docker ]]; then
-        [[ ${arg_flags["deploy_docker"]} -eq 1 ]] && deploy_method=docker
-    elif [[ "${deploy_method}" = aliyun_func ]]; then
-        [[ ${arg_flags["deploy_aliyun_func"]} -eq 1 ]] && deploy_method=aliyun_func
-    elif [[ "${deploy_method}" = aliyun_oss ]]; then
-        [[ ${arg_flags["deploy_aliyun_oss"]} -eq 1 ]] && deploy_method=aliyun_oss
-    elif [[ "${deploy_method}" = rsync ]]; then
-        [[ ${arg_flags["deploy_rsync"]} -eq 1 ]] && deploy_method=rsync
-    elif [[ "${deploy_method}" = ftp ]]; then
-        [[ ${arg_flags["deploy_ftp"]} -eq 1 ]] && deploy_method=ftp
-    elif [[ "${deploy_method}" = sftp ]]; then
-        [[ ${arg_flags["deploy_sftp"]} -eq 1 ]] && deploy_method=sftp
-    else
-        [[ ${arg_flags["deploy_rsync_ssh"]} -eq 1 ]] && deploy_method=rsync_ssh
-    fi
     handle_deploy "$deploy_method" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
 
     # 测试和安全扫描

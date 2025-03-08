@@ -220,7 +220,7 @@ _handle_log() {
             file_size=$(stat -c%s "$log_file" 2>/dev/null || stat -f%z "$log_file" 2>/dev/null)
             if [ "${file_size:-0}" -gt 1073741824 ]; then
                 _msg "Clearing log file $log_file (size: $file_size bytes)"
-                : > "$log_file"
+                : >"$log_file"
             fi
         done
         sleep 300
