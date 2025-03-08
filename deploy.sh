@@ -256,10 +256,11 @@ main() {
         if [[ -z "${ENV_GITEA_SERVER}" ]]; then
             if [[ -n "${GITHUB_SERVER_URL}" ]]; then
                 ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
-            else
-                ENV_GITEA_SERVER="gitea.example.com"
-                _msg warn "ENV_GITEA_SERVER not defined, using default: ${ENV_GITEA_SERVER}"
             fi
+        fi
+        if [[ "${ENV_GITEA_SERVER}" =~ gitea.example.com ]]; then
+            _msg error "ENV_GITEA_SERVER cannot contain 'example' as it is a default value placeholder"
+            return 1
         fi
         arg_git_clone_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
         arg_git_clone_branch="${GITHUB_REF_NAME}"
@@ -283,7 +284,6 @@ main() {
     ## 处理 --in-china 参数
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
-
 
     ## 基础工具安装
     command -v jq &>/dev/null || _install_packages "$(is_china)" jq
