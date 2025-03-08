@@ -79,7 +79,7 @@ Parameters:
 
     # Build and push
     --build-langs            Build all languages.
-    --build-docker          Build image with Docker/Podman.
+    --build-image          Build image with Docker/Podman.
     --push-image            Push image to registry.
 
     # Deployment
@@ -129,17 +129,17 @@ parse_command_args() {
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build and push
         --build-langs) arg_flags["build_langs"]=1 ;;
-        --build-docker) arg_flags["build_image"]=1 ;;
-        --push-image) arg_flags["push_image"]=1 ;;
+        --build-image) arg_flags["build_image"]=1 && deploy_method=deploy_k8s ;;
+        --push-image) arg_flags["push_image"]=1 && deploy_method=deploy_k8s ;;
         # Deployment
-        --deploy-k8s) deploy_method=deploy_k8s ;;
-        --deploy-docker) deploy_method=deploy_docker ;;
-        --deploy-aliyun-func) deploy_method=deploy_aliyun_func ;;
-        --deploy-aliyun-oss) deploy_method=deploy_aliyun_oss ;;
-        --deploy-rsync-ssh) deploy_method=deploy_rsync_ssh ;;
-        --deploy-rsync) deploy_method=deploy_rsync ;;
-        --deploy-ftp) deploy_method=deploy_ftp ;;
-        --deploy-sftp) deploy_method=deploy_sftp ;;
+        --deploy-k8s) arg_flags["deploy_k8s"]=1 && deploy_method=deploy_k8s ;;
+        --deploy-docker) arg_flags["deploy_docker"]=1 && deploy_method=deploy_docker ;;
+        --deploy-aliyun-func) arg_flags["deploy_aliyun_func"]=1 && deploy_method=deploy_aliyun_func ;;
+        --deploy-aliyun-oss) arg_flags["deploy_aliyun_oss"]=1 && deploy_method=deploy_aliyun_oss ;;
+        --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 && deploy_method=deploy_rsync_ssh ;;
+        --deploy-rsync) arg_flags["deploy_rsync"]=1 && deploy_method=deploy_rsync ;;
+        --deploy-ftp) arg_flags["deploy_ftp"]=1 && deploy_method=deploy_ftp ;;
+        --deploy-sftp) arg_flags["deploy_sftp"]=1 && deploy_method=deploy_sftp ;;
         # Testing and quality
         --test-unit) arg_flags["test_unit"]=1 ;;
         --apidoc) arg_flags["apidoc"]=1 ;;
@@ -165,7 +165,7 @@ parse_command_args() {
     done
 
     ## 检查是否有参数则部分设1，没有任何参数则全部设置为1
-    local all_zero=true
+    all_zero=true
     for key in "${!arg_flags[@]}"; do
         if [[ "${arg_flags[$key]}" -eq 1 ]]; then
             all_zero=false
@@ -207,6 +207,14 @@ main() {
         ["build_langs"]=0
         ["build_image"]=0
         ["push_image"]=0
+        ["deploy_k8s"]=0
+        ["deploy_docker"]=0
+        ["deploy_aliyun_func"]=0
+        ["deploy_aliyun_oss"]=0
+        ["deploy_rsync_ssh"]=0
+        ["deploy_rsync"]=0
+        ["deploy_ftp"]=0
+        ["deploy_sftp"]=0
         ["test_unit"]=0
         ["apidoc"]=0
         ["test_func"]=0
@@ -372,17 +380,20 @@ main() {
     if [ -z "${deploy_method}" ]; then
         deploy_method=$(handle_deploy probe)
     fi
-
-    # 构建相关任务
     if [[ "${deploy_method}" =~ ^(deploy_k8s|deploy_docker)$ ]]; then
-        [[ ${arg_flags["build_image"]} -eq 1 ]] && build_image "$G_QUIET" "$G_IMAGE_TAG"
-        [[ ${arg_flags["push_image"]} -eq 1 ]] && push_image
-    else
-        [[ ${arg_flags["build_langs"]} -eq 1 ]] && build_lang "$repo_lang"
+        arg_flags["build_langs"]=0
     fi
+    if [[ "${deploy_method}" =~ ^(deploy_rsync_ssh)$ ]]; then
+        arg_flags["build_image"]=0
+        arg_flags["push_image"]=0
+    fi
+    # 构建相关任务
+    [[ ${arg_flags["build_langs"]} -eq 1 ]] && build_lang "$repo_lang"
+    [[ ${arg_flags["build_image"]} -eq 1 ]] && build_image "$G_QUIET" "$G_IMAGE_TAG"
+    [[ ${arg_flags["push_image"]} -eq 1 ]] && push_image
 
     # 部署相关任务
-    handle_deploy "$deploy_method" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
+    $all_zero && handle_deploy "$deploy_method" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
 
     # 测试和安全扫描
     [[ ${arg_flags["test_func"]} -eq 1 ]] && handle_test func
