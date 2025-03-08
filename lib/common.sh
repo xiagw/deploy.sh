@@ -569,12 +569,6 @@ _install_python_gitlab() {
     $use_china_mirror && _set_mirror python
     if python3 -m pip install --user --upgrade python-gitlab; then
         _msg green "python-gitlab is installed successfully"
-        if ! command -v gitlab >/dev/null; then
-            _msg warning "gitlab command not found in PATH, it should be in ~/.local/bin/"
-            return 1
-        fi
-        _msg green "Showing version"
-        gitlab --version
     else
         _msg error "failed to install python-gitlab"
         return 1
