@@ -270,20 +270,6 @@ main() {
     ## 处理 --in-china 参数
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
 
-    ## 处理构建工具选择
-    DOCKER=$(command -v podman || command -v docker || echo docker)
-    if [ "${arg_flags["build_image"]}" -eq 1 ]; then
-        if command -v docker >/dev/null 2>&1; then
-            DOCKER=$(command -v docker)
-        elif command -v podman >/dev/null 2>&1; then
-            DOCKER=$(command -v podman)
-            DOCKER_OPT='--force-rm --format=docker'
-        else
-            _msg error "Neither docker nor podman found"
-            return 1
-        fi
-    fi
-
     ## 处理 --gitea 参数
     if ${arg_gitea:-false}; then
         if [[ -z "${ENV_GITEA_SERVER}" ]]; then
@@ -340,6 +326,19 @@ main() {
     repo_lang=$(repo_language_detect)
     _msg info "Detected program language: ${repo_lang}"
 
+    ## 处理构建工具选择
+    DOCKER=$(command -v podman || command -v docker || echo docker)
+    if [ "${arg_flags["build_image"]}" -eq 1 ]; then
+        if command -v docker >/dev/null 2>&1; then
+            DOCKER=$(command -v docker)
+        elif command -v podman >/dev/null 2>&1; then
+            DOCKER=$(command -v podman)
+            DOCKER_OPT='--force-rm --format=docker'
+        else
+            _msg error "Neither docker nor podman found"
+            return 1
+        fi
+    fi
     # 设置构建参数
     DOCKER_RUN0="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 0:0"
     DOCKER_RUN="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 1000:1000"
