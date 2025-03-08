@@ -218,10 +218,7 @@ build_php() {
 
 # Main build function that determines which specific builder to run
 build_lang() {
-    local lang="$1" action="$2"
-    if [[ "${action}" =~ ^(helm|docker)$ ]]; then
-        return 0
-    fi
+    local lang="$1"
     case "$lang" in
     java) build_java ;;
     node) build_node ;;

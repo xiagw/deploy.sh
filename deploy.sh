@@ -128,29 +128,29 @@ parse_command_args() {
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build and push
-        --build-langs) arg_build_langs=true && exec_single_job=true ;;
-        --build-docker) arg_build_image=true && exec_single_job=true ;;
-        --push-image) arg_push_image=true && exec_single_job=true ;;
+        --build-langs) arg_flags["build_langs"]=1 ;;
+        --build-docker) arg_flags["build_image"]=1 ;;
+        --push-image) arg_flags["push_image"]=1 ;;
         # Deployment
-        --deploy-k8s) arg_deploy_method=helm && exec_single_job=true ;;
-        --deploy-aliyun-func) arg_deploy_method=aliyun_func && exec_single_job=true ;;
-        --deploy-aliyun-oss) arg_deploy_method=aliyun_oss && exec_single_job=true ;;
-        --deploy-rsync-ssh) arg_deploy_method=rsync_ssh && exec_single_job=true ;;
-        --deploy-rsync) arg_deploy_method=rsync && exec_single_job=true ;;
-        --deploy-ftp) arg_deploy_method=ftp && exec_single_job=true ;;
-        --deploy-sftp) arg_deploy_method=sftp && exec_single_job=true ;;
+        --deploy-k8s) arg_flags["deploy_k8s"]=1 ;;
+        --deploy-docker) arg_flags["deploy_docker"]=1 ;;
+        --deploy-aliyun-func) arg_flags["deploy_aliyun_func"]=1 ;;
+        --deploy-aliyun-oss) arg_flags["deploy_aliyun_oss"]=1 ;;
+        --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 ;;
+        --deploy-rsync) arg_flags["deploy_rsync"]=1 ;;
+        --deploy-ftp) arg_flags["deploy_ftp"]=1 ;;
+        --deploy-sftp) arg_flags["deploy_sftp"]=1 ;;
         # Testing and quality
-        --test-unit) arg_test_unit=true && exec_single_job=true ;;
-        --apidoc) arg_apidoc=true && exec_single_job=true ;;
-        --test-function) arg_test_func=true && exec_single_job=true ;;
-        --code-style) arg_code_style=true && exec_single_job=true ;;
-        --code-quality) arg_code_quality=true && exec_single_job=true ;;
-        --security-zap) arg_security_zap=true ;;
-        --security-vulmap) arg_security_vulmap=true ;;
+        --test-unit) arg_flags["test_unit"]=1 ;;
+        --apidoc) arg_flags["apidoc"]=1 ;;
+        --test-function) arg_flags["test_func"]=1 ;;
+        --code-style) arg_flags["code_style"]=1 ;;
+        --code-quality) arg_flags["code_quality"]=1 ;;
+        --security-zap) arg_flags["security_zap"]=1 ;;
+        --security-vulmap) arg_flags["security_vulmap"]=1 ;;
         # Kubernetes operations
         --create-helm)
-            arg_create_helm=true
-            exec_single_job=true
+            arg_create_helm=1
             disable_inject_action=true
             helm_dir="$2"
             shift
@@ -158,11 +158,26 @@ parse_command_args() {
         --create-k8s) create_k8s_with_terraform=true ;;
         # Miscellaneous
         --disable-inject) disable_inject_on_env=true ;;
-        -r | --renew-cert) arg_renew_cert=true && exec_single_job=true ;;
+        -r | --renew-cert) arg_renew_cert=true ;;
         *) _usage && exit 1 ;;
         esac
         shift
     done
+
+    ## 检查是否所有参数都未被设置，如果是则全部设置为1
+    local all_zero=true
+    for key in "${!arg_flags[@]}"; do
+        if [[ "${arg_flags[$key]}" -eq 1 ]]; then
+            all_zero=false
+            break
+        fi
+    done
+
+    if $all_zero; then
+        for key in "${!arg_flags[@]}"; do
+            arg_flags[$key]=1
+        done
+    fi
 
     ## Set quiet mode unless debug is enabled
     ${DEBUG_ON:-false} && unset G_QUIET || G_QUIET='--quiet'
@@ -187,6 +202,27 @@ main() {
     G_CONF="${G_DATA}/deploy.json"
     G_ENV="${G_DATA}/deploy.env"
 
+    ## 声明关联数组用于跟踪参数使用情况
+    declare -A arg_flags=(
+        ["build_langs"]=0
+        ["build_image"]=0
+        ["push_image"]=0
+        ["deploy_k8s"]=0
+        ["deploy_docker"]=0
+        ["deploy_aliyun_func"]=0
+        ["deploy_aliyun_oss"]=0
+        ["deploy_rsync_ssh"]=0
+        ["deploy_rsync"]=0
+        ["deploy_ftp"]=0
+        ["deploy_sftp"]=0
+        ["test_unit"]=0
+        ["apidoc"]=0
+        ["test_func"]=0
+        ["code_style"]=0
+        ["code_quality"]=0
+        ["security_zap"]=0
+        ["security_vulmap"]=0
+    )
     ## 解析和处理命令行参数
     parse_command_args "$@"
 
@@ -236,7 +272,7 @@ main() {
 
     ## 处理构建工具选择
     DOCKER=$(command -v podman || command -v docker || echo docker)
-    if ${arg_build_image:-false}; then
+    if [ "${arg_flags["build_image"]}" -eq 1 ]; then
         if command -v docker >/dev/null 2>&1; then
             DOCKER=$(command -v docker)
         elif command -v podman >/dev/null 2>&1; then
@@ -247,6 +283,7 @@ main() {
             return 1
         fi
     fi
+
     ## 处理 --gitea 参数
     if ${arg_gitea:-false}; then
         if [[ -z "${ENV_GITEA_SERVER}" ]]; then
@@ -320,49 +357,58 @@ main() {
     repo_inject_file "$repo_lang" "${disable_inject_action:-false}" "${disable_inject_on_env:-false}"
 
     ## probe deploy method / 探测文件并确定发布方式
-    [ -z "$arg_deploy_method" ] && arg_deploy_method=$(handle_deploy probe)
+    deploy_method=$(handle_deploy probe)
 
     ################################################################################
-    ## exec single task / 执行单个任务，适用于 gitlab-ci/jenkins 等自动化部署工具的单个 job 任务执行
-    if ${exec_single_job:-false}; then
-        _msg green "exec single jobs..."
-        ${arg_code_quality:-false} && analysis_sonarqube
-        ${arg_code_style:-false} && style_check "$repo_lang"
-        ${arg_test_unit:-false} && handle_test unit
-        ${arg_apidoc:-false} && generate_apidoc
-        ${arg_build_langs:-false} && build_lang "$repo_lang" "$arg_deploy_method"
-        ${arg_build_image:-false} && build_image "$G_QUIET" "$G_IMAGE_TAG"
-        ${arg_push_image:-false} && push_image
-        ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
-        ${arg_deploy_helm:-false} && handle_deploy "$arg_deploy_method" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
-        ${arg_test_func:-false} && handle_test func
-        ${arg_security_zap:-false} && analysis_zap
-        ${arg_security_vulmap:-false} && analysis_vulmap
-        _msg green "exec single jobs...end"
-        ${GH_ACTION:-false} || return 0
+    ## 根据 arg_flags 执行相应的任务
+    _msg green "executing tasks..."
+
+    [[ "${arg_create_helm:-0}" -eq 1 ]] && create_helm_chart "${helm_dir}"
+    # 代码质量和风格检查
+    [[ ${arg_flags["code_quality"]} -eq 1 ]] && analysis_sonarqube
+    [[ ${arg_flags["code_style"]} -eq 1 ]] && style_check "$repo_lang"
+
+    # 单元测试
+    [[ ${arg_flags["test_unit"]} -eq 1 ]] && handle_test unit
+
+    # API文档生成
+    [[ ${arg_flags["apidoc"]} -eq 1 ]] && generate_apidoc
+
+    # 构建相关任务
+    if [[ "${deploy_method}" =~ ^(helm|docker)$ ]]; then
+        [[ ${arg_flags["build_image"]} -eq 1 ]] && build_image "$G_QUIET" "$G_IMAGE_TAG"
+        [[ ${arg_flags["push_image"]} -eq 1 ]] && push_image
+    else
+        [[ ${arg_flags["build_langs"]} -eq 1 ]] && build_lang "$repo_lang"
     fi
-    ################################################################################
 
-    ## default exec all tasks / 单个任务未启动时默认执行所有任务
-    analysis_sonarqube
-    ## check code style
-    style_check "$repo_lang"
-    ## unit test
-    handle_test unit
-    ## generate api docs / 利用 apidoc 产生 api 文档
-    ${arg_apidoc:-false} && generate_apidoc
-    ## build
-    build_lang "$repo_lang" "$arg_deploy_method"
-    ## build docker image
-    build_image "$G_QUIET" "$G_IMAGE_TAG"
-    push_image
-    ## deploy
-    handle_deploy "$arg_deploy_method" "$repo_lang"
-    ## 功能测试
-    handle_test func
-    ## 安全扫描
-    analysis_zap
-    analysis_vulmap
+    # 部署相关任务
+    if [[ "${deploy_method}" = helm ]]; then
+        [[ ${arg_flags["deploy_k8s"]} -eq 1 ]] && deploy_method=helm
+    elif [[ "${deploy_method}" = docker ]]; then
+        [[ ${arg_flags["deploy_docker"]} -eq 1 ]] && deploy_method=docker
+    elif [[ "${deploy_method}" = aliyun_func ]]; then
+        [[ ${arg_flags["deploy_aliyun_func"]} -eq 1 ]] && deploy_method=aliyun_func
+    elif [[ "${deploy_method}" = aliyun_oss ]]; then
+        [[ ${arg_flags["deploy_aliyun_oss"]} -eq 1 ]] && deploy_method=aliyun_oss
+    elif [[ "${deploy_method}" = rsync ]]; then
+        [[ ${arg_flags["deploy_rsync"]} -eq 1 ]] && deploy_method=rsync
+    elif [[ "${deploy_method}" = ftp ]]; then
+        [[ ${arg_flags["deploy_ftp"]} -eq 1 ]] && deploy_method=ftp
+    elif [[ "${deploy_method}" = sftp ]]; then
+        [[ ${arg_flags["deploy_sftp"]} -eq 1 ]] && deploy_method=sftp
+    else
+        [[ ${arg_flags["deploy_rsync_ssh"]} -eq 1 ]] && deploy_method=rsync_ssh
+    fi
+    handle_deploy "$deploy_method" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
+
+    # 测试和安全扫描
+    [[ ${arg_flags["test_func"]} -eq 1 ]] && handle_test func
+    [[ ${arg_flags["security_zap"]} -eq 1 ]] && analysis_zap
+    [[ ${arg_flags["security_vulmap"]} -eq 1 ]] && analysis_vulmap
+
+    _msg green "tasks execution completed"
+    ################################################################################
 
     ## deploy notify info / 发布通知信息
     handle_notify
