@@ -262,9 +262,6 @@ deploy_via_rsync_ssh() {
 
     ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
     ## debug for github action error
-    cat "$G_CONF"
-    jq --version
-    jq . "$G_CONF"
     if ! jq -e ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .branchs[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]" "$G_CONF"; then
         _msg warn "[deploy] No hosts configured for project '${G_REPO_GROUP_PATH}' branch '${G_NAMESPACE}' in $G_CONF"
     fi

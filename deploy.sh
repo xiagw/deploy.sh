@@ -354,7 +354,7 @@ main() {
     ## build
     build_lang "$repo_lang" "$arg_deploy_method"
     ## build docker image
-    ${arg_build_image:-false} && build_image
+    build_image "$G_QUIET" "$G_IMAGE_TAG"
     push_image
     ## deploy
     handle_deploy "$arg_deploy_method" "$repo_lang"
