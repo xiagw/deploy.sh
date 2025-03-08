@@ -251,6 +251,19 @@ main() {
     ## 检测操作系统版本、类型，安装必要的命令和软件
     system_check
 
+    ## 处理 --gitea 参数
+    if ${arg_gitea:-false}; then
+        if [[ -z "${ENV_GITEA_SERVER}" ]]; then
+            if [[ -n "${GITHUB_SERVER_URL}" ]]; then
+                ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
+            else
+                ENV_GITEA_SERVER="gitea.example.com"
+                _msg warn "ENV_GITEA_SERVER not defined, using default: ${ENV_GITEA_SERVER}"
+            fi
+        fi
+        arg_git_clone_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
+        arg_git_clone_branch="${GITHUB_REF_NAME}"
+    fi
     ## Git仓库克隆
     if [ -n "${arg_git_clone_url}" ]; then
         setup_git_repo "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
@@ -271,19 +284,6 @@ main() {
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
 
-    ## 处理 --gitea 参数
-    if ${arg_gitea:-false}; then
-        if [[ -z "${ENV_GITEA_SERVER}" ]]; then
-            if [[ -n "${GITHUB_SERVER_URL}" ]]; then
-                ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
-            else
-                ENV_GITEA_SERVER="gitea.example.com"
-                _msg warn "ENV_GITEA_SERVER not defined, using default: ${ENV_GITEA_SERVER}"
-            fi
-        fi
-        arg_git_clone_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
-        arg_git_clone_branch="${GITHUB_REF_NAME}"
-    fi
 
     ## 基础工具安装
     command -v jq &>/dev/null || _install_packages "$(is_china)" jq
