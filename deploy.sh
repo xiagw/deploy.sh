@@ -164,7 +164,7 @@ parse_command_args() {
         shift
     done
 
-    ## 检查是否所有参数都未被设置，如果是则全部设置为1
+    ## 检查是否有参数则部分设1，没有任何参数则全部设置为1
     local all_zero=true
     for key in "${!arg_flags[@]}"; do
         if [[ "${arg_flags[$key]}" -eq 1 ]]; then
@@ -333,7 +333,7 @@ main() {
             DOCKER=$(command -v docker)
         elif command -v podman >/dev/null 2>&1; then
             DOCKER=$(command -v podman)
-            DOCKER_OPT='--force-rm --format=docker'
+            BUILD_ARG="--force-rm --format=docker"
         else
             _msg error "Neither docker nor podman found"
             return 1
@@ -342,14 +342,20 @@ main() {
     # 设置构建参数
     DOCKER_RUN0="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 0:0"
     DOCKER_RUN="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 1000:1000"
-    DOCKER_OPT="${DOCKER_OPT:+"$DOCKER_OPT "}$ENV_ADD_HOST $G_QUIET"
-    ${DEBUG_ON:-false} && DOCKER_OPT+=" --progress plain"
-    BUILD_ARG="${BUILD_ARG:+"$BUILD_ARG "}--build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-    [ -n "${ENV_DOCKER_MIRROR}" ] && BUILD_ARG+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR} --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+    BUILD_ARG+=" $ENV_ADD_HOST $G_QUIET --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+        BUILD_ARG+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR} --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+    fi
+    if ${DEBUG_ON:-false}; then
+        BUILD_ARG+=" --progress plain"
+    fi
     if [ "$repo_lang" = java ]; then
         BUILD_ARG+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
-        ${DEBUG_ON:-false} && BUILD_ARG+=" --build-arg MVN_DEBUG=on"
+        if ${DEBUG_ON:-false}; then
+            BUILD_ARG+=" --build-arg MVN_DEBUG=on"
+        fi
     fi
+    export DOCKER_RUN0 DOCKER_RUN BUILD_ARG
 
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
     # Skip injection if disabled

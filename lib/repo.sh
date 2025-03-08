@@ -140,27 +140,110 @@ repo_inject_file() {
 # Sets:
 #   lang_type: The detected programming language
 repo_language_detect() {
-    local lang_files=("pom.xml" "composer.json" "package.json" "requirements.txt" "README.md" "readme.md" "README.txt" "readme.txt")
-    local file lang_type
+    local lang_files=(
+        "pom.xml" "build.gradle" "gradle.build"    # Java
+        "composer.json"                            # PHP
+        "package.json"                            # Node.js
+        "requirements.txt" "setup.py" "Pipfile"   # Python
+        "go.mod"                                  # Go
+        "Cargo.toml"                             # Rust
+        "*.csproj"                               # .NET
+        "Gemfile" "*.gemspec"                    # Ruby
+        "mix.exs"                                # Elixir
+        "README.md" "readme.md" "README.txt" "readme.txt"
+    )
+    local file lang_type version
 
+    # 首先检查特定的项目文件
     for file in "${lang_files[@]}"; do
-        [[ -f "${G_REPO_DIR}/${file}" ]] || continue
+        # 处理通配符文件
+        if [[ $file == *"*"* ]]; then
+            if compgen -G "${G_REPO_DIR}/${file}" > /dev/null; then
+                file=$(ls "${G_REPO_DIR}/${file}" | head -n 1)
+            else
+                continue
+            fi
+        else
+            [[ -f "${G_REPO_DIR}/${file}" ]] || continue
+        fi
+
         case ${file,,} in
-        pom.xml | build.gradle)
-            lang_type="java"
-            ;;
-        composer.json) lang_type="php" ;;
-        package.json) lang_type="node" ;;
-        requirements.txt) lang_type="python" ;;
-        *)
-            lang_type=$(awk -F= '/^project_lang/ {print tolower($2)}' "${G_REPO_DIR}/${file}" | tail -n 1)
-            lang_type=${lang_type// /}
-            ;;
+            pom.xml)
+                lang_type="java"
+                # 尝试提取 Java 版本
+                if command -v xmllint >/dev/null 2>&1; then
+                    version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
+                fi
+                ;;
+            build.gradle|gradle.build)
+                lang_type="java"
+                # 可以从 build.gradle 提取 Java 版本
+                version=$(grep -E "sourceCompatibility.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+                ;;
+            composer.json)
+                lang_type="php"
+                version=$(jq -r '.require.php // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
+                ;;
+            package.json)
+                lang_type="node"
+                version=$(jq -r '.engines.node // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
+                ;;
+            requirements.txt|setup.py|Pipfile)
+                lang_type="python"
+                if [[ ${file} == "setup.py" ]]; then
+                    version=$(grep -E "python_requires.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+                fi
+                ;;
+            go.mod)
+                lang_type="golang"
+                version=$(grep -E "^go [0-9]+\.[0-9]+$" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+                ;;
+            Cargo.toml)
+                lang_type="rust"
+                ;;
+            *.csproj)
+                lang_type="dotnet"
+                version=$(grep -oP '(?<=TargetFramework>net)[^<]+' "${G_REPO_DIR}/${file}" 2>/dev/null)
+                ;;
+            Gemfile|*.gemspec)
+                lang_type="ruby"
+                if [[ ${file} == "Gemfile" ]]; then
+                    version=$(grep -E "^ruby ['\"].*['\"]" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+                fi
+                ;;
+            mix.exs)
+                lang_type="elixir"
+                ;;
+            *)
+                # 从 README 文件中查找项目语言标记
+                lang_type=$(awk -F= '/^project_lang/ {print tolower($2)}' "${G_REPO_DIR}/${file}" | tail -n 1)
+                lang_type=${lang_type// /}
+                ;;
         esac
         [[ -n $lang_type ]] && break
     done
 
+    # 如果没有找到特定的项目文件，尝试通过文件扩展名统计来判断
+    if [[ -z $lang_type || $lang_type == "unknown" ]]; then
+        # 获取仓库中最常见的源代码文件类型
+        local most_common_ext
+        most_common_ext=$(find "${G_REPO_DIR}" -type f -name "*.*" | grep -v "/\." | grep -oE "\.[^./]+$" | sort | uniq -c | sort -nr | head -n1 | awk '{print $2}')
+        case ${most_common_ext} in
+            .java) lang_type="java" ;;
+            .py) lang_type="python" ;;
+            .js|.ts) lang_type="node" ;;
+            .php) lang_type="php" ;;
+            .go) lang_type="golang" ;;
+            .rs) lang_type="rust" ;;
+            .cs) lang_type="dotnet" ;;
+            .rb) lang_type="ruby" ;;
+            .ex|.exs) lang_type="elixir" ;;
+        esac
+    fi
+
     lang_type=${lang_type:-unknown}
+    # 如果检测到版本信息，将其附加到语言类型后
+    [[ -n $version ]] && lang_type="${lang_type}:${version}"
     echo "${lang_type}"
 }
 

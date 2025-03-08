@@ -375,7 +375,7 @@ _build_jmeter() {
     fi
     apt-get update
     apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip
-    curl -fL https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz | tar -C /opt/ -xz
+    curl -fL "https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz" | tar -C /opt/ -xz
     rm -rf /tmp/*
 }
 
