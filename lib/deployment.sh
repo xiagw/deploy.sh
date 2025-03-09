@@ -96,7 +96,7 @@ EOF
 # Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
     _msg step "[deploy] deploy k8s with helm"
-    is_demo_mode "deploy-helm" && return 0
+    is_demo_mode "deploy_k8s" && return 0
     format_release_name
 
     ## finding helm files folder / 查找 helm 文件目录
@@ -207,7 +207,7 @@ deploy_via_rsync_ssh() {
 
         ## deploy to aliyun oss / 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
-            if is_demo_mode "deploy-aliyun-oss"; then
+            if is_demo_mode "deploy_aliyun_oss"; then
                 _msg purple "Demo mode: would deploy to Aliyun OSS:"
                 _msg purple "  Source: ${rsync_src}"
                 _msg purple "  Destination: ${rsync_dest}"
@@ -219,7 +219,7 @@ deploy_via_rsync_ssh() {
 
         # Create destination directory and sync files
         _msg info "Deploying to ${ssh_host}:${rsync_dest}"
-        if is_demo_mode "rsync-deploy-files"; then
+        if is_demo_mode "deploy_rsync_ssh"; then
             _msg purple "Demo mode: would execute commands:"
             _msg purple "  $ssh_opt -n \"$ssh_host\" \"mkdir -p $rsync_dest\""
             _msg purple "  ${rsync_opt} -e \"$ssh_opt\" \"$rsync_src\" \"${ssh_host}:${rsync_dest}\""

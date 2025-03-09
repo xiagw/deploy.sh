@@ -316,7 +316,7 @@ main() {
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
 
     ## 基础工具安装
-    command -v jq &>/dev/null || _install_packages "$(is_china)" jq
+    command -v jq &>/dev/null || _install_packages "$IS_CHINA" jq
 
     ## 云服务工具安装
     ([ "${ENV_DOCKER_LOGIN_TYPE:-}" = aws ] || ${ENV_INSTALL_AWS:-false}) && _install_aws
@@ -328,13 +328,13 @@ main() {
     ${ENV_INSTALL_HELM:-false} && _install_helm
 
     ## 集成工具安装
-    ${ENV_INSTALL_PYTHON_ELEMENT:-false} && _install_python_element "$@" "$(is_china)"
-    ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab "$@" "$(is_china)"
+    ${ENV_INSTALL_PYTHON_ELEMENT:-false} && _install_python_element "$@" "$IS_CHINA"
+    ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab "$@" "$IS_CHINA"
     ${ENV_INSTALL_JMETER:-false} && _install_jmeter
     ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
 
     ## 容器工具安装
-    ${ENV_INSTALL_DOCKER:-false} && _install_docker "$(is_china && echo "--mirror Aliyun" || echo "")"
+    ${ENV_INSTALL_DOCKER:-false} && _install_docker "$([[ "$IS_CHINA" == "true" ]] && echo "--mirror Aliyun" || echo "")"
     ${ENV_INSTALL_PODMAN:-false} && _install_podman
 
     ## 系统维护：清理磁盘空间

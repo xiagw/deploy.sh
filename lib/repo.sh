@@ -9,7 +9,7 @@ repo_inject_file() {
     local lang_type="$1" action="${2:-false}" env_inject="${3:-false}"
     $action && return 0
 
-    command -v rsync >/dev/null || _install_packages "$(is_china)" rsync
+    command -v rsync >/dev/null || _install_packages "$IS_CHINA" rsync
 
     _msg step "[inject] from ${G_DATA}/inject/"
 
@@ -266,7 +266,7 @@ repo_language_detect() {
 # Git related functions
 setup_git_repo() {
     local is_gitea="${1:-false}" git_repo_url="$2" git_repo_branch="${3:-main}" git_repo_group git_repo_name git_repo_dir
-    command -v git >/dev/null || _install_packages "$(is_china)" git
+    command -v git >/dev/null || _install_packages "$IS_CHINA" git
 
     # Handle Gitea parameter
     if ${is_gitea}; then
@@ -339,7 +339,7 @@ setup_git_repo() {
 }
 
 get_git_branch() {
-    command -v git >/dev/null || _install_packages "$(is_china)" git
+    command -v git >/dev/null || _install_packages "$IS_CHINA" git
     local branch="${CI_COMMIT_REF_NAME:-}"
 
     # Try to determine branch name from different sources
@@ -354,7 +354,7 @@ get_git_branch() {
 }
 
 get_git_commit_sha() {
-    command -v git >/dev/null || _install_packages "$(is_china)" git
+    command -v git >/dev/null || _install_packages "$IS_CHINA" git
     local sha=""
 
     # Try to get commit SHA from different sources
@@ -369,7 +369,7 @@ get_git_commit_sha() {
 }
 
 get_git_last_commit_message() {
-    command -v git >/dev/null || _install_packages "$(is_china)" git
+    command -v git >/dev/null || _install_packages "$IS_CHINA" git
     if git rev-parse --git-dir >/dev/null 2>&1; then
         git --no-pager log --no-merges --oneline -1
     else
@@ -383,7 +383,7 @@ setup_svn_repo() {
     local svn_repo_url="${1:-}" svn_repo_name svn_repo_dir="${G_PATH}/builds/${svn_repo_name}"
     svn_repo_name=$(basename "$svn_repo_url")
 
-    command -v svn >/dev/null || _install_packages "$(is_china)" subversion
+    command -v svn >/dev/null || _install_packages "$IS_CHINA" subversion
     if [ -d "$svn_repo_dir/.svn" ]; then
         _msg step "Updating existing repo: $svn_repo_dir"
         (cd "$svn_repo_dir" && svn update) || {

@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
 
-# 检查是否使用中国镜像源
-is_china() {
-    # Check ENV file first, then fallback to environment variables
-    [ -f "$G_ENV" ] && grep -q 'ENV_IN_CHINA=true' "$G_ENV" && echo "true" && return
-    ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false} && echo "true" || echo "false"
-}
-
 # 检查是否为演示模式
 is_demo_mode() {
     local skip_msg="$1"
@@ -95,6 +88,12 @@ config_deploy_env() {
 config_deploy_depend() {
     local conf_type="$1"
     shift
+    # Check ENV file first, then fallback to environment variables
+    if grep -q 'ENV_IN_CHINA=true' "$G_ENV" || ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
+        export IS_CHINA=true
+    else
+        export IS_CHINA=false
+    fi
     case "$conf_type" in
     file)
         config_deploy_file
@@ -107,12 +106,6 @@ config_deploy_depend() {
         ;;
     vars)
         config_deploy_vars
-        ;;
-    demo)
-        is_demo_mode "$@"
-        ;;
-    china)
-        is_china
         ;;
     esac
 }

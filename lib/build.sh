@@ -265,7 +265,7 @@ docker_login() {
         fi
         ;;
     *)
-        is_demo_mode "docker-login" && return 0
+        is_demo_mode "docker_login" && return 0
 
         if [[ -f "$lock_login_registry" ]]; then
             return 0
@@ -393,7 +393,7 @@ build_image() {
 
 push_image() {
     _msg step "[image] Pushing container image"
-    is_demo_mode "push-image" && return 0
+    is_demo_mode "push_image" && return 0
     docker_login
 
     local push_error=false
