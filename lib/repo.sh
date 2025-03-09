@@ -258,6 +258,29 @@ repo_language_detect() {
 # Export the function
 # export -f repo_language_detect
 
+# Detect repository languages using Docker and GitHub Linguist
+# Uses crazymax/linguist Docker image, fallback: "ghcr.io/crazy-max/linguist:latest"
+# @return String containing detected languages and their percentages
+repo_language_detect_docker() {
+    local target_dir="${1:-.}" format="${2:-}" docker_image="crazymax/linguist:latest"
+
+    # Run linguist in Docker container
+    case "$format" in
+        json)
+            docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image" --json
+            ;;
+        breakdown)
+            docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image" --breakdown
+            ;;
+        *)
+            docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image"
+            ;;
+    esac
+}
+
+# Export the function
+# export -f repo_language_detect_docker
+
 # Version Control System Module
 # Handles operations for different version control systems:
 # - Git repository management
