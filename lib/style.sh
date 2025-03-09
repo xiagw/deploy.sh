@@ -127,7 +127,6 @@ check_ios_style() {
         # Note: iOS style checking typically requires macOS environment
         # This is a placeholder for SwiftLint or similar tools
         echo "iOS style checking requires macOS environment"
-        echo '<skip>'
     else
         echo '<skip>'
     fi
@@ -171,7 +170,6 @@ style_check() {
     _msg step "[style] check code style"
     echo "MAN_CODE_STYLE: ${MAN_CODE_STYLE:-false}"
     if ! ${MAN_CODE_STYLE:-false}; then
-        echo '<skip>'
         return 0
     fi
 

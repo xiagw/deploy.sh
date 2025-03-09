@@ -57,7 +57,6 @@ analysis_zap() {
     _msg step "[security] ZAP scan"
     echo "MAN_SCAN_ZAP: ${MAN_SCAN_ZAP:-false}"
     if [[ "${MAN_SCAN_ZAP:-false}" != true ]]; then
-        # echo '<skip>'
         return 0
     fi
 
@@ -84,7 +83,6 @@ analysis_vulmap() {
     _msg step "[security] vulmap scan"
     echo "MAN_SCAN_VULMAP: ${MAN_SCAN_VULMAP:-false}"
     if [[ "${MAN_SCAN_VULMAP:-false}" != true ]]; then
-        # echo '<skip>'
         return 0
     fi
 
@@ -114,7 +112,6 @@ analysis_sonarqube() {
     ## 在 gitlab 的 pipeline 配置环境变量 MAN_SONAR ，true 启用，false 禁用[default]
     echo "MAN_SONAR: ${MAN_SONAR:-false}"
     if ! ${MAN_SONAR:-false}; then
-        # echo "<skip>"
         return 0
     fi
 

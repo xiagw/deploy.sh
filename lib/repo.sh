@@ -61,7 +61,7 @@ repo_inject_file() {
     echo "ENV_INJECT: ${ENV_INJECT:-keep}"
     case ${ENV_INJECT:-keep} in
     keep)
-        echo '<skip>'
+        echo "Keeping existing configuration, no files will be overwritten."
         ;;
     overwrite)
         ## 代码库内已存在 Dockerfile 不覆盖
