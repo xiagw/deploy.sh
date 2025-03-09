@@ -55,8 +55,6 @@ handle_test() {
                 test_result=1
                 _msg error "Unit tests failed"
             fi
-        else
-            echo "<skip>"
         fi
         ;;
     "func")
@@ -70,8 +68,6 @@ handle_test() {
                 test_result=1
                 _msg error "Functional tests failed"
             fi
-        else
-            echo "<skip>"
         fi
         ;;
     *)
