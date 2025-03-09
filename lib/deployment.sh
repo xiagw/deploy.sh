@@ -132,7 +132,7 @@ deploy_to_kubernetes() {
         --namespace "${G_NAMESPACE}" --create-namespace \
         --timeout 120s --set image.pullPolicy='Always' \
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
-        --set image.tag="${G_IMAGE_TAG}" >/dev/null
+        --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
 
     ## 检测 helm upgrade 状态
     echo "Checking deployment status for ${release_name} in namespace ${G_NAMESPACE}, timeout 120s..."
