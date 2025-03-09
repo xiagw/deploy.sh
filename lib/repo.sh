@@ -245,7 +245,12 @@ repo_language_detect() {
     # 如果检测到版本信息，将其附加到语言类型后
     lang_type="${lang_type}:${version}:"
     # 如果检测到 Dockerfile，附加 docker 类型
-    [[ -f "${G_REPO_DIR}/Dockerfile" ]] && lang_type="${lang_type}docker"
+    for file in Dockerfile{,.*}; do
+        [[ -f "${G_REPO_DIR}/${file}" ]] && {
+            lang_type="${lang_type}docker"
+            break
+        }
+    done
 
     echo "${lang_type}"
 }
