@@ -219,6 +219,13 @@ _install_packages() {
     [ "$#" -eq 0 ] && return 0
     _check_sudo >/dev/null || true
     $use_china_mirror && _set_mirror os
+
+    # Set non-interactive installation environment variables
+    if [[ "${cmd_pkg}" == *"apt-get"* ]]; then
+        export DEBIAN_FRONTEND=noninteractive
+        export DEBCONF_NONINTERACTIVE_SEEN=true
+    fi
+
     if [[ "${apt_update:-0}" -eq 1 ]]; then
         $cmd_pkg update -yqq
         apt_update=0
@@ -445,9 +452,9 @@ _install_flarectl() {
     _check_distribution
     local os
     case "$OSTYPE" in
-        darwin*) os="darwin" ;;
-        linux*) os="linux" ;;
-        *) _msg error "Unsupported operating system: $OSTYPE" && return 1 ;;
+    darwin*) os="darwin" ;;
+    linux*) os="linux" ;;
+    *) _msg error "Unsupported operating system: $OSTYPE" && return 1 ;;
     esac
 
     local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_${os}_amd64.tar.gz"

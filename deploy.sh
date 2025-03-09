@@ -252,7 +252,7 @@ main() {
 	setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
 
     ## SVN仓库检出
-	setup_svn_repo "${arg_svn_checkout_url:-}"
+	[ -n "${arg_svn_checkout_url:-}" ] && setup_svn_repo
 
     ## 设置手动执行deploy.sh时的GitLab默认配置
     config_deploy_vars

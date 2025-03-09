@@ -371,11 +371,11 @@ get_git_last_commit_message() {
 
 # SVN related functions
 setup_svn_repo() {
-    command -v svn >/dev/null || _install_packages "$(is_china)" subversion
+    [ -z "$1" ] && return
     local svn_repo_url="${1:-}" svn_repo_name svn_repo_dir="${G_PATH}/builds/${svn_repo_name}"
     svn_repo_name=$(basename "$svn_repo_url")
-    [ -z "$1" ] && return
 
+    command -v svn >/dev/null || _install_packages "$(is_china)" subversion
     if [ -d "$svn_repo_dir/.svn" ]; then
         _msg step "Updating existing repo: $svn_repo_dir"
         (cd "$svn_repo_dir" && svn update) || {
