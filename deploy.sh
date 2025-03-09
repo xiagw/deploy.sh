@@ -295,7 +295,9 @@ main() {
     source "$G_ENV"
 
     ## Git仓库克隆 处理 --gitea 参数
-    setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
+    if ${arg_gitea:-false} || [ -n "${arg_git_clone_url}" ]; then
+        setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
+    fi
 
     ## SVN仓库检出
     [ -n "${arg_svn_checkout_url:-}" ] && setup_svn_repo
