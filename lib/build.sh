@@ -342,6 +342,38 @@ get_docker_context() {
     export DOCKER
 }
 
+repo_language_detect_and_build() {
+    local target_dir="${1:-.}"
+    local lang_type
+
+    # 首先检测语言
+    lang_type=$(repo_language_detect)
+
+    # 根据语言选择合适的builder
+    case "${lang_type%%:*}" in
+    java)
+        builder="gcr.io/buildpacks/builder:java"
+        ;;
+    python)
+        builder="gcr.io/buildpacks/builder:python"
+        ;;
+    node)
+        builder="gcr.io/buildpacks/builder:nodejs"
+        ;;
+    go)
+        builder="gcr.io/buildpacks/builder:go"
+        ;;
+    *)
+        builder="gcr.io/buildpacks/builder:base"
+        ;;
+    esac
+
+    # 使用buildpack构建镜像
+    pack build "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
+        --builder "$builder" \
+        --path "$target_dir"
+}
+
 build_image() {
     [ "${GH_ACTION:-false}" = "true" ] && return 0
     _msg step "[image] build container image"
@@ -434,5 +466,58 @@ build_lang() {
     php) build_php ;;
     shell) build_shell ;;
     *) _msg warn "No build function available for language: $lang" ;;
+    esac
+}
+
+# Common layers for all images
+generate_base_dockerfile() {
+    # Base images for different languages
+    declare -A BASE_IMAGES=(
+        ["java"]="eclipse-temurin:17-jre-alpine"
+        ["python"]="python:3.11-slim"
+        ["node"]="node:18-alpine"
+        ["go"]="golang:1.20-alpine"
+    )
+    cat <<EOF
+FROM ${BASE_IMAGES[$1]}
+
+# Common security updates
+RUN set -ex && \
+    apk update --no-cache && \
+    apk upgrade --no-cache
+
+# Add non-root user
+RUN adduser -D -u 1000 appuser
+USER appuser
+
+# Common environment variables
+ENV TZ=Asia/Shanghai
+ENV LANG=en_US.UTF-8
+EOF
+}
+
+# Language specific layers
+generate_lang_dockerfile() {
+    local lang="$1"
+    local dockerfile="Dockerfile.${lang}"
+
+    generate_base_dockerfile "$lang" >"$dockerfile"
+
+    case "$lang" in
+    java)
+        cat <<EOF >>"$dockerfile"
+COPY target/*.jar app.jar
+CMD ["java", "-jar", "app.jar"]
+EOF
+        ;;
+    python)
+        cat <<EOF >>"$dockerfile"
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "app.py"]
+EOF
+        ;;
+        # 其他语言的特定配置...
     esac
 }

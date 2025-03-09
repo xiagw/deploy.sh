@@ -1,3 +1,4 @@
+## xiagw/deploy.sh Dockerfile
 ## arch: x86_64
 ARG IMAGE_NAME=ubuntu:22.04
 ## arch: arm64
