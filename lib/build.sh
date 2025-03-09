@@ -28,8 +28,8 @@ build_java() {
             $DOCKER volume create --name maven-repo
         fi
 
-        $DOCKER run --rm -i -v maven-repo:/var/maven/.m2:rw maven:"${ENV_MAVEN_VER:-3.8-jdk-8}" bash -c "chown -R 1000.1000 /var/maven"
-        $DOCKER run --rm -i --user "$(id -u):$(id -g)" \
+        $DOCKER_RUN0 -v maven-repo:/var/maven/.m2:rw maven:"${ENV_MAVEN_VER:-3.8-jdk-8}" bash -c "chown -R 1000.1000 /var/maven"
+        $DOCKER_RUN0 --user "$(id -u):$(id -g)" \
             -e MAVEN_CONFIG=/var/maven/.m2 \
             -v maven-repo:/var/maven/.m2:rw \
             -v "$G_REPO_DIR":/src:rw -w /src \

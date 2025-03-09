@@ -252,11 +252,9 @@ set_proxy() {
 # Internal function to renew SSL certificates
 # This function handles the actual certificate renewal process
 system_cert_renew() {
-    local action="${1:-false}"
     # Check if certificate renewal is needed
     if [[ "${MAN_RENEW_CERT:-false}" != true ]] &&
-       [[ "${GH_ACTION:-false}" = false ]] &&
-       [[ "${action:-false}" = false ]]; then
+       [[ "${GH_ACTION:-false}" = false ]]; then
         return 0
     fi
 

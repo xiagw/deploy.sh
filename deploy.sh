@@ -109,14 +109,12 @@ EOF
 }
 
 parse_command_args() {
-    [[ ${CI_DEBUG_TRACE:-false} == true ]] && DEBUG_ON=true
-
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
         # Basic options
         -h | --help) _usage && exit 0 ;;
         -v | --version) echo "Version: 5.0.0" && exit 0 ;;
-        -d | --debug) DEBUG_ON=true ;;
+        -d | --debug) DEBUG_ON=true && set -x ;;
         --cron | --loop) run_with_crontab=true ;;
         --github-action) DEBUG_ON=true && export GH_ACTION=true ;;
         --in-china) arg_in_china=true ;;
@@ -164,10 +162,9 @@ parse_command_args() {
     done
 
     if ${DEBUG_ON:-false};then
-	    set -x
 	    unset G_QUIET
     else
-		G_QUIET='--quiet'
+		export G_QUIET='--quiet'
     fi
     ## 检查是否有参数则部分设1，没有任何参数则全部设置为1
     all_zero=true
@@ -190,6 +187,7 @@ main() {
     # set -u ## 变量未定义报错 # set -Eeuo pipefail
     if [[ ${CI_DEBUG_TRACE:-false} == true ]]; then
         set -x
+        DEBUG_ON=true
     fi
     SECONDS=0
     ## Prefix G_ is GLOBAL_
@@ -250,22 +248,8 @@ main() {
     ## 检测操作系统版本、类型，安装必要的命令和软件
     system_check
 
-    ## 处理 --gitea 参数
-    if ${arg_gitea:-false}; then
-        if [[ -z "${ENV_GITEA_SERVER}" ]]; then
-            if [[ -n "${GITHUB_SERVER_URL}" ]]; then
-                ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
-            fi
-        fi
-        if [[ "${ENV_GITEA_SERVER}" =~ gitea.example.com ]]; then
-            _msg error "ENV_GITEA_SERVER cannot contain 'example' as it is a default value placeholder"
-            return 1
-        fi
-        arg_git_clone_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
-        arg_git_clone_branch="${GITHUB_REF_NAME}"
-    fi
-    ## Git仓库克隆
-	setup_git_repo "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
+    ## Git仓库克隆 处理 --gitea 参数
+	setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
 
     ## SVN仓库检出
 	setup_svn_repo "${arg_svn_checkout_url:-}"
@@ -315,7 +299,7 @@ main() {
     config_deploy_depend env >/dev/null
 
     ## 使用acme.sh更新SSL证书
-    system_cert_renew "${arg_renew_cert:-false}"
+    ${arg_renew_cert:-false} && system_cert_renew
 
     ## 探测项目的程序语言
     _msg step "[language] probe program language"
@@ -336,7 +320,7 @@ main() {
         fi
     fi
     # 设置构建参数
-    DOCKER_RUN0="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 0:0"
+    DOCKER_RUN0="$DOCKER run $ENV_ADD_HOST --interactive --rm"
     DOCKER_RUN="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 1000:1000"
     BUILD_ARG+=" $ENV_ADD_HOST $G_QUIET --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
     if [ -n "${ENV_DOCKER_MIRROR}" ]; then

@@ -141,15 +141,15 @@ repo_inject_file() {
 #   lang_type: The detected programming language
 repo_language_detect() {
     local lang_files=(
-        "pom.xml" "build.gradle" "gradle.build"    # Java
-        "composer.json"                            # PHP
-        "package.json"                            # Node.js
-        "requirements.txt" "setup.py" "Pipfile"   # Python
-        "go.mod"                                  # Go
-        "Cargo.toml"                             # Rust
-        "*.csproj"                               # .NET
-        "Gemfile" "*.gemspec"                    # Ruby
-        "mix.exs"                                # Elixir
+        "pom.xml" "build.gradle" "gradle.build" # Java
+        "composer.json"                         # PHP
+        "package.json"                          # Node.js
+        "requirements.txt" "setup.py" "Pipfile" # Python
+        "go.mod"                                # Go
+        "Cargo.toml"                            # Rust
+        "*.csproj"                              # .NET
+        "Gemfile" "*.gemspec"                   # Ruby
+        "mix.exs"                               # Elixir
         "README.md" "readme.md" "README.txt" "readme.txt"
     )
     local file lang_type version
@@ -158,7 +158,7 @@ repo_language_detect() {
     for file in "${lang_files[@]}"; do
         # 处理通配符文件
         if [[ $file == *"*"* ]]; then
-            if compgen -G "${G_REPO_DIR}/${file}" > /dev/null; then
+            if compgen -G "${G_REPO_DIR}/${file}" >/dev/null; then
                 file=$(ls "${G_REPO_DIR}/${file}" | head -n 1)
             else
                 continue
@@ -168,57 +168,57 @@ repo_language_detect() {
         fi
 
         case ${file,,} in
-            pom.xml)
-                lang_type="java"
-                # 尝试提取 Java 版本
-                if command -v xmllint >/dev/null 2>&1; then
-                    version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
-                fi
-                ;;
-            build.gradle|gradle.build)
-                lang_type="java"
-                # 可以从 build.gradle 提取 Java 版本
-                version=$(grep -E "sourceCompatibility.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
-                ;;
-            composer.json)
-                lang_type="php"
-                version=$(jq -r '.require.php // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
-                ;;
-            package.json)
-                lang_type="node"
-                version=$(jq -r '.engines.node // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
-                ;;
-            requirements.txt|setup.py|Pipfile)
-                lang_type="python"
-                if [[ ${file} == "setup.py" ]]; then
-                    version=$(grep -E "python_requires.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
-                fi
-                ;;
-            go.mod)
-                lang_type="golang"
-                version=$(grep -E "^go [0-9]+\.[0-9]+$" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
-                ;;
-            Cargo.toml)
-                lang_type="rust"
-                ;;
-            *.csproj)
-                lang_type="dotnet"
-                version=$(grep -oP '(?<=TargetFramework>net)[^<]+' "${G_REPO_DIR}/${file}" 2>/dev/null)
-                ;;
-            Gemfile|*.gemspec)
-                lang_type="ruby"
-                if [[ ${file} == "Gemfile" ]]; then
-                    version=$(grep -E "^ruby ['\"].*['\"]" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
-                fi
-                ;;
-            mix.exs)
-                lang_type="elixir"
-                ;;
-            *)
-                # 从 README 文件中查找项目语言标记
-                lang_type=$(awk -F= '/^project_lang/ {print tolower($2)}' "${G_REPO_DIR}/${file}" | tail -n 1)
-                lang_type=${lang_type// /}
-                ;;
+        pom.xml)
+            lang_type="java"
+            # 尝试提取 Java 版本
+            if command -v xmllint >/dev/null 2>&1; then
+                version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
+            fi
+            ;;
+        build.gradle | gradle.build)
+            lang_type="java"
+            # 可以从 build.gradle 提取 Java 版本
+            version=$(grep -E "sourceCompatibility.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+            ;;
+        composer.json)
+            lang_type="php"
+            version=$(jq -r '.require.php // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
+            ;;
+        package.json)
+            lang_type="node"
+            version=$(jq -r '.engines.node // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
+            ;;
+        requirements.txt | setup.py | Pipfile)
+            lang_type="python"
+            if [[ ${file} == "setup.py" ]]; then
+                version=$(grep -E "python_requires.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+            fi
+            ;;
+        go.mod)
+            lang_type="golang"
+            version=$(grep -E "^go [0-9]+\.[0-9]+$" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+            ;;
+        Cargo.toml)
+            lang_type="rust"
+            ;;
+        *.csproj)
+            lang_type="dotnet"
+            version=$(grep -oP '(?<=TargetFramework>net)[^<]+' "${G_REPO_DIR}/${file}" 2>/dev/null)
+            ;;
+        Gemfile | *.gemspec)
+            lang_type="ruby"
+            if [[ ${file} == "Gemfile" ]]; then
+                version=$(grep -E "^ruby ['\"].*['\"]" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+            fi
+            ;;
+        mix.exs)
+            lang_type="elixir"
+            ;;
+        *)
+            # 从 README 文件中查找项目语言标记
+            lang_type=$(awk -F= '/^project_lang/ {print tolower($2)}' "${G_REPO_DIR}/${file}" | tail -n 1)
+            lang_type=${lang_type// /}
+            ;;
         esac
         [[ -n $lang_type ]] && break
     done
@@ -229,15 +229,15 @@ repo_language_detect() {
         local most_common_ext
         most_common_ext=$(find "${G_REPO_DIR}" -type f -name "*.*" | grep -v "/\." | grep -oE "\.[^./]+$" | sort | uniq -c | sort -nr | head -n1 | awk '{print $2}')
         case ${most_common_ext} in
-            .java) lang_type="java" ;;
-            .py) lang_type="python" ;;
-            .js|.ts) lang_type="node" ;;
-            .php) lang_type="php" ;;
-            .go) lang_type="golang" ;;
-            .rs) lang_type="rust" ;;
-            .cs) lang_type="dotnet" ;;
-            .rb) lang_type="ruby" ;;
-            .ex|.exs) lang_type="elixir" ;;
+        .java) lang_type="java" ;;
+        .py) lang_type="python" ;;
+        .js | .ts) lang_type="node" ;;
+        .php) lang_type="php" ;;
+        .go) lang_type="golang" ;;
+        .rs) lang_type="rust" ;;
+        .cs) lang_type="dotnet" ;;
+        .rb) lang_type="ruby" ;;
+        .ex | .exs) lang_type="elixir" ;;
         esac
     fi
 
@@ -257,10 +257,43 @@ repo_language_detect() {
 
 # Git related functions
 setup_git_repo() {
-    local git_repo_url="$1" git_repo_branch="$2" git_repo_group git_repo_name git_repo_dir
+    local is_gitea="${1:-false}" git_repo_url="$2" git_repo_branch="${3:-main}" git_repo_group git_repo_name git_repo_dir
     command -v git >/dev/null || _install_packages "$(is_china)" git
-	[[ -z "$1" ] && return
 
+    # Handle Gitea parameter
+    if ${is_gitea}; then
+        # Determine Gitea server
+        if [[ -z "${ENV_GITEA_SERVER:-}" ]]; then
+            if [[ -z "${GITHUB_SERVER_URL:-}" ]]; then
+                _msg error "Either ENV_GITEA_SERVER or GITHUB_SERVER_URL must be set for Gitea setup"
+                return 1
+            fi
+            ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
+        fi
+
+        # Validate Gitea server
+        if [[ "${ENV_GITEA_SERVER}" =~ gitea.example.com ]]; then
+            _msg error "ENV_GITEA_SERVER cannot contain 'example' as it is a default value placeholder"
+            return 1
+        fi
+
+        # Check required environment variables
+        if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
+            _msg error "GITHUB_REPOSITORY environment variable is required for Gitea setup"
+            return 1
+        fi
+
+        # Set git repository URL and branch
+        git_repo_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
+        if [[ -n "${GITHUB_REF_NAME:-}" ]]; then
+            git_repo_branch="${GITHUB_REF_NAME}"
+        fi
+    fi
+    # Check if we have a valid repository URL
+    if [[ -z "$git_repo_url" ]]; then
+        _msg error "Git repository URL is required"
+        return 1
+    fi
     # Extract the full group path and repo name from different URL formats
     if [[ $git_repo_url =~ ^git@ ]]; then
         # Handle SSH format: git@host:port/group/name.git or git@host:group/name.git
@@ -341,7 +374,7 @@ setup_svn_repo() {
     command -v svn >/dev/null || _install_packages "$(is_china)" subversion
     local svn_repo_url="${1:-}" svn_repo_name svn_repo_dir="${G_PATH}/builds/${svn_repo_name}"
     svn_repo_name=$(basename "$svn_repo_url")
-	[ -z "$1" ] && return
+    [ -z "$1" ] && return
 
     if [ -d "$svn_repo_dir/.svn" ]; then
         _msg step "Updating existing repo: $svn_repo_dir"
