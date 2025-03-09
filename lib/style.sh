@@ -144,6 +144,25 @@ check_django_style() {
     fi
 }
 
+# 添加并行处理
+parallel_style_check() {
+    local languages=("$@")
+    local pids=()
+
+    for lang in "${languages[@]}"; do
+        style_check "$lang" &
+        pids+=($!)
+    done
+
+    # 等待所有检查完成
+    for pid in "${pids[@]}"; do
+        wait "$pid"
+    done
+}
+
+# 使用示例
+# parallel_style_check php python node
+
 # Main style check function that determines which specific checker to run
 style_check() {
     local lang="$1"

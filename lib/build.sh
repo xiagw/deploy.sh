@@ -342,38 +342,6 @@ get_docker_context() {
     export DOCKER
 }
 
-repo_language_detect_and_build() {
-    local target_dir="${1:-.}"
-    local lang_type
-
-    # 首先检测语言
-    lang_type=$(repo_language_detect)
-
-    # 根据语言选择合适的builder
-    case "${lang_type%%:*}" in
-    java)
-        builder="gcr.io/buildpacks/builder:java"
-        ;;
-    python)
-        builder="gcr.io/buildpacks/builder:python"
-        ;;
-    node)
-        builder="gcr.io/buildpacks/builder:nodejs"
-        ;;
-    go)
-        builder="gcr.io/buildpacks/builder:go"
-        ;;
-    *)
-        builder="gcr.io/buildpacks/builder:base"
-        ;;
-    esac
-
-    # 使用buildpack构建镜像
-    pack build "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
-        --builder "$builder" \
-        --path "$target_dir"
-}
-
 build_image() {
     [ "${GH_ACTION:-false}" = "true" ] && return 0
     _msg step "[image] build container image"
@@ -520,4 +488,92 @@ EOF
         ;;
         # 其他语言的特定配置...
     esac
+}
+
+repo_language_detect_and_build() {
+    local target_dir="${1:-.}"
+    local lang_type
+
+    # 首先检测语言
+    lang_type=$(repo_language_detect)
+
+    # 根据语言选择合适的builder
+    case "${lang_type%%:*}" in
+    java)
+        builder="gcr.io/buildpacks/builder:java"
+        ;;
+    python)
+        builder="gcr.io/buildpacks/builder:python"
+        ;;
+    node)
+        builder="gcr.io/buildpacks/builder:nodejs"
+        ;;
+    go)
+        builder="gcr.io/buildpacks/builder:go"
+        ;;
+    php)
+        builder="paketobuildpacks/builder:base"
+
+        # 创建 project.toml 配置文件来指定 PHP 版本和扩展
+        cat > "${target_dir}/project.toml" <<EOF
+[[build.env]]
+name = "BP_PHP_VERSION"
+value = "${PHP_VERSION:-8.3}"  # 默认使用 PHP 8.3，可以通过环境变量覆盖
+
+[[build.env]]
+name = "BP_PHP_SERVER"
+value = "nginx"  # 使用 nginx 作为 web 服务器
+
+[[build.env]]
+name = "BP_PHP_WEB_DIR"
+value = "public"  # web 根目录，可以根据项目修改
+
+# PHP 扩展配置
+[[build.env]]
+name = "BP_PHP_ENABLE_EXTENSIONS"
+value = "${PHP_EXTENSIONS:-bcmath,gd,intl,pdo_mysql,redis,zip,soap}"  # 默认扩展列表，可以通过环境变量覆盖
+
+# PECL 扩展配置
+[[build.env]]
+name = "BP_PHP_ENABLE_PECL_EXTENSIONS"
+value = "${PHP_PECL_EXTENSIONS:-}"  # 可以通过环境变量指定 PECL 扩展
+
+# PHP-FPM 配置
+[[build.env]]
+name = "BP_PHP_FPM_CONFIGURATION"
+value = """
+pm = dynamic
+pm.max_children = 50
+pm.start_servers = 5
+pm.min_spare_servers = 5
+pm.max_spare_servers = 35
+"""
+
+# PHP INI 配置
+[[build.env]]
+name = "BP_PHP_INI_CONFIGURATION"
+value = """
+memory_limit = 512M
+max_execution_time = 60
+upload_max_filesize = 64M
+post_max_size = 64M
+"""
+EOF
+
+        # 如果存在自定义的 PHP 配置目录，复制配置文件
+        if [ -d "${target_dir}/.php/conf.d" ]; then
+            mkdir -p "${target_dir}/.php.ini.d"
+            cp "${target_dir}/.php/conf.d/"*.ini "${target_dir}/.php.ini.d/" 2>/dev/null || true
+        fi
+        ;;
+    *)
+        builder="gcr.io/buildpacks/builder:base"
+        ;;
+    esac
+
+    # 使用buildpack构建镜像
+    pack build "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
+        --builder "$builder" \
+        --env BP_INCLUDE_FILES="project.toml" \
+        --path "$target_dir"
 }
