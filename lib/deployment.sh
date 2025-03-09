@@ -136,15 +136,18 @@ deploy_to_kubernetes() {
 
     ## 检测 helm upgrade 状态
     echo "Checking deployment status for ${release_name} in namespace ${G_NAMESPACE}, timeout 120s..."
-    $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null || deploy_result=1
-    if [[ "$deploy_result" -eq 1 ]]; then
+    if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
+        deploy_result=1
         _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
     fi
+
     ## Clean up rs 0 0 / 清理 rs 0 0
-    $KUBECTL_OPT -n "${G_NAMESPACE}" get rs | awk '$2=="0" && $3=="0" && $4=="0" {print $1}' |
-        xargs -t -r $KUBECTL_OPT -n "${G_NAMESPACE}" delete rs >/dev/null 2>&1 || true
-    $KUBECTL_OPT -n "${G_NAMESPACE}" get pod | awk '/Evicted/ {print $1}' |
-        xargs -t -r $KUBECTL_OPT -n "${G_NAMESPACE}" delete pod 2>/dev/null || true
+    {
+        $KUBECTL_OPT -n "${G_NAMESPACE}" get rs | awk '$2=="0" && $3=="0" && $4=="0" {print $1}' |
+            xargs -t -r $KUBECTL_OPT -n "${G_NAMESPACE}" delete rs >/dev/null 2>&1 || true
+        $KUBECTL_OPT -n "${G_NAMESPACE}" get pod | awk '/Evicted/ {print $1}' |
+            xargs -t -r $KUBECTL_OPT -n "${G_NAMESPACE}" delete pod 2>/dev/null || true
+    } &
 
     if [ -f "$G_REPO_DIR/deploy.custom.sh" ]; then
         _msg time "custom deploy."
@@ -152,6 +155,7 @@ deploy_to_kubernetes() {
     fi
 
     _msg time "[deploy] deploy k8s with helm"
+    return "${deploy_result:-0}"
 }
 
 # Deploy via Rsync+SSH

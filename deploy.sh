@@ -411,7 +411,14 @@ main() {
     done
 
     if [[ $deploy_sum -gt 0 ]] || $all_zero; then
-        handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
+        handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG" || {
+            _msg error "Deployment failed"
+            deploy_result=1
+            # 如果部署失败，跳过后续测试和扫描
+            arg_flags["test_func"]=0
+            arg_flags["security_zap"]=0
+            arg_flags["security_vulmap"]=0
+        }
     fi
 
     # 测试和安全扫描
