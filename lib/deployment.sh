@@ -327,12 +327,15 @@ determine_deployment_method() {
 
 # Main deployment function
 handle_deploy() {
-    local type="$1"
+    local type="${1:-}"
     shift
+
+    # 如果没有指定部署方法，先进行探测
+    if [ -z "$type" ]; then
+        type=$(determine_deployment_method "$@")
+    fi
+
     case "$type" in
-    probe)
-        determine_deployment_method "$@"
-        ;;
     deploy_k8s)
         deploy_to_kubernetes "$@"
         ;;
@@ -356,6 +359,10 @@ handle_deploy() {
         ;;
     deploy_rsync_ssh)
         deploy_via_rsync_ssh "$@"
+        ;;
+    *)
+        _msg error "Unknown or invalid deployment method: $type"
+        return 1
         ;;
     esac
 }

@@ -161,10 +161,10 @@ parse_command_args() {
         shift
     done
 
-    if ${DEBUG_ON:-false};then
-	    unset G_QUIET
+    if ${DEBUG_ON:-false}; then
+        unset G_QUIET
     else
-		export G_QUIET='--quiet'
+        export G_QUIET='--quiet'
     fi
     ## 检查是否有参数则部分设1，没有任何参数则全部设置为1
     all_zero=true
@@ -180,6 +180,58 @@ parse_command_args() {
             arg_flags[$key]=1
         done
     fi
+}
+
+# 配置 Docker/Podman 构建环境
+config_build_env() {
+    local docker_cmd build_args=""
+
+    # 选择构建工具（Docker 或 Podman）
+    docker_cmd=$(command -v podman || command -v docker || echo docker)
+
+    # 如果需要构建镜像，进行更严格的工具选择
+    if [ "${arg_flags["build_image"]}" -eq 1 ]; then
+        if command -v docker >/dev/null 2>&1; then
+            docker_cmd=$(command -v docker)
+        elif command -v podman >/dev/null 2>&1; then
+            docker_cmd=$(command -v podman)
+            build_args="--force-rm --format=docker"
+        else
+            _msg error "Neither docker nor podman found"
+            return 1
+        fi
+    fi
+
+    # 设置基本的 Docker 运行命令
+    DOCKER="${docker_cmd}"
+    DOCKER_RUN0="${docker_cmd} run ${ENV_ADD_HOST} --interactive --rm"
+    DOCKER_RUN="${docker_cmd} run ${ENV_ADD_HOST} --interactive --rm -u 1000:1000"
+
+    # 构建参数配置
+    build_args+=" ${ENV_ADD_HOST} ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+
+    # Docker 镜像源配置
+    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+        build_args+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR}"
+        build_args+=" --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+    fi
+
+    # 调试模式配置
+    if ${DEBUG_ON:-false}; then
+        build_args+=" --progress plain"
+    fi
+
+    # Java 项目特殊配置
+    if [ "$repo_lang" = java ]; then
+        build_args+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
+        if ${DEBUG_ON:-false}; then
+            build_args+=" --build-arg MVN_DEBUG=on"
+        fi
+    fi
+
+    # 导出环境变量
+    BUILD_ARG="${build_args}"
+    export DOCKER DOCKER_RUN0 DOCKER_RUN BUILD_ARG
 }
 
 main() {
@@ -224,18 +276,17 @@ main() {
     parse_command_args "$@"
 
     ## 加载所需的模块文件
-    source "$G_LIB/config.sh"
-    source "$G_LIB/common.sh"
-    source "$G_LIB/notify.sh"
-    source "$G_LIB/system.sh"
     source "$G_LIB/analysis.sh"
-    source "$G_LIB/kubernetes.sh"
+    source "$G_LIB/build.sh"
+    source "$G_LIB/common.sh"
+    source "$G_LIB/config.sh"
     source "$G_LIB/deployment.sh"
-    source "$G_LIB/test.sh"
-    source "$G_LIB/docker.sh"
+    source "$G_LIB/kubernetes.sh"
+    source "$G_LIB/notify.sh"
     source "$G_LIB/repo.sh"
     source "$G_LIB/style.sh"
-    source "$G_LIB/build.sh"
+    source "$G_LIB/system.sh"
+    source "$G_LIB/test.sh"
 
     _msg step "[deploy] BEGIN"
 
@@ -249,10 +300,10 @@ main() {
     system_check
 
     ## Git仓库克隆 处理 --gitea 参数
-	setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
+    setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
 
     ## SVN仓库检出
-	[ -n "${arg_svn_checkout_url:-}" ] && setup_svn_repo
+    [ -n "${arg_svn_checkout_url:-}" ] && setup_svn_repo
 
     ## 设置手动执行deploy.sh时的GitLab默认配置
     config_deploy_vars
@@ -303,47 +354,31 @@ main() {
 
     ## 探测项目的程序语言
     _msg step "[language] probe program language"
-    repo_lang=$(repo_language_detect)
+    repo_lang_detect=$(repo_language_detect)
+    repo_lang=${repo_lang_detect%%:*}
+    ## 解析语言类型和 docker 标识
+    repo_dockerfile=${repo_lang_detect##*:}
     _msg info "Detected program language: ${repo_lang}"
 
     ## 处理构建工具选择
-    DOCKER=$(command -v podman || command -v docker || echo docker)
-    if [ "${arg_flags["build_image"]}" -eq 1 ]; then
-        if command -v docker >/dev/null 2>&1; then
-            DOCKER=$(command -v docker)
-        elif command -v podman >/dev/null 2>&1; then
-            DOCKER=$(command -v podman)
-            BUILD_ARG="--force-rm --format=docker"
-        else
-            _msg error "Neither docker nor podman found"
-            return 1
-        fi
-    fi
-    # 设置构建参数
-    DOCKER_RUN0="$DOCKER run $ENV_ADD_HOST --interactive --rm"
-    DOCKER_RUN="$DOCKER run $ENV_ADD_HOST --interactive --rm -u 1000:1000"
-    BUILD_ARG+=" $ENV_ADD_HOST $G_QUIET --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-        BUILD_ARG+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR} --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
-    fi
-    if ${DEBUG_ON:-false}; then
-        BUILD_ARG+=" --progress plain"
-    fi
-    if [ "$repo_lang" = java ]; then
-        BUILD_ARG+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
-        if ${DEBUG_ON:-false}; then
-            BUILD_ARG+=" --build-arg MVN_DEBUG=on"
-        fi
-    fi
-    export DOCKER_RUN0 DOCKER_RUN BUILD_ARG
+    config_build_env || return 1
 
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
     # Skip injection if disabled
     repo_inject_file "$repo_lang" "${disable_inject_action:-false}" "${disable_inject_on_env:-false}"
 
     ################################################################################
-    ## 根据 arg_flags 执行相应的任务
-    _msg green "executing tasks..."
+    ## 全自动执行，或根据 arg_flags 执行相应的任务
+    if $all_zero; then
+        _msg green "executing tasks... [auto mode: all tasks will be executed]"
+    else
+        _msg green "executing tasks... [single job: only specified tasks will be executed]"
+        # 可选：打印将要执行的任务列表
+        echo "Tasks to execute:"
+        for key in "${!arg_flags[@]}"; do
+            [[ ${arg_flags[$key]} -eq 1 ]] && echo "  - ${key}"
+        done
+    fi
 
     # 代码质量和风格检查
     [[ ${arg_flags["code_quality"]} -eq 1 ]] && analysis_sonarqube
@@ -355,24 +390,26 @@ main() {
     # API文档生成
     [[ ${arg_flags["apidoc"]} -eq 1 ]] && generate_apidoc
 
-    ## probe deploy method / 探测文件并确定发布方式
-    if [ -z "${deploy_method}" ]; then
-        deploy_method=$(handle_deploy probe)
-    fi
-    if [[ "${deploy_method}" =~ ^(deploy_k8s|deploy_docker)$ ]]; then
-        arg_flags["build_langs"]=0
-    fi
-    if [[ "${deploy_method}" =~ ^(deploy_rsync_ssh)$ ]]; then
+    # 构建相关任务
+    if [[ -z "${repo_dockerfile}" ]]; then
         arg_flags["build_image"]=0
         arg_flags["push_image"]=0
+    else
+        arg_flags["build_langs"]=0
     fi
-    # 构建相关任务
     [[ ${arg_flags["build_langs"]} -eq 1 ]] && build_lang "$repo_lang"
     [[ ${arg_flags["build_image"]} -eq 1 ]] && build_image "$G_QUIET" "$G_IMAGE_TAG"
     [[ ${arg_flags["push_image"]} -eq 1 ]] && push_image
 
-    # 部署相关任务
-    $all_zero && handle_deploy "$deploy_method" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
+    # 发布，最优雅的写法
+    deploy_sum=0
+    for key in "${!arg_flags[@]}"; do
+        [[ $key == deploy_* ]] && ((deploy_sum += arg_flags[$key]))
+    done
+
+    if [[ $deploy_sum -gt 0 ]] || $all_zero; then
+        handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
+    fi
 
     # 测试和安全扫描
     [[ ${arg_flags["test_func"]} -eq 1 ]] && handle_test func
