@@ -257,10 +257,9 @@ repo_language_detect() {
 
 # Git related functions
 setup_git_repo() {
+    local git_repo_url="$1" git_repo_branch="$2" git_repo_group git_repo_name git_repo_dir
     command -v git >/dev/null || _install_packages "$(is_china)" git
-    local git_repo_url git_repo_branch git_repo_group git_repo_name git_repo_dir
-    git_repo_url="${1:-}"
-    git_repo_branch="${2:-main}"
+	[[ -z "$1" ] && return
 
     # Extract the full group path and repo name from different URL formats
     if [[ $git_repo_url =~ ^git@ ]]; then
@@ -342,6 +341,7 @@ setup_svn_repo() {
     command -v svn >/dev/null || _install_packages "$(is_china)" subversion
     local svn_repo_url="${1:-}" svn_repo_name svn_repo_dir="${G_PATH}/builds/${svn_repo_name}"
     svn_repo_name=$(basename "$svn_repo_url")
+	[ -z "$1" ] && return
 
     if [ -d "$svn_repo_dir/.svn" ]; then
         _msg step "Updating existing repo: $svn_repo_dir"

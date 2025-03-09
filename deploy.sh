@@ -265,14 +265,10 @@ main() {
         arg_git_clone_branch="${GITHUB_REF_NAME}"
     fi
     ## Git仓库克隆
-    if [ -n "${arg_git_clone_url}" ]; then
-        setup_git_repo "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
-    fi
+	setup_git_repo "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
 
     ## SVN仓库检出
-    if [ -n "${arg_svn_checkout_url}" ]; then
-        setup_svn_repo "${arg_svn_checkout_url:-}"
-    fi
+	setup_svn_repo "${arg_svn_checkout_url:-}"
 
     ## 设置手动执行deploy.sh时的GitLab默认配置
     config_deploy_vars
