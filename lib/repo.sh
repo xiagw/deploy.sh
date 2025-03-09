@@ -293,6 +293,7 @@ setup_git_repo() {
 
     # Handle Gitea parameter
     if ${is_gitea}; then
+        unset DOCKER_HOST
         # Determine Gitea server
         if [[ -z "${ENV_GITEA_SERVER:-}" ]]; then
             if [[ -z "${GITHUB_SERVER_URL:-}" ]]; then
