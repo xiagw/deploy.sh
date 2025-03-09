@@ -373,3 +373,35 @@ system_cert_renew() {
         exit 0
     fi
 }
+
+# Install required tools based on environment variables
+# Returns:
+#   0 if all installations were successful
+#   1 if any installation failed
+system_install_tools() {
+    local install_result=0
+
+    ## 基础工具安装
+    command -v jq &>/dev/null || _install_packages "$IS_CHINA" jq || ((install_result++))
+
+    ## 云服务工具安装
+    ([ "${ENV_DOCKER_LOGIN_TYPE:-}" = aws ] || ${ENV_INSTALL_AWS:-false}) && _install_aws
+    ${ENV_INSTALL_ALIYUN:-false} && _install_aliyun_cli
+
+    ## 基础设施工具安装
+    ${ENV_INSTALL_TERRAFORM:-false} && _install_terraform
+    ${ENV_INSTALL_KUBECTL:-false} && _install_kubectl
+    ${ENV_INSTALL_HELM:-false} && _install_helm
+
+    ## 集成工具安装
+    ${ENV_INSTALL_PYTHON_ELEMENT:-false} && _install_python_element "$@" "$IS_CHINA"
+    ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab "$@" "$IS_CHINA"
+    ${ENV_INSTALL_JMETER:-false} && _install_jmeter
+    ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
+
+    ## 容器工具安装
+    ${ENV_INSTALL_DOCKER:-false} && _install_docker "$([[ "$IS_CHINA" == "true" ]] && echo "--mirror Aliyun" || echo "")"
+    ${ENV_INSTALL_PODMAN:-false} && _install_podman
+
+    return "$install_result"
+}

@@ -23,10 +23,8 @@ config_deploy_file() {
 
     [[ -f "${data}/deploy.json" ]] || cp -v "${path}/conf/example-deploy.json" "${data}/deploy.json"
     [[ -f "${data}/deploy.env" ]] || cp -v "${path}/conf/example-deploy.env" "${data}/deploy.env"
-}
 
-# PATH 环境变量设置
-config_deploy_path() {
+    # PATH 环境变量设置
     local path="$G_PATH" data="$G_DATA"
 
     mkdir -p "${data}/bin"
@@ -95,17 +93,7 @@ config_deploy_depend() {
         export IS_CHINA=false
     fi
     case "$conf_type" in
-    file)
-        config_deploy_file
-        ;;
-    path)
-        config_deploy_path
-        ;;
-    env)
-        config_deploy_env
-        ;;
-    vars)
-        config_deploy_vars
-        ;;
+    file) config_deploy_file ;;
+    env) config_deploy_env ;;
     esac
 }

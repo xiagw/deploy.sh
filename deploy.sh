@@ -10,11 +10,6 @@
 #
 ################################################################################
 
-## year month day - time - %u day of week (1..7); 1 is Monday - %j day of year (001..366) - %W week number of year, with Monday as first day of week (00..53)
-
-# 解决 Encountered 1 file(s) that should have been pointers, but weren't
-# git lfs migrate import --everything$(awk '/filter=lfs/ {printf " --include='\''%s'\''", $1}' .gitattributes)
-
 config_deploy_vars() {
     ## Set repository directory from GitLab CI variable CI_PROJECT_DIR or fallback to PWD
     G_REPO_DIR=${CI_PROJECT_DIR:-$PWD}
@@ -166,7 +161,7 @@ parse_command_args() {
     else
         export G_QUIET='--quiet'
     fi
-    ## 检查是否有参数则部分设1，没有任何参数则全部设置为1
+    ## 检查是否有命令参数则部分设1，
     all_zero=true
     for key in "${!arg_flags[@]}"; do
         if [[ "${arg_flags[$key]}" -eq 1 ]]; then
@@ -174,7 +169,7 @@ parse_command_args() {
             break
         fi
     done
-
+    ## 没有任何参数则全部设置为1
     if $all_zero; then
         for key in "${!arg_flags[@]}"; do
             arg_flags[$key]=1
@@ -235,8 +230,8 @@ config_build_env() {
 }
 
 main() {
+    # set -Eeuo pipefail
     set -e ## 出现错误自动退出
-    # set -u ## 变量未定义报错 # set -Eeuo pipefail
     if [[ ${CI_DEBUG_TRACE:-false} == true ]]; then
         set -x
         DEBUG_ON=true
@@ -290,11 +285,8 @@ main() {
 
     _msg step "[deploy] BEGIN"
 
-    ## 复制示例配置文件（deploy.json、deploy.env）到data目录
+    ## 复制示例配置文件（deploy.json、deploy.env）到data目录 添加必要的二进制文件目录到PATH环境变量
     config_deploy_depend file
-
-    ## 添加必要的二进制文件目录到PATH环境变量
-    config_deploy_depend path
 
     ## 检测操作系统版本、类型，安装必要的命令和软件
     system_check
@@ -315,27 +307,8 @@ main() {
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
 
-    ## 基础工具安装
-    command -v jq &>/dev/null || _install_packages "$IS_CHINA" jq
-
-    ## 云服务工具安装
-    ([ "${ENV_DOCKER_LOGIN_TYPE:-}" = aws ] || ${ENV_INSTALL_AWS:-false}) && _install_aws
-    ${ENV_INSTALL_ALIYUN:-false} && _install_aliyun_cli
-
-    ## 基础设施工具安装
-    ${ENV_INSTALL_TERRAFORM:-false} && _install_terraform
-    ${ENV_INSTALL_KUBECTL:-false} && _install_kubectl
-    ${ENV_INSTALL_HELM:-false} && _install_helm
-
-    ## 集成工具安装
-    ${ENV_INSTALL_PYTHON_ELEMENT:-false} && _install_python_element "$@" "$IS_CHINA"
-    ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab "$@" "$IS_CHINA"
-    ${ENV_INSTALL_JMETER:-false} && _install_jmeter
-    ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
-
-    ## 容器工具安装
-    ${ENV_INSTALL_DOCKER:-false} && _install_docker "$([[ "$IS_CHINA" == "true" ]] && echo "--mirror Aliyun" || echo "")"
-    ${ENV_INSTALL_PODMAN:-false} && _install_podman
+    ## 安装所需的系统工具
+    system_install_tools "$@"
 
     ## 系统维护：清理磁盘空间
     system_clean_disk
