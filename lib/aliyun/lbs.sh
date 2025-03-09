@@ -26,7 +26,8 @@ handle_lbs_commands() {
     case "$operation" in
     list)
         local lb_type=${1:-all}
-        lbs_list "$lb_type"
+        local format=${2:-human}
+        lbs_list "$lb_type" "$format"
         ;;
     create)
         local lb_type=$1
@@ -127,27 +128,46 @@ nlb_list() {
 
     case "$format" in
     json)
-        echo "$result" | jq '.LoadBalancers'
+        # 直接输出原始结果
+        echo "$result"
         ;;
     tsv)
-        echo -e "LoadBalancerId\tLoadBalancerName\tLoadBalancerStatus\tIpAddress\tVpcId\tCreateTime"
-        echo "$result" | jq -r '.LoadBalancers[] | [.LoadBalancerId, .LoadBalancerName, .LoadBalancerStatus, (.ZoneMappings[0].LoadBalancerAddress // "-"), .VpcId, .CreateTime] | @tsv'
+        echo -e "LoadBalancerId\tLoadBalancerName\tLoadBalancerStatus\tZoneId\tPublicIP\tPrivateIP\tVpcId\tCreateTime"
+        echo "$result" | jq -r '.LoadBalancers[] | .ZoneMappings[] as $zone | [
+            .LoadBalancerId,
+            .LoadBalancerName,
+            .LoadBalancerStatus,
+            $zone.ZoneId,
+            ($zone.LoadBalancerAddresses[0].PublicIPv4Address // "-"),
+            ($zone.LoadBalancerAddresses[0].PrivateIPv4Address // "-"),
+            .VpcId,
+            .CreateTime
+        ] | @tsv'
         ;;
     human | *)
         if [[ $(echo "$result" | jq '.LoadBalancers | length') -eq 0 ]]; then
             echo "没有找到 NLB 实例。"
         else
             echo "列出 NLB 实例："
-            echo "实例ID            名称                状态    IP地址        VPC-ID         创建时间"
-            echo "----------------  ------------------  ------  ------------  -------------  -------------------------"
-            echo "$result" | jq -r '.LoadBalancers[] | [.LoadBalancerId, .LoadBalancerName, .LoadBalancerStatus, (.ZoneMappings[0].LoadBalancerAddress // "-"), .VpcId, .CreateTime] | @tsv' |
+            echo "实例ID            名称          状态  可用区      公网IP        内网IP        VPC-ID         创建时间"
+            echo "----------------  ------------  ----  ----------  ------------  ------------  -------------  -------------------------"
+            echo "$result" | jq -r '.LoadBalancers[] | .ZoneMappings[] as $zone | [
+                .LoadBalancerId,
+                .LoadBalancerName,
+                .LoadBalancerStatus,
+                $zone.ZoneId,
+                ($zone.LoadBalancerAddresses[0].PublicIPv4Address // "-"),
+                ($zone.LoadBalancerAddresses[0].PrivateIPv4Address // "-"),
+                .VpcId,
+                .CreateTime
+            ] | @tsv' |
                 awk 'BEGIN {FS="\t"; OFS="\t"}
             {
                 status = $3;
-                if (status == "Active") status = "运行中";
-                else if (status == "Inactive") status = "已停止";
+                if (status == "Active") status = "运行";
+                else if (status == "Inactive") status = "停止";
                 else status = "未知";
-                printf "%-16s  %-18s  %-6s  %-12s  %-13s  %s\n", $1, $2, status, $4, $5, $6
+                printf "%-16s  %-12s  %-4s  %-10s  %-12s  %-12s  %-13s  %s\n", $1, $2, status, $4, $5, $6, $7, $8
             }'
         fi
         ;;
