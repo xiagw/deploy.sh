@@ -299,17 +299,17 @@ main() {
     ## 检测操作系统版本、类型，安装必要的命令和软件
     system_check
 
+    ## 导入所有以ENV_开头的全局变量（位置不要随意变动）
+    source "$G_ENV"
+
     ## Git仓库克隆 处理 --gitea 参数
     setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
 
     ## SVN仓库检出
     [ -n "${arg_svn_checkout_url:-}" ] && setup_svn_repo
 
-    ## 设置手动执行deploy.sh时的GitLab默认配置
+    ## 设置手动执行deploy.sh时的GitLab默认配置（位置不要随意变动）
     config_deploy_vars
-
-    ## 导入所有以ENV_开头的全局变量
-    source "$G_ENV"
 
     ## 处理 --in-china 参数
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
