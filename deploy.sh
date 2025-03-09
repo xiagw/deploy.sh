@@ -366,6 +366,9 @@ main() {
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
     # Skip injection if disabled
     repo_inject_file "$repo_lang" "${disable_inject_action:-false}" "${disable_inject_on_env:-false}"
+    repo_lang_detect=$(repo_language_detect)
+    ## 解析 docker 标识
+    repo_dockerfile=${repo_lang_detect##*:}
 
     ################################################################################
     ## 全自动执行，或根据 arg_flags 执行相应的任务
