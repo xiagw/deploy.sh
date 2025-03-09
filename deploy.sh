@@ -109,7 +109,6 @@ EOF
 }
 
 parse_command_args() {
-    ## Enable debug mode if CI_DEBUG_TRACE is true
     [[ ${CI_DEBUG_TRACE:-false} == true ]] && DEBUG_ON=true
 
     while [[ "$#" -gt 0 ]]; do
@@ -164,6 +163,12 @@ parse_command_args() {
         shift
     done
 
+    if ${DEBUG_ON:-false};then
+	    set -x
+	    unset G_QUIET
+    else
+		G_QUIET='--quiet'
+    fi
     ## 检查是否有参数则部分设1，没有任何参数则全部设置为1
     all_zero=true
     for key in "${!arg_flags[@]}"; do
@@ -178,12 +183,6 @@ parse_command_args() {
             arg_flags[$key]=1
         done
     fi
-
-    ## Set quiet mode unless debug is enabled
-    ${DEBUG_ON:-false} && unset G_QUIET || G_QUIET='--quiet'
-
-    ## Enable shell debugging if DEBUG_ON is true
-    if ${DEBUG_ON:-false}; then set -x; else true; fi
 }
 
 main() {
