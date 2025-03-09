@@ -37,6 +37,7 @@ config_deploy_file() {
         "$HOME/.local/bin"
         "$HOME/.acme.sh"
         "$HOME/.config/composer/vendor/bin"
+        "/home/linuxbrew/.linuxbrew/bin"
     )
     for p in "${paths_append[@]}"; do
         if [[ -d "$p" && ! ":$PATH:" =~ :$p: ]]; then
