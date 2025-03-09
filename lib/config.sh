@@ -10,7 +10,7 @@ is_demo_mode() {
         if [[ "${ENV_DEMO_MODE:-false}" != "true" ]]; then
             _msg warning "Legacy demo mode detected. Please set ENV_DEMO_MODE=true in your deploy.env instead"
         fi
-        _msg purple "[Demo Mode] Operation skipped: $skip_msg"
+        _msg purple "[Demo] Operation skipped: $skip_msg"
         return 0
     fi
 

@@ -12,10 +12,10 @@ build_java() {
     local jars_path="$G_REPO_DIR/jars"
 
     if [[ -f "$G_REPO_DIR/build.gradle" ]]; then
-        _msg step "[build] with gradle"
+        _msg step "[build] Building with gradle"
         gradle -q
     else
-        _msg step "[build] with maven"
+        _msg step "[build] Building with maven"
         local maven_settings=""
         local maven_quiet=""
 
@@ -95,7 +95,7 @@ build_node() {
 
     [ ! -d "${G_REPO_DIR}/node_modules" ] && yarn_install=true
 
-    _msg step "[build] yarn install"
+    _msg step "[build] Running yarn install"
     ${GH_ACTION:-false} && return 0
 
     # Custom build check
@@ -128,7 +128,7 @@ build_node() {
 
 # Python Build
 build_python() {
-    _msg step "[build] python build"
+    _msg step "[build] Running python build"
     if [ -f "$G_REPO_DIR/requirements.txt" ]; then
         pip install -r requirements.txt
     fi
@@ -137,7 +137,7 @@ build_python() {
 
 # Android Build
 build_android() {
-    _msg step "[build] android build"
+    _msg step "[build] Running android build"
     if [ -f "$G_REPO_DIR/gradlew" ]; then
         chmod +x "$G_REPO_DIR/gradlew"
         "$G_REPO_DIR/gradlew" clean assembleRelease
@@ -149,7 +149,7 @@ build_android() {
 
 # iOS Build
 build_ios() {
-    _msg step "[build] iOS build"
+    _msg step "[build] Running iOS build"
     if [ -f "$G_REPO_DIR/Podfile" ]; then
         pod install
         xcodebuild -workspace "*.xcworkspace" -scheme "Release" build
@@ -159,7 +159,7 @@ build_ios() {
 
 # Ruby Build
 build_ruby() {
-    _msg step "[build] ruby build"
+    _msg step "[build] Running ruby build"
     if [ -f "$G_REPO_DIR/Gemfile" ]; then
         bundle install
     fi
@@ -168,14 +168,14 @@ build_ruby() {
 
 # Go Build
 build_go() {
-    _msg step "[build] go build"
+    _msg step "[build] Running go build"
     go build -v ./...
     _msg stepend "[build] go build"
 }
 
 # C/C++ Build
 build_c() {
-    _msg step "[build] C/C++ build"
+    _msg step "[build] Running C/C++ build"
     if [ -f "$G_REPO_DIR/CMakeLists.txt" ]; then
         mkdir -p build && cd build || exit
         cmake ..
@@ -189,7 +189,7 @@ build_c() {
 
 # Docker Build
 build_docker() {
-    _msg step "[build] docker build"
+    _msg step "[build] Running docker build"
     if [ -f "$G_REPO_DIR/Dockerfile" ]; then
         docker build -t "${G_REPO_NAME}:latest" .
     fi
@@ -198,7 +198,7 @@ build_docker() {
 
 # Django Build
 build_django() {
-    _msg step "[build] django build"
+    _msg step "[build] Running django build"
     if [ -f "$G_REPO_DIR/manage.py" ]; then
         python manage.py collectstatic --noinput
         python manage.py migrate
@@ -208,7 +208,7 @@ build_django() {
 
 # PHP Build
 build_php() {
-    _msg step "[build] php build"
+    _msg step "[build] Running php build"
     if [ -f "$G_REPO_DIR/composer.json" ]; then
         composer install --no-dev
     fi
@@ -217,7 +217,7 @@ build_php() {
 
 # Shell Build
 build_shell() {
-    _msg step "[build] shell build"
+    _msg step "[build] Running shell build"
     ${DEBUG_ON} && return 0
     local exit_code=0 script s=0
     command -v shellcheck >/dev/null 2>&1 && sc=true
@@ -344,7 +344,7 @@ get_docker_context() {
 
 build_image() {
     [ "${GH_ACTION:-false}" = "true" ] && return 0
-    _msg step "[image] build container image"
+    _msg step "[image] Building container image"
 
     get_docker_context
 
