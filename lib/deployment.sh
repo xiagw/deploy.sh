@@ -37,7 +37,7 @@ format_release_name() {
 # @param $1 lang The programming language of the project
 deploy_aliyun_functions() {
     if "${ENV_DISABLE_K8S:-false}"; then
-        _msg time "!!! disable deploy to k8s !!!"
+        _msg time "Kubernetes deployment is disabled"
         return
     fi
     local lang="${1:?'lang parameter is required'}"
@@ -45,13 +45,13 @@ deploy_aliyun_functions() {
     format_release_name
     ${GH_ACTION:-false} && return 0
     ${ENV_ENABLE_FUNC:-false} || {
-        _msg time "!!! disable deploy to functions3.0 aliyun !!!"
+        _msg time "Aliyun Functions deployment is disabled"
         return 0
     }
     [ "${G_NAMESPACE}" != main ] && release_name="${release_name}-${G_NAMESPACE}"
 
     ## create FC
-    _msg step "[deploy] create/update functions"
+    _msg step "[deploy] Creating/updating Aliyun Functions"
     local functions_conf_tmpl="$G_DATA/aliyun.functions.${lang}.json"
     local functions_conf="$G_DATA/aliyun.functions.json"
     if [ -f "$functions_conf_tmpl" ]; then
@@ -80,22 +80,22 @@ EOF
     fi
 
     if aliyun -p "${ENV_ALIYUN_PROFILE-}" fc GET /2023-03-30/functions --prefix "${release_name:0:3}" --limit 100 --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "${release_name}$"; then
-        _msg time "update function $release_name"
+        _msg time "Updating function: $release_name"
         aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}\"}}"
     else
-        _msg time "create function $release_name"
+        _msg time "Creating new function: $release_name"
         aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"
-        _msg time "create trigger for function $release_name"
+        _msg time "Creating HTTP trigger for function: $release_name"
         aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     fi
     rm -f "$functions_conf"
 
-    _msg time "[deploy] create/update functions end"
+    _msg time "Aliyun Functions deployment completed"
 }
 
 # Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
-    _msg step "[deploy] deploy k8s with helm"
+    _msg step "[deploy] Deploy to Kubernetes with Helm"
     is_demo_mode "deploy_k8s" && return 0
     format_release_name
 
@@ -116,8 +116,8 @@ deploy_to_kubernetes() {
     done
     ## create helm charts / 创建 helm 文件
     if [ -z "$helm_dir" ]; then
-        _msg purple "Not found helm files"
-        echo "Try to generate helm files"
+        _msg purple "No Helm charts found in standard locations"
+        echo "Generating new Helm charts"
         helm_dir="${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG}/${release_name}"
         mkdir -p "$helm_dir"
         create_helm_chart "${helm_dir}"
@@ -134,10 +134,10 @@ deploy_to_kubernetes() {
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
 
-    ## 检测 helm upgrade 状态
-    echo "Checking deployment status for ${release_name} in namespace ${G_NAMESPACE}, timeout 120s..."
+    echo "Monitoring deployment status for ${release_name} in namespace ${G_NAMESPACE} (timeout: 120s)..."
     if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
         deploy_result=1
+        _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
         _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
     fi
 
@@ -150,11 +150,11 @@ deploy_to_kubernetes() {
     } &
 
     if [ -f "$G_REPO_DIR/deploy.custom.sh" ]; then
-        _msg time "custom deploy."
+        _msg time "Executing custom deployment script"
         source "$G_REPO_DIR/deploy.custom.sh"
     fi
 
-    _msg time "[deploy] deploy k8s with helm"
+    _msg time "Kubernetes deployment completed"
     return "${deploy_result:-0}"
 }
 
@@ -162,15 +162,13 @@ deploy_to_kubernetes() {
 # @param $1 lang The programming language of the project
 deploy_via_rsync_ssh() {
     local lang="${1:?'lang parameter is required'}"
-    _msg step "[deploy] deploy files with rsync+ssh"
-    ## rsync exclude some files / rsync 排除某些文件
+    _msg step "[deploy] Deploy files with Rsync+SSH"
+    ## rsync exclude configuration
     rsync_exclude="${G_REPO_DIR}/rsync.exclude"
     [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${G_PATH}/conf/rsync.exclude"
 
-    ## read conf, get project,branch,jar/war etc. / 读取配置文件，获取 项目/分支名/war包目录
-    ## debug for github action error
     if ! jq -e ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .branchs[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]" "$G_CONF"; then
-        _msg warn "[deploy] No hosts configured for project '${G_REPO_GROUP_PATH}' branch '${G_NAMESPACE}' in $G_CONF"
+        _msg warn "No host configuration found for project '${G_REPO_GROUP_PATH}' branch '${G_NAMESPACE}' in $G_CONF"
     fi
 
     while read -r line; do
@@ -179,18 +177,14 @@ deploy_via_rsync_ssh() {
         rsync_src_from_conf=$(echo "$line" | jq -r '.rsync_src')
         rsync_dest=$(echo "$line" | jq -r '.rsync_dest')
 
-        # Setup SSH options
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
-        # 2. Set language-specific relative path
         case "$lang" in
         java) rsync_relative_path="jars/" ;;
         node) rsync_relative_path="dist/" ;;
         *) rsync_relative_path="" ;;
         esac
 
-        # 3 & 4. Determine source directory
-        # If rsync_src is configured in deploy.json, use it; otherwise use repo_dir with language-specific path
         if [[ -n "$rsync_src_from_conf" ]]; then
             rsync_src="${rsync_src_from_conf%/}/"
             _msg info "Using configured source path: $rsync_src"
@@ -199,20 +193,16 @@ deploy_via_rsync_ssh() {
             _msg info "Using default source path: $rsync_src"
         fi
 
-        # Setup rsync options with excludes
         rsync_opt="rsync -acvzt --timeout=10 --no-times --exclude-from=${rsync_exclude}"
-        # Add --delete option for Node.js projects
         [[ "$lang" == "node" ]] && rsync_opt+=" --delete"
 
-        # Setup destination directory
         if [[ "$rsync_dest" == "none" || -z "$rsync_dest" ]]; then
             rsync_dest="${ENV_PATH_DEST_PRE}/${G_NAMESPACE}.${G_REPO_NAME}/"
         fi
 
-        ## deploy to aliyun oss / 发布到 aliyun oss 存储
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             if is_demo_mode "deploy_aliyun_oss"; then
-                _msg purple "Demo mode: would deploy to Aliyun OSS:"
+                _msg purple "Demo mode: Aliyun OSS deployment simulation:"
                 _msg purple "  Source: ${rsync_src}"
                 _msg purple "  Destination: ${rsync_dest}"
                 continue
@@ -221,10 +211,9 @@ deploy_via_rsync_ssh() {
             continue
         fi
 
-        # Create destination directory and sync files
         _msg info "Deploying to ${ssh_host}:${rsync_dest}"
         if is_demo_mode "deploy_rsync_ssh"; then
-            _msg purple "Demo mode: would execute commands:"
+            _msg purple "Demo mode: Command simulation:"
             _msg purple "  $ssh_opt -n \"$ssh_host\" \"mkdir -p $rsync_dest\""
             _msg purple "  ${rsync_opt} -e \"$ssh_opt\" \"$rsync_src\" \"${ssh_host}:${rsync_dest}\""
             continue
@@ -232,16 +221,14 @@ deploy_via_rsync_ssh() {
         $ssh_opt -n "$ssh_host" "mkdir -p $rsync_dest"
         ${rsync_opt} -e "$ssh_opt" "$rsync_src" "${ssh_host}:${rsync_dest}"
 
-        # Run custom deployment script if exists
         if [[ -f "${G_DATA}/bin/deploy.custom.sh" ]]; then
-            _msg time "Running custom deployment script..."
+            _msg time "Executing custom deployment script"
             bash "${G_DATA}/bin/deploy.custom.sh" "$ssh_host" "$rsync_dest"
             _msg time "Custom deployment completed"
         fi
 
-        # Handle docker-compose deployment
         if ${exec_deploy_docker_compose:-false}; then
-            _msg step "Deploying with docker-compose"
+            _msg step "[deploy] Deploying with Docker Compose"
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $G_REPO_NAME"
         fi
     done < <(jq -c ".projects[] | select (.project == \"${G_REPO_GROUP_PATH}\") | .branchs[] | select (.branch == \"${G_NAMESPACE}\") | .hosts[]" "$G_CONF")
@@ -254,35 +241,31 @@ deploy_aliyun_oss() {
     local source_path="${1:?'source_path parameter is required'}"
     local oss_dest="${2:?'oss_dest parameter is required (format: oss://bucket-name/path)'}"
 
-    _msg step "[deploy] deploy files to Aliyun OSS"
-    # Check if OSS CLI is installed
+    _msg step "[deploy] Deploy files to Aliyun OSS"
     _install_ossutil
 
-    # Deploy files to Aliyun OSS
-    _msg time "copy start"
+    _msg time "Starting file transfer"
     if ossutil cp "${source_path}/" "${oss_dest}" --recursive --force; then
-        _msg green "Result = OK"
+        _msg green "Deployment successful"
     else
-        _msg error "Result = FAIL"
+        _msg error "Deployment failed"
     fi
-    _msg time "[oss] deploy files to Aliyun OSS"
+    _msg time "Aliyun OSS deployment completed"
 }
 
 # Deploy via Rsync
 deploy_via_rsync() {
-    _msg step "[deploy] deploy files to rsyncd server"
-    # Load configuration from file
+    _msg step "[deploy] Deploy files to Rsyncd server"
     rsyncd_conf="$G_DATA/rsyncd.conf"
     source "$rsyncd_conf"
 
-    # Deploy files with rsync
     rsync_options="rsync -avz"
     $rsync_options --exclude-from="$EXCLUDE_FILE" "$SOURCE_DIR/" "$RSYNC_USER@$RSYNC_HOST::$TARGET_DIR"
 }
 
 # Deploy via FTP
 deploy_via_ftp() {
-    _msg step "[deploy] deploy files to ftp server"
+    _msg step "[deploy] Deploy files to FTP server"
     upload_file="${G_REPO_DIR}/ftp.tgz"
     tar czvf "${upload_file}" -C "${G_REPO_DIR}" .
     ftp -inv "${ssh_host}" <<EOF
@@ -295,12 +278,12 @@ put $upload_file
 passive off
 bye
 EOF
-    _msg time "[deploy] deploy files to ftp server"
+    _msg time "FTP deployment completed"
 }
 
 # Deploy via SFTP
 deploy_via_sftp() {
-    _msg step "[deploy] deploy files to sftp server"
+    _msg step "[deploy] Deploy files to SFTP server"
     # TODO: Implement SFTP deployment
 }
 

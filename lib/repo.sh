@@ -31,10 +31,10 @@ repo_inject_file() {
     local inject_init="${G_DATA}/dockerfile/init.sh"
     ## 替换git库部分代码文件
     if [ -d "$inject_code_path_branch" ]; then
-        _msg warning "found $inject_code_path_branch, sync to ${G_REPO_DIR}/"
+        _msg warning "Found custom code in $inject_code_path_branch, syncing to ${G_REPO_DIR}/"
         rsync -av "$inject_code_path_branch/" "${G_REPO_DIR}/"
     elif [ -d "$inject_code_path" ]; then
-        _msg warning "found $inject_code_path, sync to ${G_REPO_DIR}/"
+        _msg warning "Found custom code in $inject_code_path, syncing to ${G_REPO_DIR}/"
         rsync -av "$inject_code_path/" "${G_REPO_DIR}/"
     fi
     ## frontend (VUE) .env file / 替换前端代码内配置文件
@@ -42,7 +42,7 @@ repo_inject_file() {
         env_files="$(find "${G_REPO_DIR}" -maxdepth 2 -name "${G_NAMESPACE}-*")"
         for file in $env_files; do
             [[ -f "$file" ]] || continue
-            echo "Found $file"
+            echo "Located environment file: $file"
             if [[ "$file" =~ 'config' ]]; then
                 cp -avf "$file" "${file/${G_NAMESPACE}./}" # vue2.x
             else
@@ -66,7 +66,7 @@ repo_inject_file() {
     overwrite)
         ## 代码库内已存在 Dockerfile 不覆盖
         if [[ -f "${project_dockerfile}" ]]; then
-            echo "found Dockerfile in project path, skip copy."
+            echo "Dockerfile already exists in project directory, skipping copy operation."
         else
             if [[ -f "${inject_dockerfile_1}" ]]; then
                 cp -avf "${inject_dockerfile_1}" "${project_dockerfile}"
@@ -76,7 +76,7 @@ repo_inject_file() {
         fi
         ## build image files 打包镜像时需要注入的文件
         if [ -d "${G_REPO_DIR}/root/opt" ]; then
-            echo "found exist path root/opt in project path, skip copy"
+            echo "Directory root/opt already exists in project path, skipping copy operation"
         else
             cp -af "${inject_root_path}" "$G_REPO_DIR/"
         fi

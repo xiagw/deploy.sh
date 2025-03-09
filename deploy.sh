@@ -328,7 +328,7 @@ main() {
     ${arg_renew_cert:-false} && system_cert_renew
 
     ## 探测项目的程序语言
-    _msg step "[language] probe program language"
+    _msg step "[lang] probe program language"
     repo_lang_detect=$(repo_language_detect)
     repo_lang=${repo_lang_detect%%:*}
     ## 解析语言类型和 docker 标识
