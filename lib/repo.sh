@@ -23,10 +23,10 @@ repo_inject_file() {
     ## 3. 使用 rsync 进行文件同步，保持文件属性并覆盖目标文件
     if [ -d "$inject_code_path_branch" ]; then
         _msg warning "Found custom code in $inject_code_path_branch, syncing to ${G_REPO_DIR}/"
-        rsync -av "$inject_code_path_branch/" "${G_REPO_DIR}/"
+        rsync -r "$inject_code_path_branch/" "${G_REPO_DIR}/"
     elif [ -d "$inject_code_path" ]; then
         _msg warning "Found custom code in $inject_code_path, syncing to ${G_REPO_DIR}/"
-        rsync -av "$inject_code_path/" "${G_REPO_DIR}/"
+        rsync -r "$inject_code_path/" "${G_REPO_DIR}/"
     fi
     ## frontend (VUE) .env file / 替换前端代码内配置文件
     if [[ "$lang_type" == node ]]; then
@@ -35,15 +35,15 @@ repo_inject_file() {
             [[ -f "$file" ]] || continue
             echo "Located environment file: $file"
             if [[ "$file" =~ 'config' ]]; then
-                cp -avf "$file" "${file/${G_NAMESPACE}./}" # vue2.x
+                cp -f "$file" "${file/${G_NAMESPACE}./}" # vue2.x
             else
-                cp -avf "$file" "${file/${G_NAMESPACE}/}" # vue3.x
+                cp -f "$file" "${file/${G_NAMESPACE}/}" # vue3.x
             fi
         done
     fi
     ## 检查项目不存在 /.dockerignore 时注入通用型文件 conf/dockerfile/.dockerignore
     if [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
-        cp -avf "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
+        cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
     fi
 
     ${arg_disable_inject:-false} && ENV_INJECT=keep
@@ -66,23 +66,23 @@ repo_inject_file() {
             ## 优先级1：使用 ${G_DATA}/dockerfile/Dockerfile.${lang_type}
             ## 优先级2：使用 ${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}
             if [[ -f "${G_DATA}/dockerfile/Dockerfile.${lang_type}" ]]; then
-                cp -avf "${G_DATA}/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
+                cp -f "${G_DATA}/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
             elif [[ -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" ]]; then
-                cp -avf "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
+                cp -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
             fi
         fi
 
         ## 优先级1：当项目中不存在 root/opt 目录时，从 ${G_PATH}/conf/dockerfile/root 注入目录结构
         ## 优先级2：无条件注入 ${G_DATA}/dockerfile/root 目录（如果存在），并对非 Java 项目清理 settings.xml
         if [ ! -d "${G_REPO_DIR}/root/opt" ] && [ -d "${G_PATH}/conf/dockerfile/root" ]; then
-            rsync -rv --exclude="*.cnf" "${G_PATH}/conf/dockerfile/root/" "${G_REPO_DIR}/"
+            rsync -r --exclude="*.cnf" "${G_PATH}/conf/dockerfile/root/" "${G_REPO_DIR}/"
         fi
         if [ -d "${G_DATA}/dockerfile/root" ]; then
             # 非 Java 项目删除 Maven settings 文件
             if [[ "$lang_type" == "java" ]]; then
-                rsync -rv --exclude="*.cnf" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/"
+                rsync -r --exclude="*.cnf" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/"
             else
-                rsync -rv --exclude="*.xml" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/"
+                rsync -r --exclude="*.xml" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/"
             fi
         fi
         ;;
