@@ -6,30 +6,21 @@
 # @param $1 G_DATA Directory containing data files
 # @return 0 on success, non-zero on failure
 repo_inject_file() {
-    local lang_type="$1" action="${2:-false}" env_inject="${3:-false}"
-    $action && return 0
+    local lang_type="$1" arg_disable_inject="${2:-false}"
 
     command -v rsync >/dev/null || _install_packages "$IS_CHINA" rsync
 
     _msg step "[inject] from ${G_DATA}/inject/"
 
     # Define paths for injection
+    ## Priority 1: ${G_DATA} paths
     local inject_code_path="${G_DATA}/inject/${G_REPO_NAME}"
     local inject_code_path_branch="${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE}"
-    ## 项目git代码库内如果已存在 Dockerfile
-    local project_dockerfile="${G_REPO_DIR}/Dockerfile"
-    ## git库内没有 Dockerfile 时尝试从 1. data/ 2. conf/ 自动注入 Dockerfile
-    local inject_dockerfile_1="${G_DATA}/dockerfile/Dockerfile.${lang_type}"
-    local inject_dockerfile_2="${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}"
-    ## git库内 注入 root/ 目录
-    local inject_root_path="${G_PATH}/conf/dockerfile/root"
-    ## Java 项目打包镜像时注入的 settings.xml 文件
-    local inject_setting="${G_DATA}/dockerfile/settings.xml"
-    ## 打包镜像时注入的 .dockerignore 文件
-    local inject_dockerignore="${G_PATH}/conf/dockerfile/.dockerignore"
-    ## 打包镜像时注入的 /opt/init.sh 文件 容器启动时初始化配置文件 init.sh 可以注入 /etc/hosts 等配置
-    local inject_init="${G_DATA}/dockerfile/init.sh"
-    ## 替换git库部分代码文件
+
+    ## 代码注入逻辑：
+    ## 1. 优先从 ${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE} 注入（命名空间特定的代码）
+    ## 2. 如果命名空间目录不存在，从 ${G_DATA}/inject/${G_REPO_NAME} 注入（项目通用代码）
+    ## 3. 使用 rsync 进行文件同步，保持文件属性并覆盖目标文件
     if [ -d "$inject_code_path_branch" ]; then
         _msg warning "Found custom code in $inject_code_path_branch, syncing to ${G_REPO_DIR}/"
         rsync -av "$inject_code_path_branch/" "${G_REPO_DIR}/"
@@ -50,13 +41,13 @@ repo_inject_file() {
             fi
         done
     fi
-    ## 检查并注入 .dockerignore 文件
-    if [[ -f "${project_dockerfile}" && ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
-        cp -avf "${inject_dockerignore}" "${G_REPO_DIR}/"
+    ## 检查并从conf/注入 .dockerignore 文件
+    if [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
+        cp -avf "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
     fi
 
     ## data/deploy.env:ENV_INJECT, default is keep， 使用 data/ 目录下的全局模板文件替换项目文件，例如 dockerfile init.sh等
-    ${env_inject:-false} && ENV_INJECT=keep
+    ${arg_disable_inject:-false} && ENV_INJECT=keep
 
     echo "ENV_INJECT: ${ENV_INJECT:-keep}"
     case ${ENV_INJECT:-keep} in
@@ -65,64 +56,29 @@ repo_inject_file() {
         ;;
     overwrite)
         ## 代码库内已存在 Dockerfile 不覆盖
-        if [[ -f "${project_dockerfile}" ]]; then
+        if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
             echo "Dockerfile already exists in project directory, skipping copy operation."
         else
-            if [[ -f "${inject_dockerfile_1}" ]]; then
-                cp -avf "${inject_dockerfile_1}" "${project_dockerfile}"
-            elif [[ -f "${inject_dockerfile_2}" ]]; then
-                cp -avf "${inject_dockerfile_2}" "${project_dockerfile}"
+            ## Priority 1: ${G_DATA} paths
+            if [[ -f "${G_DATA}/dockerfile/Dockerfile.${lang_type}" ]]; then
+                cp -avf "${G_DATA}/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
+                ## Priority 2: ${G_PATH}/conf/ paths
+            elif [[ -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" ]]; then
+                cp -avf "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
             fi
         fi
-        ## build image files 打包镜像时需要注入的文件
-        if [ -d "${G_REPO_DIR}/root/opt" ]; then
-            echo "Directory root/opt already exists in project path, skipping copy operation"
-        else
-            cp -af "${inject_root_path}" "$G_REPO_DIR/"
+        ## Priority 1: ${G_PATH}/conf/  打包镜像时需要注入的文件
+        if [ -d "${G_PATH}/conf/dockerfile/root" ]; then
+            cp -avf "${G_PATH}/conf/dockerfile/root" "$G_REPO_DIR/"
         fi
-        if [[ -f "${inject_init}" && -d "$G_REPO_DIR/root/opt/" ]]; then
-            cp -avf "${inject_init}" "$G_REPO_DIR/root/opt/"
+        ## Priority 2: ${G_DATA}/  打包镜像时需要注入的文件
+        if [ -d "${G_DATA}/dockerfile/root" ]; then
+            cp -avf "${G_DATA}/dockerfile/root" "$G_REPO_DIR/"
         fi
-
-        case "${lang_type}" in
-        java)
-            # Copy Java settings.xml if it exists 优先查找 data/ 目录
-            [[ -f "${inject_setting}" ]] && cp -avf "${inject_setting}" "${G_REPO_DIR}/"
-
-            # Read JDK version from README files
-            jdk_version=$(grep -iE 'jdk_version=([0-9.]+)' "${G_REPO_DIR}"/{README,readme}* 2>/dev/null | sed -E 's/.*=([0-9.]+).*/\1/' | tail -n1)
-
-            # Set Maven and JDK versions based on JDK version
-            case "${jdk_version:-}" in
-            1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" ;;
-            1.8 | 8) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;;
-            11) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11" ;;
-            17) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17" ;;
-            21) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21" ;;
-            *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;; # Default
-            esac
-
-            # Adjust versions if using Docker mirror
-            if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-                MVN_VERSION="maven-${MVN_VERSION}"
-                [[ "${JDK_VERSION}" == "7" ]] && JDK_VERSION="openjdk-7" || JDK_VERSION="amazoncorretto-${JDK_VERSION}"
-            fi
-
-            # Add build arguments
-            G_ARGS+=" --build-arg MVN_VERSION=${MVN_VERSION} --build-arg JDK_VERSION=${JDK_VERSION}"
-            # Check for additional installations
-            for install in FFMPEG FONTS LIBREOFFICE; do
-                if grep -qi "INSTALL_${install}=true" "${G_REPO_DIR}"/{README,readme}* 2>/dev/null; then
-                    G_ARGS+=" --build-arg INSTALL_${install}=true"
-                fi
-            done
-            export G_ARGS
-            ;;
-        esac
         ;;
     remove)
         echo 'Removing Dockerfile (disable docker build)'
-        rm -f "${project_dockerfile}"
+        rm -f "${G_REPO_DIR}/Dockerfile"
         ;;
     create)
         ## TODO
@@ -174,11 +130,38 @@ repo_language_detect() {
             if command -v xmllint >/dev/null 2>&1; then
                 version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
             fi
+            # 如果 xmllint 不可用或未获取到版本，使用 grep 和 sed
+            if [ -z "$version" ]; then
+                # 尝试获取 java.version
+                version=$(grep -E "<java.version>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<java.version>([^<]+)<.*/\1/')
+                # 如果没有 java.version，尝试获取 maven.compiler.source
+                if [ -z "$version" ]; then
+                    version=$(grep -E "<maven.compiler.source>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.source>([^<]+)<.*/\1/')
+                fi
+                # 如果还是没有，尝试获取 maven.compiler.target
+                if [ -z "$version" ]; then
+                    version=$(grep -E "<maven.compiler.target>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.target>([^<]+)<.*/\1/')
+                fi
+            fi
             ;;
         build.gradle | gradle.build)
             lang_type="java"
-            # 可以从 build.gradle 提取 Java 版本
-            version=$(grep -E "sourceCompatibility.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+            # 从 build.gradle 提取 Java 版本，支持多种格式
+            version=$(grep -E "sourceCompatibility.*=.*|targetCompatibility.*=.*|JavaVersion\.(VERSION_)?[0-9]+.*" "${G_REPO_DIR}/${file}" 2>/dev/null | head -n1)
+            if [ -n "$version" ]; then
+                # 处理不同的版本格式
+                if [[ $version =~ JavaVersion\.(VERSION_)?([0-9]+) ]]; then
+                    # 处理 JavaVersion.VERSION_11 或 JavaVersion.11 格式
+                    version="${BASH_REMATCH[2]}"
+                else
+                    # 处理 sourceCompatibility = '1.8' 或 targetCompatibility = 11 格式
+                    version=$(echo "$version" | grep -oE "[0-9]+(\.[0-9]+)?")
+                fi
+                # 统一版本格式，如果是 1.8 这样的格式，转换为 8
+                if [[ $version =~ ^1\.([0-9]+)$ ]]; then
+                    version="${BASH_REMATCH[1]}"
+                fi
+            fi
             ;;
         composer.json)
             lang_type="php"
@@ -266,15 +249,15 @@ repo_language_detect_docker() {
 
     # Run linguist in Docker container
     case "$format" in
-        json)
-            docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image" --json
-            ;;
-        breakdown)
-            docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image" --breakdown
-            ;;
-        *)
-            docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image"
-            ;;
+    json)
+        docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image" --json
+        ;;
+    breakdown)
+        docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image" --breakdown
+        ;;
+    *)
+        docker run --rm -t -v "${target_dir}:/repo" -w /repo "$docker_image"
+        ;;
     esac
 }
 

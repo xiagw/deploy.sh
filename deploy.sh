@@ -143,13 +143,12 @@ parse_command_args() {
         # Kubernetes operations
         --create-helm)
             arg_create_helm=true
-            disable_inject_action=true
             helm_dir="$2"
             shift
             ;;
         --create-k8s) create_k8s_with_terraform=true ;;
-        # Miscellaneous
-        --disable-inject) disable_inject_on_env=true ;;
+        ## 命令参数强制不注入文件
+        --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
         *) _usage && exit 1 ;;
         esac
@@ -179,6 +178,8 @@ parse_command_args() {
 
 # 配置 Docker/Podman 构建环境
 config_build_env() {
+    local lang="$1" lang_ver="$2"
+
     # 选择构建工具（Docker 或 Podman）
     G_DOCK=$(command -v podman || command -v docker || echo docker)
 
@@ -205,17 +206,38 @@ config_build_env() {
     fi
 
     # Java 项目特殊配置
-    if [ "$repo_lang" = java ]; then
+    if [ "$lang" = java ]; then
         G_ARGS+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
         if ${DEBUG_ON:-false}; then
             G_ARGS+=" --build-arg MVN_DEBUG=on"
         fi
-    fi
 
-    # Docker 镜像源配置
-    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-        G_ARGS+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR}"
-        G_ARGS+=" --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+        # Set Maven and JDK versions based on lang_ver
+        case "${lang_ver:-}" in
+        1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" ;;
+        1.8 | 8) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;;
+        11) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11" ;;
+        17) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17" ;;
+        21) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21" ;;
+        *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;; # Default
+        esac
+
+        # Adjust versions and set mirror if using Docker mirror
+        if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+            G_ARGS+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR}"
+            G_ARGS+=" --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+            MVN_VERSION="maven-${MVN_VERSION}"
+            [[ "${JDK_VERSION}" == "7" ]] && JDK_VERSION="openjdk-7" || JDK_VERSION="amazoncorretto-${JDK_VERSION}"
+        fi
+
+        # Add build arguments
+        G_ARGS+=" --build-arg MVN_VERSION=${MVN_VERSION} --build-arg JDK_VERSION=${JDK_VERSION}"
+        # Check for additional installations
+        for install in FFMPEG FONTS LIBREOFFICE; do
+            if grep -qi "INSTALL_${install}=true" "${G_REPO_DIR}"/{README,readme}* 2>/dev/null; then
+                G_ARGS+=" --build-arg INSTALL_${install}=true"
+            fi
+        done
     fi
 
     # 导出环境变量
@@ -301,7 +323,7 @@ main() {
     ## 处理 --in-china 参数
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
     ## 独立的创建 helm chart 目录
-    ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
+    ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return 0
 
     ## 安装所需的系统工具
     system_install_tools "$@"
@@ -323,21 +345,30 @@ main() {
 
     ## 探测项目的程序语言
     _msg step "[lang] probe program language"
-    repo_lang_detect=$(repo_language_detect)
-    repo_lang=${repo_lang_detect%%:*}
+    get_lang=$(repo_language_detect)
+    repo_lang=${get_lang%%:*}
+    repo_lang_ver=${get_lang#*:}
+    repo_lang_ver=${repo_lang_ver%%:*}
     ## 解析语言类型和 docker 标识
-    repo_dockerfile=${repo_lang_detect##*:}
-    _msg info "Detected program language: ${repo_lang}"
+    repo_dockerfile=${get_lang##*:}
+    _msg info "Detected program language: ${get_lang}"
 
     ## 处理构建工具选择
-    config_build_env || return 1
+    config_build_env "${repo_lang}" "${repo_lang_ver}" || return 1
 
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
-    # Skip injection if disabled
-    repo_inject_file "$repo_lang" "${disable_inject_action:-false}" "${disable_inject_on_env:-false}"
-    repo_lang_detect=$(repo_language_detect)
+    # disable_inject_on_env: 命令参数强制不注入文件
+    repo_inject_file "$repo_lang" "${arg_disable_inject:-false}"
+    get_lang=$(repo_language_detect)
     ## 解析 docker 标识
-    repo_dockerfile=${repo_lang_detect##*:}
+    repo_dockerfile=${get_lang##*:}
+    _msg info "Detected program language(again): ${get_lang}"
+    if [[ -z "${repo_dockerfile}" ]]; then
+        arg_flags["build_image"]=0
+        arg_flags["push_image"]=0
+    else
+        arg_flags["build_langs"]=0
+    fi
 
     ################################################################################
     ## 全自动执行，或根据 arg_flags 执行相应的任务
@@ -363,12 +394,6 @@ main() {
     [[ ${arg_flags["apidoc"]} -eq 1 ]] && generate_apidoc
 
     # 构建相关任务
-    if [[ -z "${repo_dockerfile}" ]]; then
-        arg_flags["build_image"]=0
-        arg_flags["push_image"]=0
-    else
-        arg_flags["build_langs"]=0
-    fi
     [[ ${arg_flags["build_langs"]} -eq 1 ]] && build_lang "$repo_lang"
     [[ ${arg_flags["build_image"]} -eq 1 ]] && build_image "$G_QUIET" "$G_IMAGE_TAG"
     [[ ${arg_flags["push_image"]} -eq 1 ]] && push_image
