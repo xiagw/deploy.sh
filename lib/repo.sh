@@ -41,10 +41,6 @@ repo_inject_file() {
             fi
         done
     fi
-    ## 检查项目不存在 /.dockerignore 时注入通用型文件 conf/dockerfile/.dockerignore
-    if [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
-        cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
-    fi
 
     ${arg_disable_inject:-false} && ENV_INJECT=keep
 
@@ -71,7 +67,10 @@ repo_inject_file() {
                 cp -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
             fi
         fi
-
+        ## 检查项目不存在 /.dockerignore 时注入通用型文件 conf/dockerfile/.dockerignore
+        if [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
+            cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
+        fi
         ## 优先级1：当项目中不存在 root/opt 目录时，从 ${G_PATH}/conf/dockerfile/root 注入目录结构
         ## 优先级2：无条件注入 ${G_DATA}/dockerfile/root 目录（如果存在），并对非 Java 项目清理 settings.xml
         if [ ! -d "${G_REPO_DIR}/root/opt" ] && [ -d "${G_PATH}/conf/dockerfile/root" ]; then
