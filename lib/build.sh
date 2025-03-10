@@ -372,8 +372,7 @@ build_image() {
         return
     fi
 
-    $G_DOCK build $G_ARGS --tag "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
-        "${G_REPO_DIR}" || {
+    $G_DOCK build $G_ARGS --tag "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" "${G_REPO_DIR}" || {
         _msg error "Failed to build image"
         return 1
     }
@@ -515,7 +514,7 @@ repo_language_detect_and_build() {
         builder="paketobuildpacks/builder:base"
 
         # 创建 project.toml 配置文件来指定 PHP 版本和扩展
-        cat > "${target_dir}/project.toml" <<EOF
+        cat >"${target_dir}/project.toml" <<EOF
 [[build.env]]
 name = "BP_PHP_VERSION"
 value = "${PHP_VERSION:-8.3}"  # 默认使用 PHP 8.3，可以通过环境变量覆盖

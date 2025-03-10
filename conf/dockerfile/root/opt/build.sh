@@ -58,6 +58,8 @@ _set_mirror() {
             cp -vf settings.xml $m2_dir/
         elif [ -f docs/settings.xml ]; then
             cp -vf docs/settings.xml $m2_dir/
+        elif [ -f .mvn/settings.xml ]; then
+            cp -vf .mvn/settings.xml $m2_dir/
         elif [ -f /src/root/opt/settings.xml ]; then
             cp -vf /src/root/opt/settings.xml $m2_dir/
         elif [ -f /opt/settings.xml ]; then

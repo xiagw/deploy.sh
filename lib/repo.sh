@@ -135,12 +135,15 @@ repo_language_detect() {
         case ${file,,} in
         pom.xml)
             lang_type="java"
-            # 尝试提取 Java 版本
-            if command -v xmllint >/dev/null 2>&1; then
-                version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
+            if [ -z "$version" ]; then
+                version=$(awk -F= '/^jdk_version/ {print tolower($2)}' "${G_REPO_DIR}/README".* | tr -d ' ' | tail -n 1)
             fi
+            # 尝试提取 Java 版本
             # 如果 xmllint 不可用或未获取到版本，使用 grep 和 sed
             if [ -z "$version" ]; then
+                if command -v xmllint >/dev/null 2>&1; then
+                    version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
+                fi
                 # 尝试获取 java.version
                 version=$(grep -E "<java.version>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<java.version>([^<]+)<.*/\1/')
                 # 如果没有 java.version，尝试获取 maven.compiler.source
