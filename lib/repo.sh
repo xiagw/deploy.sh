@@ -67,8 +67,9 @@ repo_inject_file() {
                 cp -avf "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
             fi
         fi
+
         ## Priority 1: ${G_PATH}/conf/  打包镜像时需要注入的文件
-        if [ -d "${G_PATH}/conf/dockerfile/root" ]; then
+        if [ ! -d "${G_REPO_DIR}/root/opt" ] && [ -d "${G_PATH}/conf/dockerfile/root" ]; then
             cp -avf "${G_PATH}/conf/dockerfile/root" "$G_REPO_DIR/"
         fi
         ## Priority 2: ${G_DATA}/  打包镜像时需要注入的文件
