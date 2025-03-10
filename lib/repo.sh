@@ -327,7 +327,7 @@ setup_git_repo() {
     git_repo_name="$(basename "$git_repo_full_path" .git)"
     git_repo_group="$(dirname "$git_repo_full_path")"
     git_repo_dir="${G_PATH}/builds/${git_repo_group}/${git_repo_name}"
-    mkdir -p "$git_repo_dir"
+    [ -d "${git_repo_dir}" ] || mkdir -p "$git_repo_dir"
 
     if [ -d "${git_repo_dir}/.git" ] && cd "$git_repo_dir" && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ "$(git rev-parse --git-dir)" = ".git" ]; then
         _msg step "[repo] Updating existing repo: $git_repo_dir, branch: ${git_repo_branch}"
