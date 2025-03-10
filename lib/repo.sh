@@ -75,14 +75,14 @@ repo_inject_file() {
         ## 优先级1：当项目中不存在 root/opt 目录时，从 ${G_PATH}/conf/dockerfile/root 注入目录结构
         ## 优先级2：无条件注入 ${G_DATA}/dockerfile/root 目录（如果存在），并对非 Java 项目清理 settings.xml
         if [ ! -d "${G_REPO_DIR}/root/opt" ] && [ -d "${G_PATH}/conf/dockerfile/root" ]; then
-            rsync -r --exclude="*.cnf" "${G_PATH}/conf/dockerfile/root/" "${G_REPO_DIR}/"
+            rsync -r --exclude="*.cnf" "${G_PATH}/conf/dockerfile/root/" "${G_REPO_DIR}/root/"
         fi
         if [ -d "${G_DATA}/dockerfile/root" ]; then
             # 非 Java 项目删除 Maven settings 文件
             if [[ "$lang_type" == "java" ]]; then
-                rsync -r --exclude="*.cnf" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/"
+                rsync -r --exclude="*.cnf" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/root/"
             else
-                rsync -r --exclude="*.xml" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/"
+                rsync -r --exclude="*.xml" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/root/"
             fi
         fi
         ;;
