@@ -18,8 +18,8 @@ repo_inject_file() {
     local inject_code_path_branch="${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE}"
 
     ## 代码注入逻辑：
-    ## 1. 优先从 ${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE} 注入（命名空间特定的代码）
-    ## 2. 如果命名空间目录不存在，从 ${G_DATA}/inject/${G_REPO_NAME} 注入（项目通用代码）
+    ## 1. 优先从 ${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE} 注入（对应项目的对应命名空间的代码）
+    ## 2. 如果命名空间目录不存在，从 ${G_DATA}/inject/${G_REPO_NAME} 注入（对应项目通用代码）
     ## 3. 使用 rsync 进行文件同步，保持文件属性并覆盖目标文件
     if [ -d "$inject_code_path_branch" ]; then
         _msg warning "Found custom code in $inject_code_path_branch, syncing to ${G_REPO_DIR}/"
@@ -41,40 +41,48 @@ repo_inject_file() {
             fi
         done
     fi
-    ## 检查并从conf/注入 .dockerignore 文件
+    ## 检查项目不存在 /.dockerignore 时注入通用型文件 conf/dockerfile/.dockerignore
     if [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
         cp -avf "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
     fi
 
-    ## data/deploy.env:ENV_INJECT, default is keep， 使用 data/ 目录下的全局模板文件替换项目文件，例如 dockerfile init.sh等
     ${arg_disable_inject:-false} && ENV_INJECT=keep
 
+    ## 根据 ENV_INJECT 变量值（默认为 keep）控制配置文件注入行为：
+    ## - keep: 保持现有配置不变
+    ## - overwrite: 注入 Dockerfile 和 root 目录结构（优先使用 conf/dockerfile/，其次是 data/dockerfile/）
+    ## - remove: 移除 Dockerfile
+    ## - create: 创建 docker-compose.yml
     echo "ENV_INJECT: ${ENV_INJECT:-keep}"
     case ${ENV_INJECT:-keep} in
     keep)
         echo "Keeping existing configuration, no files will be overwritten."
         ;;
     overwrite)
-        ## 代码库内已存在 Dockerfile 不覆盖
+        ## 检查项目中是否已存在 Dockerfile，存在则跳过，不存在则按优先级注入对应语言类型的 Dockerfile
         if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
             echo "Dockerfile already exists in project directory, skipping copy operation."
         else
-            ## Priority 1: ${G_DATA} paths
+            ## 优先级1：使用 ${G_DATA}/dockerfile/Dockerfile.${lang_type}
+            ## 优先级2：使用 ${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}
             if [[ -f "${G_DATA}/dockerfile/Dockerfile.${lang_type}" ]]; then
                 cp -avf "${G_DATA}/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
-                ## Priority 2: ${G_PATH}/conf/ paths
             elif [[ -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" ]]; then
                 cp -avf "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
             fi
         fi
 
-        ## Priority 1: ${G_PATH}/conf/  打包镜像时需要注入的文件
+        ## 优先级1：当项目中不存在 root/opt 目录时，从 ${G_PATH}/conf/dockerfile/root 注入目录结构
+        ## 优先级2：无条件注入 ${G_DATA}/dockerfile/root 目录（如果存在），并对非 Java 项目清理 settings.xml
         if [ ! -d "${G_REPO_DIR}/root/opt" ] && [ -d "${G_PATH}/conf/dockerfile/root" ]; then
             cp -avf "${G_PATH}/conf/dockerfile/root" "$G_REPO_DIR/"
         fi
-        ## Priority 2: ${G_DATA}/  打包镜像时需要注入的文件
         if [ -d "${G_DATA}/dockerfile/root" ]; then
             cp -avf "${G_DATA}/dockerfile/root" "$G_REPO_DIR/"
+            # 非 Java 项目删除 Maven settings 文件
+            if [[ "$lang_type" != "java" && -f "${G_REPO_DIR}/root/opt/settings.xml" ]]; then
+                rm -f "${G_REPO_DIR}/root/opt/settings.xml"
+            fi
         fi
         ;;
     remove)
