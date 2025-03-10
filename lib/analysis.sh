@@ -22,7 +22,7 @@ generate_apidoc() {
     _msg green "Using input directory: ${input_dir}"
     _msg blue "Using output directory: ${output_dir}"
 
-    if ${DOCKER_RUN:-} -v "${G_REPO_DIR}":/app -w /app deploy/node bash -c "$apidoc_cmd"; then
+    if ${G_RUN:-} -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app deploy/node bash -c "$apidoc_cmd"; then
         _msg success "API documentation generated successfully"
     else
         _msg error "Failed to generate API documentation"
@@ -40,7 +40,7 @@ analysis_gitleaks() {
 
     _msg step "[security] checking for sensitive information leaks"
 
-    ${DOCKER_RUN0:-} \
+    ${G_RUN:-} \
         -v "$path:/repo" \
         -v "$config_file:/config.toml" \
         zricethezav/gitleaks:v7.5.0 \
@@ -68,7 +68,7 @@ analysis_zap() {
 
     _msg step "[security] running ZAP security scan"
 
-    if $DOCKER_RUN0 -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh $zap_options; then
+    if $G_RUN -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh $zap_options; then
         mv "$zap_report_file" "zap_report_latest.html"
         _msg green "ZAP scan completed. Report saved to zap_report_latest.html"
     else
@@ -96,7 +96,7 @@ analysis_vulmap() {
     source "$config_file"
 
     # Run vulmap scan
-    $DOCKER_RUN0 -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/$output_file"
+    $G_RUN -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/$output_file"
     if [[ -f "$output_file" ]]; then
         _msg green "Vulmap scan complete. Results saved to '$output_file'."
     else
@@ -143,7 +143,7 @@ EOF
 
     ${GH_ACTION:-false} && return 0
 
-    if ! $DOCKER_RUN -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$G_REPO_DIR":/usr/src sonarsource/sonar-scanner-cli; then
+    if ! $G_RUN -u 1000:1000 -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$G_REPO_DIR":/usr/src sonarsource/sonar-scanner-cli; then
         _msg error "SonarQube scan failed"
         return 1
     fi
@@ -167,7 +167,7 @@ analysis_pmd() {
 
     _msg step "[quality] Running PMD analysis with version ${pmd_version}"
 
-    if ! $DOCKER_RUN0 \
+    if ! $G_RUN \
         -v "${G_REPO_DIR}:/src" \
         -v "${G_REPO_DIR}/pmd-rules:/rules" \
         "pmd/pmd:${pmd_version}" pmd \
@@ -250,7 +250,7 @@ EOF
 
     _msg step "[quality] Running CodeClimate analysis with configuration from ${config_file}"
 
-    if ! $DOCKER_RUN0 \
+    if ! $G_RUN \
         -v "${G_REPO_DIR}":/code \
         -v "${config_file}":/code/.codeclimate.yml \
         -v /tmp/cc:/tmp/cc \
@@ -321,11 +321,11 @@ EOF
 
     _msg step "[quality] Running Spotbugs analysis with version ${spotbugs_version}"
 
-    if ! $DOCKER_RUN0 \
+    if ! $G_RUN \
         -v "${G_REPO_DIR}:/src" \
         -v "${exclude_file}:/opt/spotbugs/exclude.xml" \
         "spotbugs/spotbugs:${spotbugs_version}" \
-        -textui -${report_format}:"/src/${report_file}" \
+        -textui -"${report_format}":"/src/${report_file}" \
         -exclude "/opt/spotbugs/exclude.xml" \
         "/src/${java_classes_dir}"; then
         _msg error "Spotbugs analysis failed"
@@ -358,12 +358,12 @@ analysis_pylint() {
     # 创建默认的Pylint配置文件
     if [[ ! -f "$config_file" ]]; then
         _msg green "Creating default Pylint configuration"
-        $DOCKER_RUN0 "python:${pylint_version}-slim" bash -c "pip install pylint==${pylint_version} && pylint --generate-rcfile" > "$config_file"
+        $G_RUN "python:${pylint_version}-slim" bash -c "pip install pylint==${pylint_version} && pylint --generate-rcfile" > "$config_file"
     fi
 
     _msg step "[quality] Running Pylint analysis with version ${pylint_version}"
 
-    if ! $DOCKER_RUN0 \
+    if ! $G_RUN \
         -v "${G_REPO_DIR}:/code" \
         -w /code \
         "python:${pylint_version}-slim" bash -c "\
@@ -434,7 +434,7 @@ EOF
 
     _msg step "[quality] Running Checkstyle analysis with version ${checkstyle_version}"
 
-    if ! $DOCKER_RUN0 \
+    if ! $G_RUN \
         -v "${G_REPO_DIR}:/src" \
         "checkstyle/checkstyle:${checkstyle_version}" \
         -c "/src/checkstyle.xml" \

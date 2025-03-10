@@ -109,14 +109,14 @@ repo_inject_file() {
             fi
 
             # Add build arguments
-            BUILD_ARG+=" --build-arg MVN_VERSION=${MVN_VERSION} --build-arg JDK_VERSION=${JDK_VERSION}"
+            G_ARGS+=" --build-arg MVN_VERSION=${MVN_VERSION} --build-arg JDK_VERSION=${JDK_VERSION}"
             # Check for additional installations
             for install in FFMPEG FONTS LIBREOFFICE; do
                 if grep -qi "INSTALL_${install}=true" "${G_REPO_DIR}"/{README,readme}* 2>/dev/null; then
-                    BUILD_ARG+=" --build-arg INSTALL_${install}=true"
+                    G_ARGS+=" --build-arg INSTALL_${install}=true"
                 fi
             done
-            export BUILD_ARG
+            export G_ARGS
             ;;
         esac
         ;;

@@ -23,12 +23,12 @@ build_java() {
         ${DEBUG_ON:-false} || maven_quiet='--quiet'
 
         ## Create maven cache
-        if ! $DOCKER volume ls | grep -q maven-repo; then
-            $DOCKER volume create --name maven-repo
+        if ! $G_DOCK volume ls | grep -q maven-repo; then
+            $G_DOCK volume create --name maven-repo
         fi
 
-        $DOCKER_RUN0 -v maven-repo:/var/maven/.m2:rw maven:"${ENV_MAVEN_VER:-3.8-jdk-8}" bash -c "chown -R 1000.1000 /var/maven"
-        $DOCKER_RUN0 --user "$(id -u):$(id -g)" \
+        $G_RUN -u 0:0 -v maven-repo:/var/maven/.m2:rw maven:"${ENV_MAVEN_VER:-3.8-jdk-8}" bash -c "chown -R 1000.1000 /var/maven"
+        $G_RUN --user "$(id -u):$(id -g)" \
             -e MAVEN_CONFIG=/var/maven/.m2 \
             -v maven-repo:/var/maven/.m2:rw \
             -v "$G_REPO_DIR":/src:rw -w /src \
@@ -100,13 +100,13 @@ build_node() {
 
     # Custom build check
     if [ -f "$G_REPO_DIR/build.custom.sh" ]; then
-        $DOCKER_RUN -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash build.custom.sh
+        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash build.custom.sh
         return
     fi
 
     # Install dependencies
     if ${yarn_install}; then
-        $DOCKER_RUN -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash -c "yarn install" &&
+        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash -c "yarn install" &&
             echo "$file_json_md5" >>"${me_log}"
     else
         _msg time "skip yarn install..."
@@ -120,7 +120,7 @@ build_node() {
     *) build_opt=build ;;
     esac
 
-    $DOCKER_RUN -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash -c "yarn run ${build_opt}"
+    $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash -c "yarn run ${build_opt}"
 
     [ -d "${G_REPO_DIR}"/build ] && rsync -a --delete "${G_REPO_DIR}"/build/ "${G_REPO_DIR}"/dist/
     _msg stepend "[build] yarn"
@@ -257,7 +257,7 @@ docker_login() {
         fi
         _msg time "[login] aws ecr login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
         if aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" |
-            $DOCKER login --username AWS --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" >/dev/null; then
+            $G_DOCK login --username AWS --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" >/dev/null; then
             touch "$lock_login_registry"
         else
             _msg error "AWS ECR login failed"
@@ -271,7 +271,7 @@ docker_login() {
             return 0
         fi
         if echo "${ENV_DOCKER_PASSWORD}" |
-            $DOCKER login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"; then
+            $G_DOCK login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"; then
             touch "$lock_login_registry"
         else
             _msg error "Docker login failed"
@@ -337,9 +337,9 @@ get_docker_context() {
         ;;
     esac
 
-    DOCKER="${DOCKER:+"$DOCKER "}--context $selected_context"
-    echo "$DOCKER"
-    export DOCKER
+    G_DOCK="${G_DOCK:+"$G_DOCK "}--context $selected_context"
+    echo "$G_DOCK"
+    export G_DOCK
 }
 
 build_image() {
@@ -358,12 +358,12 @@ build_image() {
         else
             local base_tag="${registry_base}:${G_REPO_NAME}-${G_REPO_BRANCH}"
             _msg info "Building base image: $base_tag"
-            $DOCKER build $BUILD_ARG --tag "$base_tag" \
+            $G_DOCK build $G_ARGS --tag "$base_tag" \
                 -f "${G_REPO_DIR}/Dockerfile.base" "${G_REPO_DIR}" || {
                 _msg error "Failed to build base image"
                 return 1
             }
-            $DOCKER push $G_QUIET "$base_tag" || {
+            $G_DOCK push $G_QUIET "$base_tag" || {
                 _msg error "Failed to push base image"
                 return 1
             }
@@ -372,7 +372,7 @@ build_image() {
         return
     fi
 
-    $DOCKER build $BUILD_ARG --tag "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
+    $G_DOCK build $G_ARGS --tag "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
         "${G_REPO_DIR}" || {
         _msg error "Failed to build image"
         return 1
@@ -383,11 +383,11 @@ build_image() {
         image_uuid="ttl.sh/$(uuidgen):1h"
         _msg info "Temporary image tag for ttl.sh: $image_uuid"
         echo "## If you want to push the image to ttl.sh, please execute the following commands on gitlab-runner:"
-        echo "  $DOCKER tag ${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG} ${image_uuid}"
-        echo "  $DOCKER push $image_uuid"
+        echo "  $G_DOCK tag ${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG} ${image_uuid}"
+        echo "  $G_DOCK push $image_uuid"
         echo "## Then execute the following commands on remote server:"
-        echo "  $DOCKER pull $image_uuid"
-        echo "  $DOCKER tag $image_uuid laradock_spring"
+        echo "  $G_DOCK pull $image_uuid"
+        echo "  $G_DOCK tag $image_uuid laradock_spring"
     fi
 }
 
@@ -399,8 +399,8 @@ push_image() {
     local push_error=false
 
     # Push main image
-    if $DOCKER push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
-        $DOCKER rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null
+    if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
+        $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null
     else
         push_error=true
     fi

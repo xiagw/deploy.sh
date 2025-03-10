@@ -179,54 +179,47 @@ parse_command_args() {
 
 # 配置 Docker/Podman 构建环境
 config_build_env() {
-    local docker_cmd build_args=""
-
     # 选择构建工具（Docker 或 Podman）
-    docker_cmd=$(command -v podman || command -v docker || echo docker)
+    G_DOCK=$(command -v podman || command -v docker || echo docker)
 
     # 如果需要构建镜像，进行更严格的工具选择
-    if [ "${arg_flags["build_image"]}" -eq 1 ]; then
-        if command -v docker >/dev/null 2>&1; then
-            docker_cmd=$(command -v docker)
-        elif command -v podman >/dev/null 2>&1; then
-            docker_cmd=$(command -v podman)
-            build_args="--force-rm --format=docker"
-        else
-            _msg error "Neither docker nor podman found"
-            return 1
-        fi
+    if command -v docker >/dev/null 2>&1; then
+        G_DOCK=$(command -v docker)
+    elif command -v podman >/dev/null 2>&1; then
+        G_DOCK=$(command -v podman)
+        # G_ARGS="--force-rm --format=docker"
+    else
+        _msg error "Neither docker nor podman found"
+        return 1
     fi
 
     # 设置基本的 Docker 运行命令
-    DOCKER="${docker_cmd}"
-    DOCKER_RUN0="${docker_cmd} run ${ENV_ADD_HOST} --interactive --rm"
-    DOCKER_RUN="${docker_cmd} run ${ENV_ADD_HOST} --interactive --rm -u 1000:1000"
+    G_RUN="${G_DOCK} run --add-host=${ENV_ADD_HOST} --interactive --rm"
 
     # 构建参数配置
-    build_args+=" ${ENV_ADD_HOST} ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-
-    # Docker 镜像源配置
-    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-        build_args+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR}"
-        build_args+=" --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
-    fi
+    G_ARGS=" --add-host=${ENV_ADD_HOST} ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
 
     # 调试模式配置
     if ${DEBUG_ON:-false}; then
-        build_args+=" --progress plain"
+        G_ARGS+=" --progress plain"
     fi
 
     # Java 项目特殊配置
     if [ "$repo_lang" = java ]; then
-        build_args+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
+        G_ARGS+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
         if ${DEBUG_ON:-false}; then
-            build_args+=" --build-arg MVN_DEBUG=on"
+            G_ARGS+=" --build-arg MVN_DEBUG=on"
         fi
     fi
 
+    # Docker 镜像源配置
+    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+        G_ARGS+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR}"
+        G_ARGS+=" --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
+    fi
+
     # 导出环境变量
-    BUILD_ARG="${build_args}"
-    export DOCKER DOCKER_RUN0 DOCKER_RUN BUILD_ARG
+    export G_DOCK G_RUN G_ARGS
 }
 
 main() {
@@ -307,6 +300,7 @@ main() {
 
     ## 处理 --in-china 参数
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
+    ## 独立的创建 helm chart 目录
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}"
 
     ## 安装所需的系统工具
