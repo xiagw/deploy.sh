@@ -11,7 +11,7 @@
 
 # SSL deployment functions
 select_file() {
-    local search_dir="$1"
+    local search_dir="$1" selected_file
 
     if [[ -z "$search_dir" ]]; then
         echo "错误: 未提供搜索目录" >&2
@@ -23,7 +23,6 @@ select_file() {
         return 1
     fi
 
-    local selected_file
     selected_file=$(find "$search_dir" -maxdepth 1 \
         \( -name "*.zip" -o -name "*nginx*" -o -name "*.key" -o -name "*.pem" -o -name "*.crt" \) \
         -type f | fzf --height 50% --prompt="选择要同步的文件: ")
@@ -36,8 +35,7 @@ select_file() {
 }
 
 select_ssh_host() {
-    local ssh_config_files=("$HOME/.ssh/config"* "$HOME/.ssh/config.d/"*)
-    local hosts
+    local ssh_config_files=("$HOME/.ssh/config"* "$HOME/.ssh/config.d/"*) hosts
     hosts=$(grep "^Host " "${ssh_config_files[@]}" 2>/dev/null | awk '{print $2}' | sort -u)
 
     if [[ -z "$hosts" ]]; then
@@ -79,17 +77,12 @@ extract_file() {
 }
 
 find_and_sync_files() {
-    local source_path="$1"
-    local target_host="$2"
-    local target_base_path="$3"
+    local source_path="$1" target_host="$2" target_base_path="$3" key_file="" pem_file="" crt_file="" sync_status=0
 
     if [[ -z "$source_path" || -z "$target_host" || -z "$target_base_path" ]]; then
         echo "错误: 缺少必需的参数" >&2
         return 1
     fi
-
-    local key_file="" pem_file="" crt_file=""
-    local sync_status=0
 
     if [[ -d "$source_path" ]]; then
         key_file=$(find "$source_path" -type f -name "*.key" | head -n 1)
@@ -143,14 +136,12 @@ find_and_sync_files() {
 
 # Project management functions 00-文档库/03研发/所有研发人员-ssh-public-key.txt
 sync_ssh_keys() {
-    local source_keys_file="$1"
-    local oss_bucket_and_path="$2"
-    local temp_keys_file="${SCRIPT_DIR}/temp_ssh_keys.txt"
+    local source_keys_file="$1" oss_bucket_and_path="$2" temp_keys_file="${G_DIR}/temp_ssh_keys.txt"
 
     # Validate required parameters
     if [[ -z "$source_keys_file" || -z "$oss_bucket_and_path" ]]; then
-        echo "Usage: $SCRIPT_NAME keys <source_keys_file> <oss_bucket/path>" >&2
-        echo "Example: $SCRIPT_NAME keys ./ssh-keys.txt oss-bucket/path/to/example.keys" >&2
+        echo "Usage: $G_NAME keys <source_keys_file> <oss_bucket/path>" >&2
+        echo "Example: $G_NAME keys ./ssh-keys.txt oss-bucket/path/to/example.keys" >&2
         return 1
     fi
 
@@ -167,14 +158,12 @@ sync_ssh_keys() {
 }
 
 search_project_files() {
-    local active_dir="$1"
+    local active_dir="$1" search_pattern="$2" selected_dir
     if [[ ! -d "$active_dir" ]]; then
         echo "Error: Active directory path is required" >&2
         display_usage
         return 1
     fi
-    local search_pattern="$2"
-    local selected_dir
 
     if [[ -d "$active_dir"/已关闭 ]]; then
         active_dir+=" $active_dir/已关闭"
@@ -201,11 +190,7 @@ search_project_files() {
 deploy_ssl() {
     trap cleanup EXIT INT TERM HUP QUIT
 
-    local source_dir="${1:-$HOME/Downloads}" # 默认使用 Downloads 目录
-    local source_file
-    local extracted_path
-    local target_host
-    local target_path="docker/laradock/nginx/sites/ssl/"
+    local source_dir="${1:-$HOME/Downloads}" source_file extracted_path target_host target_path="docker/laradock/nginx/sites/ssl/"
 
     source_file=$(select_file "$source_dir") || return 1
     echo "选择的源文件: $source_file"
@@ -233,8 +218,7 @@ deploy_ssl() {
 
 # Docker image management functions
 copy_docker_image() {
-    local source_image="$1"
-    local target_registry="$2"
+    local source_image="$1" target_registry="$2" image_name image_tag
 
     if [[ -z "$source_image" || -z "$target_registry" ]]; then
         echo "Error: Missing required parameters"
@@ -244,8 +228,6 @@ copy_docker_image() {
     fi
 
     # Extract image name and tag from source_image
-    local image_name
-    local image_tag
     if [[ "$source_image" == *":"* ]]; then
         image_name="${source_image%:*}"
         image_tag="${source_image#*:}"
@@ -310,7 +292,7 @@ deploy_wechat() {
 
 display_usage() {
     cat <<EOF
-Usage: ${SCRIPT_NAME} COMMAND [ARGS]
+Usage: ${G_NAME} COMMAND [ARGS]
 
 Commands:
     ssl [DIR]                   Deploy SSL certificates (default dir: ~/Downloads)
@@ -325,12 +307,12 @@ Options for search command:
     -b, --bat          Use bat for viewing (default)
 
 Examples:
-    ${SCRIPT_NAME} ssl /path/to/certificates
-    ${SCRIPT_NAME} search
-    ${SCRIPT_NAME} search /path/to/active pattern
-    ${SCRIPT_NAME} keys /path/to/ssh-keys.txt bucket/path
-    ${SCRIPT_NAME} wechat
-    ${SCRIPT_NAME} docker nginx:latest registry.example.com
+    ${G_NAME} ssl /path/to/certificates
+    ${G_NAME} search
+    ${G_NAME} search /path/to/active pattern
+    ${G_NAME} keys /path/to/ssh-keys.txt bucket/path
+    ${G_NAME} wechat
+    ${G_NAME} docker nginx:latest registry.example.com
 EOF
 }
 
@@ -343,15 +325,15 @@ main() {
     command -v fzf >/dev/null 2>&1 || { echo "Error: fzf is required" >&2 && exit 1; }
     CMD_OSS=$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")
 
-    SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
-    SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-    SCRIPT_DATA="$(dirname "${SCRIPT_DIR}")/data"
-    SCRIPT_ENV="${SCRIPT_DATA}/${SCRIPT_NAME}.env"
+    G_NAME="${BASH_SOURCE[0]##*/}"
+    G_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+    G_DATA="$(dirname "${G_DIR}")/data"
+    G_ENV="${G_DATA}/${G_NAME}.env"
 
     # 加载环境变量文件
-    [ -f "$SCRIPT_ENV" ] || { echo "Error: Environment file $SCRIPT_ENV not found" >&2 && exit 1; }
+    [ -f "$G_ENV" ] || { echo "Error: Environment file $G_ENV not found" >&2 && exit 1; }
     # shellcheck source=/dev/null
-    source "$SCRIPT_ENV"
+    source "$G_ENV"
 
     # Command processing
     case "${1:-search}" in
