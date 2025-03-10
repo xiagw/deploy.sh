@@ -58,10 +58,10 @@ _set_mirror() {
             cp -vf settings.xml $m2_dir/
         elif [ -f docs/settings.xml ]; then
             cp -vf docs/settings.xml $m2_dir/
+        elif [ -f root/opt/settings.xml ]; then
+            cp -vf root/opt/settings.xml $m2_dir/
         elif [ -f /opt/settings.xml ]; then
             cp -vf /opt/settings.xml $m2_dir/
-        elif [ -f /root/opt/settings.xml ]; then
-            cp -vf /root/opt/settings.xml $m2_dir/
         else
             curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
         fi
