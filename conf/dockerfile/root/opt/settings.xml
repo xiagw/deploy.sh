@@ -1,14 +1,63 @@
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
-                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
+                              https://maven.apache.org/xsd/settings-1.2.0.xsd">
+
     <localRepository>/var/maven/.m2</localRepository>
+
+    <profiles>
+        <profile>
+            <id>repo1</id>
+            <repositories>
+            <repository>
+                <id>repo1</id>
+                <url>http://mirror.flyh6.com/repository/maven2proxy/</url>
+                <releases>
+                <enabled>true</enabled>
+                </releases>
+                <snapshots>
+                <enabled>true</enabled>
+                </snapshots>
+            </repository>
+            </repositories>
+        </profile>
+
+        <profile>
+            <id>repo2</id>
+            <repositories>
+            <repository>
+                <id>repo2</id>
+                <url>https://mirror.flyh6.com/repository/maven-releases/</url>
+                <releases>
+                <enabled>true</enabled>
+                </releases>
+                <snapshots>
+                <enabled>true</enabled>
+                </snapshots>
+            </repository>
+            </repositories>
+        </profile>
+    </profiles>
+
+    <activeProfiles>
+        <!-- <activeProfile>repo1</activeProfile> -->
+        <activeProfile>repo2</activeProfile>
+    </activeProfiles>
+
+
     <mirrors>
+        <mirror>
+            <id>flyh6</id>
+            <mirrorOf>*</mirrorOf>
+            <url>http://mirror.flyh6.com/repository/maven2proxy/</url>
+        </mirror>
+
         <mirror>
             <id>huaweicloud</id>
             <mirrorOf>*</mirrorOf>
             <url>https://repo.huaweicloud.com/repository/maven/</url>
         </mirror>
+
         <mirror>
             <id>aliyunmaven</id>
             <mirrorOf>*</mirrorOf>
@@ -16,4 +65,5 @@
             <url>https://maven.aliyun.com/repository/public</url>
         </mirror>
     </mirrors>
+
 </settings>

@@ -55,34 +55,51 @@ repo_inject_file() {
         echo "Keeping existing configuration, no files will be overwritten."
         ;;
     overwrite)
-        ## 检查项目中是否已存在 Dockerfile，存在则跳过，不存在则按优先级注入对应语言类型的 Dockerfile
-        if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
-            echo "Dockerfile already exists in project directory, skipping copy operation."
-        else
-            ## 优先级1：使用 ${G_DATA}/dockerfile/Dockerfile.${lang_type}
-            ## 优先级2：使用 ${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}
-            if [[ -f "${G_DATA}/dockerfile/Dockerfile.${lang_type}" ]]; then
-                cp -f "${G_DATA}/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
-            elif [[ -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" ]]; then
-                cp -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang_type}" "${G_REPO_DIR}/Dockerfile"
+        ## 定义常用路径
+        local dockerfile_data="${G_DATA}/dockerfile"
+        local dockerfile_conf="${G_PATH}/conf/dockerfile"
+        local root_dir="${G_REPO_DIR}/root"
+
+        ## 1. Dockerfile 注入
+        if [[ ! -f "${G_REPO_DIR}/Dockerfile" ]]; then
+            local dockerfile_template
+            ## 按优先级查找对应语言的 Dockerfile 模板
+            if [[ -f "${dockerfile_data}/Dockerfile.${lang_type}" ]]; then
+                dockerfile_template="${dockerfile_data}/Dockerfile.${lang_type}"
+            elif [[ -f "${dockerfile_conf}/Dockerfile.${lang_type}" ]]; then
+                dockerfile_template="${dockerfile_conf}/Dockerfile.${lang_type}"
+            fi
+
+            ## 如果找到模板则复制
+            if [[ -n "${dockerfile_template}" ]]; then
+                cp -f "${dockerfile_template}" "${G_REPO_DIR}/Dockerfile"
+
+                ## 同时注入 .dockerignore（如果不存在）
+                [[ ! -f "${G_REPO_DIR}/.dockerignore" ]] && \
+                    cp -f "${dockerfile_conf}/.dockerignore" "${G_REPO_DIR}/"
             fi
         fi
-        ## 检查项目不存在 /.dockerignore 时注入通用型文件 conf/dockerfile/.dockerignore
-        if [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
-            cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
+
+        ## 2. root 目录结构注入
+        ## 创建 root 目录（如果不存在）
+        [[ ! -d "${root_dir}" ]] && mkdir -p "${root_dir}"
+
+        ## 优先级1：注入基础目录结构（如果不存在 root/opt）
+        if [[ ! -d "${root_dir}/opt" ]] && [[ -d "${dockerfile_conf}/root" ]]; then
+            rsync -r --exclude="*.cnf" "${dockerfile_conf}/root/" "${root_dir}/"
         fi
-        ## 优先级1：当项目中不存在 root/opt 目录时，从 ${G_PATH}/conf/dockerfile/root 注入目录结构
-        ## 优先级2：无条件注入 ${G_DATA}/dockerfile/root 目录（如果存在），并对非 Java 项目清理 settings.xml
-        if [ ! -d "${G_REPO_DIR}/root/opt" ] && [ -d "${G_PATH}/conf/dockerfile/root" ]; then
-            rsync -r --exclude="*.cnf" "${G_PATH}/conf/dockerfile/root/" "${G_REPO_DIR}/root/"
-        fi
-        if [ -d "${G_DATA}/dockerfile/root" ]; then
-            # 非 Java 项目删除 Maven settings 文件
+
+        ## 优先级2：注入自定义目录结构
+        if [[ -d "${dockerfile_data}/root" ]]; then
+            local exclude_opts="rsync -r --exclude=*.cnf"
             if [[ "$lang_type" == "java" ]]; then
-                rsync -r --exclude="*.cnf" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/root/"
+                ## Java 项目特殊处理：根据区域决定是否保留 settings.xml
+                [[ "$IS_CHINA" != "true" ]] && exclude_opts+=" --exclude=settings.xml"
             else
-                rsync -r --exclude="*.xml" "${G_DATA}/dockerfile/root/" "${G_REPO_DIR}/root/"
+                ## 非 Java 项目：排除所有 XML 文件
+                exclude_opts+=" --exclude=*.xml"
             fi
+            ${exclude_opts} "${dockerfile_data}/root/" "${root_dir}/"
         fi
         ;;
     remove)
