@@ -252,7 +252,7 @@ main() {
         DEBUG_ON=true
     fi
     SECONDS=0
-    ## Prefix G_ is GLOBAL_
+    ## G_ prefix indicates GLOBAL variables that are used across multiple functions
     G_NAME="$(basename "${BASH_SOURCE[0]}")"
     G_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
     G_LIB="${G_PATH}/lib"
@@ -309,7 +309,10 @@ main() {
     ## 导入所有以ENV_开头的全局变量（位置不要随意变动）
     source "$G_ENV"
 
-    ## Git仓库克隆 处理 --gitea 参数
+    ## Clone Git repository and handle --gitea flag
+    ## - If --gitea is set: Use GITHUB_* variables
+    ## - If git-clone-url is provided: Clone from specified URL
+    ## - Default branch: main
     if ${arg_gitea:-false} || [ -n "${arg_git_clone_url}" ]; then
         setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
     fi
@@ -322,7 +325,8 @@ main() {
 
     ## 处理 --in-china 参数
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
-    ## 独立的创建 helm chart 目录
+    ## Create Helm chart directory if --create-helm flag is set
+    ## This is an independent operation that will exit after completion
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return 0
 
     ## 安装所需的系统工具
@@ -357,7 +361,7 @@ main() {
     config_build_env "${repo_lang}" "${repo_lang_ver}" || return 1
 
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
-    # disable_inject_on_env: 命令参数强制不注入文件
+    # arg_disable_inject: 命令参数强制不注入文件
     repo_inject_file "$repo_lang" "${arg_disable_inject:-false}"
     get_lang=$(repo_language_detect)
     ## 解析 docker 标识
@@ -370,13 +374,16 @@ main() {
         arg_flags["build_langs"]=0
     fi
 
+    ## Task Execution Phase
+    ## Mode:
+    ## - Auto: All tasks will be executed if no specific flags are set
+    ## - Single: Only specified tasks will be executed based on arg_flags
     ################################################################################
     ## 全自动执行，或根据 arg_flags 执行相应的任务
     if $all_zero; then
         _msg green "executing tasks... [auto mode: all tasks will be executed]"
     else
         _msg green "executing tasks... [single job: only specified tasks will be executed]"
-        # 可选：打印将要执行的任务列表
         echo "Tasks to execute:"
         for key in "${!arg_flags[@]}"; do
             [[ ${arg_flags[$key]} -eq 1 ]] && echo "  - ${key}"
@@ -433,3 +440,16 @@ main() {
 }
 
 main "$@"
+
+## Exit codes:
+## - 0: Deployment successful
+## - 1: Deployment failed
+
+## Configure external service dependencies:
+## - Authentication: ssh-config
+## - SSL: acme.sh
+## - Cloud Providers: aws, aliyun
+## - Container Orchestration: kubernetes
+## - Version Control: python-gitlab
+## - DNS: cloudflare
+## - File Transfer: rsync
