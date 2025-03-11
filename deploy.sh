@@ -235,20 +235,30 @@ config_build_env() {
 
         # Set Maven and JDK versions based on lang_ver
         case "${lang_ver:-}" in
-        1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" ;;
+        1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" && JDK_IMAGE="openjdk" ;;
         1.8 | 8) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;;
         11) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11" ;;
         17) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17" ;;
         21) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21" ;;
+        23) MVN_VERSION="3.9-amazoncorretto-23" && JDK_VERSION="23" ;;
         *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;; # Default
         esac
 
         # Adjust versions and set mirror if using Docker mirror
         if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+            MVN_VERSION="maven-${MVN_VERSION}"
+            if [[ "${JDK_VERSION}" == "7" ]]; then
+                JDK_VERSION="openjdk-7"
+            else
+                JDK_VERSION="amazoncorretto-${JDK_VERSION}"
+            fi
             G_ARGS+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR}"
             G_ARGS+=" --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
-            MVN_VERSION="maven-${MVN_VERSION}"
-            [[ "${JDK_VERSION}" == "7" ]] && JDK_VERSION="openjdk-7" || JDK_VERSION="amazoncorretto-${JDK_VERSION}"
+        else
+            if [[ "${JDK_VERSION}" == "7" ]]; then
+                JDK_IMAGE="openjdk"
+                G_ARGS+=" --build-arg JDK_IMAGE=${JDK_IMAGE}"
+            fi
         fi
 
         # Add build arguments
