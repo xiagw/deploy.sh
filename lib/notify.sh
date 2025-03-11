@@ -69,7 +69,7 @@ notify_feishu() {
 # Main notification function that handles all channels
 handle_notify() {
     local type=${ENV_NOTIFY_TYPE:-skip}
-    _msg step "[Notification] Starting deployment result notification"
+    _msg step "[notify] deployment result notification"
     echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
 
     # Check if notification should be sent
@@ -98,8 +98,6 @@ Branche = ${G_REPO_BRANCH}"
 
     # Append test result if it exists
     [[ -n "$test_result" ]] && message+=$'\nTest_Result = '"${test_result}"
-
-    _msg time "Start sending notification => ${ENV_NOTIFY_TYPE:-skip}"
 
     case "$type" in
     wecom)

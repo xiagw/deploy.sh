@@ -370,7 +370,7 @@ main() {
     ${arg_renew_cert:-false} && system_cert_renew
 
     ## 探测项目的程序语言
-    _msg step "[lang] probe program language"
+    _msg step "[lang] Probe program language"
     get_lang=$(repo_language_detect)
     repo_lang=${get_lang%%:*}
     repo_lang_ver=${get_lang#*:}
