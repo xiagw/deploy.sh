@@ -569,16 +569,27 @@ _install_aws() {
 
 _install_python_gitlab() {
     local flag="$1" use_china_mirror=${2:-false}
-    if [ "$flag" != "upgrade" ] && python3 -m pip show --quiet python-gitlab >/dev/null 2>&1; then
+    if [ "$flag" != "upgrade" ]; then
+        pipx list 2>/dev/null | grep -q "package python-gitlab" ||
+            python3 -m pip show --quiet python-gitlab >/dev/null 2>&1
         return
     fi
     _msg green "Installing python3 gitlab api..."
     $use_china_mirror && _set_mirror python
-    if python3 -m pip install --user --upgrade python-gitlab; then
-        _msg green "python-gitlab is installed successfully"
+    if command -v pipx >/dev/null 2>&1; then
+        if pipx install python-gitlab; then
+            _msg green "python-gitlab is installed successfully via pipx"
+        else
+            _msg error "failed to install python-gitlab via pipx"
+            return 1
+        fi
     else
-        _msg error "failed to install python-gitlab"
-        return 1
+        if python3 -m pip install --user --upgrade python-gitlab; then
+            _msg green "python-gitlab is installed successfully via pip"
+        else
+            _msg error "failed to install python-gitlab via pip"
+            return 1
+        fi
     fi
 }
 

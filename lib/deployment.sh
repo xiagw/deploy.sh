@@ -167,15 +167,37 @@ deploy_via_rsync_ssh() {
     rsync_exclude="${G_REPO_DIR}/rsync.exclude"
     [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${G_PATH}/conf/rsync.exclude"
 
-    if ! jq -e ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .branchs[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]" "$G_CONF"; then
+    # 检查配置文件格式并设置解析工具
+    local parse_cmd
+    if [[ "${G_CONF}" =~ \.(yaml|yml)$ ]]; then
+        parse_cmd="yq"
+    elif [[ "${G_CONF}" =~ \.json$ ]]; then
+        parse_cmd="jq"
+    else
+        _msg error "Unsupported configuration file format: ${G_CONF}"
+        return 1
+    fi
+    if ! $parse_cmd -e ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .branches[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]" "$G_CONF"; then
         _msg warn "No host configuration found for project '${G_REPO_GROUP_PATH}' branch '${G_NAMESPACE}' in $G_CONF"
     fi
 
     while read -r line; do
-        ssh_host=$(echo "$line" | jq -r '.ssh_host')
-        ssh_port=$(echo "$line" | jq -r '.ssh_port')
-        rsync_src_from_conf=$(echo "$line" | jq -r '.rsync_src')
-        rsync_dest=$(echo "$line" | jq -r '.rsync_dest')
+        if [[ "$parse_cmd" == "yq" ]]; then
+            ssh_host=$(echo "$line" | yq -r '.ssh_host // ""')
+            ssh_port=$(echo "$line" | yq -r '.ssh_port // "22"')
+            rsync_src_from_conf=$(echo "$line" | yq -r '.rsync_src // ""')
+            rsync_dest=$(echo "$line" | yq -r '.rsync_dest // ""')
+        else
+            ssh_host=$(echo "$line" | jq -r '.ssh_host // empty')
+            ssh_port=$(echo "$line" | jq -r '.ssh_port // "22"')
+            rsync_src_from_conf=$(echo "$line" | jq -r '.rsync_src // empty')
+            rsync_dest=$(echo "$line" | jq -r '.rsync_dest // empty')
+        fi
+
+        [[ -z "$ssh_host" ]] && {
+            _msg error "ssh_host is required but not found in config"
+            continue
+        }
 
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
@@ -231,7 +253,13 @@ deploy_via_rsync_ssh() {
             _msg step "[deploy] Deploying with Docker Compose"
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $G_REPO_NAME"
         fi
-    done < <(jq -c ".projects[] | select (.project == \"${G_REPO_GROUP_PATH}\") | .branchs[] | select (.branch == \"${G_NAMESPACE}\") | .hosts[]" "$G_CONF")
+    done < <(
+        if [[ "$parse_cmd" == "yq" ]]; then
+            yq -o=json -I=0 ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .branches[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
+        else
+            jq -c ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .branches[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
+        fi
+    )
 }
 
 # Deploy to Aliyun OSS

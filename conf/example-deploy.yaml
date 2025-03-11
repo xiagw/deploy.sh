@@ -1,0 +1,113 @@
+version: "1.0"
+
+# 部署配置文件，用于定义项目的部署环境和目标主机
+#
+# 配置格式说明：
+# 1. 项目格式 (projects):
+#    - project: 项目路径格式：namespace/project_name
+#    - branches: 分支配置数组，支持多个分支
+#    - hosts: 主机配置数组，支持多个目标主机
+#
+# 2. 主机配置格式 (hosts):
+#    - ssh_host: SSH主机地址，格式：user@host
+#    - ssh_port: SSH端口，默认22（必须使用引号，如："22"）
+#    - rsync_src: rsync源目录，相对于项目根目录（空值必须使用引号，如：""）
+#    - rsync_dest: rsync目标目录，绝对路径
+#    - db_host: 数据库主机地址（空值必须使用引号，如：""）
+#    - db_user: 数据库用户名（空值必须使用引号，如：""）
+#    - db_name: 数据库名称（空值必须使用引号，如：""）
+#    - helm_dir: Helm配置目录（空值必须使用引号，如：""）
+#
+# 3. 环境说明：
+#    - develop: 开发环境，用于测试和开发
+#    - main: 生产环境，用于正式部署
+#
+# 注意事项：
+# - 所有空值字段必须使用空字符串 "" 而不是直接留空，避免被解析为 null
+# - 端口号等数字类型也建议使用引号包裹，保持一致性
+# - 路径值可以不使用引号，但如果包含特殊字符则必须使用引号
+
+projects:
+  - project: root/runner
+    description: 部署脚本项目
+    branches:
+      - branch: develop
+        description: 开发环境配置
+        hosts:
+          - ssh_host: dev1@192.168.100.102
+            ssh_port: "22"
+            rsync_src: dist1
+            rsync_dest: /www/develop/dest1
+            db_host: m01.example.com
+            db_user: dev1
+            db_name: dev1
+            helm_dir: /runner/data/helm/owner/repo1
+          - ssh_host: dev2@192.168.100.103
+            ssh_port: "222"
+            rsync_src: dist2
+            rsync_dest: /www/develop/dest2
+            db_host: m02.example.com
+            db_user: dev2
+            db_name: dev2
+            helm_dir: /runner/data/helm/owner/repo2
+      - branch: main
+        description: 生产环境配置
+        hosts:
+          - ssh_host: prod@192.168.100.104
+            ssh_port: "2222"
+            rsync_src: /www/main/src
+            rsync_dest: /www/main/dest
+            db_host: mm01.example.com
+            db_user: prod1
+            db_name: prod1
+            helm_dir: /runner/data/helm/owner/repo11
+          - ssh_host: prod2@192.168.100.105
+            ssh_port: "2222"
+            rsync_src: /www/main/src
+            rsync_dest: /www/main/dest
+            db_host: mm01.example.com
+            db_user: prod2
+            db_name: prod2
+            helm_dir: /runner/data/helm/owner/repo22
+
+  - project: root/example0
+    description: 示例项目
+    branches:
+      - branch: develop
+        description: 开发环境配置
+        hosts:
+          - ssh_host: dev@192.168.100.102
+            ssh_port: "22"
+            rsync_src: /www/develop/src
+            rsync_dest: /www/develop/dest
+            db_host: ""
+            db_user: ""
+            db_name: ""
+            helm_dir: ""
+          - ssh_host: dev@192.168.100.103
+            ssh_port: "22"
+            rsync_src: /www/develop/src
+            rsync_dest: /www/develop/dest
+            db_host: ""
+            db_user: ""
+            db_name: ""
+            helm_dir: ""
+      - branch: main
+        description: 生产环境配置
+        hosts:
+          - ssh_host: prod@192.168.100.104
+            ssh_port: "2222"
+            rsync_src: /www/main/src
+            rsync_dest: /www/main/dest
+            db_host: ""
+            db_user: ""
+            db_name: ""
+            helm_dir: ""
+          - ssh_host: prod@192.168.100.105
+            ssh_port: "2222"
+            rsync_src: /www/main/src
+            rsync_dest: /www/main/dest
+            db_host: ""
+            db_user: ""
+            db_name: ""
+            helm_dir: ""

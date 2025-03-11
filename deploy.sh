@@ -266,8 +266,7 @@ config_build_env() {
 }
 
 main() {
-    # set -Eeuo pipefail
-    set -e ## 出现错误自动退出
+    set -Eeo pipefail
     if [[ ${CI_DEBUG_TRACE:-false} == true ]]; then
         set -x
         DEBUG_ON=true
@@ -279,7 +278,7 @@ main() {
     G_LIB="${G_PATH}/lib"
     G_DATA="${G_PATH}/data"
     G_LOG="${G_DATA}/${G_NAME}.log"
-    G_CONF="${G_DATA}/deploy.json"
+    G_CONF="${G_DATA}/deploy.yaml" # 默认使用YAML格式
     G_ENV="${G_DATA}/deploy.env"
 
     ## 声明关联数组用于跟踪参数使用情况

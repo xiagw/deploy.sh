@@ -19,21 +19,23 @@ is_demo_mode() {
 
 # 基础配置文件管理
 config_deploy_file() {
-    local path="$G_PATH" data="$G_DATA"
-
-    [[ -f "${data}/deploy.json" ]] || cp -v "${path}/conf/example-deploy.json" "${data}/deploy.json"
-    [[ -f "${data}/deploy.env" ]] || cp -v "${path}/conf/example-deploy.env" "${data}/deploy.env"
+    # 初始化配置文件
+    [[ ! -f "${G_CONF}" ]] && cp -v "${G_PATH}/conf/example-deploy.yaml" "${G_CONF}"
+    [[ ! -f "${G_ENV}" ]] && cp -v "${G_PATH}/conf/example-deploy.env" "${G_ENV}"
+    ## 如果YAML配置文件不存在，尝试使用JSON配置文件
+    if [[ ! -f "$G_CONF" ]]; then
+        G_CONF="${G_DATA}/deploy.json"
+        cp -v "${G_PATH}/conf/example-deploy.json" "${G_CONF}"
+    fi
 
     # PATH 环境变量设置
-    local path="$G_PATH" data="$G_DATA"
-
-    mkdir -p "${data}/bin"
+    mkdir -p "${G_DATA}/bin"
     local -a paths_append=(
         "/usr/local/sbin"
         "/snap/bin"
-        "${path}/bin"
-        "${data}/bin"
-        "${data}/.acme.sh"
+        "${G_PATH}/bin"
+        "${G_DATA}/bin"
+        "${G_DATA}/.acme.sh"
         "$HOME/.local/bin"
         "$HOME/.acme.sh"
         "$HOME/.config/composer/vendor/bin"
@@ -49,12 +51,11 @@ config_deploy_file() {
 
 # 设置部署环境配置
 config_deploy_env() {
-    local path="${G_DATA}"
     local conf_dirs=(".ssh" ".acme.sh" ".aws" ".kube" ".aliyun")
-    local file_python_gitlab="${path}/.python-gitlab.cfg"
+    local file_python_gitlab="${G_DATA}/.python-gitlab.cfg"
 
     # Create and set permissions for SSH directory
-    local ssh_dir="${path}/.ssh"
+    local ssh_dir="${G_DATA}/.ssh"
     if [[ ! -d "${ssh_dir}" ]]; then
         mkdir -m 700 "${ssh_dir}"
         _msg warn "Generate ssh key file for gitlab-runner: ${ssh_dir}/id_ed25519"
@@ -75,7 +76,7 @@ config_deploy_env() {
 
     # Link configuration directories
     for dir in "${conf_dirs[@]}"; do
-        [[ ! -d "$HOME/${dir}" && -d "${path}/${dir}" ]] && ln -sf "${path}/${dir}" "$HOME/"
+        [[ ! -d "$HOME/${dir}" && -d "${G_DATA}/${dir}" ]] && ln -sf "${G_DATA}/${dir}" "$HOME/"
     done
 
     # Link python-gitlab config file
@@ -85,7 +86,7 @@ config_deploy_env() {
 }
 
 config_deploy_depend() {
-    local conf_type="$1"
+    local type="$1"
     shift
     # Check ENV file first, then fallback to environment variables
     if grep -q 'ENV_IN_CHINA=true' "$G_ENV" || ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
@@ -93,7 +94,7 @@ config_deploy_depend() {
     else
         export IS_CHINA=false
     fi
-    case "$conf_type" in
+    case "$type" in
     file) config_deploy_file ;;
     env) config_deploy_env ;;
     esac

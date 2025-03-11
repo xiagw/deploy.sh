@@ -11,7 +11,7 @@
 #   1 if execution should be skipped
 check_crontab_execution() {
     local script_data="$1" repo_id="$2" commit_sha="$3"
-## Install crontab if not exists
+    ## Install crontab if not exists
     command -v crontab &>/dev/null || _install_packages "$IS_CHINA" cron
     [[ -z "$script_data" || -z "$repo_id" || -z "$commit_sha" ]] && {
         _msg error "Missing required parameters for check_crontab_execution"
@@ -249,7 +249,7 @@ ssytem_proxy() {
 system_cert_renew() {
     # Check if certificate renewal is needed
     if [[ "${MAN_RENEW_CERT:-false}" != true ]] &&
-       [[ "${GH_ACTION:-false}" = false ]]; then
+        [[ "${GH_ACTION:-false}" = false ]]; then
         return 0
     fi
 
@@ -378,6 +378,33 @@ system_install_tools() {
 
     ## 基础工具安装
     command -v jq &>/dev/null || _install_packages "$IS_CHINA" jq || ((install_result++))
+
+    if ! command -v yq &>/dev/null; then
+        case "$(uname -s)" in
+        Linux)
+            if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64; then
+                sudo install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
+            else
+                ((install_result++))
+            fi
+            ;;
+        Darwin)
+            if command -v brew &>/dev/null; then
+                brew install yq || ((install_result++))
+            else
+                if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_darwin_amd64; then
+                    sudo install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
+                else
+                    ((install_result++))
+                fi
+            fi
+            ;;
+        *)
+            _msg error "Unsupported operating system for yq installation"
+            ((install_result++))
+            ;;
+        esac
+    fi
 
     ## 云服务工具安装
     ([ "${ENV_DOCKER_LOGIN_TYPE:-}" = aws ] || ${ENV_INSTALL_AWS:-false}) && _install_aws
