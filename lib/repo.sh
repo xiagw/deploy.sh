@@ -153,7 +153,10 @@ repo_language_detect() {
         pom.xml)
             lang_type="java"
             if [ -z "$version" ]; then
-                version=$(awk -F= '/^jdk_version/ {print tolower($2)}' "${G_REPO_DIR}/README".* | tr -d ' ' | tail -n 1)
+                # 首先检查是否存在任何 README 文件
+                if compgen -G "${G_REPO_DIR}/README"* >/dev/null; then
+                    version=$(awk -F= '/^jdk_version/ {print tolower($2)}' "${G_REPO_DIR}/README".* | tr -d ' ' | tail -n 1)
+                fi
             fi
             # 尝试提取 Java 版本
             # 如果 xmllint 不可用或未获取到版本，使用 grep 和 sed
