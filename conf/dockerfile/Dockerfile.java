@@ -37,7 +37,7 @@ WORKDIR /app
 EXPOSE 8080 8081 8082
 CMD ["bash", "/opt/run0.sh"]
 RUN --mount=type=cache,target=/var/lib/apt/lists \
-    --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/cache/yum \
     --mount=type=bind,target=/src,rw \
     if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
     elif [ -f build.sh ]; then bash build.sh; \
