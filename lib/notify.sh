@@ -69,8 +69,8 @@ notify_feishu() {
 # Main notification function that handles all channels
 handle_notify() {
     local type=${ENV_NOTIFY_TYPE:-skip}
-    _msg step "[notify] message for result"
-    echo "MAN_DISABLE_NOTIFY: ${MAN_DISABLE_NOTIFY:-false}"
+    _msg step "[Notification] Starting deployment result notification"
+    echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
 
     # Check if notification should be sent
     ${GH_ACTION:-false} && deploy_result=0
@@ -99,33 +99,42 @@ Branche = ${G_REPO_BRANCH}"
     # Append test result if it exists
     [[ -n "$test_result" ]] && message+=$'\nTest_Result = '"${test_result}"
 
-    _msg time "notify to ${ENV_NOTIFY_TYPE:-skip}"
+    _msg time "Start sending notification => ${ENV_NOTIFY_TYPE:-skip}"
 
     case "$type" in
     wecom)
+        _msg info "Sending WeChat Work notification..."
         notify_wecom "${ENV_WECOM_KEY}" "$message"
         ;;
     telegram)
+        _msg info "Sending Telegram notification..."
         notify_telegram "${ENV_TG_API_KEY}" "${ENV_TG_GROUP_ID}" "$message"
         ;;
     element)
+        _msg info "Sending Element notification..."
         notify_element "$G_LIB" "${ENV_ELM_SERVER}" "${ENV_ELM_USERID}" "${ENV_ELM_PASSWORD}" "${ENV_ELM_ROOMID}" "$message"
         ;;
     email)
+        _msg info "Sending Email notification..."
         notify_email "${G_PATH:-}" "${ENV_EMAIL_SERVER}" "${ENV_EMAIL_FROM}" "${ENV_EMAIL_TO}" "${ENV_EMAIL_SUBJECT:-Deployment Notification}" "$message"
         ;;
     zoom)
+        _msg info "Sending Zoom notification..."
         notify_zoom "${ENV_ZOOM_CHANNEL}" "$message"
         ;;
     feishu)
+        _msg info "Sending Feishu notification..."
         notify_feishu "${ENV_WEBHOOK_URL}" "$message"
         ;;
     skip)
+        _msg info "Notification is not enabled, skipping"
         return 0
         ;;
     *)
-        echo "Unknown notification type: $type"
+        _msg error "Unknown notification type: $type"
         return 1
         ;;
     esac
+
+    _msg success "Notification sent successfully"
 }

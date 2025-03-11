@@ -369,7 +369,7 @@ _build_jdk_runtime() {
     # Clean up if yum is available
     if command -v yum; then
         yum clean all
-        rm -rf /var/cache/yum /var/lib/yum/yumdb /var/lib/yum/history
+        rm -rf /var/lib/yum/yumdb /var/lib/yum/history
     fi
 }
 

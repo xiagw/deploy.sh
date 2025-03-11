@@ -13,8 +13,8 @@ check_php_style() {
     _msg step '[style] Running PHP Code Sniffer (PSR12)'
     [[ "${GH_ACTION:-0}" -eq 1 ]] && return 0
 
-    if ! docker images | grep -q 'deploy/phpcs'; then
-        DOCKER_BUILDKIT=1 docker build ${G_QUIET} -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null
+    if ! ${G_DOCK} images | grep -q 'deploy/phpcs'; then
+        ${G_DOCK} build ${G_ARGS} -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null
     fi
 
     local phpcs_result=0
@@ -35,8 +35,7 @@ check_android_style() {
     _msg step "[style] Checking Android code style"
     echo "PIPELINE_ANDROID_CODE_STYLE: ${PIPELINE_ANDROID_CODE_STYLE:-0}"
     if [[ "${PIPELINE_ANDROID_CODE_STYLE:-0}" -eq 1 ]]; then
-        $G_RUN --rm -v "$G_REPO_DIR:/project" \
-            openjdk:11 \
+        ${G_RUN} -v "$G_REPO_DIR:/project" openjdk:11 \
             /bin/bash -c "cd /project && ./gradlew ktlintCheck"
     else
         echo '<skip>'
@@ -47,7 +46,7 @@ check_android_style() {
 check_python_style() {
     _msg step "[style] Checking Python code style"
     if [[ "${PIPELINE_PYTHON_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run --rm -v "$G_REPO_DIR:/code" python:3 \
+        ${G_RUN} -v "$G_REPO_DIR:/code" python:3 \
             /bin/bash -c "cd /code && pip install pylint && pylint *.py"
     else
         echo '<skip>'
@@ -58,7 +57,7 @@ check_python_style() {
 check_node_style() {
     _msg step "[style] Checking Node.js code style"
     if [[ "${PIPELINE_NODE_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run --rm -v "$G_REPO_DIR:/app" node:latest \
+        ${G_RUN} -v "$G_REPO_DIR:/app" node:latest \
             /bin/bash -c "cd /app && npm install eslint && npx eslint ."
     else
         echo '<skip>'
@@ -69,7 +68,7 @@ check_node_style() {
 check_java_style() {
     _msg step "[style] Checking Java code style"
     if [[ "${PIPELINE_JAVA_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run --rm -v "$G_REPO_DIR:/src" openjdk:11 \
+        ${G_RUN} -v "$G_REPO_DIR:/src" openjdk:11 \
             /bin/bash -c "cd /src && ./gradlew checkstyle"
     else
         echo '<skip>'
@@ -80,7 +79,7 @@ check_java_style() {
 check_go_style() {
     _msg step "[style] Checking Go code style"
     if [[ "${PIPELINE_GO_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run --rm -v "$G_REPO_DIR:/go/src/app" golang:latest \
+        ${G_RUN} -v "$G_REPO_DIR:/go/src/app" golang:latest \
             /bin/bash -c "cd /go/src/app && go fmt ./... && golint ./..."
     else
         echo '<skip>'
@@ -91,7 +90,7 @@ check_go_style() {
 check_ruby_style() {
     _msg step "[style] Checking Ruby code style"
     if [[ "${PIPELINE_RUBY_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run --rm -v "$G_REPO_DIR:/app" ruby:latest \
+        ${G_RUN} -v "$G_REPO_DIR:/app" ruby:latest \
             /bin/bash -c "cd /app && gem install rubocop && rubocop"
     else
         echo '<skip>'
@@ -102,7 +101,7 @@ check_ruby_style() {
 check_c_style() {
     _msg step "[style] Checking C/C++ code style"
     if [[ "${PIPELINE_C_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run --rm -v "$G_REPO_DIR:/src" gcc:latest \
+        ${G_RUN} -v "$G_REPO_DIR:/src" gcc:latest \
             /bin/bash -c "cd /src && clang-format -i *.{c,h,cpp,hpp}"
     else
         echo '<skip>'
@@ -113,7 +112,7 @@ check_c_style() {
 check_docker_style() {
     _msg step "[style] Checking Dockerfile style"
     if [[ "${PIPELINE_DOCKER_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run --rm -v "$G_REPO_DIR:/work" hadolint/hadolint:latest \
+        ${G_RUN} -v "$G_REPO_DIR:/work" hadolint/hadolint:latest \
             hadolint /work/Dockerfile*
     else
         echo '<skip>'
@@ -136,7 +135,7 @@ check_ios_style() {
 check_django_style() {
     _msg step "[style] Checking Django code style"
     if [[ "${PIPELINE_DJANGO_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run --rm -v "$G_REPO_DIR:/app" python:3 \
+        ${G_RUN} -v "$G_REPO_DIR:/app" python:3 \
             /bin/bash -c "cd /app && pip install pylint-django && pylint --load-plugins pylint_django *.py"
     else
         echo '<skip>'

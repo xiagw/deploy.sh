@@ -108,7 +108,7 @@ analysis_vulmap() {
 }
 
 analysis_sonarqube() {
-    _msg step "[quality] check code with sonarqube"
+    _msg step "[quality] Checking code with sonarqube"
     ## 在 gitlab 的 pipeline 配置环境变量 MAN_SONAR ，true 启用，false 禁用[default]
     echo "MAN_SONAR: ${MAN_SONAR:-false}"
     if ! ${MAN_SONAR:-false}; then
