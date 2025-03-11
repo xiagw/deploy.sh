@@ -197,7 +197,7 @@ deploy_via_rsync_ssh() {
         [[ "$lang" == "node" ]] && rsync_opt+=" --delete"
 
         if [[ "$rsync_dest" == "none" || -z "$rsync_dest" ]]; then
-            rsync_dest="${ENV_PATH_DEST_PRE}/${G_NAMESPACE}.${G_REPO_NAME}/"
+            rsync_dest="${ENV_PATH_DEST_PRE}/${G_NAMESPACE}_${G_REPO_NAME}/"
         fi
 
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then

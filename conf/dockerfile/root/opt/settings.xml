@@ -5,46 +5,6 @@
 
     <localRepository>/var/maven/.m2</localRepository>
 
-    <profiles>
-        <profile>
-            <id>repo1</id>
-            <repositories>
-            <repository>
-                <id>repo1</id>
-                <url>http://mirror.flyh6.com/repository/maven2proxy/</url>
-                <releases>
-                <enabled>true</enabled>
-                </releases>
-                <snapshots>
-                <enabled>true</enabled>
-                </snapshots>
-            </repository>
-            </repositories>
-        </profile>
-
-        <profile>
-            <id>repo2</id>
-            <repositories>
-            <repository>
-                <id>repo2</id>
-                <url>https://mirror.flyh6.com/repository/maven-releases/</url>
-                <releases>
-                <enabled>true</enabled>
-                </releases>
-                <snapshots>
-                <enabled>true</enabled>
-                </snapshots>
-            </repository>
-            </repositories>
-        </profile>
-    </profiles>
-
-    <activeProfiles>
-        <!-- <activeProfile>repo1</activeProfile> -->
-        <activeProfile>repo2</activeProfile>
-    </activeProfiles>
-
-
     <mirrors>
         <mirror>
             <id>flyh6</id>
@@ -61,7 +21,6 @@
         <mirror>
             <id>aliyunmaven</id>
             <mirrorOf>*</mirrorOf>
-            <name>aliyunpublic</name>
             <url>https://maven.aliyun.com/repository/public</url>
         </mirror>
     </mirrors>

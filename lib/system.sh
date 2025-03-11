@@ -126,11 +126,6 @@ update_nginx_geoip_db() {
 
     _msg step "[geoip] Updating Nginx GeoIP database"
 
-    if [[ -z "${ENV_NGINX_IPS}" ]]; then
-        _msg error "ENV_NGINX_IPS is not defined or is empty"
-        return 1
-    fi
-
     _download_and_extract() {
         local url="$1" output="$2"
         if ! curl -LqsSf "$url" | gunzip -c >"$output"; then
@@ -153,7 +148,7 @@ update_nginx_geoip_db() {
         fi
     }
 
-    for ip in ${ENV_NGINX_IPS}; do
+    for ip in "${ENV_NGINX_IPS[@]}"; do
         _update_server "$ip" &
     done
 
@@ -226,7 +221,7 @@ system_check() {
 }
 
 # 设置系统代理
-set_proxy() {
+ssytem_proxy() {
     case "$1" in
     0 | off | disable)
         _msg time "unset http_proxy https_proxy all_proxy"
@@ -263,7 +258,7 @@ system_cert_renew() {
 
     local acme_home="${HOME}/.acme.sh"
     local acme_cmd="${acme_home}/acme.sh"
-    local acme_cert_dest="${ENV_CERT_INSTALL:-${acme_home}/dest}"
+    local acme_cert_dest="${ENV_CERT_INSTALL:-${acme_home}}/dest"
     local reload_nginx="$acme_home/reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
@@ -288,7 +283,7 @@ system_cert_renew() {
         dns_type=${file##*.}
         profile_name=${file%.dns_*}
         profile_name=${profile_name##*.}
-        set_proxy on
+        system_proxy on
         case "${dns_type}" in
         dns_gd)
             _msg yellow "dns type: Goddady"

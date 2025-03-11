@@ -42,8 +42,24 @@ config_deploy_vars() {
     ## Get abbreviated git commit hash
     G_REPO_SHORT_SHA=$(get_git_commit_sha)
 
-    ## Set Kubernetes namespace to match git branch name
-    G_NAMESPACE=$G_REPO_BRANCH
+    ## Set Kubernetes namespace based on git branch mapping
+    case "${G_REPO_BRANCH}" in
+    dev)
+        G_NAMESPACE="develop"
+        ;;
+    test | sit)
+        G_NAMESPACE="testing"
+        ;;
+    uat)
+        G_NAMESPACE="release"
+        ;;
+    prod | master)
+        G_NAMESPACE="main"
+        ;;
+    *)
+        G_NAMESPACE="${G_REPO_BRANCH}"
+        ;;
+    esac
 
     ## Docker image tag format: <git-commit-sha>-<unix-timestamp-with-milliseconds>
     G_IMAGE_TAG="${G_REPO_SHORT_SHA}-$(date +%s%3N)"
@@ -67,7 +83,6 @@ Parameters:
     --in-china               Set ENV_IN_CHINA to true.
 
     # Repository operations
-    --gitea                  Use Gitea with GITHUB_* variables.
     --git-clone URL          Clone git repo URL to builds/REPO_NAME.
     --git-clone-branch NAME  Specify git branch (default: main).
     --svn-checkout URL       Checkout SVN repository.
@@ -113,8 +128,6 @@ parse_command_args() {
         --cron | --loop) run_with_crontab=true ;;
         --github-action) DEBUG_ON=true && export GH_ACTION=true ;;
         --in-china) arg_in_china=true ;;
-        ## gitea variables
-        --gitea) arg_gitea=true ;;
         # Repository operations
         --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
@@ -195,10 +208,18 @@ config_build_env() {
     fi
 
     # 设置基本的 Docker 运行命令
-    G_RUN="${G_DOCK} run --add-host=${ENV_ADD_HOST} --interactive --rm"
+    G_RUN="${G_DOCK} run --interactive --rm"
+    # 添加所有 add-host 参数
+    for host in "${ENV_ADD_HOST[@]}"; do
+        G_RUN+=" --add-host=${host}"
+    done
 
     # 构建参数配置
-    G_ARGS=" --add-host=${ENV_ADD_HOST} ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+    G_ARGS=" ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+    # 添加所有 add-host 参数
+    for host in "${ENV_ADD_HOST[@]}"; do
+        G_ARGS+=" --add-host=${host}"
+    done
 
     # 调试模式配置
     if ${DEBUG_ON:-false}; then
@@ -313,12 +334,14 @@ main() {
     ## - If --gitea is set: Use GITHUB_* variables
     ## - If git-clone-url is provided: Clone from specified URL
     ## - Default branch: main
-    if ${arg_gitea:-false} || [ -n "${arg_git_clone_url}" ]; then
-        setup_git_repo "${arg_gitea:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
+    if [ -n "${arg_git_clone_url}" ] || ${GITEA_ACTIONS:-false}; then
+        setup_git_repo "${GITEA_ACTIONS:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
     fi
 
     ## SVN仓库检出
-    [ -n "${arg_svn_checkout_url:-}" ] && setup_svn_repo
+    if [ -n "${arg_svn_checkout_url:-}" ]; then
+        setup_svn_repo
+    fi
 
     ## 设置手动执行deploy.sh时的GitLab默认配置（位置不要随意变动）
     config_deploy_vars

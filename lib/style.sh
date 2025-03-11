@@ -35,7 +35,7 @@ check_android_style() {
     _msg step "[style] Checking Android code style"
     echo "PIPELINE_ANDROID_CODE_STYLE: ${PIPELINE_ANDROID_CODE_STYLE:-0}"
     if [[ "${PIPELINE_ANDROID_CODE_STYLE:-0}" -eq 1 ]]; then
-        docker run $ENV_ADD_HOST --rm -v "$G_REPO_DIR:/project" \
+        $G_RUN --rm -v "$G_REPO_DIR:/project" \
             openjdk:11 \
             /bin/bash -c "cd /project && ./gradlew ktlintCheck"
     else

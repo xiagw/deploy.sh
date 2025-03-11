@@ -70,14 +70,14 @@ notify_feishu() {
 handle_notify() {
     local type=${ENV_NOTIFY_TYPE:-skip}
     _msg step "[notify] message for result"
-    echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
+    echo "MAN_DISABLE_NOTIFY: ${MAN_DISABLE_NOTIFY:-false}"
 
     # Check if notification should be sent
     ${GH_ACTION:-false} && deploy_result=0
     ((deploy_result)) && exec_deploy_notify=true
-    ${ENV_ENABLE_MSG:-false} || exec_deploy_notify=false
-    [[ "${ENV_DISABLE_MSG_BRANCH}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false
-    ${MAN_NOTIFY:-false} && exec_deploy_notify=true
+    ${ENV_DISABLE_NOTIFY:-false} && exec_deploy_notify=false
+    [[ "${ENV_DISABLE_NOTIFY_BRANCH}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false
+    ${MAN_DISABLE_NOTIFY:-false} && exec_deploy_notify=true
 
     if ! ${exec_deploy_notify:-true}; then
         return 0

@@ -282,43 +282,31 @@ docker_login() {
 }
 
 get_docker_context() {
-    ## use local context / 使用本地 context
+    ## ENV_DOCKER_CONTEXT: local/remote/both
     [[ ${ENV_DOCKER_CONTEXT:-local} == local ]] && return
 
-    local docker_contexts docker_endpoints selected_context
-
-    ## use remote context (exclude local) / 使用远程 context
-    if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
-        read -ra docker_contexts <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .Name' | tr '\n' ' ')"
-        read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .DockerEndpoint' | tr '\n' ' ')"
-    else
-        ## use local and remote context / 使用本地和远程 context
-        read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
-        read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
-    fi
-
-    ## create context when not found remote / 没有 remote 时则根据环境变量创建
-    local c=0
+    local docker_contexts docker_endpoints selected_context response
+    # 获取context列表
+    response="$(docker context ls --format json)"
+    read -ra docker_endpoints <<<"$(echo "$response" | jq -r '.DockerEndpoint' | tr '\n' ' ')"
+    # 创建缺失的远程上下文
+    local c=0 context_created=false
     for dk_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
         ((++c))
-        if echo "${docker_endpoints[@]}" | grep -qw "$dk_host"; then
-            : ## found docker endpoint
-        else
-            ## not found docker endpoint, create it
-            docker context create "remote$c" --docker "host=${dk_host}" || _msg error "Failed to create docker context remote$c: ${dk_host}"
+        if [[ ! " ${docker_endpoints[*]} " =~ ${dk_host} ]]; then
+            docker context create "remote$c" --docker "host=${dk_host}" || _msg error "创建Docker上下文remote$c失败: ${dk_host}"
+            context_created=true
         fi
     done
-    ## use remote context (exclude local) / 使用远程 context
-    ## Refresh context list after potential new additions
-    if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
-        read -ra docker_contexts <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .Name' | tr '\n' ' ')"
-        read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r 'select(.Name != "default") | .DockerEndpoint' | tr '\n' ' ')"
-    else
-        ## use local and remote context / 使用本地和远程 context
-        read -ra docker_contexts <<<"$(docker context ls --format json | jq -r '.Name' | tr '\n' ' ')"
-        read -ra docker_endpoints <<<"$(docker context ls --format json | jq -r '.DockerEndpoint' | tr '\n' ' ')"
-    fi
 
+    # 如果创建了新context则刷新列表
+    [[ "$context_created" = true ]] && response="$(docker context ls --format json)"
+    if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
+        read -ra docker_contexts <<<"$(echo "$response" | jq -r '.Name' | grep -v '^default$' | tr '\n' ' ')"
+    else
+        read -ra docker_contexts <<<"$(echo "$response" | jq -r '.Name' | tr '\n' ' ')"
+    fi
+    # 选择上下文
     case ${ENV_DOCKER_CONTEXT_ALGO:-rr} in
     rand)
         ## random algorithm / 随机算法

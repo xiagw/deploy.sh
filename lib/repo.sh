@@ -28,19 +28,6 @@ repo_inject_file() {
         _msg warning "Found custom code in $inject_code_path, syncing to ${G_REPO_DIR}/"
         rsync -r "$inject_code_path/" "${G_REPO_DIR}/"
     fi
-    ## frontend (VUE) .env file / 替换前端代码内配置文件
-    if [[ "$lang_type" == node ]]; then
-        env_files="$(find "${G_REPO_DIR}" -maxdepth 2 -name "${G_NAMESPACE}-*")"
-        for file in $env_files; do
-            [[ -f "$file" ]] || continue
-            echo "Located environment file: $file"
-            if [[ "$file" =~ 'config' ]]; then
-                cp -f "$file" "${file/${G_NAMESPACE}./}" # vue2.x
-            else
-                cp -f "$file" "${file/${G_NAMESPACE}/}" # vue3.x
-            fi
-        done
-    fi
 
     ${arg_disable_inject:-false} && ENV_INJECT=keep
 
@@ -58,10 +45,9 @@ repo_inject_file() {
         ## 定义常用路径
         local dockerfile_data="${G_DATA}/dockerfile"
         local dockerfile_conf="${G_PATH}/conf/dockerfile"
-        local root_dir="${G_REPO_DIR}/root"
 
         ## 1. Dockerfile 注入
-        if [[ ! -f "${G_REPO_DIR}/Dockerfile" ]]; then
+        if [[ ! -f "${G_REPO_DIR}/Dockerfile" ]] || [[ "$lang_type" == "java" ]]; then
             local dockerfile_template
             ## 按优先级查找对应语言的 Dockerfile 模板
             if [[ -f "${dockerfile_data}/Dockerfile.${lang_type}" ]]; then
@@ -72,21 +58,27 @@ repo_inject_file() {
 
             ## 如果找到模板则复制
             if [[ -n "${dockerfile_template}" ]]; then
+                ## Java项目强制注入时显示警告信息
+                [[ -f "${G_REPO_DIR}/Dockerfile" ]] && [[ "$lang_type" == "java" ]] &&
+                    _msg warning "Forcing Dockerfile injection for Java project"
+
+                ## 复制Dockerfile
                 cp -f "${dockerfile_template}" "${G_REPO_DIR}/Dockerfile"
 
-                ## 同时注入 .dockerignore（如果不存在）
-                [[ ! -f "${G_REPO_DIR}/.dockerignore" ]] && \
-                    cp -f "${dockerfile_conf}/.dockerignore" "${G_REPO_DIR}/"
             fi
         fi
+        ## 同时注入 .dockerignore（如果不存在）
+        [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]] &&
+            cp -f "${dockerfile_conf}/.dockerignore" "${G_REPO_DIR}/"
 
         ## 2. root 目录结构注入
+        local root_conf="${dockerfile_conf}/root" root_dir="${G_REPO_DIR}/root"
         ## 创建 root 目录（如果不存在）
         [[ ! -d "${root_dir}" ]] && mkdir -p "${root_dir}"
 
         ## 优先级1：注入基础目录结构（如果不存在 root/opt）
-        if [[ ! -d "${root_dir}/opt" ]] && [[ -d "${dockerfile_conf}/root" ]]; then
-            rsync -r --exclude="*.cnf" "${dockerfile_conf}/root/" "${root_dir}/"
+        if [[ ! -d "${root_dir}/opt" ]] && [[ -d "${root_conf}" ]]; then
+            rsync -r --exclude="*.cnf" "${root_conf}/" "${root_dir}/"
         fi
 
         ## 优先级2：注入自定义目录结构
@@ -298,6 +290,7 @@ repo_language_detect_docker() {
 # - Git repository management
 # - SVN repository management
 
+# GITHUB_WORKSPACE=/home/ops/.cache/act/1298bce48350a805/hostexecutor
 # Git related functions
 setup_git_repo() {
     local is_gitea="${1:-false}" git_repo_url="$2" git_repo_branch="${3:-main}" git_repo_group git_repo_name git_repo_dir
@@ -306,29 +299,31 @@ setup_git_repo() {
     # Handle Gitea parameter
     if ${is_gitea}; then
         unset DOCKER_HOST
-        # Determine Gitea server
-        if [[ -z "${ENV_GITEA_SERVER:-}" ]]; then
-            if [[ -z "${GITHUB_SERVER_URL:-}" ]]; then
+        # Determine Gitea server, if not default port 22,
+        if [[ -n "${ENV_GITEA_SERVER}" ]]; then
+            gitea_server="${ENV_GITEA_SERVER}"
+        else
+            if [[ -z "${GITHUB_SERVER_URL}" ]]; then
                 _msg error "Either ENV_GITEA_SERVER or GITHUB_SERVER_URL must be set for Gitea setup"
                 return 1
             fi
-            ENV_GITEA_SERVER="${GITHUB_SERVER_URL#*://}"
+            gitea_server="${GITHUB_SERVER_URL#*://}"
         fi
 
         # Validate Gitea server
-        if [[ "${ENV_GITEA_SERVER}" =~ gitea.example.com ]]; then
-            _msg error "ENV_GITEA_SERVER cannot contain 'example' as it is a default value placeholder"
+        if [[ "${gitea_server}" =~ .example.com ]]; then
+            _msg error "gitea_server cannot contain 'example' as it is a default value placeholder"
             return 1
         fi
 
         # Check required environment variables
-        if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
+        if [[ -z "${GITHUB_REPOSITORY}" ]]; then
             _msg error "GITHUB_REPOSITORY environment variable is required for Gitea setup"
             return 1
         fi
 
         # Set git repository URL and branch
-        git_repo_url="ssh://git@${ENV_GITEA_SERVER}/${GITHUB_REPOSITORY}.git"
+        git_repo_url="ssh://git@${gitea_server}/${GITHUB_REPOSITORY}.git"
         if [[ -n "${GITHUB_REF_NAME:-}" ]]; then
             git_repo_branch="${GITHUB_REF_NAME}"
         fi
