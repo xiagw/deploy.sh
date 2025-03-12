@@ -436,12 +436,9 @@ main() {
     [[ ${arg_flags["build_langs"]} -eq 1 ]] && build_lang "$repo_lang"
     if [[ ${arg_flags["build_image"]} -eq 1 ]]; then
         build_image "$G_QUIET" "$G_IMAGE_TAG"
-        ret=$?
-        if [[ $ret -eq 100 ]]; then
+        if [[ "${BASE_IMAGE_BUILT:-false}" == "true" ]]; then
             _msg info "Base image build completed, exiting..."
-            exit 0
-        elif [[ $ret -ne 0 ]]; then
-            return $ret
+            return 0
         fi
     fi
     [[ ${arg_flags["push_image"]} -eq 1 ]] && push_image

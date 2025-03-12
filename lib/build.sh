@@ -341,15 +341,17 @@ build_image() {
         _msg info "Found ${G_REPO_DIR}/build.base.sh, running it..."
         ${DEBUG_ON:-false} && debug_flag="-x"
         bash "${G_REPO_DIR}/build.base.sh" $debug_flag || return 1
-        return 100 # 使用特殊的退出码100表示基础镜像构建完成
+        export BASE_IMAGE_BUILT=true
+        return
     fi
 
     local base_tag="${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
     local base_file="${G_REPO_DIR}/Dockerfile.base"
     if [[ -f "${base_file}" ]]; then
         _msg info "Found ${base_file}, building base image: $base_tag"
-        $G_DOCK build $G_ARGS --push --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}" || return 1
-        return 100 # 使用特殊的退出码100表示基础镜像构建完成
+        $G_DOCK build $G_ARGS --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}" || return 1
+        export BASE_IMAGE_BUILT=true
+        return
     fi
 
     ## build from Dockerfile
