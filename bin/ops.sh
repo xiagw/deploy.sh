@@ -156,7 +156,8 @@ sync_ssh_keys() {
 }
 
 search_project_files() {
-    local active_dir="$1" search_pattern="$2" selected_dir
+    local active_dir="$1" search_pattern="$2" selected_dir preview_cmd display_cmd
+
     if [[ ! -d "$active_dir" ]]; then
         echo "Error: Active directory path is required" >&2
         display_usage
@@ -165,6 +166,15 @@ search_project_files() {
 
     if [[ -d "$active_dir"/已关闭 ]]; then
         active_dir+=" $active_dir/已关闭"
+    fi
+
+    # 设置预览和显示命令
+    if [[ "$CMD_CAT" =~ ^(bat|batcat) ]]; then
+        preview_cmd="$CMD_CAT --language=markdown --style=full --color=always {}"
+        display_cmd="$CMD_CAT --paging=never --language=markdown --color=always --style=full --theme=Dracula --wrap=auto --tabs=2"
+    else
+        preview_cmd="cat {}"
+        display_cmd="cat"
     fi
 
     # 直接使用 $CMD_CAT，不需要额外的模式检查
@@ -178,11 +188,11 @@ search_project_files() {
     find "$selected_dir" |
         fzf --multi \
             --height=60% \
-            --preview "$CMD_CAT --language=markdown {}" \
+            --preview "$preview_cmd" \
             --preview-window=right:50% \
             --bind 'ctrl-/:change-preview-window(hidden|)' \
             --header 'CTRL-/ to toggle preview' |
-        xargs -I {} $CMD_CAT --paging=never --language=markdown --color=always --style=full --theme=Dracula --wrap=auto --tabs=2 {}
+        xargs -I {} $display_cmd {}
 }
 
 deploy_ssl() {
@@ -384,6 +394,7 @@ main() {
     # 执行命令
     case "$G_COMMAND" in
     search_project_files)
+        ## project_dir 来源于 env
         if [[ -z "${project_dir}" ]]; then
             "$G_COMMAND" "${G_ARGS[@]}"
         else
