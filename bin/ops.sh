@@ -188,11 +188,17 @@ search_project_files() {
     find "$selected_dir" |
         fzf --multi \
             --height=60% \
-            --preview "$preview_cmd" \
+            --preview '[[ "{}" =~ \.txt$ ]] && '"$preview_cmd"' || echo "Not a txt file"' \
             --preview-window=right:50% \
             --bind 'ctrl-/:change-preview-window(hidden|)' \
             --header 'CTRL-/ to toggle preview' |
-        xargs -I {} $display_cmd {}
+        while IFS= read -r file; do
+            if [[ "$file" =~ \.txt$ ]]; then
+                $display_cmd "$file"
+            else
+                echo "跳过非txt文件: $file"
+            fi
+        done
 }
 
 deploy_ssl() {

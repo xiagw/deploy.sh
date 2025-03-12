@@ -6,19 +6,6 @@ build_base_image() {
     local ver="$1" reg cmd cmd_opt
     local reg='registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5'
 
-    cmd="$(command -v docker || command -v podman)"
-    cmd_opt=(
-        "$cmd"
-        build
-        --progress=plain
-        --push
-        --platform "linux/amd64,linux/arm64"
-        --build-arg CHANGE_SOURCE=true
-        --build-arg IN_CHINA=true
-        --build-arg HTTP_PROXY="${http_proxy-}"
-        --build-arg HTTPS_PROXY="${http_proxy-}"
-    )
-
     case "$ver" in
     5.6 | 7.1 | 7.3 | 7.4 | 8.1 | 8.2 | 8.3 | 8.4)
         cmd_opt+=(
@@ -75,6 +62,19 @@ cmd_arg="${*}"
 all_args=(5.6 7.1 7.3 7.4 8.1 8.2 8.3 8.4 mysql-5.6 mysql-5.7 mysql-8.0 mysql-8.4 spring-8 spring-17 spring-21 spring-23 nodejs-18 nodejs-20 nodejs-21 redis nginx)
 
 me_path="$(dirname "$(readlink -f "$0")")"
+cmd="$(command -v docker || command -v podman)"
+cmd_opt=(
+    "$cmd"
+    build
+    --pull
+    --push
+    --progress=plain
+    --platform "linux/amd64,linux/arm64"
+    --build-arg CHANGE_SOURCE=true
+    --build-arg IN_CHINA=true
+    --build-arg HTTP_PROXY="${http_proxy-}"
+    --build-arg HTTPS_PROXY="${http_proxy-}"
+)
 
 case "$cmd_arg" in
 all)
