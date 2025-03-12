@@ -88,17 +88,17 @@ system_clean_disk() {
 
     # Clean up temporary files
     _msg info "Cleaning up temporary files..."
-    sudo find /tmp -type f -atime +10 -delete 2>/dev/null || true
-    sudo find /var/tmp -type f -atime +10 -delete 2>/dev/null || true
+    ${use_sudo:-} find /tmp -type f -atime +10 -delete 2>/dev/null || true
+    ${use_sudo:-} find /var/tmp -type f -atime +10 -delete 2>/dev/null || true
 
     # Clean up old log files
     _msg info "Cleaning up old log files..."
-    sudo find /var/log -type f -name "*.log" -mtime +30 -delete 2>/dev/null || true
+    ${use_sudo:-} find /var/log -type f -name "*.log" -mtime +30 -delete 2>/dev/null || true
 
     # Clean up old core dumps if aggressive
     if $aggressive; then
         _msg info "Cleaning up old core dumps..."
-        sudo find /var/crash -type f -delete 2>/dev/null || true
+        ${use_sudo:-} find /var/crash -type f -delete 2>/dev/null || true
     fi
 
     # Final disk usage check
@@ -383,7 +383,7 @@ system_install_tools() {
         case "$(uname -s)" in
         Linux)
             if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64; then
-                sudo install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
+                install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
             else
                 ((install_result++))
             fi
@@ -393,7 +393,7 @@ system_install_tools() {
                 brew install yq || ((install_result++))
             else
                 if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_darwin_amd64; then
-                    sudo install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
+                    install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
                 else
                     ((install_result++))
                 fi
