@@ -90,6 +90,10 @@ Parameters:
     --deploy-ftp             Deploy to FTP server.
     --deploy-sftp            Deploy to SFTP server.
 
+    # Docker operations
+    --docker-copy SRC DEST   Copy Docker image from source to target registry.
+                            Example: --docker-copy nginx:latest registry.example.com
+
     # Testing and quality
     --test-unit              Run unit tests.
     --test-function          Run functional tests.
@@ -135,6 +139,8 @@ parse_command_args() {
         --deploy-rsync) arg_flags["deploy_rsync"]=1 && deploy_method=deploy_rsync ;;
         --deploy-ftp) arg_flags["deploy_ftp"]=1 && deploy_method=deploy_ftp ;;
         --deploy-sftp) arg_flags["deploy_sftp"]=1 && deploy_method=deploy_sftp ;;
+        # Docker operations
+        --docker-copy) arg_flags["docker_copy"]=1 && arg_docker_source="${2:?empty docker source image}" && arg_docker_target="${3:?empty docker target registry}" && shift 2 ;;
         # Testing and quality
         --test-unit) arg_flags["test_unit"]=1 ;;
         --apidoc) arg_flags["apidoc"]=1 ;;
@@ -293,6 +299,7 @@ main() {
         ["code_quality"]=0
         ["security_zap"]=0
         ["security_vulmap"]=0
+        ["docker_copy"]=0
     )
     ## 解析和处理命令行参数
     parse_command_args "$@"
@@ -341,7 +348,12 @@ main() {
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
     ## Create Helm chart directory if --create-helm flag is set
     ## This is an independent operation that will exit after completion
-    ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return 0
+    ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return
+    ## Docker image copy operation
+    if [[ ${arg_flags["docker_copy"]} -eq 1 && -n "${arg_docker_source}" ]]; then
+        copy_docker_image "${arg_docker_source}" "${arg_docker_target}"
+        return
+    fi
 
     ## 安装所需的系统工具
     system_install_tools "$@"

@@ -391,10 +391,15 @@ handle_deploy() {
 copy_docker_image() {
     local source_image="$1" target_registry="$2" image_name tag target
 
+    if ! command -v skopeo >/dev/null 2>&1; then
+        _msg error "skopeo command not found. Please install skopeo first."
+        return 1
+    fi
+
     if [[ -z "$source_image" || -z "$target_registry" ]]; then
-        echo "Error: Missing required parameters"
-        echo "Usage: copy_docker_image source_image target_registry"
-        echo "Example: copy_docker_image nginx:latest registry.example.com"
+        _msg error "Missing required parameters"
+        _msg error "Usage: copy_docker_image source_image target_registry"
+        _msg error "Example: copy_docker_image nginx:latest registry.example.com"
         return 1
     fi
 
@@ -407,9 +412,9 @@ copy_docker_image() {
     # 构建最终的目标镜像名
     target="${target_registry}:${tag}"
 
-    echo "Copying multi-arch image from Docker Hub to custom registry..."
-    echo "Source: ${source_image}"
-    echo "Target: ${target}"
+    _msg info "Copying multi-arch image from Docker Hub to custom registry..."
+    _msg info "Source: ${source_image}"
+    _msg info "Target: ${target}"
 
     # Copy all available platforms
     skopeo copy --multi-arch index-only "docker://docker.io/${source_image}" "docker://${target}"
