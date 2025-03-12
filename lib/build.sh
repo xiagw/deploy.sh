@@ -336,43 +336,33 @@ build_image() {
 
     get_docker_context
 
-    ## build from Dockerfile.base
-    local registry_base=${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}
-    if [[ -f "${G_REPO_DIR}/Dockerfile.base" ]]; then
-        if [[ -f "${G_REPO_DIR}/build.base.sh" ]]; then
-            _msg info "Found ${G_REPO_DIR}/build.base.sh, running it..."
-            ${DEBUG_ON:-false} && debug_flag="-x"
-            bash "${G_REPO_DIR}/build.base.sh" $debug_flag
-        else
-            local base_tag="${registry_base}:${G_REPO_NAME}-${G_REPO_BRANCH}"
-            _msg info "Building base image: $base_tag"
-            $G_DOCK build $G_ARGS --tag "$base_tag" \
-                -f "${G_REPO_DIR}/Dockerfile.base" "${G_REPO_DIR}" || {
-                _msg error "Failed to build base image"
-                return 1
-            }
-            $G_DOCK push $G_QUIET "$base_tag" || {
-                _msg error "Failed to push base image"
-                return 1
-            }
-        fi
-        _msg time "[image] build base image"
-        return
+    ## build from build.base.sh or Dockerfile.base
+    if [[ -f "${G_REPO_DIR}/build.base.sh" ]]; then
+        _msg info "Found ${G_REPO_DIR}/build.base.sh, running it..."
+        ${DEBUG_ON:-false} && debug_flag="-x"
+        bash "${G_REPO_DIR}/build.base.sh" $debug_flag || return 1
+        return 100 # 使用特殊的退出码100表示基础镜像构建完成
     fi
 
-    $G_DOCK build $G_ARGS --tag "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" "${G_REPO_DIR}" || {
-        _msg error "Failed to build image"
-        return 1
-    }
+    local base_tag="${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
+    local base_file="${G_REPO_DIR}/Dockerfile.base"
+    if [[ -f "${base_file}" ]]; then
+        _msg info "Found ${base_file}, building base image: $base_tag"
+        $G_DOCK build $G_ARGS --push --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}" || return 1
+        return 100 # 使用特殊的退出码100表示基础镜像构建完成
+    fi
+
+    ## build from Dockerfile
+    local repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
+    $G_DOCK build $G_ARGS --tag "${repo_tag}" "${G_REPO_DIR}" || return 1
 
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         local image_uuid
         image_uuid="ttl.sh/$(uuidgen):1h"
         _msg info "Temporary image tag for ttl.sh: $image_uuid"
-        echo "## If you want to push the image to ttl.sh, please execute the following commands on gitlab-runner:"
-        echo "  $G_DOCK tag ${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG} ${image_uuid}"
-        echo "  $G_DOCK push $image_uuid"
-        echo "## Then execute the following commands on remote server:"
+        $G_DOCK tag ${repo_tag} ${image_uuid}
+        $G_DOCK push $image_uuid
+        echo "## Then execute the following commands on REMOTE SERVER."
         echo "  $G_DOCK pull $image_uuid"
         echo "  $G_DOCK tag $image_uuid laradock_spring"
     fi
@@ -381,26 +371,19 @@ build_image() {
 push_image() {
     _msg step "[image] Pushing container image"
     is_demo_mode "push_image" && return 0
-    docker_login
 
-    local push_error=false
+    docker_login
 
     # Push main image
     if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
         $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null
     else
-        push_error=true
-    fi
-
-    # Check for errors
-    if $push_error; then
         _msg error "Image push failed: network connectivity issue detected"
         _msg error "Please verify:"
         _msg error "  - Network connection is stable"
         _msg error "  - Docker registry (${ENV_DOCKER_REGISTRY}) is accessible"
         _msg error "  - Docker credentials are valid"
     fi
-
     _msg time "[image] Image push completed"
 }
 
