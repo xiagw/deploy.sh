@@ -44,21 +44,11 @@ config_deploy_vars() {
 
     ## Set Kubernetes namespace based on git branch mapping
     case "${G_REPO_BRANCH}" in
-    dev)
-        G_NAMESPACE="develop"
-        ;;
-    test | sit)
-        G_NAMESPACE="testing"
-        ;;
-    uat)
-        G_NAMESPACE="release"
-        ;;
-    prod | master)
-        G_NAMESPACE="main"
-        ;;
-    *)
-        G_NAMESPACE="${G_REPO_BRANCH}"
-        ;;
+    dev) G_NAMESPACE="develop" ;;
+    test | sit) G_NAMESPACE="testing" ;;
+    uat) G_NAMESPACE="release" ;;
+    prod | master) G_NAMESPACE="main" ;;
+    *) G_NAMESPACE="${G_REPO_BRANCH}" ;;
     esac
 
     ## Docker image tag format: <git-commit-sha>-<unix-timestamp-with-milliseconds>
@@ -154,11 +144,7 @@ parse_command_args() {
         --security-zap) arg_flags["security_zap"]=1 ;;
         --security-vulmap) arg_flags["security_vulmap"]=1 ;;
         # Kubernetes operations
-        --create-helm)
-            arg_create_helm=true
-            helm_dir="$2"
-            shift
-            ;;
+        --create-helm) arg_create_helm=true && helm_dir="$2" && shift ;;
         --create-k8s) create_k8s_with_terraform=true ;;
         ## 命令参数强制不注入文件
         --disable-inject) arg_disable_inject=true ;;
@@ -168,11 +154,7 @@ parse_command_args() {
         shift
     done
 
-    if ${DEBUG_ON:-false}; then
-        unset G_QUIET
-    else
-        export G_QUIET='--quiet'
-    fi
+    ${DEBUG_ON:-false} || export G_QUIET='--quiet'
     ## 检查是否有命令参数则部分设1，
     all_zero=true
     for key in "${!arg_flags[@]}"; do

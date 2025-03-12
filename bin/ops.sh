@@ -151,9 +151,7 @@ sync_ssh_keys() {
     fi
 
     grep -vE '^#|^$|^[[:space:]]*$' "$source_keys_file" | tr -d '\r' | tee "$temp_keys_file"
-    if [ -n "$CMD_OSS" ]; then
-        $CMD_OSS cp "$temp_keys_file" "oss://${oss_bucket_and_path}" -f
-    fi
+    $CMD_OSS cp "$temp_keys_file" "oss://${oss_bucket_and_path}" -f
     rm -f "$temp_keys_file"
 }
 
@@ -296,9 +294,9 @@ Usage: ${G_NAME} COMMAND [ARGS]
 
 Commands:
     ssl [DIR]                   Deploy SSL certificates (default dir: ~/Downloads)
-    search [DIR] [PATTERN]      Search project files
-    keys [FILE] [BUCKET/PATH]   Sync SSH public keys to OSS storage
-    wechat                      Process WeChat verification files
+    search [DIR] [PATTERN]      Search project files from NAS (server_info.txt)
+    keys [FILE] [BUCKET/PATH]   Sync SSH public keys to OSS storage (flyh6.keys)
+    wechat                      Process WeChat verification files (like skdhcaFHdk.txt)
     docker SOURCE TARGET        Copy Docker image from source to target registry
     help                        Display this help message
 
@@ -316,58 +314,92 @@ Examples:
 EOF
 }
 
-# Main function to handle command processing
+# Process command line arguments
+process_args() {
+    local command="${1:-search}"
+    shift || true
+
+    case "$command" in
+    ssl)
+        G_COMMAND="deploy_ssl"
+        G_ARGS=("$@")
+        ;;
+    search)
+        G_COMMAND="search_project_files"
+        G_ARGS=("$@")
+        ;;
+    keys)
+        G_COMMAND="sync_ssh_keys"
+        G_ARGS=("$@")
+        ;;
+    wechat)
+        G_COMMAND="deploy_wechat"
+        G_ARGS=("$@")
+        ;;
+    docker)
+        G_COMMAND="copy_docker_image"
+        G_ARGS=("$@")
+        disable_env=1
+        ;;
+    help | --help | -h)
+        display_usage
+        exit 0
+        ;;
+    *)
+        echo "Unknown command: $command" >&2
+        display_usage
+        exit 1
+        ;;
+    esac
+}
+
+# Main function to handle initialization and command execution
 main() {
+    # 处理命令行参数
+    process_args "$@"
+
+    # 设置全局变量
+    G_NAME="${BASH_SOURCE[0]##*/}"
+    G_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+    G_DATA="$(dirname "${G_DIR}")/data"
+    G_ENV="${G_DATA}/${G_NAME}.env"
+
+    if [[ "${disable_env:-0}" -eq 1 ]]; then
+        "$G_COMMAND" "${G_ARGS[@]}"
+        return
+    fi
+    # 初始化环境
     CMD_CAT="$(command -v bat || command -v batcat || command -v cat)"
     if [ "$CMD_CAT" = "bat" ] || [ "$CMD_CAT" = "batcat" ]; then
         CMD_CAT="$CMD_CAT --paging=never --color=always --style=full --theme=Dracula --wrap=auto --tabs=2"
     fi
     command -v fzf >/dev/null 2>&1 || { echo "Error: fzf is required" >&2 && exit 1; }
-    CMD_OSS=$(command -v ossutil || command -v ossutil64 || command -v aliyun >/dev/null 2>&1 && echo "aliyun oss")
-
-    G_NAME="${BASH_SOURCE[0]##*/}"
-    G_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-    G_DATA="$(dirname "${G_DIR}")/data"
-    G_ENV="${G_DATA}/${G_NAME}.env"
+    CMD_OSS=$(command -v ossutil || command -v ossutil64 || (command -v aliyun >/dev/null 2>&1 && echo "aliyun oss"))
 
     # 加载环境变量文件
     [ -f "$G_ENV" ] || { echo "Error: Environment file $G_ENV not found" >&2 && exit 1; }
     # shellcheck source=/dev/null
     source "$G_ENV"
 
-    # Command processing
-    case "${1:-search}" in
-    ssl)
-        shift
-        deploy_ssl "$@"
-        ;;
-    search)
-        shift
+    # 执行命令
+    case "$G_COMMAND" in
+    search_project_files)
         if [[ -z "${project_dir}" ]]; then
-            search_project_files "$@"
+            "$G_COMMAND" "${G_ARGS[@]}"
         else
-            search_project_files "${project_dir}" "$@"
+            "$G_COMMAND" "${project_dir}" "${G_ARGS[@]}"
         fi
         ;;
-    keys)
-        shift
+    sync_ssh_keys)
+        ## all_keys_file 来源于 env
         if [[ -z "${all_keys_file}" ]]; then
-            sync_ssh_keys "$@"
+            "$G_COMMAND" "${G_ARGS[@]}"
         else
-            sync_ssh_keys "${all_keys_file}" "$@"
+            "$G_COMMAND" "${all_keys_file}" "${bucket_and_path}" "${G_ARGS[@]}"
         fi
-        ;;
-    wechat)
-        deploy_wechat
-        ;;
-    docker)
-        shift
-        copy_docker_image "$@"
         ;;
     *)
-        echo "Unknown command: $1" >&2
-        display_usage
-        return 1
+        "$G_COMMAND" "${G_ARGS[@]}"
         ;;
     esac
 }
