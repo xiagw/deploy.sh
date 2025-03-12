@@ -1,4 +1,4 @@
-ARG NODE_VERSION=18
+ARG NODE_VERSION=20
 # ARG NODE_VERSION=20
 # ARG NODE_VERSION=21
 FROM node:{NODE_VERSION}-slim
@@ -16,4 +16,5 @@ RUN --mount=type=bind,target=/src,rw \
 
 ONBUILD COPY --chown=1000:1000 . /app/
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi
-## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:node-18-base -f Dockerfile.node.base --progress=plain --build-arg IN_CHINA="true" .
+## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:node-18-base \
+## -f Dockerfile.node.base --progress=plain --build-arg IN_CHINA="true" .

@@ -1,6 +1,7 @@
 ARG GO_VERSION=1.22
 # FROM registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:golang-${GO_VERSION} AS build
 FROM golang:${GO_VERSION} AS build
+ARG IN_CHINA=false
 WORKDIR /src
 ENV CGO_ENABLED 0
 ENV GOPROXY https://goproxy.cn,direct
@@ -14,7 +15,7 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 
 # FROM alpine:latest AS final
 # FROM registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5:nginx-alpine AS final
-FROM nginx:alpine AS final
+FROM nginx:stable-alpine AS final
 RUN --mount=type=cache,target=/var/cache/apk \
     set -xe; \
     apk --update add ca-certificates tzdata; \

@@ -23,7 +23,7 @@ build_base_image() {
     5.6 | 7.1 | 7.3 | 7.4 | 8.1 | 8.2 | 8.3 | 8.4)
         cmd_opt+=(
             --build-arg PHP_VERSION="$ver"
-            -f Dockerfile.php.base
+            -f Dockerfile.base.php
             --tag "$reg":laradock-php-fpm-"$ver"
         )
         ;;
@@ -49,14 +49,14 @@ build_base_image() {
     spring-8 | spring-17 | spring-21)
         cmd_opt+=(
             --build-arg JDK_VERSION="${ver#*-}"
-            -f Dockerfile.java.base
+            -f Dockerfile.base.java
             --tag "$reg":laradock-"$ver"
         )
         ;;
     nodejs-18 | nodejs-20 | nodejs-21 | nodejs-22)
         cmd_opt+=(
             --build-arg NODE_VERSION="${ver#*-}"
-            -f Dockerfile.node.base
+            -f Dockerfile.base.node
             --tag "$reg":laradock-"$ver"
         )
         ;;
@@ -72,7 +72,7 @@ build_base_image() {
 }
 
 cmd_arg="${*}"
-all_args=(5.6 7.1 7.3 7.4 8.1 8.2 8.3 8.4 mysql-5.6 mysql-5.7 mysql-8.0 mysql-8.4 spring-8 spring-17 spring-21 nodejs-18 nodejs-20 nodejs-21 redis nginx)
+all_args=(5.6 7.1 7.3 7.4 8.1 8.2 8.3 8.4 mysql-5.6 mysql-5.7 mysql-8.0 mysql-8.4 spring-8 spring-17 spring-21 spring-23 nodejs-18 nodejs-20 nodejs-21 redis nginx)
 
 me_path="$(dirname "$(readlink -f "$0")")"
 
