@@ -135,10 +135,15 @@ deploy_to_kubernetes() {
         --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
 
     echo "Monitoring deployment status for ${release_name} in namespace ${G_NAMESPACE} (timeout: 120s)..."
-    if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
-        deploy_result=1
-        _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
-        _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
+    # 检查是否在忽略列表中
+    if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
+        _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
+    else
+        if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
+            deploy_result=1
+            _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
+            _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
+        fi
     fi
 
     ## Clean up rs 0 0 / 清理 rs 0 0

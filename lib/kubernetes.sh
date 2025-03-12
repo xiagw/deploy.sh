@@ -96,7 +96,7 @@ create_helm_chart() {
 
     # Configure volumeMounts
     sed -i -e "/volumeMounts: \[\]/s//volumeMounts:/" "$file_values"
-    sed -i -e "@volumeMounts:@ a \    mountPath: \"${ENV_HELM_VALUES_MOUNT_PATH:-/app2}\"" "$file_values"
+    sed -i -e "/volumeMounts:/ a \    mountPath: \"${ENV_HELM_VALUES_MOUNT_PATH:-/app2}\"" "$file_values"
     sed -i -e "/volumeMounts:/ a \  - name: volume-cnfs" "$file_values"
 
     ## set livenessProbe, spring delay 30s
