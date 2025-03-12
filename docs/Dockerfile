@@ -20,4 +20,4 @@ RUN set -xe; \
     -e '/ENV_INSTALL_PODMAN=/s/false/true/' \
     -e '/ENV_IN_CHINA=/s/true/false/' data/deploy.env; \
     chmod +x deploy.sh; \
-    ./deploy.sh --github-action
+    bash -x ./deploy.sh -d --github-action
