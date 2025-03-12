@@ -569,10 +569,15 @@ _install_aws() {
 
 _install_python_gitlab() {
     local flag="$1" use_china_mirror=${2:-false}
-    if [ "$flag" != "upgrade" ]; then
-        pipx list 2>/dev/null | grep -q "package python-gitlab" ||
-            python3 -m pip show --quiet python-gitlab >/dev/null 2>&1
-        return
+    if [ "$flag" = "upgrade" ]; then
+        echo "Upgrade python-gitlab..."
+    else
+        if pipx list 2>/dev/null | grep -q "package python-gitlab"; then
+            return
+        fi
+        if python3 -m pip show --quiet python-gitlab >/dev/null 2>&1; then
+            return
+        fi
     fi
     _msg green "Installing python3 gitlab api..."
     $use_china_mirror && _set_mirror python
