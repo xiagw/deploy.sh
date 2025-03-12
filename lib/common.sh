@@ -659,21 +659,6 @@ _set_mirror() {
             $use_sudo sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
         fi
         ;;
-    maven)
-        local m2_path=/root/.m2
-        local settings_url=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/settings.xml
-        mkdir -p $m2_path
-        ## 项目内自带 settings.xml docs/settings.xml
-        if [ -f settings.xml ]; then
-            cp -vf settings.xml $m2_path/
-        elif [ -f docs/settings.xml ]; then
-            cp -vf docs/settings.xml $m2_path/
-        elif [ -f /opt/settings.xml ]; then
-            mv -vf /opt/settings.xml $m2_path/
-        else
-            curl -Lo $m2_path/settings.xml $settings_url
-        fi
-        ;;
     composer)
         _check_root || return
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
