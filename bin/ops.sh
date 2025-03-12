@@ -224,51 +224,6 @@ deploy_ssl() {
     echo "同步完成"
 }
 
-# Docker image management functions
-copy_docker_image() {
-    local source_image="$1" target_registry="$2" image_name image_tag
-
-    if [[ -z "$source_image" || -z "$target_registry" ]]; then
-        echo "Error: Missing required parameters"
-        echo "Usage: copy_docker_image source_image target_registry"
-        echo "Example: copy_docker_image nginx:latest registry.example.com"
-        return 1
-    fi
-
-    # Extract image name and tag from source_image
-    if [[ "$source_image" == *":"* ]]; then
-        image_name="${source_image%:*}"
-        image_tag="${source_image#*:}"
-    else
-        image_name="$source_image"
-        image_tag="latest"
-    fi
-
-    # Convert slashes to hyphens in image name
-    image_name="${image_name//\//-}"
-
-    # Construct target image path
-    local target="${target_registry}:${image_name}-${image_tag}"
-
-    echo "Copying multi-arch image from Docker Hub to custom registry..."
-    echo "Source: ${source_image}"
-    echo "Target: ${target}"
-
-    # Copy all available platforms
-    if ! skopeo copy --multi-arch index-only "docker://docker.io/${source_image}" "docker://${target}"; then
-        echo "Failed to copy multi-arch image"
-        return 1
-    fi
-
-    echo "Successfully copied multi-arch image ${source_image} to ${target}"
-    return 0
-}
-
-# Example usage:
-# copy_docker_image "nginx:latest" "registry.example.com"        # -> registry.example.com:nginx-latest
-# copy_docker_image "ubuntu:22.04" "registry.example.com"       # -> registry.example.com:ubuntu-22.04
-# copy_docker_image "bitnami/nginx:latest" "registry.example.com" # -> registry.example.com:bitnami-nginx-latest
-
 # 添加微信验证文件处理函数
 deploy_wechat() {
     local c c_total
@@ -307,7 +262,6 @@ Commands:
     search [DIR] [PATTERN]      Search project files from NAS (server_info.txt)
     keys [FILE] [BUCKET/PATH]   Sync SSH public keys to OSS storage (flyh6.keys)
     wechat                      Process WeChat verification files (like skdhcaFHdk.txt)
-    docker SOURCE TARGET        Copy Docker image from source to target registry
     help                        Display this help message
 
 Options for search command:
@@ -346,11 +300,6 @@ process_args() {
         G_COMMAND="deploy_wechat"
         G_ARGS=("$@")
         ;;
-    docker)
-        G_COMMAND="copy_docker_image"
-        G_ARGS=("$@")
-        disable_env=1
-        ;;
     help | --help | -h)
         display_usage
         exit 0
@@ -374,10 +323,6 @@ main() {
     G_DATA="$(dirname "${G_DIR}")/data"
     G_ENV="${G_DATA}/${G_NAME}.env"
 
-    if [[ "${disable_env:-0}" -eq 1 ]]; then
-        "$G_COMMAND" "${G_ARGS[@]}"
-        return
-    fi
     # 初始化环境
     CMD_CAT="$(command -v bat || command -v batcat || command -v cat)"
     if [ "$CMD_CAT" = "bat" ] || [ "$CMD_CAT" = "batcat" ]; then

@@ -384,3 +384,42 @@ handle_deploy() {
 
 # Export the function
 # export -f determine_deployment_method
+
+# Copy Docker image from source to target registry
+# @param $1 source_image Source image name (e.g., nginx:latest)
+# @param $2 target_registry Target registry (e.g., registry.example.com)
+copy_docker_image() {
+    local source_image="$1" target_registry="$2" image_name image_tag tag target
+
+    if [[ -z "$source_image" || -z "$target_registry" ]]; then
+        echo "Error: Missing required parameters"
+        echo "Usage: copy_docker_image source_image target_registry"
+        echo "Example: copy_docker_image nginx:latest registry.example.com"
+        return 1
+    fi
+
+    # 如果镜像标签是 latest，则移除它
+    image_name="${source_image%:latest}"
+    # 将路径中的 / 替换为 -
+    tag="${image_name//\//-}"
+    # 将剩余的 : 替换为 -
+    tag="${tag//:/-}"
+    # 构建最终的目标镜像名
+    target="${target_registry}:${tag}"
+
+    echo "Copying multi-arch image from Docker Hub to custom registry..."
+    echo "Source: ${source_image}"
+    echo "Target: ${target}"
+
+    # Copy all available platforms
+    skopeo copy --multi-arch index-only "docker://docker.io/${source_image}" "docker://${target}"
+
+    echo "Successfully copied multi-arch image ${source_image} to ${target}"
+}
+
+# Example usage:
+# copy_docker_image "nginx:latest" "registry.example.com"  # -> registry.example.com:nginx
+# copy_docker_image "nginx" "registry.example.com"        # -> registry.example.com:nginx
+# copy_docker_image "ubuntu:22.04" "registry.example.com" # -> registry.example.com:ubuntu-22.04
+
+# copy_docker_image "$@"
