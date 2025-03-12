@@ -53,20 +53,60 @@ _set_mirror() {
     */mvn)
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
-        ## 项目内自带 settings.xml docs/settings.xml
-        if [ -f settings.xml ]; then
-            cp -vf settings.xml $m2_dir/
-        elif [ -f docs/settings.xml ]; then
-            cp -vf docs/settings.xml $m2_dir/
-        elif [ -f .mvn/settings.xml ]; then
-            cp -vf .mvn/settings.xml $m2_dir/
-        elif [ -f /src/root/opt/settings.xml ]; then
-            cp -vf /src/root/opt/settings.xml $m2_dir/
-        elif [ -f /opt/settings.xml ]; then
-            cp -vf /opt/settings.xml $m2_dir/
-        else
-            curl -Lo $m2_dir/settings.xml $url_deploy_raw/conf/dockerfile/root/opt/settings.xml
-        fi
+        # Generate Maven settings.xml
+        cat > "$m2_dir/settings.xml" << 'EOF'
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
+                              https://maven.apache.org/xsd/settings-1.2.0.xsd">
+
+    <localRepository>/var/maven/.m2</localRepository>
+
+    <mirrors>
+        <mirror>
+            <id>mirror-all</id>
+            <mirrorOf>external:*,!custom-group</mirrorOf>
+            <name>mirror-all</name>
+            <url>http://mirror.flyh6.com/repository/maven2proxy/</url>
+        </mirror>
+        <mirror>
+            <id>mirror-all-2</id>
+            <mirrorOf>external:*,!custom-group,!mirror-all</mirrorOf>
+            <name>mirror-all-2</name>
+            <url>https://repo.huaweicloud.com/repository/maven/</url>
+        </mirror>
+        <mirror>
+            <id>mirror-all-3</id>
+            <mirrorOf>external:*,!custom-group,!mirror-all,!mirror-all-2</mirrorOf>
+            <name>mirror-all-3</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </mirror>
+    </mirrors>
+
+    <profiles>
+        <profile>
+            <id>default</id>
+            <repositories>
+                <repository>
+                    <id>central</id>
+                    <url>https://repo.maven.apache.org/maven2</url>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>false</enabled>
+                    </snapshots>
+                </repository>
+            </repositories>
+        </profile>
+    </profiles>
+
+    <activeProfiles>
+        <activeProfile>default</activeProfile>
+    </activeProfiles>
+
+</settings>
+EOF
         ;;
     */composer)
         _is_root || return
@@ -394,11 +434,113 @@ _build_mysql() {
     chmod o-rw /var/run/mysqld
 
     my_cnf=/etc/mysql/conf.d/my.cnf
-    if mysqld --version | grep '8\..\.'; then
-        cp -f "$me_path"/my.8.cnf $my_cnf
+    # Generate MySQL configuration based on version
+    cat > $my_cnf << 'EOF'
+# The MySQL  Client configuration file.
+#
+# For explanations see
+# http://dev.mysql.com/doc/mysql/en/server-system-variables.html
+
+[mysqld]
+host_cache_size=0
+initialize-insecure=FALSE
+explicit_defaults_for_timestamp
+tls_version=TLSv1.2,TLSv1.3
+EOF
+
+    # Get MySQL version and compare
+    mysql_version=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
+    if [ "$mysql_version" -gt 8 ]; then
+        cat >> $my_cnf << 'EOF'
+sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
+character-set-server=utf8mb4
+# default-authentication-plugin=mysql_native_password
+EOF
     else
-        cp -f "$me_path"/my.5.cnf $my_cnf
+        cat >> $my_cnf << 'EOF'
+sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER"
+character-set-server=utf8mb4
+default-authentication-plugin=mysql_native_password
+EOF
     fi
+
+    cat >> $my_cnf << 'EOF'
+
+character-set-client-handshake = FALSE
+# lower_case_table_names = 1
+myisam_recover_options = FORCE,BACKUP
+max_allowed_packet = 128M
+max_connect_errors = 1000000
+sync_binlog = 1
+log_bin = log-bin
+log_bin_index = log-bin
+EOF
+
+    if mysqld --version | grep '8\..\.'; then
+        echo '# binlog_format = ROW' >> $my_cnf
+    else
+        echo 'binlog_format = ROW' >> $my_cnf
+    fi
+
+    cat >> $my_cnf << 'EOF'
+skip-name-resolve
+
+######## M2M replication (master)
+server_id = 1
+## 主键奇数列
+auto_increment_offset = 1
+## 递增步长 2
+# auto_increment_increment = 2
+auto_increment_increment = 1
+
+######## M2M replication (slave)
+# server_id = 2
+## 主键偶数列
+# auto_increment_offset = 2
+## 递增步长 2
+# auto_increment_increment = 2
+
+read_only = 0
+# binlog_do_db = default
+binlog_ignore_db = mysql
+binlog_ignore_db = test
+binlog_ignore_db = information_schema
+replicate_ignore_db = mysql
+replicate_ignore_db = test
+replicate_ignore_db = information_schema
+replicate_ignore_db = easyschedule
+replicate_wild_ignore_table = easyschedule.%
+# log_replica_updates
+
+#############################################
+# query_cache_type = 0
+# query_cache_size = 0
+# innodb_log_files_in_group = 2
+# innodb_log_file_size = 2560M
+# tmp_table_size = 32M
+# max_heap_table_size = 64M
+max_connections = 2048
+# thread_cache_size = 50
+open_files_limit = 65535
+# table_definition_cache = 2048
+# table_open_cache = 2048
+# innodb_flush_method = O_DIRECT
+# innodb_redo_log_capacity = 2560M
+# innodb_flush_log_at_trx_commit = 1
+# innodb_file_per_table = 1
+# innodb_buffer_pool_size = 1G
+# log_queries_not_using_indexes = 0
+slow_query_log = 1
+long_query_time = 1
+# innodb_stats_on_metadata = 0
+
+[mysql]
+default-character-set=utf8mb4
+
+[client]
+default-character-set=utf8mb4
+EOF
+
     chmod 0444 $my_cnf
     if [ "$MYSQL_SLAVE" = 'true' ]; then
         sed -i -e "/server_id/s/1/${MYSQL_SLAVE_ID:-2}/" -e "/auto_increment_offset/s/1/2/" $my_cnf
