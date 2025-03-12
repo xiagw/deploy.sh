@@ -52,7 +52,7 @@ _log() {
     if [[ $CURRENT_LOG_LEVEL -ge $level ]]; then
         if [[ $level -eq $LOG_LEVEL_FILE ]]; then
             # 输出到日志文件，不使用颜色
-            echo "[${level_name}] $(date '+%Y-%m-%d %H:%M:%S') - $message" >>"$LOG_FILE"
+            echo "[${level_name}] $(date '+%Y-%m-%d %H:%M:%S') - $message" >>"${LOG_FILE:-/tmp/tmp.log}"
         else
             # 输出到终端，使用颜色
             echo -e "${color}[${level_name}] $(date '+%Y-%m-%d %H:%M:%S')${COLOR_RESET} - $message" >&2

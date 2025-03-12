@@ -14,7 +14,8 @@ check_php_style() {
     [[ "${GH_ACTION:-0}" -eq 1 ]] && return 0
 
     if ! ${G_DOCK} images | grep -q 'deploy/phpcs'; then
-        ${G_DOCK} build ${G_ARGS} -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null
+        local run="${G_DOCK} build ${G_ARGS}"
+        $run -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null
     fi
 
     local phpcs_result=0

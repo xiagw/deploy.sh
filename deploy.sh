@@ -390,7 +390,7 @@ main() {
     _msg info "Detected program language: ${get_lang}"
 
     ## 处理构建工具选择
-    config_build_env "${repo_lang}" "${repo_lang_ver}" || return 1
+    config_build_env "${repo_lang}" "${repo_lang_ver}"
 
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
     # arg_disable_inject: 命令参数强制不注入文件
@@ -448,16 +448,8 @@ main() {
     for key in "${!arg_flags[@]}"; do
         [[ $key == deploy_* ]] && ((deploy_sum += arg_flags[$key]))
     done
-
     if [[ $deploy_sum -gt 0 ]] || $all_zero; then
-        handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG" || {
-            _msg error "Deployment failed"
-            deploy_result=1
-            # 如果部署失败，跳过后续测试和扫描
-            arg_flags["test_func"]=0
-            arg_flags["security_zap"]=0
-            arg_flags["security_vulmap"]=0
-        }
+        handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
     fi
 
     # 测试和安全扫描
