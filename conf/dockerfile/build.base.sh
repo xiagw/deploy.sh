@@ -85,6 +85,8 @@ all)
 *)
     if [ -z "$cmd_arg" ]; then
         select_arg=$(echo "${all_args[@]}" | sed 's/\ /\n/g' | fzf)
+    else
+        select_arg="$*"
     fi
     build_base_image "$select_arg"
     ;;

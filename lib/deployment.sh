@@ -389,7 +389,7 @@ handle_deploy() {
 # @param $1 source_image Source image name (e.g., nginx:latest)
 # @param $2 target_registry Target registry (e.g., registry.example.com)
 copy_docker_image() {
-    local source_image="$1" target_registry="$2" image_name image_tag tag target
+    local source_image="$1" target_registry="$2" image_name tag target
 
     if [[ -z "$source_image" || -z "$target_registry" ]]; then
         echo "Error: Missing required parameters"
