@@ -417,7 +417,8 @@ copy_docker_image() {
     _msg info "Target: ${target}"
 
     # Copy all available platforms
-    skopeo copy --multi-arch index-only "docker://docker.io/${source_image}" "docker://${target}"
+    # skopeo copy --multi-arch index-only "docker://docker.io/${source_image}" "docker://${target}"
+    skopeo copy "docker://docker.io/${source_image}" "docker://${target}"
 
     echo "Successfully copied multi-arch image ${source_image} to ${target}"
 }
