@@ -48,34 +48,34 @@ cdn_list() {
     echo "列出 CDN 域名："
     local result
     result=$(aliyun --profile "${profile:-}" cdn DescribeUserDomains)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ "$ret" -ne 0 ]; then
         echo "错误：无法获取 CDN 域名列表。请检查您的凭证和权限。" >&2
         return 1
     fi
 
     case "$format" in
-        json)
-            # 直接输出原始结果
-            echo "$result"
-            ;;
-        tsv)
-            echo -e "DomainName\tCname\tDomainStatus\tGmtCreated"
-            echo "$result" | jq -r '.Domains.PageData[] | [.DomainName, .Cname, .DomainStatus, .GmtCreated] | @tsv'
-            ;;
-        human|*)
-            if [[ $(echo "$result" | jq '.Domains.PageData | length') -eq 0 ]]; then
-                echo "没有找到 CDN 域名。"
-            else
-                echo "域名                  CNAME                                  状态    创建时间"
-                echo "--------------------  --------------------------------------  ------  -------------------------"
-                echo "$result" | jq -r '.Domains.PageData[] | [.DomainName, .Cname, .DomainStatus, .GmtCreated] | @tsv' |
+    json)
+        # 直接输出原始结果
+        echo "$result"
+        ;;
+    tsv)
+        echo -e "DomainName\tCname\tDomainStatus\tGmtCreated"
+        echo "$result" | jq -r '.Domains.PageData[] | [.DomainName, .Cname, .DomainStatus, .GmtCreated] | @tsv'
+        ;;
+    human | *)
+        if [[ $(echo "$result" | jq '.Domains.PageData | length') -eq 0 ]]; then
+            echo "没有找到 CDN 域名。"
+        else
+            echo "域名                  CNAME                                  状态    创建时间"
+            echo "--------------------  --------------------------------------  ------  -------------------------"
+            echo "$result" | jq -r '.Domains.PageData[] | [.DomainName, .Cname, .DomainStatus, .GmtCreated] | @tsv' |
                 awk 'BEGIN {FS="\t"; OFS="\t"}
                 {
                     printf "%-20s  %-38s  %-6s  %s\n", $1, $2, $3, $4
                 }'
-            fi
-            ;;
+        fi
+        ;;
     esac
     log_result "${profile:-}" "${region:-}" "cdn" "list" "$result" "$format"
 }
@@ -124,12 +124,12 @@ cdn_refresh() {
 
     local object_type
     case "$type" in
-        directory) object_type="Directory" ;;
-        file) object_type="File" ;;
-        *)
-            echo "错误：无效的刷新类型。请使用 'directory' 或 'file'。" >&2
-            return 1
-            ;;
+    directory) object_type="Directory" ;;
+    file) object_type="File" ;;
+    *)
+        echo "错误：无效的刷新类型。请使用 'directory' 或 'file'。" >&2
+        return 1
+        ;;
     esac
 
     echo "刷新 CDN $type ："
@@ -140,7 +140,8 @@ cdn_refresh() {
         --ObjectPath "$path" \
         --ObjectType "$object_type")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ "$ret" -eq 0 ]; then
         echo "CDN $type 刷新请求已提交："
         echo "$result" | jq '.'
     else
@@ -163,7 +164,8 @@ cdn_prefetch() {
         --region "$region" \
         --ObjectPath "$path")
 
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ "$ret" -eq 0 ]; then
         echo "CDN 文件预热请求已提交："
         echo "$result" | jq '.'
     else
@@ -179,12 +181,12 @@ cdn_pay() {
     local show_message="$1"
 
     # 资源包规格和价格配置
-    local package_unit_size=1024  # 1TB = 1024GB
-    local package_unit_price=126  # 每 TB 单价 126 元
+    local package_unit_size=1024 # 1TB = 1024GB
+    local package_unit_price=126 # 每 TB 单价 126 元
 
     # 阈值配置
-    local remaining_threshold=1.900  # 剩余容量阈值 1.9TB
-    local balance_threshold=700      # 账户余额阈值 700 元
+    local remaining_threshold=1.900 # 剩余容量阈值 1.9TB
+    local balance_threshold=700     # 账户余额阈值 700 元
 
     # 查询当前资源包剩余容量
     local remaining_amount
@@ -205,8 +207,8 @@ cdn_pay() {
     local available_balance
     available_balance="$(
         aliyun --profile "${profile:-}" bssopenapi QueryAccountBalance |
-        jq -r '.Data.AvailableAmount' |
-        awk '{gsub(/,/,""); print int($0)}'
+            jq -r '.Data.AvailableAmount' |
+            awk '{gsub(/,/,""); print int($0)}'
     )"
 
     # 检查账户余额是否充足
@@ -218,7 +220,7 @@ cdn_pay() {
     # 根据账户余额计算可购买的资源包规格
     local package_size
     for size in 200 50 10 5 1; do
-        local special_discount=$((size == 200 ? 7870 : 0))  # 200TB 包有特殊优惠
+        local special_discount=$((size == 200 ? 7870 : 0)) # 200TB 包有特殊优惠
         if ((available_balance > balance_threshold + package_unit_price * size - special_discount)); then
             package_size=$((package_unit_size * size))
             break

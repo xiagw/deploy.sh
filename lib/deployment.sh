@@ -150,11 +150,16 @@ deploy_to_kubernetes() {
     fi
 
     ## Clean up rs 0 0 / 清理 rs 0 0
+    local rs0 bad_pod
     {
-        $KUBECTL_OPT -n "${G_NAMESPACE}" get rs | awk '$2=="0" && $3=="0" && $4=="0" {print $1}' |
-            xargs -t -r $KUBECTL_OPT -n "${G_NAMESPACE}" delete rs >/dev/null 2>&1 || true
-        $KUBECTL_OPT -n "${G_NAMESPACE}" get pod | awk '/Evicted/ {print $1}' |
-            xargs -t -r $KUBECTL_OPT -n "${G_NAMESPACE}" delete pod 2>/dev/null || true
+        while read -r rs0; do
+            $KUBECTL_OPT -n "${G_NAMESPACE}" delete rs "${rs0}" &>/dev/null || true
+        done < <($KUBECTL_OPT -n "${G_NAMESPACE}" get rs | awk '$2=="0" && $3=="0" && $4=="0" {print $1}')
+        while read -r bad_pod; do
+            $KUBECTL_OPT -n "${G_NAMESPACE}" delete pod "${bad_pod}" &>/dev/null || true
+        done < <(
+            $KUBECTL_OPT -n "${G_NAMESPACE}" get pod | awk '/Evicted/ {print $1}'
+        )
     } &
 
     if [ -f "$G_REPO_DIR/deploy.custom.sh" ]; then
