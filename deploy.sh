@@ -128,8 +128,7 @@ parse_command_args() {
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build and push
         --build-langs) arg_flags["build_langs"]=1 ;;
-        --build-image) arg_flags["build_image"]=1 && deploy_method=deploy_k8s ;;
-        --push-image) arg_flags["push_image"]=1 && deploy_method=deploy_k8s ;;
+        --build-image) arg_flags["build_image"]=1 && deploy_method=deploy_k8s keep_image="${2:-remove}" && shift ;;
         # Deployment
         --deploy-k8s) arg_flags["deploy_k8s"]=1 && deploy_method=deploy_k8s ;;
         --deploy-docker) arg_flags["deploy_docker"]=1 && deploy_method=deploy_docker ;;
@@ -283,7 +282,6 @@ main() {
     declare -A arg_flags=(
         ["build_langs"]=0
         ["build_image"]=0
-        ["push_image"]=0
         ["deploy_k8s"]=0
         ["deploy_docker"]=0
         ["deploy_aliyun_func"]=0
@@ -395,7 +393,6 @@ main() {
     _msg info "Detected program language(again): ${get_lang}"
     if [[ -z "${repo_dockerfile}" ]]; then
         arg_flags["build_image"]=0
-        arg_flags["push_image"]=0
     else
         arg_flags["build_langs"]=0
     fi
@@ -429,13 +426,12 @@ main() {
     # 构建相关任务
     [[ ${arg_flags["build_langs"]} -eq 1 ]] && build_lang "$repo_lang"
     if [[ ${arg_flags["build_image"]} -eq 1 ]]; then
-        build_image "$G_QUIET" "$G_IMAGE_TAG"
+        build_image "${keep_image:-}" "$G_QUIET" "$G_IMAGE_TAG"
         if [[ "${BASE_IMAGE_BUILT:-false}" == "true" ]]; then
             _msg info "Base image build completed, exiting..."
             return 0
         fi
     fi
-    [[ ${arg_flags["push_image"]} -eq 1 ]] && push_image
 
     # 发布，最优雅的写法
     deploy_sum=0

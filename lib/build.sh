@@ -58,6 +58,7 @@ get_docker_context() {
 
 build_image() {
     [ "${GH_ACTION:-false}" = "true" ] && return 0
+    local keep_image="${1}"
     _msg step "[build] Building container image"
 
     get_docker_context
@@ -95,25 +96,31 @@ build_image() {
         echo "  $G_DOCK tag $image_uuid laradock_spring"
     fi
     _msg time "[build] Image build completed"
-}
 
-push_image() {
     _msg step "[build] Pushing image"
-    is_demo_mode "push_image" && return 0
 
     docker_login
 
-    # Push main image
-    if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
+    # auto mode:            push=1, keep=0, keep_image=
+    # arg build:            push=0, keep=0, keep_image=remove
+    # arg build keep:       push=0, keep=1, keep_image=keep
+    # arg build push:       push=1, keep=0, keep_image=push
+
+    # 根据参数决定上传镜像
+    if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
+        if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
+            _msg time "[build] Image push completed"
+        else
+            _msg error "Image push failed: network connectivity issue detected"
+        fi
+    fi
+    # 根据参数决定是否保留镜像
+    if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
+        _msg info "Removing image"
         $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null
     else
-        _msg error "Image push failed: network connectivity issue detected"
-        _msg error "Please verify:"
-        _msg error "  - Network connection is stable"
-        _msg error "  - Docker registry (${ENV_DOCKER_REGISTRY}) is accessible"
-        _msg error "  - Docker credentials are valid"
+        _msg info "Keeping image [$G_DOCK]"
     fi
-    _msg time "[build] Image push completed"
 }
 
 # Main build function that determines which specific builder to run
