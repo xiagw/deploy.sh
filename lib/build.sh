@@ -97,10 +97,6 @@ build_image() {
     fi
     _msg time "[build] Image build completed"
 
-    _msg step "[build] Pushing image"
-
-    docker_login
-
     # auto mode:            push=1, keep=0, keep_image=
     # arg build:            push=0, keep=0, keep_image=remove
     # arg build keep:       push=0, keep=1, keep_image=keep
@@ -108,6 +104,8 @@ build_image() {
 
     # 根据参数决定上传镜像
     if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
+        _msg step "[build] Pushing image"
+        docker_login
         if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
             _msg time "[build] Image push completed"
         else

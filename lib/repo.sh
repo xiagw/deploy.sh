@@ -357,13 +357,15 @@ setup_git_repo() {
     [ -d "${git_repo_dir}" ] || mkdir -p "$git_repo_dir"
 
     if [ -d "${git_repo_dir}/.git" ] && cd "$git_repo_dir" && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ "$(git rev-parse --git-dir)" = ".git" ]; then
-        _msg step "[repo] Updating existing repo: $git_repo_dir, branch: ${git_repo_branch}"
+        _msg step "[repo] Updating existing repo: "
+        echo "  $git_repo_dir, branch: ${git_repo_branch}"
         git clean -fxd
         git fetch --quiet
         git checkout --quiet "${git_repo_branch}"
         git pull --quiet
     else
-        _msg step "[repo] Cloning git repo: $git_repo_url, branch: ${git_repo_branch}"
+        _msg step "[repo] Cloning git repo:"
+        echo "  $git_repo_url, branch: ${git_repo_branch}"
         git clone --quiet --depth 1 -b "${git_repo_branch}" "$git_repo_url" "$git_repo_dir" || {
             _msg error "Failed to clone git repo: $git_repo_url"
             return 1
