@@ -371,7 +371,10 @@ main() {
         copy_docker_image "${arg_docker_source:?docker source required}" "${arg_docker_target}"
         return
     fi
-    [[ ${arg_flags["kube_pvc"]} -eq 1 ]] && kube_create_pv_pvc "{$sub_path_name}" && return
+    if [[ ${arg_flags["kube_pvc"]} -eq 1 && -n "${sub_path_name}" ]]; then
+        kube_create_pv_pvc "${sub_path_name}"
+        return
+    fi
 
     ## 安装所需的系统工具
     system_install_tools "$@"
