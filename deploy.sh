@@ -156,6 +156,9 @@ parse_command_args() {
         # Kubernetes operations
         --create-helm) arg_create_helm=true && helm_dir="$2" && shift ;;
         --create-k8s) create_k8s_with_terraform=true ;;
+        --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" ;;
+        ## 加一个参数 kube check pv pvc
+
         ## 命令参数强制不注入文件
         --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
@@ -302,22 +305,34 @@ main() {
         ["security_zap"]=0
         ["security_vulmap"]=0
         ["docker_copy"]=0
+        ["kube_pvc"]=0
     )
     ## 解析和处理命令行参数
     parse_command_args "$@"
 
-    ## 加载所需的模块文件
-    source "$G_LIB/analysis.sh"
-    source "$G_LIB/build.sh"
-    source "$G_LIB/common.sh"
-    source "$G_LIB/config.sh"
-    source "$G_LIB/deployment.sh"
-    source "$G_LIB/kubernetes.sh"
-    source "$G_LIB/notify.sh"
-    source "$G_LIB/repo.sh"
-    source "$G_LIB/style.sh"
-    source "$G_LIB/system.sh"
-    source "$G_LIB/test.sh"
+    ## 定义需要加载的模块列表
+    modules=(
+        "analysis"
+        "build"
+        "common"
+        "config"
+        "deployment"
+        "kubernetes"
+        "notify"
+        "repo"
+        "style"
+        "system"
+        "test"
+    )
+
+    ## 按顺序加载模块
+    for module in "${modules[@]}"; do
+        if [[ -f "$G_LIB/${module}.sh" ]]; then
+            source "$G_LIB/${module}.sh"
+        else
+            _msg error "Module ${module}.sh not found"
+        fi
+    done
 
     _msg step "[deploy] BEGIN"
 
@@ -331,7 +346,7 @@ main() {
     source "$G_ENV"
 
     ## Clone Git repository and handle --gitea flag
-    ## - If --gitea is set: Use GITHUB_* variables
+    ## - In Gitea: Use GITHUB_* variables
     ## - If git-clone-url is provided: Clone from specified URL
     ## - Default branch: main
     if [ -n "${arg_git_clone_url}" ] || ${GITEA_ACTIONS:-false}; then
@@ -353,9 +368,10 @@ main() {
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return
     ## Docker image copy operation
     if [[ ${arg_flags["docker_copy"]} -eq 1 && -n "${arg_docker_source}" ]]; then
-        copy_docker_image "${arg_docker_source}" "${arg_docker_target}"
+        copy_docker_image "${arg_docker_source:?docker source required}" "${arg_docker_target}"
         return
     fi
+    [[ ${arg_flags["kube_pvc"]} -eq 1 ]] && kube_create_pv_pvc "{$sub_path_name}" && return
 
     ## 安装所需的系统工具
     system_install_tools "$@"
@@ -437,7 +453,7 @@ main() {
         [[ $key == deploy_* ]] && ((deploy_sum += arg_flags[$key]))
     done
     if [[ $deploy_sum -gt 0 ]] || $all_zero; then
-        handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG"
+        handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG" "$G_IMAGE_TAG"
     fi
 
     # 测试和安全扫描
