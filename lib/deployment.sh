@@ -6,8 +6,8 @@
 # Including Kubernetes, Aliyun Functions, Rsync, FTP, etc.
 
 format_release_name() {
+    local release_name
     if ${ENV_REMOVE_PROJ_PREFIX:-false}; then
-        echo "remove project name prefix-"
         release_name=${G_REPO_NAME#*-}
     else
         release_name=${G_REPO_NAME}
@@ -20,7 +20,7 @@ format_release_name() {
     release_name="${release_name//[@#$%^&*_.\/]/-}"
     ## start with numbers / 开头是数字
     if [[ "$release_name" == [0-9]* ]]; then
-        release_name="a${release_name}"
+        release_name="n${release_name}"
     fi
     ## characters greate than 15 / 字符大于 15
     # if [[ ${#release_name} -gt 15 ]]; then
@@ -31,6 +31,84 @@ format_release_name() {
     #     ## cut 15 characters / 截取 15 个字符
     #     release_name="${release_name:0:15}"
     # fi
+    echo "${release_name}"
+}
+
+# Deploy to Kubernetes cluster
+deploy_to_kubernetes() {
+    _msg step "[deploy] Deploy to Kubernetes with Helm"
+    is_demo_mode "deploy_k8s" && return 0
+    local release_name
+    release_name="$(format_release_name)"
+
+    # Ensure PVC exists before proceeding with deployment
+    # kube_check_pv_pvc
+
+    ## finding helm files folder / 查找 helm 文件目录
+    helm_dirs=(
+        "$G_REPO_DIR/helm/${release_name}"
+        "$G_REPO_DIR/docs/helm/${release_name}"
+        "$G_REPO_DIR/doc/helm/${release_name}"
+        "${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG}/${G_NAMESPACE}/${release_name}"
+        "${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG}/${release_name}"
+        "${G_DATA}/helm/${release_name}"
+    )
+    for dir in "${helm_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            helm_dir="$dir"
+            break
+        fi
+    done
+    ## create helm charts / 创建 helm 文件
+    if [ -z "$helm_dir" ]; then
+        _msg purple "Helm charts not exist, generating new Helm charts"
+        helm_dir="${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG}/${release_name}"
+        mkdir -p "$helm_dir"
+        create_helm_chart "${helm_dir}"
+    fi
+
+    echo "helm upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${G_NAMESPACE} --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${G_IMAGE_TAG}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
+    ${GH_ACTION:-false} && return 0
+
+    ## helm install / helm 安装  --atomic
+    $HELM_OPT upgrade "${release_name}" "$helm_dir/" --install --history-max 1 \
+        --namespace "${G_NAMESPACE}" --create-namespace \
+        --timeout 120s --set image.pullPolicy='Always' \
+        --set image.repository="${ENV_DOCKER_REGISTRY}" \
+        --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
+
+    echo "Monitoring deployment status for ${release_name} in namespace ${G_NAMESPACE} (timeout: 120s)..."
+    # 检查是否在忽略列表中
+    if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
+        _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
+    else
+        if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
+            deploy_result=1
+            _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
+            _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
+        fi
+    fi
+
+    ## Clean up rs 0 0 / 清理 rs 0 0
+    local rs0 bad_pod
+    {
+        while read -r rs0; do
+            $KUBECTL_OPT -n "${G_NAMESPACE}" delete rs "${rs0}" &>/dev/null || true
+        done < <($KUBECTL_OPT -n "${G_NAMESPACE}" get rs | awk '$2=="0" && $3=="0" && $4=="0" {print $1}')
+        while read -r bad_pod; do
+            $KUBECTL_OPT -n "${G_NAMESPACE}" delete pod "${bad_pod}" &>/dev/null || true
+        done < <(
+            $KUBECTL_OPT -n "${G_NAMESPACE}" get pod | awk '/Evicted/ {print $1}'
+        )
+    } &
+
+    if [ -f "$G_REPO_DIR/deploy.custom.sh" ]; then
+        _msg time "Executing custom deployment script"
+        source "$G_REPO_DIR/deploy.custom.sh"
+    fi
+
+    _msg time "Kubernetes deployment completed"
+    return "${deploy_result:-0}"
 }
 
 # Deploy to Aliyun Functions
@@ -42,7 +120,9 @@ deploy_aliyun_functions() {
     fi
     local lang="${1:?'lang parameter is required'}"
     _install_aliyun_cli
-    format_release_name
+    local release_name
+    release_name="$(format_release_name)"
+
     ${GH_ACTION:-false} && return 0
     ${ENV_ENABLE_FUNC:-false} || {
         _msg time "Aliyun Functions deployment is disabled"
@@ -91,84 +171,6 @@ EOF
     rm -f "$functions_conf"
 
     _msg time "Aliyun Functions deployment completed"
-}
-
-# Deploy to Kubernetes cluster
-deploy_to_kubernetes() {
-    _msg step "[deploy] Deploy to Kubernetes with Helm"
-    is_demo_mode "deploy_k8s" && return 0
-    format_release_name
-
-    # Ensure PVC exists before proceeding with deployment
-    # kube_check_pv_pvc
-
-    ## finding helm files folder / 查找 helm 文件目录
-    helm_dirs=(
-        "$G_REPO_DIR/helm/${release_name}"
-        "$G_REPO_DIR/docs/helm/${release_name}"
-        "$G_REPO_DIR/doc/helm/${release_name}"
-        "${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG}/${G_NAMESPACE}/${release_name}"
-        "${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG}/${release_name}"
-        "${G_DATA}/helm/${release_name}"
-    )
-    for dir in "${helm_dirs[@]}"; do
-        if [ -d "$dir" ]; then
-            helm_dir="$dir"
-            break
-        fi
-    done
-    ## create helm charts / 创建 helm 文件
-    if [ -z "$helm_dir" ]; then
-        _msg purple "No Helm charts found in standard locations"
-        echo "Generating new Helm charts"
-        helm_dir="${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG}/${release_name}"
-        mkdir -p "$helm_dir"
-        create_helm_chart "${helm_dir}"
-    fi
-
-    echo "helm upgrade --install --history-max 1 ${release_name} $helm_dir/ --namespace ${G_NAMESPACE} --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${G_IMAGE_TAG}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
-    ${GH_ACTION:-false} && return 0
-
-    ## helm install / helm 安装  --atomic
-    $HELM_OPT upgrade --install --history-max 1 \
-        "${release_name}" "$helm_dir/" \
-        --namespace "${G_NAMESPACE}" --create-namespace \
-        --timeout 120s --set image.pullPolicy='Always' \
-        --set image.repository="${ENV_DOCKER_REGISTRY}" \
-        --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
-
-    echo "Monitoring deployment status for ${release_name} in namespace ${G_NAMESPACE} (timeout: 120s)..."
-    # 检查是否在忽略列表中
-    if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
-        _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
-    else
-        if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
-            deploy_result=1
-            _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
-            _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
-        fi
-    fi
-
-    ## Clean up rs 0 0 / 清理 rs 0 0
-    local rs0 bad_pod
-    {
-        while read -r rs0; do
-            $KUBECTL_OPT -n "${G_NAMESPACE}" delete rs "${rs0}" &>/dev/null || true
-        done < <($KUBECTL_OPT -n "${G_NAMESPACE}" get rs | awk '$2=="0" && $3=="0" && $4=="0" {print $1}')
-        while read -r bad_pod; do
-            $KUBECTL_OPT -n "${G_NAMESPACE}" delete pod "${bad_pod}" &>/dev/null || true
-        done < <(
-            $KUBECTL_OPT -n "${G_NAMESPACE}" get pod | awk '/Evicted/ {print $1}'
-        )
-    } &
-
-    if [ -f "$G_REPO_DIR/deploy.custom.sh" ]; then
-        _msg time "Executing custom deployment script"
-        source "$G_REPO_DIR/deploy.custom.sh"
-    fi
-
-    _msg time "Kubernetes deployment completed"
-    return "${deploy_result:-0}"
 }
 
 # Deploy via Rsync+SSH
@@ -237,7 +239,7 @@ deploy_via_rsync_ssh() {
 
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             if is_demo_mode "deploy_aliyun_oss"; then
-                _msg purple "Demo mode: Aliyun OSS deployment simulation:"
+                _msg info "Demo mode: Aliyun OSS deployment simulation:"
                 _msg purple "  Source: ${rsync_src}"
                 _msg purple "  Destination: ${rsync_dest}"
                 continue
@@ -248,7 +250,7 @@ deploy_via_rsync_ssh() {
 
         _msg info "Deploying to ${ssh_host}:${rsync_dest}"
         if is_demo_mode "deploy_rsync_ssh"; then
-            _msg purple "Demo mode: Command simulation:"
+            _msg info "Demo mode: Command simulation:"
             _msg purple "  $ssh_opt -n \"$ssh_host\" \"mkdir -p $rsync_dest\""
             _msg purple "  ${rsync_opt} -e \"$ssh_opt\" \"$rsync_src\" \"${ssh_host}:${rsync_dest}\""
             continue
