@@ -99,6 +99,9 @@ deploy_to_kubernetes() {
     is_demo_mode "deploy_k8s" && return 0
     format_release_name
 
+    # Ensure PVC exists before proceeding with deployment
+    # kube_check_pv_pvc
+
     ## finding helm files folder / 查找 helm 文件目录
     helm_dirs=(
         "$G_REPO_DIR/helm/${release_name}"

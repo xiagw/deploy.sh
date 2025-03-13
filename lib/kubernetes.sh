@@ -159,3 +159,140 @@ kube_setup_terraform() {
         return 1
     fi
 }
+
+# Create CNFS storage class and related resources
+# @param $1 namespace The namespace to create resources in
+kube_create_storage_class() {
+    local cnfs_name="cnfs01"
+    local sc_name="alicloud-cnfs-nas"
+    local namespace="${G_NAMESPACE}"
+    local nas_url="${ENV_NAS_URL}"
+
+    if [ -z "$nas_url" ]; then
+        _msg error "ENV_NAS_URL is required but not set"
+        return 1
+    fi
+
+    _msg step "[k8s] Creating CNFS storage class resources"
+
+    # Check if CNFS exists
+    if ! $KUBECTL_OPT get cnfs "$cnfs_name" &>/dev/null; then
+        # Create ContainerNetworkFileSystem
+        $KUBECTL_OPT apply -f - <<EOF
+apiVersion: storage.alibabacloud.com/v1beta1
+kind: ContainerNetworkFileSystem
+metadata:
+  name: $cnfs_name
+spec:
+  description: "cnfs"
+  type: nas
+  reclaimPolicy: Retain
+  parameters:
+    server: $nas_url
+EOF
+    fi
+    # Check if storageclasses exists
+    if ! $KUBECTL_OPT get sc "$sc_name" &>/dev/null; then
+        # Create StorageClass
+        $KUBECTL_OPT apply -f - <<EOF
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: $sc_name
+mountOptions:
+  - vers=3,nolock,proto=tcp,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport
+parameters:
+  volumeAs: subpath
+  containerNetworkFileSystem: $cnfs_name
+  path: "/"
+provisioner: nasplugin.csi.alibabacloud.com
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+EOF
+    fi
+}
+
+# Create PV and PVC for a specific subpath, or ensure PVC exists
+# @param $1 namespace The namespace to create resources in
+# @param $2 subpath The NAS subpath to use (optional)
+kube_create_pv_pvc() {
+    local subpath="$1" pvc_name="$2" pv_name="$3"
+    local namespace="${G_NAMESPACE}"
+    local cnfs_name="cnfs01"
+    local sc_name="alicloud-cnfs-nas"
+
+    _msg step "[k8s] Creating PVC $pvc_name in namespace $namespace"
+
+    # Check if PVC exists
+    if ! $KUBECTL_OPT -n "$namespace" get pvc "$pvc_name" &>/dev/null; then
+        $KUBECTL_OPT apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: $pv_name
+spec:
+  accessModes:
+  - ReadWriteMany
+  capacity:
+    storage: 50Gi
+  csi:
+    driver: nasplugin.csi.alibabacloud.com
+    fsType: nfs
+    volumeAttributes:
+      containerNetworkFileSystem: $cnfs_name
+      mountProtocol: nfs
+      path: /$subpath
+      volumeAs: subpath
+      volumeCapacity: "true"
+    volumeHandle: $pv_name
+  mountOptions:
+  - vers=3,nolock,proto=tcp,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: $sc_name
+  volumeMode: Filesystem
+EOF
+    fi
+
+    # Create PVC using the template
+    if ! $KUBECTL_OPT get pv "$pv_name" &>/dev/null; then
+        $KUBECTL_OPT apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: $pvc_name
+  namespace: $namespace
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: $sc_name
+  volumeMode: Filesystem
+  volumeName: $pv_name
+EOF
+    fi
+}
+
+kube_check_pv_pvc() {
+    case "${G_NAMESPACE}" in
+    auth)
+        nas_subpath=auth
+        kube_create_pv_pvc "${nas_subpath}" "cnfs-pvc-${nas_subpath}" "cnfs-pv-${nas_subpath}-${G_NAMESPACE}"
+        ;;
+    dev | develop)
+        nas_subpath=www
+        kube_create_pv_pvc "${nas_subpath}" "cnfs-pvc-${nas_subpath}" "cnfs-pv-${nas_subpath}-${G_NAMESPACE}"
+        ;;
+    main)
+        nas_subpath=www
+        kube_create_pv_pvc "${nas_subpath}" "cnfs-pvc-${nas_subpath}" "cnfs-pv-${nas_subpath}-${G_NAMESPACE}"
+        nas_subpath=nexus
+        kube_create_pv_pvc "${nas_subpath}" "cnfs-pvc-${nas_subpath}" "cnfs-pv-${nas_subpath}-${G_NAMESPACE}"
+        ;;
+    *)
+        nas_subpath=www
+        kube_create_pv_pvc "${nas_subpath}" "cnfs-pvc-${nas_subpath}" "cnfs-pv-${nas_subpath}-${G_NAMESPACE}"
+        ;;
+    esac
+}
