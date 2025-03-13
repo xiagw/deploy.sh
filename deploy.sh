@@ -382,7 +382,6 @@ main() {
     repo_lang_ver=${get_lang#*:}
     repo_lang_ver=${repo_lang_ver%%:*}
     ## 解析语言类型和 docker 标识
-    repo_dockerfile=${get_lang##*:}
     _msg info "Detected program language: ${get_lang}"
 
     ## 处理构建工具选择
@@ -393,13 +392,7 @@ main() {
     repo_inject_file "$repo_lang" "${arg_disable_inject:-false}"
     get_lang=$(repo_language_detect)
     ## 解析 docker 标识
-    repo_dockerfile=${get_lang##*:}
     _msg info "Detected program language(again): ${get_lang}"
-    if [[ -z "${repo_dockerfile}" ]]; then
-        arg_flags["build_image"]=0
-    else
-        arg_flags["build_langs"]=0
-    fi
 
     ## Task Execution Phase
     ## Mode:
@@ -430,10 +423,11 @@ main() {
     # 构建相关任务
     if [[ ${arg_flags["build_langs"]} -eq 1 ]]; then
         if [[ "$get_lang" == *":docker" ]]; then
-            repo_lang="docker"
+            build_arg="docker"
+        else
+            build_arg="${repo_lang}"
         fi
-        build_all "$repo_lang" "${keep_image:-}"
-
+        build_all "$build_arg" "${keep_image:-}"
         [[ "${BASE_IMAGE_BUILT:-false}" == "true" ]] && return 0
     fi
 
