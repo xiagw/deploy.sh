@@ -128,18 +128,27 @@ parse_command_args() {
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build and push
         --build-langs) arg_flags["build_langs"]=1 ;;
-        --build-image) arg_flags["build_image"]=1 && deploy_method=deploy_k8s keep_image="${2:-remove}" && shift ;;
+        --build-image)
+            arg_flags["build_image"]=1
+            deploy_method=deploy_k8s
+            if [ -z "$2" ]; then
+                keep_image="remove"
+            else
+                keep_image="$2"
+                shift
+            fi
+            ;;
         # Deployment
-        --deploy-k8s) arg_flags["deploy_k8s"]=1 && deploy_method=deploy_k8s ;;
-        --deploy-docker) arg_flags["deploy_docker"]=1 && deploy_method=deploy_docker ;;
-        --deploy-aliyun-func) arg_flags["deploy_aliyun_func"]=1 && deploy_method=deploy_aliyun_func ;;
-        --deploy-aliyun-oss) arg_flags["deploy_aliyun_oss"]=1 && deploy_method=deploy_aliyun_oss ;;
-        --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 && deploy_method=deploy_rsync_ssh ;;
-        --deploy-rsync) arg_flags["deploy_rsync"]=1 && deploy_method=deploy_rsync ;;
-        --deploy-ftp) arg_flags["deploy_ftp"]=1 && deploy_method=deploy_ftp ;;
-        --deploy-sftp) arg_flags["deploy_sftp"]=1 && deploy_method=deploy_sftp ;;
+        --deploy-k8s) arg_flags["deploy_k8s"]=1 deploy_method=deploy_k8s ;;
+        --deploy-docker) arg_flags["deploy_docker"]=1 deploy_method=deploy_docker ;;
+        --deploy-aliyun-func) arg_flags["deploy_aliyun_func"]=1 deploy_method=deploy_aliyun_func ;;
+        --deploy-aliyun-oss) arg_flags["deploy_aliyun_oss"]=1 deploy_method=deploy_aliyun_oss ;;
+        --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 deploy_method=deploy_rsync_ssh ;;
+        --deploy-rsync) arg_flags["deploy_rsync"]=1 deploy_method=deploy_rsync ;;
+        --deploy-ftp) arg_flags["deploy_ftp"]=1 deploy_method=deploy_ftp ;;
+        --deploy-sftp) arg_flags["deploy_sftp"]=1 deploy_method=deploy_sftp ;;
         # Docker operations
-        --docker-copy) arg_flags["docker_copy"]=1 && arg_docker_source="${2:?empty docker source image}" && arg_docker_target="${3:?empty docker target registry}" && shift 2 ;;
+        --docker-copy) arg_flags["docker_copy"]=1 && arg_docker_source="${2:?empty docker source image}" arg_docker_target="${3:?empty docker target registry}" && shift 2 ;;
         # Testing and quality
         --test-unit) arg_flags["test_unit"]=1 ;;
         --apidoc) arg_flags["apidoc"]=1 ;;
