@@ -10,7 +10,7 @@ repo_inject_file() {
 
     command -v rsync >/dev/null || _install_packages "$IS_CHINA" rsync
 
-    _msg step "[inject] Initializing file injection from ${G_DATA}/inject/"
+    _msg step "[inject] Initializing file injection..."
 
     # Define paths for injection
     ## Priority 1: ${G_DATA} paths
