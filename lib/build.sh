@@ -83,7 +83,7 @@ build_image() {
 
     ## build from Dockerfile
     local repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
-    $G_DOCK build $G_ARGS --tag "${repo_tag}" "${G_REPO_DIR}" || return 1
+    $G_DOCK build $G_ARGS --tag "${repo_tag}" "${G_REPO_DIR}" | grep -v 'error reading preface from client dummy'
 
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         local image_uuid
