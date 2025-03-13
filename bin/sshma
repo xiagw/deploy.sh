@@ -203,7 +203,9 @@ _connect_host() {
         uname -a | grep -i -q 'iphone.*ish' && use_byobu=
     fi
 
-    _msg info "Connecting to $alias_name..."
+    local host_info
+    host_info=$(_list_hosts | grep -w "$alias_name" | tr -s ' ')
+    _msg info "Connecting to ${host_info#*)} ..."
     ssh -A -t "$alias_name" $use_byobu
 }
 
