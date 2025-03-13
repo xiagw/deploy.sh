@@ -105,10 +105,10 @@ build_image() {
 
     # 根据参数决定上传镜像
     if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
-        _msg step "[build] Pushing image"
+        _msg time "Pushing image"
         docker_login
         if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
-            _msg time "[build] Image push completed"
+            _msg time "Image push completed"
         else
             _msg error "Image push failed: network connectivity issue detected"
         fi
@@ -147,8 +147,6 @@ build_all() {
     docker) build_image "${keep_image}" ;;
     *) _msg warn "No build function available for language: $lang" ;;
     esac
-
-    _msg stepend "[build] Build process completed"
 }
 
 # Java Build
