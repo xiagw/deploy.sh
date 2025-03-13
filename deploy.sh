@@ -77,10 +77,8 @@ Parameters:
     --git-clone-branch NAME  Specify git branch (default: main).
     --svn-checkout URL       Checkout SVN repository.
 
-    # Build and push
-    --build-langs            Build all languages.
-    --build-image          Build image with Docker/Podman.
-    --push-image            Push image to registry.
+    # Build operations
+    --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
 
     # Deployment
     --deploy-k8s             Deploy to Kubernetes.
@@ -126,12 +124,10 @@ parse_command_args() {
         --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
-        # Build and push
-        --build-langs) arg_flags["build_langs"]=1 ;;
-        --build-image)
-            arg_flags["build_image"]=1
-            deploy_method=deploy_k8s
-            if [ -z "$2" ]; then
+        # Build operations
+        --build)
+            arg_flags["build_langs"]=1
+            if [[ -z "$2" || ! "$2" =~ ^(push|keep)$ ]]; then
                 keep_image="remove"
             else
                 keep_image="$2"
@@ -290,7 +286,6 @@ main() {
     ## 声明关联数组用于跟踪参数使用情况
     declare -A arg_flags=(
         ["build_langs"]=0
-        ["build_image"]=0
         ["deploy_k8s"]=0
         ["deploy_docker"]=0
         ["deploy_aliyun_func"]=0
@@ -433,13 +428,13 @@ main() {
     [[ ${arg_flags["apidoc"]} -eq 1 ]] && generate_apidoc
 
     # 构建相关任务
-    [[ ${arg_flags["build_langs"]} -eq 1 ]] && build_lang "$repo_lang"
-    if [[ ${arg_flags["build_image"]} -eq 1 ]]; then
-        build_image "${keep_image:-}" "$G_QUIET" "$G_IMAGE_TAG"
-        if [[ "${BASE_IMAGE_BUILT:-false}" == "true" ]]; then
-            _msg info "Base image build completed, exiting..."
-            return 0
+    if [[ ${arg_flags["build_langs"]} -eq 1 ]]; then
+        if [[ "$get_lang" == *":docker" ]]; then
+            repo_lang="docker"
         fi
+        build_all "$repo_lang" "${keep_image:-}"
+
+        [[ "${BASE_IMAGE_BUILT:-false}" == "true" ]] && return 0
     fi
 
     # 发布，最优雅的写法

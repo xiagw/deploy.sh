@@ -52,22 +52,23 @@ get_docker_context() {
     esac
 
     G_DOCK="${G_DOCK:+"$G_DOCK "}--context $selected_context"
-    echo "$G_DOCK"
+    echo "  - $G_DOCK"
     export G_DOCK
 }
 
 build_image() {
     [ "${GH_ACTION:-false}" = "true" ] && return 0
     local keep_image="${1}"
-    _msg step "[build] Building container image"
+    _msg step "[build] Building image"
 
     get_docker_context
 
     ## build from build.base.sh or Dockerfile.base
-    if [[ -f "${G_REPO_DIR}/build.base.sh" ]]; then
-        _msg info "Found ${G_REPO_DIR}/build.base.sh, running it..."
+    local build_sh="${G_REPO_DIR}/build.base.sh"
+    if [[ -f "${build_sh}" ]]; then
+        _msg info "Found ${build_sh}, running it..."
         ${DEBUG_ON:-false} && debug_flag="-x"
-        bash "${G_REPO_DIR}/build.base.sh" $debug_flag || return 1
+        bash "${build_sh}" $debug_flag
         export BASE_IMAGE_BUILT=true
         return
     fi
@@ -76,7 +77,7 @@ build_image() {
     local base_file="${G_REPO_DIR}/Dockerfile.base"
     if [[ -f "${base_file}" ]]; then
         _msg info "Found ${base_file}, building base image: $base_tag"
-        $G_DOCK build $G_ARGS --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}" || return 1
+        $G_DOCK build $G_ARGS --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}"
         export BASE_IMAGE_BUILT=true
         return
     fi
@@ -115,15 +116,22 @@ build_image() {
     # 根据参数决定是否保留镜像
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
         $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null
-        _msg time "Image removed on [$G_DOCK]"
+        _msg time "Image removed"
     else
-        _msg time "Image keeped on [$G_DOCK]"
+        _msg time "Image keeped"
     fi
 }
 
 # Main build function that determines which specific builder to run
-build_lang() {
-    local lang="$1"
+# @param $1 lang The programming language
+# @param $2 keep_image Optional parameter for image retention
+build_all() {
+    local lang="${1:?'lang parameter is required'}"
+    local keep_image="${2:-}"
+
+    _msg step "[build] Starting build process for ${lang}"
+
+    # Language specific build
     case "$lang" in
     java) build_java ;;
     node) build_node ;;
@@ -133,12 +141,14 @@ build_lang() {
     ruby) build_ruby ;;
     go) build_go ;;
     c) build_c ;;
-    docker) build_docker ;;
     django) build_django ;;
     php) build_php ;;
     shell) build_shell ;;
+    docker) build_image "${keep_image}" ;;
     *) _msg warn "No build function available for language: $lang" ;;
     esac
+
+    _msg stepend "[build] Build process completed"
 }
 
 # Java Build
