@@ -156,9 +156,7 @@ parse_command_args() {
         # Kubernetes operations
         --create-helm) arg_create_helm=true && helm_dir="$2" && shift ;;
         --create-k8s) create_k8s_with_terraform=true ;;
-        --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" ;;
-        ## 加一个参数 kube check pv pvc
-
+        --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" && shift ;;
         ## 命令参数强制不注入文件
         --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
@@ -371,10 +369,6 @@ main() {
         copy_docker_image "${arg_docker_source:?docker source required}" "${arg_docker_target}"
         return
     fi
-    if [[ ${arg_flags["kube_pvc"]} -eq 1 && -n "${sub_path_name}" ]]; then
-        kube_create_pv_pvc "${sub_path_name}"
-        return
-    fi
 
     ## 安装所需的系统工具
     system_install_tools "$@"
@@ -387,6 +381,11 @@ main() {
 
     ## 注意：Kubernetes配置初始化，此步骤位置不可调整
     kube_config_init "$G_NAMESPACE"
+
+    if [[ ${arg_flags["kube_pvc"]} -eq 1 && -n "${sub_path_name}" ]]; then
+        kube_create_pv_pvc "${sub_path_name}"
+        return
+    fi
 
     ## 设置ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     config_deploy_depend env >/dev/null
