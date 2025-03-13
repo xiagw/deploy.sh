@@ -7,6 +7,135 @@
 # License: GNU/GPL
 ################################################################################
 
+get_docker_context() {
+    ## ENV_DOCKER_CONTEXT: local/remote/both
+    [[ ${ENV_DOCKER_CONTEXT:-local} == local ]] && return
+
+    local docker_contexts docker_endpoints selected_context response
+    # 获取context列表
+    response="$(docker context ls --format json)"
+    read -ra docker_endpoints <<<"$(echo "$response" | jq -r '.DockerEndpoint' | tr '\n' ' ')"
+    # 创建缺失的远程上下文
+    local c=0 context_created=false
+    for dk_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
+        ((++c))
+        if [[ ! " ${docker_endpoints[*]} " =~ ${dk_host} ]]; then
+            docker context create "remote$c" --docker "host=${dk_host}" || _msg error "创建Docker上下文remote$c失败: ${dk_host}"
+            context_created=true
+        fi
+    done
+
+    # 如果创建了新context则刷新列表
+    [[ "$context_created" = true ]] && response="$(docker context ls --format json)"
+    if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
+        read -ra docker_contexts <<<"$(echo "$response" | jq -r '.Name' | grep -v '^default$' | tr '\n' ' ')"
+    else
+        read -ra docker_contexts <<<"$(echo "$response" | jq -r '.Name' | tr '\n' ' ')"
+    fi
+    # 选择上下文
+    case ${ENV_DOCKER_CONTEXT_ALGO:-rr} in
+    rand)
+        ## random algorithm / 随机算法
+        selected_context="${docker_contexts[RANDOM % ${#docker_contexts[@]}]}"
+        ;;
+    rr)
+        ## round-robin algorithm / 轮询算法
+        position_file="${G_DATA:-.}/.docker_context_history"
+        [[ -f "$position_file" ]] || echo 0 >"$position_file"
+        # Read current position / 读取当前轮询位置
+        position=$(<"$position_file")
+        # Select context / 输出当前位置的值
+        selected_context="${docker_contexts[position]}"
+        # Update position / 更新轮询位置
+        echo $((++position % ${#docker_contexts[@]})) >"$position_file"
+        ;;
+    esac
+
+    G_DOCK="${G_DOCK:+"$G_DOCK "}--context $selected_context"
+    echo "$G_DOCK"
+    export G_DOCK
+}
+
+build_image() {
+    [ "${GH_ACTION:-false}" = "true" ] && return 0
+    _msg step "[build] Building container image"
+
+    get_docker_context
+
+    ## build from build.base.sh or Dockerfile.base
+    if [[ -f "${G_REPO_DIR}/build.base.sh" ]]; then
+        _msg info "Found ${G_REPO_DIR}/build.base.sh, running it..."
+        ${DEBUG_ON:-false} && debug_flag="-x"
+        bash "${G_REPO_DIR}/build.base.sh" $debug_flag || return 1
+        export BASE_IMAGE_BUILT=true
+        return
+    fi
+
+    local base_tag="${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
+    local base_file="${G_REPO_DIR}/Dockerfile.base"
+    if [[ -f "${base_file}" ]]; then
+        _msg info "Found ${base_file}, building base image: $base_tag"
+        $G_DOCK build $G_ARGS --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}" || return 1
+        export BASE_IMAGE_BUILT=true
+        return
+    fi
+
+    ## build from Dockerfile
+    local repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
+    $G_DOCK build $G_ARGS --tag "${repo_tag}" "${G_REPO_DIR}" || return 1
+
+    if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
+        local image_uuid
+        image_uuid="ttl.sh/$(uuidgen):1h"
+        _msg info "Temporary image tag for ttl.sh: $image_uuid"
+        $G_DOCK tag ${repo_tag} ${image_uuid}
+        $G_DOCK push $image_uuid
+        echo "## Then execute the following commands on REMOTE SERVER."
+        echo "  $G_DOCK pull $image_uuid"
+        echo "  $G_DOCK tag $image_uuid laradock_spring"
+    fi
+    _msg time "[build] Image build completed"
+}
+
+push_image() {
+    _msg step "[build] Pushing image"
+    is_demo_mode "push_image" && return 0
+
+    docker_login
+
+    # Push main image
+    if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
+        $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null
+    else
+        _msg error "Image push failed: network connectivity issue detected"
+        _msg error "Please verify:"
+        _msg error "  - Network connection is stable"
+        _msg error "  - Docker registry (${ENV_DOCKER_REGISTRY}) is accessible"
+        _msg error "  - Docker credentials are valid"
+    fi
+    _msg time "[build] Image push completed"
+}
+
+# Main build function that determines which specific builder to run
+build_lang() {
+    local lang="$1"
+    case "$lang" in
+    java) build_java ;;
+    node) build_node ;;
+    python) build_python ;;
+    android) build_android ;;
+    ios) build_ios ;;
+    ruby) build_ruby ;;
+    go) build_go ;;
+    c) build_c ;;
+    docker) build_docker ;;
+    django) build_django ;;
+    php) build_php ;;
+    shell) build_shell ;;
+    *) _msg warn "No build function available for language: $lang" ;;
+    esac
+}
+
 # Java Build
 build_java() {
     local jars_path="$G_REPO_DIR/jars"
@@ -278,134 +407,6 @@ docker_login() {
             return 1
         fi
         ;;
-    esac
-}
-
-get_docker_context() {
-    ## ENV_DOCKER_CONTEXT: local/remote/both
-    [[ ${ENV_DOCKER_CONTEXT:-local} == local ]] && return
-
-    local docker_contexts docker_endpoints selected_context response
-    # 获取context列表
-    response="$(docker context ls --format json)"
-    read -ra docker_endpoints <<<"$(echo "$response" | jq -r '.DockerEndpoint' | tr '\n' ' ')"
-    # 创建缺失的远程上下文
-    local c=0 context_created=false
-    for dk_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
-        ((++c))
-        if [[ ! " ${docker_endpoints[*]} " =~ ${dk_host} ]]; then
-            docker context create "remote$c" --docker "host=${dk_host}" || _msg error "创建Docker上下文remote$c失败: ${dk_host}"
-            context_created=true
-        fi
-    done
-
-    # 如果创建了新context则刷新列表
-    [[ "$context_created" = true ]] && response="$(docker context ls --format json)"
-    if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
-        read -ra docker_contexts <<<"$(echo "$response" | jq -r '.Name' | grep -v '^default$' | tr '\n' ' ')"
-    else
-        read -ra docker_contexts <<<"$(echo "$response" | jq -r '.Name' | tr '\n' ' ')"
-    fi
-    # 选择上下文
-    case ${ENV_DOCKER_CONTEXT_ALGO:-rr} in
-    rand)
-        ## random algorithm / 随机算法
-        selected_context="${docker_contexts[RANDOM % ${#docker_contexts[@]}]}"
-        ;;
-    rr)
-        ## round-robin algorithm / 轮询算法
-        position_file="${G_DATA:-.}/.docker_context_history"
-        [[ -f "$position_file" ]] || echo 0 >"$position_file"
-        # Read current position / 读取当前轮询位置
-        position=$(<"$position_file")
-        # Select context / 输出当前位置的值
-        selected_context="${docker_contexts[position]}"
-        # Update position / 更新轮询位置
-        echo $((++position % ${#docker_contexts[@]})) >"$position_file"
-        ;;
-    esac
-
-    G_DOCK="${G_DOCK:+"$G_DOCK "}--context $selected_context"
-    echo "$G_DOCK"
-    export G_DOCK
-}
-
-build_image() {
-    [ "${GH_ACTION:-false}" = "true" ] && return 0
-    _msg step "[image] Building container image"
-
-    get_docker_context
-
-    ## build from build.base.sh or Dockerfile.base
-    if [[ -f "${G_REPO_DIR}/build.base.sh" ]]; then
-        _msg info "Found ${G_REPO_DIR}/build.base.sh, running it..."
-        ${DEBUG_ON:-false} && debug_flag="-x"
-        bash "${G_REPO_DIR}/build.base.sh" $debug_flag || return 1
-        export BASE_IMAGE_BUILT=true
-        return
-    fi
-
-    local base_tag="${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
-    local base_file="${G_REPO_DIR}/Dockerfile.base"
-    if [[ -f "${base_file}" ]]; then
-        _msg info "Found ${base_file}, building base image: $base_tag"
-        $G_DOCK build $G_ARGS --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}" || return 1
-        export BASE_IMAGE_BUILT=true
-        return
-    fi
-
-    ## build from Dockerfile
-    local repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
-    $G_DOCK build $G_ARGS --tag "${repo_tag}" "${G_REPO_DIR}" || return 1
-
-    if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
-        local image_uuid
-        image_uuid="ttl.sh/$(uuidgen):1h"
-        _msg info "Temporary image tag for ttl.sh: $image_uuid"
-        $G_DOCK tag ${repo_tag} ${image_uuid}
-        $G_DOCK push $image_uuid
-        echo "## Then execute the following commands on REMOTE SERVER."
-        echo "  $G_DOCK pull $image_uuid"
-        echo "  $G_DOCK tag $image_uuid laradock_spring"
-    fi
-}
-
-push_image() {
-    _msg step "[image] Pushing container image"
-    is_demo_mode "push_image" && return 0
-
-    docker_login
-
-    # Push main image
-    if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
-        $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null
-    else
-        _msg error "Image push failed: network connectivity issue detected"
-        _msg error "Please verify:"
-        _msg error "  - Network connection is stable"
-        _msg error "  - Docker registry (${ENV_DOCKER_REGISTRY}) is accessible"
-        _msg error "  - Docker credentials are valid"
-    fi
-    _msg time "[image] Image push completed"
-}
-
-# Main build function that determines which specific builder to run
-build_lang() {
-    local lang="$1"
-    case "$lang" in
-    java) build_java ;;
-    node) build_node ;;
-    python) build_python ;;
-    android) build_android ;;
-    ios) build_ios ;;
-    ruby) build_ruby ;;
-    go) build_go ;;
-    c) build_c ;;
-    docker) build_docker ;;
-    django) build_django ;;
-    php) build_php ;;
-    shell) build_shell ;;
-    *) _msg warn "No build function available for language: $lang" ;;
     esac
 }
 
