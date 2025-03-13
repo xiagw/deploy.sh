@@ -126,7 +126,7 @@ parse_command_args() {
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build operations
         --build)
-            arg_flags["build_langs"]=1
+            arg_flags["build_all"]=1
             if [[ -z "$2" || ! "$2" =~ ^(push|keep)$ ]]; then
                 keep_image="remove"
             else
@@ -285,7 +285,7 @@ main() {
 
     ## 声明关联数组用于跟踪参数使用情况
     declare -A arg_flags=(
-        ["build_langs"]=0
+        ["build_all"]=0
         ["deploy_k8s"]=0
         ["deploy_docker"]=0
         ["deploy_aliyun_func"]=0
@@ -382,7 +382,7 @@ main() {
     repo_lang_ver=${get_lang#*:}
     repo_lang_ver=${repo_lang_ver%%:*}
     ## 解析语言类型和 docker 标识
-    _msg info "Detected program language: ${get_lang}"
+    echo "  - ${get_lang}"
 
     ## 处理构建工具选择
     config_build_env "${repo_lang}" "${repo_lang_ver}"
@@ -392,7 +392,7 @@ main() {
     repo_inject_file "$repo_lang" "${arg_disable_inject:-false}"
     get_lang=$(repo_language_detect)
     ## 解析 docker 标识
-    _msg info "Detected program language(again): ${get_lang}"
+    echo "  - ${get_lang}"
 
     ## Task Execution Phase
     ## Mode:
@@ -401,9 +401,9 @@ main() {
     ################################################################################
     ## 全自动执行，或根据 arg_flags 执行相应的任务
     if $all_zero; then
-        _msg green "executing tasks... [auto mode: all tasks will be executed]"
+        _msg green "[auto mode: all tasks will be executed]"
     else
-        _msg green "executing tasks... [single job: only specified tasks will be executed]"
+        _msg green "[single job: only specified tasks will be executed]"
         echo "Tasks to execute:"
         for key in "${!arg_flags[@]}"; do
             [[ ${arg_flags[$key]} -eq 1 ]] && echo "  - ${key}"
@@ -421,13 +421,13 @@ main() {
     [[ ${arg_flags["apidoc"]} -eq 1 ]] && generate_apidoc
 
     # 构建相关任务
-    if [[ ${arg_flags["build_langs"]} -eq 1 ]]; then
+    if [[ ${arg_flags["build_all"]} -eq 1 ]]; then
         if [[ "$get_lang" == *":docker" ]]; then
-            build_arg="docker"
+            b_arg="docker"
         else
-            build_arg="${repo_lang}"
+            b_arg="${repo_lang}"
         fi
-        build_all "$build_arg" "${keep_image:-}"
+        build_all "$b_arg" "${keep_image:-}"
         [[ "${BASE_IMAGE_BUILT:-false}" == "true" ]] && return 0
     fi
 
