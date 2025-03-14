@@ -33,7 +33,7 @@ build_base_image() {
             --tag "$reg":laradock-"$ver"
         )
         ;;
-    spring-8 | spring-17 | spring-21)
+    spring-8 | spring-17 | spring-21 | spring-23)
         cmd_opt+=(
             --build-arg MVN_PROFILE="base"
             --build-arg JDK_VERSION="${ver#*-}"
