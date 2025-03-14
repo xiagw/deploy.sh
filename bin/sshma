@@ -89,38 +89,34 @@ _select_host() {
     fi
 }
 
-_parse_connection_string() {
-    local conn_str="$1"
-    if [[ "$conn_str" =~ ^([^@]+)@([^:]+)(:([0-9]+))?$ ]]; then
-        echo "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]:-22}"
-    fi
-}
-
-_check_config() {
-    [ -d "${HOME}/.ssh" ] || mkdir -p "${HOME}/.ssh"
-    [ -f "$SSH_CONFIG_FILE" ] || touch "$SSH_CONFIG_FILE"
-    chmod 700 "${HOME}/.ssh"
-    chmod 600 "$SSH_CONFIG_FILE"
-}
-
 _list_hosts() {
     awk -v format="${1:-pretty}" -v mode="list" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE"
 }
 
 _add_host() {
-    local alias_name="$1" conn_str="$2"
+    local conn_str="$1" alias_name="$2"
     local user host_ip port
     local config=()
 
-    [ -z "$alias_name" ] || [ -z "$conn_str" ] && {
-        _msg error "Usage: $SCRIPT_NAME add <alias> <user@host:port> [-i identity_file] [-b|--byobu] [-L local remote] [-R remote local]"
+    if [[ "$conn_str" == *@* ]]; then
+        IFS='@:' read -r user host_ip port <<< "$conn_str"
+    else
+        host_ip="$conn_str"
+        user="root"
+    fi
+    port=${port:-22}
+
+    [ -z "$host_ip" ] && {
+        _msg error "Invalid connection string format"
+        _show_help
         return 1
     }
 
-    read -r user host_ip port < <(_parse_connection_string "$conn_str") || {
-        _msg error "Invalid connection string. Use: user@host:port"
-        return 1
-    }
+    # 如果未指定alias_name，根据IP生成
+    if [ -z "$alias_name" ]; then
+        # 移除IP中的点号
+        alias_name="H$(echo "$host_ip" | tr -d '.')"
+    fi
 
     _list_hosts plain | grep -q "^${alias_name}$" && {
         _msg error "Host $alias_name already exists"
@@ -156,7 +152,7 @@ _add_host() {
 }
 
 _modify_host() {
-    local alias_name="$1" conn_str="$2"
+    local conn_str="$1" alias_name="$2"
 
     [ -z "$alias_name" ] && alias_name=$(_select_host "Select host to modify:") || return 1
     [ -z "$conn_str" ] && read -r -p "Enter connection string (user@host:port): " conn_str
@@ -166,7 +162,7 @@ _modify_host() {
     _remove_host "$alias_name" || return 1
 
     # 添加新配置
-    _add_host "$alias_name" "$conn_str"
+    _add_host "$conn_str" "$alias_name"
 }
 
 _remove_host() {
@@ -215,8 +211,8 @@ Usage: $SCRIPT_NAME <command> [options]
 
 Commands:
     list, l                              List all SSH hosts
-    add, a    <alias> <user@host:port>   Add new SSH host
-    modify, m <alias> <user@host:port>   Modify SSH host
+    add, a    <user@host:port> [alias]   Add new SSH host
+    modify, m <user@host:port> [alias]   Modify SSH host
     remove, r <alias>                    Remove SSH host
     connect, c [alias]                   Connect to SSH host (default)
 
@@ -228,14 +224,14 @@ Options:
 
 Example:
     # Add host with multiple options
-    $SCRIPT_NAME add myserver root@192.168.1.100 \\
+    $SCRIPT_NAME add root@192.168.1.100 myserver \\
         -i ~/.ssh/id_rsa \\
         -L 3306 db:3306 \\
         -R 8080 localhost:80 \\
         -b
 
     # 其他命令
-    $SCRIPT_NAME modify myserver admin@192.168.1.101:2222
+    $SCRIPT_NAME modify admin@192.168.1.101:2222 myserver
     $SCRIPT_NAME remove myserver
     $SCRIPT_NAME connect myserver
 EOF
@@ -243,7 +239,11 @@ EOF
 
 # 主函数
 main() {
-    _check_config
+    # 初始化 SSH 配置
+    [ -d "${HOME}/.ssh" ] || mkdir -p "${HOME}/.ssh"
+    [ -f "$SSH_CONFIG_FILE" ] || touch "$SSH_CONFIG_FILE"
+    chmod 700 "${HOME}/.ssh"
+    chmod 600 "$SSH_CONFIG_FILE"
 
     case "${1:-connect}" in
     list | ls | l) _list_hosts ;;
