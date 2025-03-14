@@ -3,7 +3,7 @@
 set -xe
 
 build_base_image() {
-    local ver="$1" reg cmd cmd_opt
+    local ver="$1" reg
     local reg='registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5'
 
     case "$ver" in
