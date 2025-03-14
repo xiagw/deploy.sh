@@ -31,8 +31,7 @@ RUN --mount=type=cache,target=/var/cache/yum,sharing=locked \
     else \
         curl -fLo build.sh "$BUILD_URL" && \
         bash build.sh; \
-    fi; \
-    rm -f /app/profile.*
+    fi
 
 # ONBUILD COPY ./root/ /
 # ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi

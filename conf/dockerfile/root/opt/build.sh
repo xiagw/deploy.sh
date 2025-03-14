@@ -54,7 +54,7 @@ _set_mirror() {
         local m2_dir=/root/.m2
         [ -d $m2_dir ] || mkdir -p $m2_dir
         # Generate Maven settings.xml
-        cat > "$m2_dir/settings.xml" << 'EOF'
+        cat >"$m2_dir/settings.xml" <<'EOF'
 <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
@@ -289,9 +289,9 @@ _build_node() {
 
     # Update npm and install cnpm if in China
     if node -v | grep -E 'v1[0-9]\.'; then
-      npm install -g npm@10.8
+        npm install -g npm@10.8
     else
-      npm install -g npm
+        npm install -g npm
     fi
     _is_china && npm install -g cnpm
 
@@ -403,7 +403,9 @@ _build_jdk_runtime() {
 
     # Create profile file if no yml/yaml files exist
     if ! compgen -G "/app/*.{yml,yaml}" >/dev/null; then
-        touch "/app/profile.${MVN_PROFILE:-main}"
+        if [ "${MVN_PROFILE}" != base ]; then
+            touch "/app/profile.${MVN_PROFILE:-main}"
+        fi
     fi
 
     # Clean up if yum is available
@@ -435,7 +437,7 @@ _build_mysql() {
 
     my_cnf=/etc/mysql/conf.d/my.cnf
     # Generate MySQL configuration based on version
-    cat > $my_cnf << 'EOF'
+    cat >$my_cnf <<'EOF'
 # The MySQL  Client configuration file.
 #
 # For explanations see
@@ -451,20 +453,20 @@ EOF
     # Get MySQL version and compare
     mysql_version=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
     if [ "$mysql_version" -gt 8 ]; then
-        cat >> $my_cnf << 'EOF'
+        cat >>$my_cnf <<'EOF'
 sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
 character-set-server=utf8mb4
 # default-authentication-plugin=mysql_native_password
 EOF
     else
-        cat >> $my_cnf << 'EOF'
+        cat >>$my_cnf <<'EOF'
 sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER"
 character-set-server=utf8mb4
 default-authentication-plugin=mysql_native_password
 EOF
     fi
 
-    cat >> $my_cnf << 'EOF'
+    cat >>$my_cnf <<'EOF'
 
 character-set-client-handshake = FALSE
 # lower_case_table_names = 1
@@ -477,12 +479,12 @@ log_bin_index = log-bin
 EOF
 
     if mysqld --version | grep '8\..\.'; then
-        echo '# binlog_format = ROW' >> $my_cnf
+        echo '# binlog_format = ROW' >>$my_cnf
     else
-        echo 'binlog_format = ROW' >> $my_cnf
+        echo 'binlog_format = ROW' >>$my_cnf
     fi
 
-    cat >> $my_cnf << 'EOF'
+    cat >>$my_cnf <<'EOF'
 skip-name-resolve
 
 ######## M2M replication (master)

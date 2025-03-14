@@ -35,6 +35,7 @@ build_base_image() {
         ;;
     spring-8 | spring-17 | spring-21)
         cmd_opt+=(
+            --build-arg MVN_PROFILE="base"
             --build-arg JDK_VERSION="${ver#*-}"
             -f Dockerfile.base.java
             --tag "$reg":laradock-"$ver"
