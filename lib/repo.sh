@@ -132,11 +132,8 @@ repo_language_detect() {
     for file in "${lang_files[@]}"; do
         # 处理通配符文件
         if [[ $file == *"*"* ]]; then
-            if compgen -G "${G_REPO_DIR}/${file}" >/dev/null; then
-                file=$(find "${G_REPO_DIR}" -maxdepth 1 -name "${file##*/}" -print -quit)
-            else
-                continue
-            fi
+            file=$(find "${G_REPO_DIR}" -maxdepth 1 -name "${file##*/}" -print -quit)
+            [[ -z "$file" ]] && continue
         else
             [[ -f "${G_REPO_DIR}/${file}" ]] || continue
         fi
