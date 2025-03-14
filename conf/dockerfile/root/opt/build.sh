@@ -402,9 +402,13 @@ _build_jdk_runtime() {
     id spring || useradd -u 1000 -s /bin/bash -m spring
 
     # Create profile file if no yml/yaml files exist
-    if ! compgen -G "/app/*.{yml,yaml}" >/dev/null; then
-        touch "/app/profile.${MVN_PROFILE:-main}"
-    fi
+    for file in /app/*.{yml,yaml}; do
+        if [ -f "$file" ]; then
+            break
+        else
+            touch "/app/profile.${MVN_PROFILE:-main}"
+        fi
+    done
 
     # Clean up if yum is available
     if command -v yum; then
