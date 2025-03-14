@@ -184,7 +184,11 @@ parse_command_args() {
 
 # 配置 Docker/Podman 构建环境
 config_build_env() {
-    local lang="$1" lang_ver="$2"
+    local get_lang="$1"
+
+    lang=${get_lang%%:*}
+    lang_ver=${get_lang%:*}
+    lang_ver=${lang_ver#*:}
 
     # 选择构建工具（Docker 或 Podman）
     G_DOCK=$(command -v podman || command -v docker || echo docker)
@@ -397,17 +401,14 @@ main() {
     _msg step "[lang] Probe program language"
     get_lang=$(repo_language_detect)
     repo_lang=${get_lang%%:*}
-    repo_lang_ver=${get_lang#*:}
-    repo_lang_ver=${repo_lang_ver%%:*}
     ## 解析语言类型和 docker 标识
     echo "  - ${get_lang}"
 
     ## 处理构建工具选择
-    config_build_env "${repo_lang}" "${repo_lang_ver}"
-
+    config_build_env "${get_lang}"
     ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
     # arg_disable_inject: 命令参数强制不注入文件
-    repo_inject_file "$repo_lang" "${arg_disable_inject:-false}"
+    repo_inject_file "${repo_lang}" "${arg_disable_inject:-false}"
     get_lang=$(repo_language_detect)
     ## 解析 docker 标识
     echo "  - ${get_lang}"

@@ -146,8 +146,8 @@ repo_language_detect() {
             lang_type="java"
             # 尝试提取 Java 版本
             # 1. 首先检查是否存在任何 README 文件(兼容旧规范)
-            if [ -z "$version" ] && compgen -G "${G_REPO_DIR}"/{readme,README}* >/dev/null; then
-                version=$(awk -F= '/^jdk_version/ {print tolower($2)}' "${G_REPO_DIR}"/{readme,README}* | tr -d ' ' | tail -n 1)
+            if [ -z "$version" ]; then
+                version=$(find "${G_REPO_DIR}" -maxdepth 1 -type f -iname "readme*" -exec awk -F= 'BEGIN{IGNORECASE=1} /^jdk_version/ {print tolower($2)}' {} + | tr -d ' ' | tail -n 1)
             fi
 
             # 2. 尝试使用 xmllint（如果可用）
