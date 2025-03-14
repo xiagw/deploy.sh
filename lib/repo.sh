@@ -144,29 +144,25 @@ repo_language_detect() {
         case ${file,,} in
         pom.xml)
             lang_type="java"
-            if [ -z "$version" ]; then
-                # 首先检查是否存在任何 README 文件
-                if compgen -G "${G_REPO_DIR}/README"* >/dev/null; then
-                    version=$(awk -F= '/^jdk_version/ {print tolower($2)}' "${G_REPO_DIR}/README".* | tr -d ' ' | tail -n 1)
-                fi
-            fi
             # 尝试提取 Java 版本
-            # 如果 xmllint 不可用或未获取到版本，使用 grep 和 sed
-            if [ -z "$version" ]; then
-                if command -v xmllint >/dev/null 2>&1; then
-                    version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
-                fi
-                # 尝试获取 java.version
-                version=$(grep -E "<java.version>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<java.version>([^<]+)<.*/\1/')
-                # 如果没有 java.version，尝试获取 maven.compiler.source
-                if [ -z "$version" ]; then
-                    version=$(grep -E "<maven.compiler.source>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.source>([^<]+)<.*/\1/')
-                fi
-                # 如果还是没有，尝试获取 maven.compiler.target
-                if [ -z "$version" ]; then
-                    version=$(grep -E "<maven.compiler.target>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.target>([^<]+)<.*/\1/')
-                fi
+            # 1. 首先检查是否存在任何 README 文件(兼容旧规范)
+            if [ -z "$version" ] && compgen -G "${G_REPO_DIR}"/{readme,README}* >/dev/null; then
+                version=$(awk -F= '/^jdk_version/ {print tolower($2)}' "${G_REPO_DIR}"/{readme,README}* | tr -d ' ' | tail -n 1)
             fi
+
+            # 2. 尝试使用 xmllint（如果可用）
+            if [ -z "$version" ] && command -v xmllint >/dev/null 2>&1; then
+                version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
+            fi
+
+            # 3. 尝试获取 java.version
+            [ -z "$version" ] && version=$(grep -E "<java.version>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<java.version>([^<]+)<.*/\1/')
+
+            # 4. 尝试获取 maven.compiler.source
+            [ -z "$version" ] && version=$(grep -E "<maven.compiler.source>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.source>([^<]+)<.*/\1/')
+
+            # 5. 尝试获取 maven.compiler.target
+            [ -z "$version" ] && version=$(grep -E "<maven.compiler.target>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.target>([^<]+)<.*/\1/')
             ;;
         build.gradle | gradle.build)
             lang_type="java"

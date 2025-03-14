@@ -243,7 +243,7 @@ config_build_env() {
             if [[ "${JDK_VERSION}" == "7" ]]; then
                 JDK_VERSION="openjdk-7"
             else
-                JDK_VERSION="amazoncorretto-${JDK_VERSION}"
+                JDK_VERSION="laradock-spring-${JDK_VERSION}"
             fi
             G_ARGS+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR}"
             G_ARGS+=" --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
