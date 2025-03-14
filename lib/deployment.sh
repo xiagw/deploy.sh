@@ -77,7 +77,7 @@ deploy_to_kubernetes() {
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
 
-    echo "Monitoring deployment status for ${release_name} in namespace ${G_NAMESPACE} (timeout: 120s)..."
+    echo "  - Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
     # 检查是否在忽略列表中
     if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
         _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
