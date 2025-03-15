@@ -376,14 +376,15 @@ system_cert_renew() {
 system_install_tools() {
     local install_result=0
 
+    _check_root
+
     ## 基础工具安装
     command -v jq &>/dev/null || _install_packages "$IS_CHINA" jq || ((install_result++))
-
     if ! command -v yq &>/dev/null; then
         case "$(uname -s)" in
         Linux)
             if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64; then
-                install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
+                $use_sudo install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
             else
                 ((install_result++))
             fi
@@ -393,7 +394,7 @@ system_install_tools() {
                 brew install yq || ((install_result++))
             else
                 if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_darwin_amd64; then
-                    install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
+                    $use_sudo install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
                 else
                     ((install_result++))
                 fi
