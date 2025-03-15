@@ -447,8 +447,8 @@ copy_docker_image() {
 }
 
 # Example usage:
-# copy_docker_image "nginx:latest" "registry.example.com"         # -> registry.example.com/nginx:latest
-# copy_docker_image "nginx:latest" "registry.example.com" false  # -> registry.example.com:nginx
-# copy_docker_image "nginx" "registry.example.com"              # -> registry.example.com/nginx:latest
-# copy_docker_image "ubuntu:22.04" "registry.example.com"       # -> registry.example.com/ubuntu:22.04
-# copy_docker_image "ubuntu:22.04" "registry.example.com" false # -> registry.example.com:ubuntu-22.04
+# copy_docker_image "nginx:latest" "registry.example.com/ns"         # -> registry.example.com/ns/nginx:latest
+# copy_docker_image "nginx:latest" "registry.example.com/ns" false  # -> registry.example.com/ns:nginx
+# copy_docker_image "nginx" "registry.example.com/ns"              # -> registry.example.com/ns/nginx:latest
+# copy_docker_image "ubuntu:22.04" "registry.example.com/ns"       # -> registry.example.com/ns/ubuntu:22.04
+# copy_docker_image "ubuntu:22.04" "registry.example.com/ns" false # -> registry.example.com/ns:ubuntu-22.04

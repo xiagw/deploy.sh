@@ -92,11 +92,11 @@ Parameters:
     # Docker operations
     --docker-copy SRC DEST [KEEP]  Copy Docker image from source to target registry.
                             SRC: Source image (e.g., nginx:latest)
-                            DEST: Target registry (e.g., registry.example.com)
+                            DEST: Target registry (e.g., registry.example.com/ns)
                             KEEP: Keep original tag format (true/false, default: true)
                             Examples:
-                              --docker-copy nginx:latest registry.example.com
-                              --docker-copy nginx:latest registry.example.com false
+                              --docker-copy nginx:latest registry.example.com/ns
+                              --docker-copy nginx:latest registry.example.com/ns false
 
     # Testing and quality
     --test-unit              Run unit tests.
