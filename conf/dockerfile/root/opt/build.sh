@@ -202,6 +202,7 @@ _build_php() {
     #deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu/ jammy main
     ## set mirror
     _is_china && sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" /etc/apt/sources.list.d/ondrej-ubuntu-php-jammy.list
+    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
     $cmd_pkg update -yqq
 
     # Install PHP-specific packages based on version
@@ -259,28 +260,6 @@ _build_php() {
     _check_run_sh
 }
 
-_onbuild_php() {
-    # Check if PHP is installed and PHP_VERSION is set
-    if ! command -v php >/dev/null || [ -z "$PHP_VERSION" ]; then
-        return
-    fi
-
-    php -v
-
-    # Configure Redis session handling if enabled
-    if [ "$PHP_SESSION_REDIS" = true ]; then
-        sed -i \
-            -e "/session.save_handler/s/files/redis/" \
-            -e "/session.save_handler/a session.save_path = \"tcp://${PHP_SESSION_REDIS_SERVER}:${PHP_SESSION_REDIS_PORT}?auth=${PHP_SESSION_REDIS_PASS}&database=${PHP_SESSION_REDIS_DB}\"" \
-            /etc/php/"${PHP_VERSION}"/fpm/php.ini
-    fi
-
-    # Setup nginx for ThinkPHP
-    curl -fLo /etc/nginx/sites-enabled/default "${url_laradock_raw}/php-fpm/root/opt/nginx.conf"
-
-    _check_run_sh
-}
-
 _build_node() {
     echo "Building node environment..."
 
@@ -315,39 +294,30 @@ _build_node() {
 }
 
 _build_maven() {
-    # Set up Maven options
-    mvn_opt="mvn --threads 1C --update-snapshots --define skipTests --define maven.compile.fork=true --define user.home=/var/maven"
-    [ "$MVN_DEBUG" = off ] && mvn_opt+=" --quiet"
-    [ -f /root/.m2/settings.xml ] && mvn_opt+=" --settings=/root/.m2/settings.xml"
+    # Set up Maven options with standard parameters
+    mvn_opts="mvn -T 1C --batch-mode --update-snapshots"
+    [ "$MVN_DEBUG" = off ] && mvn_opts+=" --quiet"
+    [ -f /root/.m2/settings.xml ] && mvn_opts+=" --settings=/root/.m2/settings.xml"
 
-    # Run Maven clean and package
-    $mvn_opt clean package
+    # Run Maven build
+    $mvn_opts -DskipTests -Dmaven.compile.fork=true -Duser.home=/var/maven clean package
 
-    # Set up jars directory
-    jars_dir=/jars
-    mkdir -p $jars_dir
+    # Copy artifacts to /jars directory
+    mkdir -p /jars
+    find . -type f -path "*/target/*.jar" -not -iname '*-sources.jar' \
+        -not -iname '*-javadoc.jar' -not -iname '*-tests.jar' \
+        -not -iname '*-original.jar' -exec cp -v {} /jars/ \;
 
-    # Copy relevant JAR files
-    find ./target/*.jar ./*/target/*.jar ./*/*/target/*.jar 2>/dev/null | while read -r jar; do
-        [ -f "$jar" ] || continue
-        case "$jar" in
-        framework* | gdp-module* | sdk*.jar | *-commom-*.jar | *-dao-*.jar | lop-opensdk*.jar | core-*.jar) continue ;;
-        *) cp -vf "$jar" $jars_dir/ ;;
-        esac
-    done
+    # Copy config files if needed
+    [ -f /src/.jvm.options ] && cp -v /src/.jvm.options /jars/
 
-    # Copy Java options file if it exists
-    [ -f /src/.java_opts ] && cp -avf /src/.java_opts $jars_dir/
-
-    # Copy YAML files if MVN_COPY_YAML is true
-    if [[ "${MVN_COPY_YAML:-false}" == true ]]; then
-        c=0
-        find ./*/*/*/*"${MVN_PROFILE:-main}".{yml,yaml} 2>/dev/null | while read -r yml; do
-            [ -f "$yml" ] || continue
-            ((++c))
-            cp -vf "$yml" $jars_dir/"${c}.${yml##*/}"
-        done
-    fi
+    i=0
+    while IFS= read -r file; do
+        ((++i))
+        cp -v "$file" "/jars/${i}_$(basename "$file")"
+    done < <(
+        find . -type f -path "*/src/*/resources/*" \( -iname "*${MVN_PROFILE:-main}*.yml" -o -iname "*${MVN_PROFILE:-main}*.yaml" \)
+    )
 }
 
 _build_jdk_runtime() {
@@ -608,17 +578,15 @@ main() {
 
     _set_mirror
 
-    case "$1" in
-    --onbuild | onbuild)
-        _onbuild_php
-        return 0
-        ;;
-    esac
+    # 单独处理 PHP_VERSION
+    if [ -n "$PHP_VERSION" ]; then
+        _build_php
+        return
+    fi
 
     case "$(
         command -v nginx ||
             command -v composer ||
-            ([ -n "$PHP_VERSION" ] && echo /usr/bin/php) ||
             command -v mvn ||
             command -v jmeter ||
             command -v java ||
@@ -632,7 +600,6 @@ main() {
     )" in
     */nginx) _build_nginx ;;
     */composer) _build_composer ;;
-    */php) _build_php ;;
     */mvn) _build_maven ;;
     */jmeter) _build_jmeter ;;
     */java) _build_jdk_runtime ;;

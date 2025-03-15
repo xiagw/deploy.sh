@@ -12,7 +12,6 @@ FROM ${MVN_IMAGE}:${MVN_VERSION} AS builder
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG MVN_DEBUG=off
-ARG MVN_COPY_YAML=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 WORKDIR /src
 RUN --mount=type=cache,target=/var/maven/.m2 \
