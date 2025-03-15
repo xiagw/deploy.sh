@@ -67,7 +67,7 @@ _set_mirror() {
             <id>mirror-all</id>
             <mirrorOf>external:*,!custom-group</mirrorOf>
             <name>mirror-all</name>
-            <url>http://mirror.flyh6.com/repository/maven2proxy/</url>
+            <url>http://mvn.flyh6.com/repository/maven2proxy/</url>
         </mirror>
         <mirror>
             <id>mirror-all-2</id>
