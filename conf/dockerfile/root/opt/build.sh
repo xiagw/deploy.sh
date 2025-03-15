@@ -9,12 +9,20 @@ _is_china() {
 }
 
 _set_mirror() {
-    if [ "$1" = shanghai ]; then
+    case "$1" in
+    shanghai)
         export TZ=Asia/Shanghai
         ln -snf /usr/share/zoneinfo/"${TZ}" /etc/localtime
         echo "${TZ}" >/etc/timezone
         return
-    fi
+        ;;
+    ppa)
+        _is_china &&
+            sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" \
+                /etc/apt/sources.list.d/ondrej-ubuntu-php-jammy.list
+        return
+        ;;
+    esac
 
     url_fly_cdn="http://oss.flyh6.com/d"
 
@@ -31,6 +39,7 @@ _set_mirror() {
         url_laradock_raw=https://gitee.com/xiagw/laradock/raw/in-china
     else
         url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
+        # shellcheck disable=SC2034
         url_laradock_raw=https://github.com/xiagw/laradock/raw/main
         return
     fi
@@ -201,7 +210,7 @@ _build_php() {
 
     #deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu/ jammy main
     ## set mirror
-    _is_china && sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" /etc/apt/sources.list.d/ondrej-ubuntu-php-jammy.list
+    _set_mirror ppa
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
     $cmd_pkg update -yqq
 

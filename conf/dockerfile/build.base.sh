@@ -33,8 +33,8 @@ build_base_image() {
     amazoncorretto:*)
         cmd_opt+=(
             --build-arg MVN_PROFILE="base"
-            --build-arg MVN_IMAGE="${reg}"
-            --build-arg JDK_IMAGE="${reg}"
+            --build-arg MVN_IMAGE="${reg}/${tag%:*}"
+            --build-arg JDK_IMAGE="${reg}/${tag%:*}"
             --build-arg JDK_VERSION="${tag#*:}"
             -f "$me_path/Dockerfile.base.java"
         )
