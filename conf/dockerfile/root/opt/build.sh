@@ -201,7 +201,7 @@ _build_php() {
 
     #deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu/ jammy main
     ## set mirror
-    sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" /etc/apt/sources.list.d/ondrej-ubuntu-php-jammy.list
+    _is_china && sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" /etc/apt/sources.list.d/ondrej-ubuntu-php-jammy.list
     $cmd_pkg update -yqq
 
     # Install PHP-specific packages based on version
