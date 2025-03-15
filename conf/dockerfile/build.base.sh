@@ -11,23 +11,23 @@ build_base_image() {
     php:*)
         cmd_opt+=(
             --build-arg PHP_VERSION="${tag#*:}"
-            -f Dockerfile.base."${tag%:*}"
+            -f "$me_path/Dockerfile.base.${tag%:*}"
         )
         ;;
     redis:*)
         cmd_opt+=(
-            -f Dockerfile.base."${tag%:*}"
+            -f "$me_path/Dockerfile.base.${tag%:*}"
         )
         ;;
     nginx:*)
         cmd_opt+=(
-            -f Dockerfile.base."${tag%:*}"
+            -f "$me_path/Dockerfile.base.${tag%:*}"
         )
         ;;
     mysql:*)
         cmd_opt+=(
             --build-arg MYSQL_VERSION="${tag#*:}"
-            -f Dockerfile.base."${tag%:*}"
+            -f "$me_path/Dockerfile.base.${tag%:*}"
         )
         ;;
     amazoncorretto:*)
@@ -36,13 +36,13 @@ build_base_image() {
             --build-arg MVN_IMAGE="${reg}"
             --build-arg JDK_IMAGE="${reg}"
             --build-arg JDK_VERSION="${tag#*:}"
-            -f Dockerfile.base.java
+            -f "$me_path/Dockerfile.base.java"
         )
         ;;
     node:*)
         cmd_opt+=(
             --build-arg NODE_VERSION="${tag#*:}"
-            -f Dockerfile.base."${tag%:*}"
+            -f "$me_path/Dockerfile.base.${tag%:*}"
         )
         ;;
     esac
