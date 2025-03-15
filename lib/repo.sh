@@ -36,7 +36,7 @@ repo_inject_file() {
     ## - overwrite: 注入 Dockerfile 和 root 目录结构（优先使用 conf/dockerfile/，其次是 data/dockerfile/）
     ## - remove: 移除 Dockerfile
     ## - create: 创建 docker-compose.yml
-    echo "ENV_INJECT: ${ENV_INJECT:-keep}"
+    # echo "ENV_INJECT: ${ENV_INJECT:-keep}"
     case ${ENV_INJECT:-keep} in
     keep)
         echo "Keeping existing configuration, no files will be overwritten."
