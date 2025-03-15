@@ -1,20 +1,42 @@
+ARG BASE_IMAGE=node
 ARG NODE_VERSION=20
-# ARG NODE_VERSION=20
-# ARG NODE_VERSION=21
-FROM node:{NODE_VERSION}-slim
+FROM ${BASE_IMAGE}:${NODE_VERSION}-slim
+
+# 设置时区和语言
+# ENV TZ=Asia/Shanghai \
+#     LANG=C.UTF-8
+
 ARG IN_CHINA=true
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
-EXPOSE 80 8080 8081 9000
-WORKDIR /app
-CMD ["bash", "/opt/run0.sh"]
-# RUN --mount=type=cache,target=/var/lib/apt/lists \
-#     --mount=type=cache,target=/var/cache/apt \
-RUN --mount=type=bind,target=/src,rw \
-    if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
-    elif [ -f build.sh ]; then bash build.sh; \
-    else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
 
+# 设置工作目录
+WORKDIR /app
+
+# 暴露端口
+EXPOSE 80 8080 8081 9000
+
+# 使用非 root 用户运行应用
+# USER node
+
+# 设置健康检查
+# HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+#     CMD curl -f http://localhost:8080/ || exit 1
+
+# 构建脚本
+RUN --mount=type=bind,target=/src,rw \
+    if [ -f /src/root/opt/build.sh ]; then \
+        bash /src/root/opt/build.sh; \
+    elif [ -f build.sh ]; then \
+        bash build.sh; \
+    else \
+        curl -fLo build.sh ${BUILD_URL} && \
+        bash build.sh; \
+    fi
+
+# ONBUILD 指令
 ONBUILD COPY --chown=1000:1000 . /app/
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi
+
+CMD ["bash", "/opt/run0.sh"]
 ## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:node-18-base \
 ## -f Dockerfile.node.base --progress=plain --build-arg IN_CHINA="true" .
