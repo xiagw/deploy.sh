@@ -199,6 +199,11 @@ _build_php() {
     $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
     LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
 
+    #deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu/ jammy main
+    ## set mirror
+    sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" /etc/apt/sources.list.d/ondrej-ubuntu-php-jammy.list
+    $cmd_pkg update -yqq
+
     # Install PHP-specific packages based on version
     case "$PHP_VERSION" in
     8.3) $cmd_pkg_opt php"${PHP_VERSION}"-common ;;
