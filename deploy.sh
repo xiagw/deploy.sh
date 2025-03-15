@@ -129,6 +129,21 @@ parse_command_args() {
         --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
+        ## call build.base.sh
+        --build-base)
+            local base_script="${G_PATH}/conf/dockerfile/build.base.sh"
+            if [[ ! -f "$base_script" ]]; then
+                _msg error "build.base.sh not found at ${base_script}"
+                return 1
+            fi
+            shift
+            if [[ $# -gt 0 ]]; then
+                "$base_script" "$@"
+            else
+                "$base_script"
+            fi
+            return
+        ;;
         # Build operations
         --build)
             arg_flags["build_all"]=1

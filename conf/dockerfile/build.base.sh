@@ -53,7 +53,6 @@ build_base_image() {
         $cmd run --privileged --rm tonistiigi/binfmt --install all
     fi
 
-    # echo "${cmd_opt[@]} $me_path/"
     "${cmd_opt[@]}" "$me_path/"
 }
 
