@@ -9,9 +9,7 @@ WORKDIR /src
 # 预下载依赖
 RUN --mount=type=cache,target=/root/.m2 \
     --mount=type=bind,target=/src,rw \
-    mvn -T 1C --batch-mode --update-snapshots \
-    $([ -f /root/.m2/settings.xml ] && echo "--settings=/root/.m2/settings.xml") \
-    dependency:go-offline -B
+    bash /src/root/opt/build.sh deps
 
 #### docker build stage 2: Build ####
 FROM deps AS builder

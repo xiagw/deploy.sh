@@ -294,10 +294,17 @@ _build_node() {
 }
 
 _build_maven() {
+    local deps="${1:-}"
     # Set up Maven options with standard parameters
     mvn_opts="mvn -T 1C --batch-mode --update-snapshots"
     [ "$MVN_DEBUG" = off ] && mvn_opts+=" --quiet"
     [ -f /root/.m2/settings.xml ] && mvn_opts+=" --settings=/root/.m2/settings.xml"
+
+    # 预下载依赖
+    if [ "${deps}" = deps ]; then
+        $mvn_opts dependency:go-offline -B
+        return
+    fi
 
     # Run Maven build
     $mvn_opts -DskipTests -Dmaven.compile.fork=true clean package
@@ -600,7 +607,7 @@ main() {
     )" in
     */nginx) _build_nginx ;;
     */composer) _build_composer ;;
-    */mvn) _build_maven ;;
+    */mvn) _build_maven "$@" ;;
     */jmeter) _build_jmeter ;;
     */java) _build_jdk_runtime ;;
     */node) _build_node ;;
