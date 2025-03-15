@@ -4,7 +4,7 @@ set -xe
 
 build_base_image() {
     local tag="$1"
-    local reg="registry.cn-hangzhou.aliyuncs.com/flyh5"
+    local reg="r.flyh6.com/flyh5"
     local base_tag="${reg}/${tag}-base"
 
     case "$tag" in
