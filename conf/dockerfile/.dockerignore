@@ -6,32 +6,20 @@
 .gitignore
 .gitattributes
 .github
-.gitlab-ci.yml
-.gitlab-ci.yaml
+.gitlab-ci.*
 .composer/
 
 # Docker
 .dockerignore
-Dockerfile
-docker-compose.yml
-docker-compose.yaml
 Dockerfile*
+docker-compose.*
 flyway_conf/
 flyway_sql/
 
 # Documentation
-README.md
-CHANGELOG.md
-CONTRIBUTING.md
-CODE_OF_CONDUCT.md
-SECURITY.md
+*.md
 doc/
 docs/
-!docs/nginx
-!docs/run.sh
-!docs/startup.sh
-!docs/build.sh
-!docs/settings.xml
 LICENSE
 tests/
 
@@ -63,11 +51,7 @@ storage/logs/*
 # vendor/
 
 ## Node
-*.log
-npm-debug.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+*.log*
 package-lock.json
 logs
 ## Dependency directories

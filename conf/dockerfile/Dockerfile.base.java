@@ -1,6 +1,4 @@
-# ARG JDK_IMAGE=openjdk
 ARG JDK_IMAGE=amazoncorretto
-# JDK version options: 8, 17, 21
 ARG JDK_VERSION=8
 
 FROM ${JDK_IMAGE}:${JDK_VERSION}

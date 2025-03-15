@@ -4,7 +4,7 @@
 
 # 全局变量定义
 SCRIPT_NAME=$(basename "$0")
-SCRIPT_PATH=$(dirname "$(readlink -f "$0")")
+# SCRIPT_PATH=$(dirname "$(readlink -f "$0")")
 SSH_CONFIG_FILE="${HOME}/.ssh/config"
 AWK_SCRIPT=$(mktemp)
 
@@ -94,9 +94,7 @@ _list_hosts() {
 }
 
 _add_host() {
-    local conn_str="$1" alias_name="$2"
-    local user host_ip port
-    local config=()
+    local conn_str="$1" alias_name="$2" user host_ip port=22 config=()
 
     if [[ "$conn_str" == *@* ]]; then
         IFS='@:' read -r user host_ip port <<< "$conn_str"
@@ -104,7 +102,6 @@ _add_host() {
         host_ip="$conn_str"
         user="root"
     fi
-    port=${port:-22}
 
     [ -z "$host_ip" ] && {
         _msg error "Invalid connection string format"
@@ -118,7 +115,7 @@ _add_host() {
         alias_name="H$(echo "$host_ip" | tr -d '.')"
     fi
 
-    _list_hosts plain | grep -q "^${alias_name}$" && {
+    _list_hosts plain | grep -qw "^${alias_name}$" && {
         _msg error "Host $alias_name already exists"
         return 1
     }
