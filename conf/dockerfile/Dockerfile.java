@@ -1,8 +1,9 @@
 #### docker build stage 1: Dependencies ####
 ARG MVN_IMAGE=maven
 ARG MVN_VERSION=3.8-amazoncorretto-8
-# ARG MVN_VERSION=3.9-amazoncorretto-11
-# ARG MVN_VERSION=3.9-amazoncorretto-17
+ARG JDK_IMAGE=amazoncorretto
+ARG JDK_VERSION=8
+
 FROM ${MVN_IMAGE}:${MVN_VERSION} AS deps
 WORKDIR /src
 # 预下载依赖
