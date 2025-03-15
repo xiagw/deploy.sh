@@ -80,7 +80,7 @@ all_args=(
     "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
     "node:18" "node:20" "node:21" "node:22"
     "redis:latest"
-    "nginx:latest"
+    "nginx:stable-alpine"
 )
 
 case "$cmd_arg" in
