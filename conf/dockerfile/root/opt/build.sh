@@ -300,7 +300,7 @@ _build_maven() {
     [ -f /root/.m2/settings.xml ] && mvn_opts+=" --settings=/root/.m2/settings.xml"
 
     # Run Maven build
-    $mvn_opts -DskipTests -Dmaven.compile.fork=true -Duser.home=/var/maven clean package
+    $mvn_opts -DskipTests -Dmaven.compile.fork=true clean package
 
     # Copy artifacts to /jars directory
     mkdir -p /jars

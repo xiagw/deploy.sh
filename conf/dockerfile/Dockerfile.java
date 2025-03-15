@@ -1,20 +1,24 @@
-#### docker build stage 1 ####
+#### docker build stage 1: Dependencies ####
 ARG MVN_IMAGE=maven
 ARG MVN_VERSION=3.8-amazoncorretto-8
 # ARG MVN_VERSION=3.9-amazoncorretto-11
 # ARG MVN_VERSION=3.9-amazoncorretto-17
-# ARG JDK_IMAGE=openjdk
-ARG JDK_IMAGE=amazoncorretto
-ARG JDK_VERSION=8
-# ARG JDK_VERSION=17
-# ARG JDK_VERSION=21
-FROM ${MVN_IMAGE}:${MVN_VERSION} AS builder
+FROM ${MVN_IMAGE}:${MVN_VERSION} AS deps
+WORKDIR /src
+# 预下载依赖
+RUN --mount=type=cache,target=/root/.m2 \
+    --mount=type=bind,target=/src,rw \
+    mvn dependency:go-offline -B
+
+#### docker build stage 2: Build ####
+FROM deps AS builder
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG MVN_DEBUG=off
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 WORKDIR /src
-RUN --mount=type=cache,target=/var/maven/.m2 \
+# 构建应用
+RUN --mount=type=cache,target=/root/.m2 \
     --mount=type=bind,target=/src,rw \
     if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
     elif [ -f build.sh ]; then bash build.sh; \
