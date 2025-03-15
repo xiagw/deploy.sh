@@ -89,8 +89,13 @@ Parameters:
     --deploy-sftp            Deploy to SFTP server.
 
     # Docker operations
-    --docker-copy SRC DEST   Copy Docker image from source to target registry.
-                            Example: --docker-copy nginx:latest registry.example.com
+    --docker-copy SRC DEST [KEEP]  Copy Docker image from source to target registry.
+                            SRC: Source image (e.g., nginx:latest)
+                            DEST: Target registry (e.g., registry.example.com)
+                            KEEP: Keep original tag format (true/false, default: true)
+                            Examples:
+                              --docker-copy nginx:latest registry.example.com
+                              --docker-copy nginx:latest registry.example.com false
 
     # Testing and quality
     --test-unit              Run unit tests.
@@ -124,6 +129,21 @@ parse_command_args() {
         --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
+        ## call build.base.sh
+        --build-base)
+            local base_script="${G_PATH}/conf/dockerfile/build.base.sh"
+            if [[ ! -f "$base_script" ]]; then
+                _msg error "build.base.sh not found at ${base_script}"
+                return 1
+            fi
+            shift
+            if [[ $# -gt 0 ]]; then
+                "$base_script" "$@"
+            else
+                "$base_script"
+            fi
+            return
+        ;;
         # Build operations
         --build)
             arg_flags["build_all"]=1
@@ -144,7 +164,18 @@ parse_command_args() {
         --deploy-ftp) arg_flags["deploy_ftp"]=1 deploy_method=deploy_ftp ;;
         --deploy-sftp) arg_flags["deploy_sftp"]=1 deploy_method=deploy_sftp ;;
         # Docker operations
-        --docker-copy) arg_flags["docker_copy"]=1 && arg_docker_source="${2:?empty docker source image}" arg_docker_target="${3:?empty docker target registry}" && shift 2 ;;
+        --docker-copy)
+            arg_flags["docker_copy"]=1
+            arg_docker_source="${2:?empty docker source image}"
+            arg_docker_target="${3:?empty target registry}"
+            if [[ -z "$4" || ! "$4" =~ ^(true|false)$ ]]; then
+                arg_docker_keep="true"
+            else
+                arg_docker_keep="$4"
+                shift
+            fi
+            shift 2
+            ;;
         # Testing and quality
         --test-unit) arg_flags["test_unit"]=1 ;;
         --apidoc) arg_flags["apidoc"]=1 ;;
@@ -370,7 +401,7 @@ main() {
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return
     ## Docker image copy operation
     if [[ ${arg_flags["docker_copy"]} -eq 1 && -n "${arg_docker_source}" ]]; then
-        copy_docker_image "${arg_docker_source:?docker source required}" "${arg_docker_target}"
+        copy_docker_image "${arg_docker_source}" "${arg_docker_target}" "${arg_docker_keep}"
         return
     fi
 

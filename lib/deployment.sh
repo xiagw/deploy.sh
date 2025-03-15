@@ -403,44 +403,53 @@ handle_deploy() {
 # Copy Docker image from source to target registry
 # @param $1 source_image Source image name (e.g., nginx:latest)
 # @param $2 target_registry Target registry (e.g., registry.example.com)
+# @param $3 keep_original_tag Whether to keep the original tag (true/false, default: true)
 copy_docker_image() {
-    local source_image="$1" target_registry="$2" image_name tag target
+    local source_image="$1" target_registry="$2" keep_original_tag="${3:-true}" image_name tag target
 
     if ! command -v skopeo >/dev/null 2>&1; then
         _msg error "skopeo command not found. Please install skopeo first."
         return 1
     fi
 
-    if [[ -z "$source_image" || -z "$target_registry" ]]; then
-        _msg error "Missing required parameters"
-        _msg error "Usage: copy_docker_image source_image target_registry"
-        _msg error "Example: copy_docker_image nginx:latest registry.example.com"
-        return 1
-    fi
+    # 移除 target_registry 末尾的斜杠（如果有）
+    target_registry="${target_registry%/}"
 
-    # 如果镜像标签是 latest，则移除它
-    image_name="${source_image%:latest}"
-    # 将路径中的 / 替换为 -
-    tag="${image_name//\//-}"
-    # 将剩余的 : 替换为 -
-    tag="${tag//:/-}"
-    # 构建最终的目标镜像名
-    target="${target_registry}:${tag}"
+    if [[ "$keep_original_tag" == "true" ]]; then
+        # 保持原始标签，使用 / 分隔符
+        image_name="${source_image%:*}"
+        tag="${source_image#*:}"
+        # 如果没有标签，使用 latest
+        [[ "$image_name" == "$source_image" ]] && tag="latest"
+        # 移除可能存在的 docker.io/ 前缀
+        image_name="${image_name#docker.io/}"
+        # 移除 image_name 开头和结尾的斜杠（如果有）
+        image_name="${image_name#/}"
+        image_name="${image_name%/}"
+        # 构建最终的目标镜像名（使用 / 分隔符）
+        target="${target_registry}/${image_name}:${tag}"
+    else
+        # 原有的标签转换逻辑
+        # 如果镜像标签是 latest，则移除它
+        image_name="${source_image%:latest}"
+        # 将路径中的 / 替换为 -
+        tag="${image_name//\//-}"
+        # 将剩余的 : 替换为 -
+        tag="${tag//:/-}"
+        # 构建最终的目标镜像名（使用 : 分隔符）
+        target="${target_registry}:${tag}"
+    fi
 
     _msg info "Copying multi-arch image from Docker Hub to custom registry..."
     _msg info "Source: ${source_image}"
     _msg info "Target: ${target}"
 
-    # Copy all available platforms
-    # skopeo copy --multi-arch index-only "docker://docker.io/${source_image}" "docker://${target}"
-    skopeo copy "docker://docker.io/${source_image}" "docker://${target}"
-
-    echo "Successfully copied multi-arch image ${source_image} to ${target}"
+    skopeo --override-os linux copy --multi-arch all "docker://docker.io/${source_image}" "docker://${target}"
 }
 
 # Example usage:
-# copy_docker_image "nginx:latest" "registry.example.com"  # -> registry.example.com:nginx
-# copy_docker_image "nginx" "registry.example.com"        # -> registry.example.com:nginx
-# copy_docker_image "ubuntu:22.04" "registry.example.com" # -> registry.example.com:ubuntu-22.04
-
-# copy_docker_image "$@"
+# copy_docker_image "nginx:latest" "registry.example.com"         # -> registry.example.com/nginx:latest
+# copy_docker_image "nginx:latest" "registry.example.com" false  # -> registry.example.com:nginx
+# copy_docker_image "nginx" "registry.example.com"              # -> registry.example.com/nginx:latest
+# copy_docker_image "ubuntu:22.04" "registry.example.com"       # -> registry.example.com/ubuntu:22.04
+# copy_docker_image "ubuntu:22.04" "registry.example.com" false # -> registry.example.com:ubuntu-22.04

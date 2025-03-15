@@ -3,64 +3,60 @@
 set -xe
 
 build_base_image() {
-    local ver="$1" reg
-    local reg='registry.cn-hangzhou.aliyuncs.com/flyh5/flyh5'
+    local tag="$1"
+    local reg="registry.cn-hangzhou.aliyuncs.com/flyh5"
+    local base_tag="${reg}/${tag}-base"
 
-    case "$ver" in
-    5.6 | 7.1 | 7.3 | 7.4 | 8.1 | 8.2 | 8.3 | 8.4)
+    case "$tag" in
+    php:*)
         cmd_opt+=(
-            --build-arg PHP_VERSION="$ver"
-            -f Dockerfile.base.php
-            --tag "$reg":laradock-php-fpm-"$ver"
+            --build-arg PHP_VERSION="${tag#*:}"
+            -f Dockerfile.base."${tag%:*}"
         )
         ;;
-    redis)
+    redis:*)
         cmd_opt+=(
-            -f Dockerfile."$ver"
-            --tag "$reg":laradock-"$ver"
+            -f Dockerfile.base."${tag%:*}"
         )
         ;;
-    nginx)
+    nginx:*)
         cmd_opt+=(
-            -f Dockerfile."$ver"
-            --tag "$reg":"$ver"-alpine-base
+            -f Dockerfile.base."${tag%:*}"
         )
         ;;
-    mysql-5.6 | mysql-5.7 | mysql-8.0 | mysql-8.4)
+    mysql:*)
         cmd_opt+=(
-            --build-arg MYSQL_VERSION="${ver#*-}"
-            -f Dockerfile.mysql
-            --tag "$reg":laradock-"$ver"
+            --build-arg MYSQL_VERSION="${tag#*:}"
+            -f Dockerfile.base."${tag%:*}"
         )
         ;;
-    spring-8 | spring-17 | spring-21 | spring-23)
+    amazoncorretto:*)
         cmd_opt+=(
             --build-arg MVN_PROFILE="base"
-            --build-arg JDK_VERSION="${ver#*-}"
+            --build-arg MVN_IMAGE="${reg}"
+            --build-arg JDK_IMAGE="${reg}"
+            --build-arg JDK_VERSION="${tag#*:}"
             -f Dockerfile.base.java
-            --tag "$reg":laradock-"$ver"
         )
         ;;
-    nodejs-18 | nodejs-20 | nodejs-21 | nodejs-22)
+    node:*)
         cmd_opt+=(
-            --build-arg NODE_VERSION="${ver#*-}"
-            -f Dockerfile.base.node
-            --tag "$reg":laradock-"$ver"
+            --build-arg NODE_VERSION="${tag#*:}"
+            -f Dockerfile.base."${tag%:*}"
         )
         ;;
     esac
+    cmd_opt+=(--tag "${base_tag}")
 
     # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
     if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
         $cmd run --privileged --rm tonistiigi/binfmt --install all
     fi
 
-    # echo "${cmd_opt[@]} $me_path/"
     "${cmd_opt[@]}" "$me_path/"
 }
 
 cmd_arg="${*}"
-all_args=(5.6 7.1 7.3 7.4 8.1 8.2 8.3 8.4 mysql-5.6 mysql-5.7 mysql-8.0 mysql-8.4 spring-8 spring-17 spring-21 spring-23 nodejs-18 nodejs-20 nodejs-21 redis nginx)
 
 me_path="$(dirname "$(readlink -f "$0")")"
 cmd="$(command -v docker || command -v podman)"
@@ -75,6 +71,15 @@ cmd_opt=(
     --build-arg IN_CHINA=true
     --build-arg HTTP_PROXY="${http_proxy-}"
     --build-arg HTTPS_PROXY="${http_proxy-}"
+)
+
+all_args=(
+    "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4"
+    "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
+    "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
+    "node:18" "node:20" "node:21" "node:22"
+    "redis:latest"
+    "nginx:stable-alpine"
 )
 
 case "$cmd_arg" in

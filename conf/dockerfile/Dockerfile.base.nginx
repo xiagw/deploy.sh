@@ -1,7 +1,7 @@
 # Base image selection
 ARG BASE_IMAGE=nginx
-ARG IMAGE_VERSION=stable-alpine
-FROM ${BASE_IMAGE}:${IMAGE_VERSION}
+ARG BASE_VERSION=stable-alpine
+FROM ${BASE_IMAGE}:${BASE_VERSION}
 
 LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
 
