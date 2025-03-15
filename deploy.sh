@@ -79,6 +79,7 @@ Parameters:
 
     # Build operations
     --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
+    --build-base [args]       Execute build.base.sh script with optional arguments.
 
     # Deployment
     --deploy-k8s             Deploy to Kubernetes.
@@ -138,9 +139,9 @@ parse_command_args() {
             fi
             shift
             if [[ $# -gt 0 ]]; then
-                "$base_script" "$@"
+                bash "$base_script" "$@"
             else
-                "$base_script"
+                bash "$base_script"
             fi
             return
         ;;
