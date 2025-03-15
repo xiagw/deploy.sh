@@ -135,7 +135,7 @@ parse_command_args() {
             local base_script="${G_PATH}/conf/dockerfile/build.base.sh"
             if [[ ! -f "$base_script" ]]; then
                 _msg error "build.base.sh not found at ${base_script}"
-                return 1
+                exit 1
             fi
             shift
             if [[ $# -gt 0 ]]; then
@@ -143,7 +143,7 @@ parse_command_args() {
             else
                 bash "$base_script"
             fi
-            return
+            exit
         ;;
         # Build operations
         --build)

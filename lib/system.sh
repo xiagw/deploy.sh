@@ -376,7 +376,7 @@ system_cert_renew() {
 system_install_tools() {
     local install_result=0
 
-    _check_root
+    _check_sudo
 
     ## 基础工具安装
     command -v jq &>/dev/null || _install_packages "$IS_CHINA" jq || ((install_result++))

@@ -32,7 +32,7 @@ projects:
     description: 部署脚本项目
     branches:
       - branch: develop
-        description: 开发环境配置
+        description: 开发环境配置，支持单分支发布到多主机
         hosts:
           - ssh_host: dev1@192.168.100.102
             ssh_port: "22"
@@ -51,7 +51,7 @@ projects:
             db_name: dev2
             helm_dir: /runner/data/helm/owner/repo2
       - branch: main
-        description: 生产环境配置
+        description: 生产环境配置，支持单分支发布到多主机
         hosts:
           - ssh_host: prod@192.168.100.104
             ssh_port: "2222"
