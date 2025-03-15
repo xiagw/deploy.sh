@@ -440,9 +440,8 @@ copy_docker_image() {
         target="${target_registry}:${tag}"
     fi
 
-    _msg info "Copying multi-arch image from Docker Hub to custom registry..."
-    _msg info "Source: ${source_image}"
-    _msg info "Target: ${target}"
+    echo "Copying multi-arch image from Docker Hub to custom registry..."
+    echo "skopeo --override-os linux copy --multi-arch all docker://docker.io/${source_image} docker://${target}"
 
     skopeo --override-os linux copy --multi-arch all "docker://docker.io/${source_image}" "docker://${target}"
 }
