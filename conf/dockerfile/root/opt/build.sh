@@ -314,7 +314,10 @@ _build_maven() {
     i=0
     while IFS= read -r file; do
         ((++i))
-        cp -v "$file" "/jars/${i}_$(basename "$file")"
+        # Get only the first directory level using awk, handling all path cases
+        first_dir=$(echo "$file" | awk -F/ '{for(i=1;i<=NF;i++) if($i!="." && $i!="") {print $i; exit}}')
+        # Copy file with first directory as prefix
+        cp -v "$file" "/jars/${first_dir}_$(basename "$file")"
     done < <(
         find . -type f -path "*/src/*/resources/*" \( -iname "*${MVN_PROFILE:-main}*.yml" -o -iname "*${MVN_PROFILE:-main}*.yaml" \)
     )
