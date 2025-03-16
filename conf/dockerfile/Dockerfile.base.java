@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=amazoncorretto
 ARG JDK_VERSION=8
 
-FROM ${JDK_IMAGE}:${JDK_VERSION}
+FROM ${BASE_IMAGE}:${JDK_VERSION}
 
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>" \
     org.opencontainers.image.authors="xiagw <fxiaxiaoyu@gmail.com>" \
