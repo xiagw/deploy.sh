@@ -544,6 +544,10 @@ _build_redis() {
     if [ -f /etc/redis.conf ] && [ -n "${REDIS_PASSWORD}" ]; then
         sed -i -e "s/.*requirepass foobared/requirepass ${REDIS_PASSWORD}/" /etc/redis.conf
     fi
+
+    cat >>/root/.bashrc <<'EOF'
+export REDISPASS_AUTH=${REDIS_PASSWORD}
+EOF
     mkdir /run/redis
     chown redis:redis /run/redis
 }
