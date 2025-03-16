@@ -73,9 +73,9 @@ build_image() {
         return
     fi
 
-    local base_tag="${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
     local base_file="${G_REPO_DIR}/Dockerfile.base"
     if [[ -f "${base_file}" ]]; then
+        local base_tag="${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
         _msg info "Found ${base_file}, building base image: $base_tag"
         $G_DOCK build $G_ARGS --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}"
         export BASE_IMAGE_BUILT=true
@@ -84,7 +84,13 @@ build_image() {
 
     ## build from Dockerfile
     local repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
-    $G_DOCK build $G_ARGS --tag "${repo_tag}" "${G_REPO_DIR}" 2>&1 | grep -v 'error reading preface from client dummy'
+    # 根据参数决定是否需要push
+    local push_flag=""
+    if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
+        docker_login
+        push_flag="--push"
+    fi
+    $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | grep -v 'error reading preface from client dummy'
 
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         local image_uuid
@@ -103,19 +109,9 @@ build_image() {
     # arg build keep:       push=0, keep=1, keep_image=keep
     # arg build push:       push=1, keep=0, keep_image=push
 
-    # 根据参数决定上传镜像
-    if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
-        _msg time "Pushing image"
-        docker_login
-        if $G_DOCK push $G_QUIET "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"; then
-            _msg time "Image push completed"
-        else
-            _msg error "Image push failed: network connectivity issue detected"
-        fi
-    fi
     # 根据参数决定是否保留镜像
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
-        $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null
+        $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null &
         _msg time "Image removed"
     else
         _msg time "Image keeped"
