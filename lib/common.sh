@@ -572,6 +572,7 @@ _install_python_gitlab() {
     if [ "$flag" = "upgrade" ]; then
         echo "Upgrade python-gitlab..."
     else
+        command -v gitlab >/dev/null && return
         if pipx list 2>/dev/null | grep -q "package python-gitlab"; then
             return
         fi
