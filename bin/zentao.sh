@@ -195,7 +195,8 @@ _completion() {
         # 从环境文件中获取可用的域名
         if [[ -f "$SCRIPT_ENV" ]]; then
             local domains
-            domains=$(grep -oP '(?<=\[)[^\]]+' "$SCRIPT_ENV")
+            # 提取case语句中的域名
+            domains=$(grep -oP '(?<=")\w+(?:\.\w+)*(?="\))' "$SCRIPT_ENV")
             mapfile -t COMPREPLY < <(compgen -W "$domains" -- "$cur")
         fi
         ;;
@@ -249,6 +250,63 @@ main() {
     SCRIPT_DATA="${SCRIPT_PATH_PARENT}/data"
     SCRIPT_LOG="${SCRIPT_DATA}/${SCRIPT_NAME}.log"
     SCRIPT_ENV="${SCRIPT_DATA}/${SCRIPT_NAME}.env"
+
+    # Create data directory if not exists
+    [ -d "$SCRIPT_DATA" ] || mkdir -p "$SCRIPT_DATA"
+
+    # Create example env file if not exists
+    if [ ! -f "$SCRIPT_ENV" ]; then
+        cat > "$SCRIPT_ENV" << 'EOF'
+# Zentao API Configuration
+case "$domain" in
+"example.com")
+# API认证信息
+env_account=root
+env_password=root123
+env_token=
+env_token_save_time=0
+# API端点
+env_json_url=http://example.com/zentao/json.php
+env_api_url=http://example.com/api.php/v1
+# 项目管理配置
+env_project_path=/path/to/projects
+env_project_exclude_id=1,2,3
+env_get_method=db
+;;
+
+"dev.example.com")
+# API认证信息
+env_account=admin
+env_password=admin123
+env_token=
+env_token_save_time=0
+# API端点
+env_json_url=http://dev.example.com/zentao/json.php
+env_api_url=http://dev.example.com/api.php/v1
+# 项目管理配置
+env_project_path=/path/to/dev/projects
+env_project_exclude_id=1
+env_get_method=api
+;;
+*)
+echo "Unknown domain: $domain" >&2
+return 1
+;;
+esac
+EOF
+        return 1
+    fi
+
+    # Required environment variables in .env file:
+    # env_token           - API token for authentication
+    # env_token_save_time - Timestamp of token creation
+    # env_json_url        - Base URL for JSON API endpoints
+    # env_api_url         - Base URL for REST API endpoints
+    # env_project_path    - Base path for project directories
+    # env_project_exclude_id - Comma-separated list of project IDs to exclude
+    # env_get_method      - Method to get project list (api/db), defaults to 'db'
+    # env_account         - Account for API authentication (default: root)
+    # env_password        - Password for API authentication (default: root)
 
     _common_lib
 
