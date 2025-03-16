@@ -533,7 +533,6 @@ echo "password=${MYSQL_ROOT_PASSWORD}" >>/root/.my.cnf
 chmod 600 /root/.my.cnf
 EOF
 
-    chmod +x /opt/*.sh
 }
 
 _build_redis() {
@@ -622,6 +621,11 @@ main() {
     else
         :
     fi
+
+    for script in /opt/*.sh; do
+        [ -f "$script" ] || continue
+        chmod +x "$script"
+    done
 }
 
 main "$@"
