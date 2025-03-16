@@ -24,6 +24,13 @@ build_base_image() {
             -f "$me_path/Dockerfile.base.${tag%:*}"
         )
         ;;
+    mysql:5*)
+        cmd_opt+=(
+            --build-arg BASE_IMAGE="mysql/mysql-server"
+            --build-arg MYSQL_VERSION="${tag#*:}"
+            -f "$me_path/Dockerfile.base.${tag%:*}"
+        )
+        ;;
     mysql:*)
         cmd_opt+=(
             --build-arg MYSQL_VERSION="${tag#*:}"
@@ -33,8 +40,7 @@ build_base_image() {
     amazoncorretto:*)
         cmd_opt+=(
             --build-arg MVN_PROFILE="base"
-            --build-arg MVN_IMAGE="${reg}/${tag%:*}"
-            --build-arg JDK_IMAGE="${reg}/${tag%:*}"
+            --build-arg BASE_IMAGE="${reg}/${tag%:*}"
             --build-arg JDK_VERSION="${tag#*:}"
             -f "$me_path/Dockerfile.base.java"
         )

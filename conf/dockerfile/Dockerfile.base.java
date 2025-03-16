@@ -1,4 +1,4 @@
-ARG JDK_IMAGE=amazoncorretto
+ARG BASE_IMAGE=amazoncorretto
 ARG JDK_VERSION=8
 
 FROM ${JDK_IMAGE}:${JDK_VERSION}
