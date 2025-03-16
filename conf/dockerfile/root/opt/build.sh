@@ -208,10 +208,8 @@ _build_php() {
     $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
     LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
 
-    #deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu/ jammy main
-    ## set mirror
     _set_mirror ppa
-    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ftp_proxy FTP_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
+
     $cmd_pkg update -yqq
 
     # Install PHP-specific packages based on version
@@ -381,7 +379,7 @@ _build_jdk_runtime() {
     # Set up app directory and permissions
     mkdir -p /app
     chown -R 1000:1000 /app
-    [ -f /src/.java_opts ] && cp -avf /src/.java_opts /app/
+    [ -f /src/.jvm.options ] && cp -avf /src/.jvm.options /app/
     command -v su || $cmd_pkg install -y util-linux
     command -v useradd || $cmd_pkg install -y shadow-utils
 
