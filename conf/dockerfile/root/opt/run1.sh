@@ -65,38 +65,9 @@ rotate_log() {
     fi
 }
 
-# 函数：日志处理
-handle_log() {
-    local max_size=$((1024 * 1024 * 1024)) # 1GB
-    local check_interval=300               # 每5分钟检查一次
-
-    # 创建日志目录
-    if [ -d "/app" ] && [ -w "/app" ]; then
-        mkdir -p "/app/log" 2>/dev/null
-    fi
-
-    local running=1
-    trap 'running=0' TERM INT QUIT
-
-    while ((running)); do
-        # 处理主日志文件
-        rotate_log "$G_LOG" "$max_size"
-
-        # 处理应用日志文件
-        if [ -d "/app/log" ]; then
-            for log_file in /app/log/*.log; do
-                [ -f "$log_file" ] || continue
-                rotate_log "$log_file" "$max_size"
-            done
-        fi
-
-        sleep "$check_interval" || break
-    done
-}
-
 # 函数：清理进程
 cleanup() {
-    log "开始清理进程..."
+    log "begin clean..."
 
     for pid in "${G_PIDS[@]}"; do
         if kill -0 "${pid}" 2>/dev/null; then
@@ -392,25 +363,14 @@ schedule_upgrade() {
         curl -fsSLo /tmp/"${line}" "${upgrade_url}/$line"
         curl -fsSLo /tmp/"${line}".sha256 "${upgrade_url}/${line}.sha256"
         if cd /tmp && sha256sum -c "${line}".sha256; then
-            log "解压 $line"
+            log "decompress $line"
             tar -C "$upgrade_type/" -zxf /tmp/"${line}" && rm -f /tmp/"${line}"*
         fi
     done < <(awk -F= '/^app_zip=/ {print $2}' "$upgrade_file_tmp")
 
-    log "设置 app_ver=$app_ver_remote 到 $upgrade_type/$trigger_file"
+    log "set app_ver=$app_ver_remote 到 $upgrade_type/$trigger_file"
     sed -i "/^app_ver=/s/=.*/=$app_ver_remote/" "$upgrade_type/$trigger_file"
     rm -f /tmp/${upgrade_file}*
-}
-
-# 函数：自动更新循环
-upgrade_loop() {
-    local running=1
-    trap 'running=0' TERM INT QUIT
-
-    while ((running)); do
-        schedule_upgrade
-        sleep 60 || break
-    done
 }
 
 # 主函数
@@ -424,11 +384,6 @@ main() {
         G_LOG="${G_PATH}/${G_NAME}.log"
     else
         G_LOG="/tmp/${G_NAME}.log"
-    fi
-
-    # 创建日志目录
-    if [ -d "/app" ] && [ -w "/app" ]; then
-        mkdir -p "/app/log" 2>/dev/null
     fi
 
     log "log" "$G_PATH/$G_NAME 开始执行..."
@@ -449,14 +404,25 @@ main() {
     command -v java >/dev/null 2>&1 && start_java "$@"
 
     # 启动自动更新
-    upgrade_loop &
+    while true; do
+        schedule_upgrade
+        sleep 60
+    done &
     G_PIDS+=("$!")
 
     # 检查jemalloc
     # check_jemalloc &
 
     # 启动日志处理
-    handle_log &
+    local max_size=$((1024 * 1024 * 1024)) # 1GB
+    while true; do
+        # 处理所有日志文件
+        for log_file in "$G_LOG" /app/log/*.log; do
+            [ -f "$log_file" ] || continue
+            rotate_log "$log_file" "$max_size"
+        done
+        sleep 1d
+    done &
     G_PIDS+=("$!")
 
     # 注册信号处理
