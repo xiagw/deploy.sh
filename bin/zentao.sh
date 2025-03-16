@@ -5,8 +5,8 @@
 # 解析JSON函数
 _parse_json() {
     local uri="$1"
-    curl -fsSL -H "token:${zen_token:? undefined zen_token}" \
-        "${zen_json_url:? undefined zen_json_url}/$uri" |
+    curl -fsSL -H "token:${env_token:? undefined env_token}" \
+        "${env_json_url:? undefined env_json_url}/$uri" |
         jq -r '.data' | jq '.'
 }
 
@@ -17,8 +17,8 @@ _add_account() {
     local password
     password=$(_get_random_password 2>/dev/null)
 
-    curl -fsSL -H "token:${zen_token:? undefined zen_token}" \
-        "${zen_api_url:? undefined zen_api_url}/users" \
+    curl -fsSL -H "token:${env_token:? undefined env_token}" \
+        "${env_api_url:? undefined env_api_url}/users" \
         -d '{
     "realname": "'"${user_realname:? undefined user_realname}"'",
     "account": "'"${user_account:? undefined user_account}"'",
@@ -27,11 +27,11 @@ _add_account() {
     "gender": "m"
 }' |
         jq -r '.id'
-    echo "$zen_json_url/  /  $user_realname / $user_account / ${password}" | tee -a "$SCRIPT_LOG"
+    echo "$env_json_url/  /  $user_realname / $user_account / ${password}" | tee -a "$SCRIPT_LOG"
 }
 
 _prepare_project_directory() {
-    local doing_path="${zen_project_path:? undefined zen_project_path}"
+    local doing_path="${env_project_path:? undefined env_project_path}"
     local closed_path="${doing_path}/已关闭"
     local get_project_json
     get_project_json=$(mktemp)
@@ -42,10 +42,10 @@ _prepare_project_directory() {
     fi
 
     ## 获取项目列表
-    case "${zen_get_method:-db}" in
+    case "${env_get_method:-db}" in
     api)
         _get_token || return $?
-        curl -fsSL -H "token:${zen_token}" "${zen_api_url:-}/projects?limit=1000" |
+        curl -fsSL -H "token:${env_token}" "${env_api_url:-}/projects?limit=1000" |
             jq '.projects' >"$get_project_json"
         ;;
     db)
@@ -66,7 +66,7 @@ SELECT JSON_OBJECT(
 FROM zt_project t1
 WHERE t1.deleted = '0'
 AND t1.parent = '0'
-AND t1.id NOT IN (${zen_project_exclude_id:-1})
+AND t1.id NOT IN (${env_project_exclude_id:-1})
 LIMIT ${offset},${batch_size};
 EOF
 
@@ -102,8 +102,8 @@ EOF
     esac
 
     ## 如果排除的项目目录存在且为空，则删除
-    if [[ -n "$zen_project_exclude_id" ]]; then
-        for id in ${zen_project_exclude_id//,/ }; do
+    if [[ -n "$env_project_exclude_id" ]]; then
+        for id in ${env_project_exclude_id//,/ }; do
             rmdir "$doing_path/${id}-*" 2>/dev/null
         done
     fi
@@ -205,24 +205,24 @@ _completion() {
 _get_token() {
     local token_timeout
     token_timeout=$(date +%s -d '3600 seconds ago')
-    if ((token_timeout > ${zen_token_save_time:-0})); then
-        zen_token=$(
+    if ((token_timeout > ${env_token_save_time:-0})); then
+        env_token=$(
             "curl" -fsSL -x '' -H "Content-Type: application/json" \
-                "${zen_api_url:? undefine zen_api_url}/tokens" \
+                "${env_api_url:? undefine env_api_url}/tokens" \
                 -d '{
-                "account": "'"${zen_account:-root}"'",
-                "password": "'"${zen_password:-root}"'"
+                "account": "'"${env_account:-root}"'",
+                "password": "'"${env_password:-root}"'"
 }' |
                 jq -r '.token'
         )
 
-        if [ -z "$zen_token" ]; then
+        if [ -z "$env_token" ]; then
             echo "get token failed"
             return 1
         fi
         sed -i \
-            -e "s/zen_token_save_time=$zen_token_save_time/zen_token_save_time=$(date +%s)/g" \
-            -e "s/zen_token=.*/zen_token=$zen_token/g" "$SCRIPT_ENV"
+            -e "s/env_token_save_time=$env_token_save_time/env_token_save_time=$(date +%s)/g" \
+            -e "s/env_token=.*/env_token=$env_token/g" "$SCRIPT_ENV"
     else
         return 0
     fi
