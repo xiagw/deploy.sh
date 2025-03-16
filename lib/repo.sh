@@ -161,7 +161,7 @@ repo_language_detect() {
             # 5. 尝试获取 maven.compiler.target
             [ -z "$version" ] && version=$(grep -E "<maven.compiler.target>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.target>([^<]+)<.*/\1/')
             ## defautl to 8
-            version="${version:-8}"
+            # version="${version:-8}"
             ;;
         build.gradle | gradle.build)
             lang_type="java"
