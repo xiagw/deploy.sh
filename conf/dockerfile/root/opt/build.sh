@@ -420,8 +420,12 @@ _build_mysql() {
     chown -R mysql:root /var/lib/mysql/
     chmod o-rw /var/run/mysqld
 
-    my_cnf=/etc/mysql/conf.d/my.cnf
     my_ver=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
+    if [ "$my_ver" -lt 8 ]; then
+        my_cnf=/etc/my.cnf
+    else
+        my_cnf=/etc/mysql/conf.d/my.cnf
+    fi
 
     # Generate base configuration
     cat >$my_cnf <<'EOF'
