@@ -421,39 +421,16 @@ _build_mysql() {
     chmod o-rw /var/run/mysqld
 
     my_cnf=/etc/mysql/conf.d/my.cnf
-    # Generate MySQL configuration based on version
-    cat >$my_cnf <<'EOF'
-# The MySQL  Client configuration file.
-#
-# For explanations see
-# http://dev.mysql.com/doc/mysql/en/server-system-variables.html
+    my_ver=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
 
+    # Generate base configuration
+    cat >$my_cnf <<'EOF'
 [mysqld]
 host_cache_size=0
 initialize-insecure=FALSE
 explicit_defaults_for_timestamp
 tls_version=TLSv1.2,TLSv1.3
-EOF
-
-    # Get MySQL version and compare
-    mysql_version=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
-    if [ "$mysql_version" -gt 8 ]; then
-        cat >>$my_cnf <<'EOF'
-sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
 character-set-server=utf8mb4
-# default-authentication-plugin=mysql_native_password
-EOF
-    else
-        cat >>$my_cnf <<'EOF'
-sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER"
-character-set-server=utf8mb4
-default-authentication-plugin=mysql_native_password
-EOF
-    fi
-
-    cat >>$my_cnf <<'EOF'
-
-character-set-client-handshake = FALSE
 # lower_case_table_names = 1
 myisam_recover_options = FORCE,BACKUP
 max_allowed_packet = 128M
@@ -461,32 +438,7 @@ max_connect_errors = 1000000
 sync_binlog = 1
 log_bin = log-bin
 log_bin_index = log-bin
-EOF
-
-    if mysqld --version | grep '8\..\.'; then
-        echo '# binlog_format = ROW' >>$my_cnf
-    else
-        echo 'binlog_format = ROW' >>$my_cnf
-    fi
-
-    cat >>$my_cnf <<'EOF'
 skip-name-resolve
-
-######## M2M replication (master)
-server_id = 1
-## 主键奇数列
-auto_increment_offset = 1
-## 递增步长 2
-# auto_increment_increment = 2
-auto_increment_increment = 1
-
-######## M2M replication (slave)
-# server_id = 2
-## 主键偶数列
-# auto_increment_offset = 2
-## 递增步长 2
-# auto_increment_increment = 2
-
 read_only = 0
 # binlog_do_db = default
 binlog_ignore_db = mysql
@@ -520,29 +472,68 @@ open_files_limit = 65535
 slow_query_log = 1
 long_query_time = 1
 # innodb_stats_on_metadata = 0
-
-[mysql]
-default-character-set=utf8mb4
-
-[client]
-default-character-set=utf8mb4
 EOF
 
-    chmod 0444 $my_cnf
-    if [ "$MYSQL_SLAVE" = 'true' ]; then
-        sed -i -e "/server_id/s/1/${MYSQL_SLAVE_ID:-2}/" -e "/auto_increment_offset/s/1/2/" $my_cnf
+    # Add version-specific configurations
+    if [ "$my_ver" -lt 8 ]; then
+        # MySQL 5.7 specific configurations
+        cat >>$my_cnf <<'EOF'
+sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER"
+default-authentication-plugin=mysql_native_password
+character-set-client-handshake = FALSE
+binlog_format = ROW
+EOF
+    else
+        # MySQL 8.0 specific configurations
+        cat >>$my_cnf <<'EOF'
+sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO"
+EOF
     fi
+
+    case "$MYSQL_REPLICATION" in
+    single | master2slave)
+        cat >>$my_cnf <<'EOF'
+server_id = 1
+auto_increment_offset = 1
+auto_increment_increment = 1
+EOF
+        ;;
+    master1)
+        cat >>$my_cnf <<'EOF'
+######## M2M replication (master to master, source to source)
+server_id = 1
+## 主键奇数列
+auto_increment_offset = 1
+## 递增步长 2
+auto_increment_increment = 2
+EOF
+        ;;
+    master2)
+        cat >>$my_cnf <<'EOF'
+######## M2M replication (master to master, source to source)
+server_id = 2
+## 主键偶数列
+auto_increment_offset = 2
+## 递增步长 2
+auto_increment_increment = 2
+EOF
+        ;;
+    esac
+
+    chmod 0644 $my_cnf
+
     if [ -f /etc/my.cnf ]; then
         sed -i '/skip-host-cache/d' /etc/my.cnf
     fi
 
-    if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
-        printf "[client]\npassword=%s\n" "${MYSQL_ROOT_PASSWORD}" >"$HOME"/.my.cnf
-        printf "export LANG=C.UTF-8\alias l='ls -al'" >"$HOME"/.bashrc
-    fi
-    if ls -A /opt/*.sh; then
-        chmod +x /opt/*.sh
-    fi
+    cat >>/root/.bashrc <<'EOF'
+export LANG=C.UTF-8
+echo "[client]" >/root/.my.cnf
+echo "password=${MYSQL_ROOT_PASSWORD}" >>/root/.my.cnf
+chmod 600 /root/.my.cnf
+EOF
+
+    chmod +x /opt/*.sh
 }
 
 _build_redis() {

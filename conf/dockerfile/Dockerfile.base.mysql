@@ -6,8 +6,12 @@ LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
 
 ARG IN_CHINA=false
 ARG TZ=UTC
-ARG MYSQL_SLAVE=false
+ARG MYSQL_REPLICATION=single
+# ARG MYSQL_REPLICATION=master1
+# ARG MYSQL_REPLICATION=master2
+
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+
 ENV TZ=${TZ}
 
 EXPOSE 3306
