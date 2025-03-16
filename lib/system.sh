@@ -376,11 +376,13 @@ system_cert_renew() {
 system_install_tools() {
     local install_result=0
 
-    _check_sudo
-
     ## 基础工具安装
-    command -v jq &>/dev/null || _install_packages "$IS_CHINA" jq || ((install_result++))
+    if ! command -v jq &>/dev/null; then
+        _check_sudo
+        _install_packages "$IS_CHINA" jq || ((install_result++))
+    fi
     if ! command -v yq &>/dev/null; then
+        _check_sudo
         case "$(uname -s)" in
         Linux)
             if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64; then

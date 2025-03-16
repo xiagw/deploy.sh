@@ -144,7 +144,7 @@ parse_command_args() {
                 bash "$base_script"
             fi
             exit
-        ;;
+            ;;
         # Build operations
         --build)
             arg_flags["build_all"]=1
@@ -262,6 +262,10 @@ config_build_env() {
             G_ARGS+=" --build-arg MVN_DEBUG=on"
         fi
 
+        # Configure Maven image
+        MVN_IMAGE="maven"
+        JDK_IMAGE="amazoncorretto"
+
         # Set Maven and JDK versions based on lang_ver
         case "${lang_ver:-}" in
         1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" && JDK_IMAGE="openjdk" ;;
@@ -273,25 +277,17 @@ config_build_env() {
         *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;; # Default
         esac
 
-        # Adjust versions and set mirror if using Docker mirror
+        # Add registry prefix if mirror is configured
         if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-            MVN_VERSION="maven-${MVN_VERSION}"
-            if [[ "${JDK_VERSION}" == "7" ]]; then
-                JDK_VERSION="openjdk-7"
-            else
-                JDK_VERSION="laradock-spring-${JDK_VERSION}"
-            fi
-            G_ARGS+=" --build-arg MVN_IMAGE=${ENV_DOCKER_MIRROR}"
-            G_ARGS+=" --build-arg JDK_IMAGE=${ENV_DOCKER_MIRROR}"
-        else
-            if [[ "${JDK_VERSION}" == "7" ]]; then
-                JDK_IMAGE="openjdk"
-                G_ARGS+=" --build-arg JDK_IMAGE=${JDK_IMAGE}"
-            fi
+            MVN_IMAGE="${ENV_DOCKER_MIRROR}/${MVN_IMAGE}"
+            JDK_IMAGE="${ENV_DOCKER_MIRROR}/${JDK_IMAGE}"
         fi
 
         # Add build arguments
-        G_ARGS+=" --build-arg MVN_VERSION=${MVN_VERSION} --build-arg JDK_VERSION=${JDK_VERSION}"
+        G_ARGS+=" --build-arg MVN_IMAGE=${MVN_IMAGE}"
+        G_ARGS+=" --build-arg MVN_VERSION=${MVN_VERSION}"
+        G_ARGS+=" --build-arg JDK_IMAGE=${JDK_IMAGE}"
+        G_ARGS+=" --build-arg JDK_VERSION=${JDK_VERSION}"
         # Check for additional installations
         for install in FFMPEG FONTS LIBREOFFICE; do
             if grep -qi "INSTALL_${install}=true" "${G_REPO_DIR}"/{README,readme}* 2>/dev/null; then
