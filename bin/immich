@@ -382,7 +382,7 @@ _immich_upload() {
 _upgrade_immich_apk() {
     url_down="$(curl -fsSL https://api.github.com/repos/immich-app/immich/releases/latest | jq -r '.assets[].browser_download_url' | grep 'app-release.apk' | tail -n1)"
     curl -Lo immich.apk "$url_down"
-    ossutil cp -f immich.apk oss://"${ENV_OSS_BUCKET_NAME:? empty bucket name}"/d/immich.apk
+    ossutil cp -f immich.apk oss://"${ENV_OSS_BUCKET:? empty bucket name}"/d/immich.apk
     rm -f immich.apk
 }
 
@@ -396,17 +396,25 @@ main() {
     ## script logic here
     me_name="$(basename "${BASH_SOURCE[0]}")"
     me_path="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+    me_data="$(dirname "${me_path}")/data"
 
     if [ -f "${me_path}/${me_name}.env" ]; then
         me_env="${me_path}/${me_name}.env"
         me_log="${me_path}/${me_name}.log"
-    elif [ -f "${me_path}/../data/${me_name}.env" ]; then
-        me_log="${me_path}/../data/${me_name}.log"
-        me_env="${me_path}/../data/${me_name}.env"
+    elif [ -f "${me_data}/${me_name}.env" ]; then
+        me_log="${me_data}/${me_name}.log"
+        me_env="${me_data}/${me_name}.env"
     else
         echo "not found $me_env, exit 1."
         return 1
     fi
+
+    # Required environment variables in .env file:
+    # ENV_REMOTE_HOST      - Remote host address for backup (e.g. user@backup-server)
+    # ENV_REMOTE_BACKUP_PATH - Remote backup path on backup server (e.g. /path/to/backup)
+    # ENV_API_URL         - Immich server API URL (e.g. http://localhost:3001)
+    # ENV_API_KEY         - Immich server API key for authentication
+    # ENV_OSS_BUCKET      - Aliyun OSS bucket name for storing APK files
     source "$me_env" "${param_account-}"
     [[ "${enable_log-}" -eq 1 ]] && echo "Log file is \"$me_log\""
 
