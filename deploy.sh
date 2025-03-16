@@ -256,6 +256,10 @@ config_build_env() {
     fi
 
     # Java 项目特殊配置
+    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+        MIRROR="${ENV_DOCKER_MIRROR}/"
+        G_ARGS+=" --build-arg MIRROR=${MIRROR}"
+    fi
     if [ "$lang" = java ]; then
         G_ARGS+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
         if ${DEBUG_ON:-false}; then
@@ -296,6 +300,7 @@ config_build_env() {
     fi
 
     # 导出环境变量
+    # echo "$G_DOCK $G_RUN $G_ARGS" && exit
     export G_DOCK G_RUN G_ARGS
 }
 

@@ -1,6 +1,7 @@
-ARG BASE_IMAGE=node
+ARG MIRROR=
 ARG NODE_VERSION=20
-FROM ${BASE_IMAGE}:${NODE_VERSION}-slim
+
+FROM ${MIRROR}node:${NODE_VERSION}-slim
 
 # 设置时区和语言
 # ENV TZ=Asia/Shanghai \

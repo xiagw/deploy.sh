@@ -1,12 +1,13 @@
 # Build stage
-ARG BASE_IMAGE=golang
+ARG MIRROR=
 ARG GO_VERSION=1.22
 ARG NGINX_VERSION=stable-alpine
 ARG APP_USER=appuser
 ARG APP_UID=1000
 ARG APP_GID=1000
 
-FROM ${BASE_IMAGE}:${GO_VERSION} AS build
+FROM ${MIRROR}golang:${GO_VERSION} AS build
+
 LABEL maintainer="DevOps Team"
 LABEL description="Go application build stage"
 
@@ -28,7 +29,7 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
     go build -ldflags="-s -w" -o /bin/server .
 
 # Final stage
-FROM nginx:${NGINX_VERSION} AS final
+FROM ${MIRROR}nginx:${NGINX_VERSION} AS final
 LABEL maintainer="DevOps Team"
 LABEL description="Production runtime image"
 

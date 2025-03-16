@@ -90,6 +90,7 @@ build_image() {
         docker_login
         push_flag="--push"
     fi
+    # echo "$G_DOCK build $G_ARGS --tag ${repo_tag} ${push_flag} ${G_REPO_DIR}"  && exit
     $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | grep -v 'error reading preface from client dummy'
 
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then

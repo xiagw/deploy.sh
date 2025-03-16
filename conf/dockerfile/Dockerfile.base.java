@@ -1,7 +1,7 @@
-ARG BASE_IMAGE=amazoncorretto
+ARG MIRROR=
 ARG JDK_VERSION=8
 
-FROM ${BASE_IMAGE}:${JDK_VERSION}
+FROM ${MIRROR}amazoncorretto:${JDK_VERSION}
 
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>" \
     org.opencontainers.image.authors="xiagw <fxiaxiaoyu@gmail.com>" \

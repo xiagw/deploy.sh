@@ -1,7 +1,8 @@
 # Base image selection
-ARG BASE_IMAGE=nginx
-ARG BASE_VERSION=stable-alpine
-FROM ${BASE_IMAGE}:${BASE_VERSION}
+ARG MIRROR=
+ARG NGINX_VERSION=stable-alpine
+
+FROM ${MIRROR}nginx:${NGINX_VERSION}
 
 LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
 
