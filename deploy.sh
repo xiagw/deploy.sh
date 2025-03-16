@@ -268,13 +268,12 @@ config_build_env() {
 
         # Set Maven and JDK versions based on lang_ver
         case "${lang_ver:-}" in
-        1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" && JDK_IMAGE="openjdk" ;;
-        1.8 | 8) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;;
-        11) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11" ;;
-        17) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17" ;;
-        21) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21" ;;
-        23) MVN_VERSION="3.9-amazoncorretto-23" && JDK_VERSION="23" ;;
-        *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8" ;; # Default
+        1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_IMAGE="openjdk" && JDK_VERSION="7" ;;
+        11) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11-base" ;;
+        17) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17-base" ;;
+        21) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21-base" ;;
+        23) MVN_VERSION="3.9-amazoncorretto-23" && JDK_VERSION="23-base" ;;
+        *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8-base" ;; # Default
         esac
 
         # Add registry prefix if mirror is configured
