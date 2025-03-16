@@ -118,21 +118,19 @@ get_jvm_opts() {
 
 # 函数：按文件名自然排序查找所有配置文件
 find_configs() {
-    local configs=() yml_files yaml_files properties_files
+    local configs=() yml_files properties_files
 
     # 使用-V参数进行自然排序获取所有配置文件
-    mapfile -t yml_files < <(find . -maxdepth 2 -name "application*.yml" -type f | sort -V)
-    mapfile -t yaml_files < <(find . -maxdepth 2 -name "application*.yaml" -type f | sort -V)
-    mapfile -t properties_files < <(find . -maxdepth 2 -name "application*.properties" -type f | sort -V)
+    mapfile -t yml_files < <(find . -maxdepth 2 -type f \( -iname "*.yml" -o -iname "*.yaml" \) | sort -V)
+    mapfile -t properties_files < <(find . -maxdepth 2 -name "*.properties" -type f | sort -V)
 
     # 返回找到的配置文件数组，保持类型信息
     if [ ${#yml_files[@]} -gt 0 ]; then
         for file in "${yml_files[@]}"; do
-            configs+=("yml:${file}")
-        done
-    elif [ ${#yaml_files[@]} -gt 0 ]; then
-        for file in "${yaml_files[@]}"; do
-            configs+=("yaml:${file}")
+            case "${file}" in
+            *.yml) configs+=("yml:${file}") ;;
+            *.yaml) configs+=("yaml:${file}") ;;
+            esac
         done
     elif [ ${#properties_files[@]} -gt 0 ]; then
         for file in "${properties_files[@]}"; do
@@ -149,7 +147,7 @@ start_java() {
     command -v redis-server && redis-server --daemonize yes
 
     local jar_files jvm_opts i=0 pid config_name config_path config_files start_cmd
-    local config_entry config_type config_file profile_file
+    local config_entry config_type config_file profile_file last_config_entry
 
     # 注册信号处理
     trap 'cleanup' SIGTERM SIGINT SIGQUIT
@@ -170,13 +168,24 @@ start_java() {
     mapfile -t config_files < <(find_configs)
     log "找到 ${#config_files[@]} 个配置文件"
 
+    # 获取最后一个配置文件
+    if [ ${#config_files[@]} -gt 0 ]; then
+        last_config_entry="${config_files[-1]}"
+    fi
+
     # 启动每个jar文件
     for jar_file in "${jar_files[@]}"; do
         start_cmd="java ${jvm_opts} -jar ${jar_file}"
 
-        # 使用对应序号的配置文件（如果存在）
+        # 使用对应序号的配置文件（如果存在），否则使用最后一个配置文件
         if [ "$i" -lt ${#config_files[@]} ]; then
             config_entry="${config_files[$i]}"
+        elif [ -n "$last_config_entry" ]; then
+            config_entry="$last_config_entry"
+            log "使用最后一个配置文件用于额外的JAR"
+        fi
+
+        if [ -n "$config_entry" ]; then
             config_type="${config_entry%%:*}"
             config_file="${config_entry#*:}"
 
@@ -194,7 +203,7 @@ start_java() {
         else
             profile_file=$(find "$G_PATH" -maxdepth 1 -iname "profile.*" -type f -print -quit)
             if [[ -f "$profile_file" ]]; then
-                log "正在启动第 $((i + 1)) 个JAR: ${jar_file}，使用profile: ${profile_file##*.}"
+                log "正在启动第 $((i + 1)) 个JAR: ${jar_file}, 使用profile: ${profile_file##*.}"
                 start_cmd="${start_cmd} --spring.profiles.active=${profile_file##*.}"
             else
                 log "正在启动第 $((i + 1)) 个JAR: ${jar_file}，使用默认配置"
