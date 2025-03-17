@@ -11,23 +11,27 @@ ARG MYSQL_REPLICATION=single
 # ARG MYSQL_REPLICATION=master2
 
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG BUILD_URL2=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/mbk.sh
 
 ENV TZ=${TZ}
-
-COPY root/ /
-RUN chmod +x /opt/mbk.sh && \
-    sed -i '/if .* _is_sourced.* then/i /opt/mbk.sh' /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3306
 
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=bind,target=/src,rw \
+    set -xe; \
+    if [ -f /src/root/opt/mbk.sh ]; then \
+        cp -f /src/root/opt/mbk.sh /opt/; \
+    else \
+        curl -fLo /opt/mbk.sh "$BUILD_URL2"; \
+    fi; \
+    sed -i '/if .* _is_sourced.* then/i /opt/mbk.sh' /usr/local/bin/docker-entrypoint.sh; \
     if [ -f /src/root/opt/build.sh ]; then \
         bash /src/root/opt/build.sh; \
     elif [ -f build.sh ]; then \
         bash build.sh; \
     else \
-        curl -fLo build.sh "$BUILD_URL" && \
+        curl -fLo build.sh "$BUILD_URL"; \
         bash build.sh; \
     fi
