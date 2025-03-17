@@ -73,24 +73,14 @@ Parameters:
     --in-china               Set ENV_IN_CHINA to true.
 
     # Repository operations
-    --git-clone URL          Clone git repo URL to builds/REPO_NAME.
-    --git-clone-branch NAME  Specify git branch (default: main).
-    --svn-checkout URL       Checkout SVN repository.
+    -g, --git-clone URL          Clone git repo URL to builds/REPO_NAME.
+    -b, --git-branch NAME  Specify git branch (default: main).
+    -s, --svn-checkout URL       Checkout SVN repository.
 
     # Build operations
-    --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
-    --build-base [args]       Execute build.base.sh script with optional arguments.
-
-    # Deployment
-    --deploy-k8s             Deploy to Kubernetes.
-    --deploy-functions       Deploy to Aliyun Functions.
-    --deploy-rsync-ssh       Deploy using rsync over SSH.
-    --deploy-rsync           Deploy to rsync server.
-    --deploy-ftp             Deploy to FTP server.
-    --deploy-sftp            Deploy to SFTP server.
-
-    # Docker operations
-    --docker-copy SRC DEST [KEEP]  Copy Docker image from source to target registry.
+    -B, --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
+    -x, --build-base [args]       Execute build.base.sh script with optional arguments.
+    --copy-image SRC [DEST] [KEEP]  Copy Docker image from source to target registry.
                             SRC: Source image (e.g., nginx:latest)
                             DEST: Target registry (e.g., registry.example.com/ns)
                             KEEP: Keep original tag format (true/false, default: true)
@@ -98,21 +88,36 @@ Parameters:
                               --docker-copy nginx:latest registry.example.com/ns
                               --docker-copy nginx:latest registry.example.com/ns false
 
+    # Deployment
+    -k, --deploy-k8s             Deploy to Kubernetes.
+    -f, --deploy-functions       Deploy to Aliyun Functions.
+    -R, --deploy-rsync-ssh       Deploy using rsync over SSH.
+    -y, --deploy-rsync           Deploy to rsync server.
+    -F, --deploy-ftp             Deploy to FTP server.
+    -S, --deploy-sftp            Deploy to SFTP server.
+    -c, --copy-image SRC [DEST] [KEEP]  Copy Docker image from source to target registry.
+                            SRC: Source image (e.g., nginx:latest)
+                            DEST: Target registry (e.g., registry.example.com/ns)
+                            KEEP: Keep original tag format (true/false, default: true)
+                            Examples:
+                              -c nginx:latest registry.example.com/ns
+                              -c nginx:latest registry.example.com/ns false
+
     # Testing and quality
-    --test-unit              Run unit tests.
-    --test-function          Run functional tests.
-    --code-style             Check code style.
-    --code-quality           Check code quality.
-    --security-zap           Run ZAP security scan.
-    --security-vulmap        Run Vulmap security scan.
+    -u, --test-unit              Run unit tests.
+    -t, --test-function          Run functional tests.
+    -C, --code-style             Check code style.
+    -Q, --code-quality           Check code quality.
+    -z, --security-zap           Run ZAP security scan.
+    -m, --security-vulmap        Run Vulmap security scan.
 
     # Kubernetes operations
-    --create-helm DIR        Create Helm chart in specified directory.
-    --create-k8s             Create K8s cluster with Terraform.
+    -H, --create-helm DIR        Create Helm chart in specified directory.
+    -K, --create-k8s             Create K8s cluster with Terraform.
 
     # Miscellaneous
-    --disable-inject         Disable file injection.
-    -r, --renew-cert         Renew all the certs.
+    -D, --disable-inject         Disable file injection.
+    -r, --renew-cert            Renew all the certs.
 EOF
 }
 
@@ -127,22 +132,38 @@ parse_command_args() {
         --github-action) DEBUG_ON=true && export GH_ACTION=true ;;
         --in-china) arg_in_china=true ;;
         # Repository operations
-        --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
-        --git-clone-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
-        --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
+        -g | --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
+        -b | --git-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
+        -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         ## call build.base.sh
-        --build-base)
-            local base_script="${G_PATH}/conf/dockerfile/build.base.sh"
-            if [[ ! -f "$base_script" ]]; then
-                _msg error "build.base.sh not found at ${base_script}"
-                exit 1
-            fi
+        -x | --build-base)
             shift
-            bash "$base_script" "$@"
+            local all_args=(
+                "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4"
+                "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
+                "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
+                "node:18" "node:20" "node:21" "node:22"
+                "redis:latest"
+                "nginx:stable-alpine"
+            )
+
+            if [[ "$1" == "all" ]]; then
+                for i in "${all_args[@]}"; do
+                    build_base_image "$i"
+                done
+            else
+                if [ -z "$1" ]; then
+                    local select_arg
+                    select_arg=$(echo "${all_args[@]}" | sed 's/\ /\n/g' | fzf)
+                    build_base_image "$select_arg"
+                else
+                    build_base_image "$*"
+                fi
+            fi
             exit
             ;;
         # Build operations
-        --build)
+        -B | --build)
             arg_flags["build_all"]=1
             if [[ -z "$2" || ! "$2" =~ ^(push|keep)$ ]]; then
                 keep_image="remove"
@@ -152,15 +173,13 @@ parse_command_args() {
             fi
             ;;
         # Deployment
-        --deploy-k8s) arg_flags["deploy_k8s"]=1 deploy_method=deploy_k8s ;;
-        --deploy-docker) arg_flags["deploy_docker"]=1 deploy_method=deploy_docker ;;
-        --deploy-aliyun-func) arg_flags["deploy_aliyun_func"]=1 deploy_method=deploy_aliyun_func ;;
-        --deploy-aliyun-oss) arg_flags["deploy_aliyun_oss"]=1 deploy_method=deploy_aliyun_oss ;;
-        --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 deploy_method=deploy_rsync_ssh ;;
-        --deploy-rsync) arg_flags["deploy_rsync"]=1 deploy_method=deploy_rsync ;;
-        --deploy-ftp) arg_flags["deploy_ftp"]=1 deploy_method=deploy_ftp ;;
-        --deploy-sftp) arg_flags["deploy_sftp"]=1 deploy_method=deploy_sftp ;;
-        --copy-image)
+        -k | --deploy-k8s) arg_flags["deploy_k8s"]=1 deploy_method=deploy_k8s ;;
+        -f | --deploy-functions) arg_flags["deploy_aliyun_func"]=1 deploy_method=deploy_aliyun_func ;;
+        -R | --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 deploy_method=deploy_rsync_ssh ;;
+        -y | --deploy-rsync) arg_flags["deploy_rsync"]=1 deploy_method=deploy_rsync ;;
+        -F | --deploy-ftp) arg_flags["deploy_ftp"]=1 deploy_method=deploy_ftp ;;
+        -S | --deploy-sftp) arg_flags["deploy_sftp"]=1 deploy_method=deploy_sftp ;;
+        -c | --copy-image)
             arg_flags["copy_image"]=1
             arg_docker_source="${2:?ERROR: example: nginx:stable-alpine}"
             if [ -z "$3" ]; then
@@ -183,19 +202,18 @@ parse_command_args() {
             shift
             ;;
         # Testing and quality
-        --test-unit) arg_flags["test_unit"]=1 ;;
-        --apidoc) arg_flags["apidoc"]=1 ;;
-        --test-function) arg_flags["test_func"]=1 ;;
-        --code-style) arg_flags["code_style"]=1 ;;
-        --code-quality) arg_flags["code_quality"]=1 ;;
-        --security-zap) arg_flags["security_zap"]=1 ;;
-        --security-vulmap) arg_flags["security_vulmap"]=1 ;;
+        -u | --test-unit) arg_flags["test_unit"]=1 ;;
+        -t | --test-function) arg_flags["test_func"]=1 ;;
+        -C | --code-style) arg_flags["code_style"]=1 ;;
+        -Q | --code-quality) arg_flags["code_quality"]=1 ;;
+        -z | --security-zap) arg_flags["security_zap"]=1 ;;
+        -m | --security-vulmap) arg_flags["security_vulmap"]=1 ;;
         # Kubernetes operations
-        --create-helm) arg_create_helm=true && helm_dir="$2" && shift ;;
-        --create-k8s) create_k8s_with_terraform=true ;;
+        -H | --create-helm) arg_create_helm=true && helm_dir="$2" && shift ;;
+        -K | --create-k8s) create_k8s_with_terraform=true ;;
         --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" && shift ;;
-        ## 命令参数强制不注入文件
-        --disable-inject) arg_disable_inject=true ;;
+        # Miscellaneous
+        -D | --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
         *) _usage && exit 1 ;;
         esac
@@ -279,6 +297,77 @@ config_build_env() {
     # 导出环境变量
     # echo "$G_DOCK $G_RUN $G_ARGS" && exit
     export G_DOCK G_RUN G_ARGS
+}
+
+build_base_image() {
+    local tag="$1"
+    local registry="registry.cn-hangzhou.aliyuncs.com/flyh5"
+    local base_tag="${registry}/${tag}-base"
+    local cmd_opt=(
+        "${G_DOCK}"
+        build
+        --pull
+        --push
+        --progress=plain
+        --platform "linux/amd64,linux/arm64"
+        --build-arg CHANGE_SOURCE=true
+        --build-arg IN_CHINA=true
+        --build-arg HTTP_PROXY="${http_proxy-}"
+        --build-arg HTTPS_PROXY="${http_proxy-}"
+    )
+
+    case "$tag" in
+    php:*)
+        cmd_opt+=(
+            --build-arg PHP_VERSION="${tag#*:}"
+            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+        )
+        ;;
+    redis:*)
+        cmd_opt+=(
+            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+        )
+        ;;
+    nginx:*)
+        cmd_opt+=(
+            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+        )
+        ;;
+    mysql:5*)
+        cmd_opt+=(
+            --build-arg MIRROR="${registry}/"
+            --build-arg MYSQL_VERSION="${tag#*:}"
+            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+        )
+        ;;
+    mysql:*)
+        cmd_opt+=(
+            --build-arg MYSQL_VERSION="${tag#*:}"
+            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+        )
+        ;;
+    amazoncorretto:*)
+        cmd_opt+=(
+            --build-arg MVN_PROFILE="base"
+            --build-arg JDK_VERSION="${tag#*:}"
+            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.java"
+        )
+        ;;
+    node:*)
+        cmd_opt+=(
+            --build-arg NODE_VERSION="${tag#*:}"
+            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+        )
+        ;;
+    esac
+    cmd_opt+=(--tag "${base_tag}")
+
+    # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
+    if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
+        ${G_DOCK} run --privileged --rm tonistiigi/binfmt --install all
+    fi
+
+    "${cmd_opt[@]}" "${G_PATH}/conf/dockerfile/"
 }
 
 main() {
