@@ -547,7 +547,7 @@ EOF
     if [ -f /usr/local/bin/docker-entrypoint.sh ]; then
         sed -i '/if .* _is_sourced.* then/i /opt/mbk.sh' /usr/local/bin/docker-entrypoint.sh
     elif [ -f /entrypoint.sh ]; then
-        sed -i '/echo ".Entrypoint. MySQL Docker Image/i /opt/mbk.sh' /entrypoint.sh
+        sed -i '/echo ".Entrypoint. MySQL Docker Image/i (exec /opt/mbk.sh) &' /entrypoint.sh
     else
         echo "not found entry point file"
     fi
