@@ -118,23 +118,29 @@ get_jvm_opts() {
 
 # 函数：按文件名自然排序查找所有配置文件
 find_configs() {
-    local configs=() yml_files properties_files
+    local configs=() yml_files properties_files profile_files
 
     # 使用-V参数进行自然排序获取所有配置文件
     mapfile -t yml_files < <(find . -maxdepth 2 -type f \( -iname "*.yml" -o -iname "*.yaml" \) | sort -V)
     mapfile -t properties_files < <(find . -maxdepth 2 -name "*.properties" -type f | sort -V)
+    mapfile -t profile_files < <(find . -maxdepth 2 -type f -iname "profile.*" | sort -V)
 
     # 返回找到的配置文件数组，保持类型信息
+    # 优先使用 yml 文件
     if [ ${#yml_files[@]} -gt 0 ]; then
         for file in "${yml_files[@]}"; do
             case "${file}" in
             *.yml|*.yaml) configs+=("yml:${file}") ;;
             esac
         done
+    # 如果没有 yml，则使用 properties
     elif [ ${#properties_files[@]} -gt 0 ]; then
         for file in "${properties_files[@]}"; do
             configs+=("properties:${file}")
         done
+    # 如果既没有 yml 也没有 properties，则使用 profile
+    elif [ ${#profile_files[@]} -gt 0 ]; then
+        configs+=("profile:${profile_files[0]}")
     fi
 
     printf "%s\n" "${configs[@]}"
@@ -146,7 +152,7 @@ start_java() {
     command -v redis-server && redis-server --daemonize yes
 
     local jar_files jvm_opts i=0 pid config_name config_path config_files start_cmd
-    local config_entry config_type config_file profile_file last_config_entry
+    local config_entry config_type config_file last_config_entry
 
     # 注册信号处理
     trap 'cleanup' SIGTERM SIGINT SIGQUIT
@@ -188,32 +194,29 @@ start_java() {
             config_type="${config_entry%%:*}"
             config_file="${config_entry#*:}"
 
-            log "正在启动第 $((i + 1)) 个JAR: ${jar_file}，使用配置文件: ${config_file} (${config_type})"
             case "${config_type}" in
             "yml")
+                log "正在启动第 $((i + 1)) 个JAR: ${jar_file}，使用yml配置: ${config_file}"
                 start_cmd="${start_cmd} --spring.config.location=${config_file}"
                 ;;
             "properties")
+                log "正在启动第 $((i + 1)) 个JAR: ${jar_file}，使用properties配置: ${config_file}"
                 config_name=$(basename "${config_file}" .properties)
                 config_path=$(dirname "${config_file}")
                 start_cmd="${start_cmd} --spring.config.name=${config_name} --spring.config.location=${config_path}/"
                 ;;
+            "profile")
+                log "正在启动第 $((i + 1)) 个JAR: ${jar_file}, 使用profile: ${config_file##*.}"
+                start_cmd="${start_cmd} --spring.profiles.active=${config_file##*.}"
+                ;;
             esac
-        else
-            profile_file=$(find "$G_PATH" -maxdepth 1 -iname "profile.*" -type f -print -quit)
-            if [[ -f "$profile_file" ]]; then
-                log "正在启动第 $((i + 1)) 个JAR: ${jar_file}, 使用profile: ${profile_file##*.}"
-                start_cmd="${start_cmd} --spring.profiles.active=${profile_file##*.}"
-            else
-                log "正在启动第 $((i + 1)) 个JAR: ${jar_file}，使用默认配置"
-            fi
         fi
 
         # 根据start mode决定启动方式
         if [ "${START_MODE:-}" = "nohup" ]; then
             # shellcheck disable=SC2086
-            nohup ${start_cmd} >nohup.out 2>&1 &
-            log "应用已在后台启动，日志输出到 nohup.out"
+            nohup ${start_cmd} >"${G_PATH}/$(basename "${jar_file}").nohup.out" 2>&1 &
+            log "应用已在后台启动，日志输出到 ${G_PATH}/$(basename "${jar_file}").nohup.out"
         else
             ${start_cmd} &
         fi
