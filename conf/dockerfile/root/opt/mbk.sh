@@ -89,7 +89,7 @@ main() {
         backup_mysql
         sleep 1h
     done &
-    echo $! >/var/run/mysql-backup.pid
+    # echo $! >/var/run/mysql-backup.pid
 }
 
 # 执行主函数
