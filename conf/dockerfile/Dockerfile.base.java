@@ -24,16 +24,11 @@ WORKDIR /app
 
 RUN --mount=type=cache,target=/var/cache/yum,sharing=locked \
     --mount=type=bind,target=/src,rw \
-    set -ex; \
-    # 执行构建脚本
-    if [ -f /src/root/opt/build.sh ]; then \
-        bash /src/root/opt/build.sh; \
-    elif [ -f build.sh ]; then \
-        bash build.sh; \
-    else \
-        curl -fLo build.sh "$BUILD_URL" && \
-        bash build.sh; \
-    fi
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
+    [ -f $BUILD_SH ] && bash $BUILD_SH
 
 EXPOSE 8080 8081 8082
 

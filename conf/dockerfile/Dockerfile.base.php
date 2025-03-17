@@ -20,14 +20,11 @@ CMD ["bash", "/opt/run0.sh"]
 # --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # --mount=type=bind,target=/src,rw \
 RUN --mount=type=bind,target=/src,rw \
-    if [ -f /src/root/opt/build.sh ]; then \
-        bash /src/root/opt/build.sh; \
-    elif [ -f build.sh ]; then \
-        bash build.sh; \
-    else \
-        curl -fLo build.sh "$BUILD_URL" && \
-        bash build.sh; \
-    fi
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
+    [ -f $BUILD_SH ] && bash $BUILD_SH
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi

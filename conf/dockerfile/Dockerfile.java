@@ -12,9 +12,11 @@ ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/op
 WORKDIR /src
 RUN --mount=type=cache,target=/root/.m2 \
     --mount=type=bind,target=/src,rw \
-    if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
-    elif [ -f build.sh ]; then bash build.sh; \
-    else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
+    [ -f $BUILD_SH ] && bash $BUILD_SH
     ## 假如此处中断，表明 maven build 失败，请检查代码
 
 
@@ -35,7 +37,10 @@ CMD ["bash", "/opt/run0.sh"]
 RUN --mount=type=cache,target=/var/lib/apt/lists \
     --mount=type=cache,target=/var/cache/yum \
     --mount=type=bind,target=/src,rw \
-    if [ -f /src/root/opt/build.sh ]; then bash /src/root/opt/build.sh; \
-    elif [ -f build.sh ]; then bash build.sh; \
-    else curl -fLo build.sh $BUILD_URL; bash build.sh; fi
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
+    [ -f $BUILD_SH ] && bash $BUILD_SH
+
 COPY --from=builder /jars/ .

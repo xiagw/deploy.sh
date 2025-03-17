@@ -20,11 +20,7 @@ RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=bind,target=/src,rw \
     set -xe; \
-    if [ -f /src/root/opt/build.sh ]; then \
-        bash /src/root/opt/build.sh; \
-    elif [ -f build.sh ]; then \
-        bash build.sh; \
-    else \
-        curl -fLo build.sh "$BUILD_URL"; \
-        bash build.sh; \
-    fi
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
+    [ -f $BUILD_SH ] && bash $BUILD_SH
