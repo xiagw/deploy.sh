@@ -14,6 +14,10 @@ ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/op
 
 ENV TZ=${TZ}
 
+COPY root/ /
+RUN chmod +x /opt/mbk.sh && \
+    sed -i '/if .* _is_sourced.* then/i /opt/mbk.sh' /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 3306
 
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
