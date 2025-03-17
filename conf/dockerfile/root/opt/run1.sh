@@ -128,8 +128,7 @@ find_configs() {
     if [ ${#yml_files[@]} -gt 0 ]; then
         for file in "${yml_files[@]}"; do
             case "${file}" in
-            *.yml) configs+=("yml:${file}") ;;
-            *.yaml) configs+=("yaml:${file}") ;;
+            *.yml|*.yaml) configs+=("yml:${file}") ;;
             esac
         done
     elif [ ${#properties_files[@]} -gt 0 ]; then
@@ -191,7 +190,7 @@ start_java() {
 
             log "正在启动第 $((i + 1)) 个JAR: ${jar_file}，使用配置文件: ${config_file} (${config_type})"
             case "${config_type}" in
-            "yml" | "yaml")
+            "yml")
                 start_cmd="${start_cmd} --spring.config.location=${config_file}"
                 ;;
             "properties")

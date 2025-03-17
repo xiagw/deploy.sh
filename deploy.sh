@@ -138,11 +138,7 @@ parse_command_args() {
                 exit 1
             fi
             shift
-            if [[ $# -gt 0 ]]; then
-                bash "$base_script" "$@"
-            else
-                bash "$base_script"
-            fi
+            bash "$base_script" "$@"
             exit
             ;;
         # Build operations
@@ -164,18 +160,27 @@ parse_command_args() {
         --deploy-rsync) arg_flags["deploy_rsync"]=1 deploy_method=deploy_rsync ;;
         --deploy-ftp) arg_flags["deploy_ftp"]=1 deploy_method=deploy_ftp ;;
         --deploy-sftp) arg_flags["deploy_sftp"]=1 deploy_method=deploy_sftp ;;
-        # Docker operations
-        --docker-copy)
-            arg_flags["docker_copy"]=1
-            arg_docker_source="${2:?empty docker source image}"
-            arg_docker_target="${3:?empty target registry}"
-            if [[ -z "$4" || ! "$4" =~ ^(true|false)$ ]]; then
-                arg_docker_keep="true"
+        --copy-image)
+            arg_flags["copy_image"]=1
+            arg_docker_source="${2:?ERROR: example: nginx:stable-alpine}"
+            if [ -z "$3" ]; then
+                if [ -n "${ENV_DOCKER_MIRROR}" ]; then
+                    arg_docker_target="${ENV_DOCKER_MIRROR}"
+                else
+                    echo "ERROR: example registry.example.com"
+                fi
             else
-                arg_docker_keep="$4"
+                arg_docker_target="${3}"
                 shift
             fi
-            shift 2
+
+            if [[ -z "$4" || ! "$4" =~ ^(true|false)$ ]]; then
+                arg_keep_tag="true"
+            else
+                arg_keep_tag="$4"
+                shift
+            fi
+            shift
             ;;
         # Testing and quality
         --test-unit) arg_flags["test_unit"]=1 ;;
@@ -225,17 +230,6 @@ config_build_env() {
     # 选择构建工具（Docker 或 Podman）
     G_DOCK=$(command -v podman || command -v docker || echo docker)
 
-    # 如果需要构建镜像，进行更严格的工具选择
-    if command -v docker >/dev/null 2>&1; then
-        G_DOCK=$(command -v docker)
-    elif command -v podman >/dev/null 2>&1; then
-        G_DOCK=$(command -v podman)
-        # G_ARGS="--force-rm --format=docker"
-    else
-        _msg error "Neither docker nor podman found"
-        return 1
-    fi
-
     # 设置基本的 Docker 运行命令
     G_RUN="${G_DOCK} run --interactive --rm"
     # 添加所有 add-host 参数
@@ -245,34 +239,25 @@ config_build_env() {
 
     # 构建参数配置
     G_ARGS=" ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-    # 添加所有 add-host 参数
-    for host in "${ENV_ADD_HOST[@]}"; do
-        G_ARGS+=" --add-host=${host}"
-    done
 
     # 调试模式配置
     if ${DEBUG_ON:-false}; then
         G_ARGS+=" --progress plain"
     fi
 
-    # Java 项目特殊配置
     if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-        MIRROR="${ENV_DOCKER_MIRROR}/"
-        G_ARGS+=" --build-arg MIRROR=${MIRROR}"
+        G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR}/"
     fi
+    # Java 项目特殊配置
     if [ "$lang" = java ]; then
         G_ARGS+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
         if ${DEBUG_ON:-false}; then
             G_ARGS+=" --build-arg MVN_DEBUG=on"
         fi
 
-        # Configure Maven image
-        MVN_IMAGE="maven"
-        JDK_IMAGE="amazoncorretto"
-
         # Set Maven and JDK versions based on lang_ver
         case "${lang_ver:-}" in
-        1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_IMAGE="openjdk" && JDK_VERSION="7" ;;
+        1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" ;;
         11) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11-base" ;;
         17) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17-base" ;;
         21) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21-base" ;;
@@ -280,16 +265,8 @@ config_build_env() {
         *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8-base" ;; # Default
         esac
 
-        # Add registry prefix if mirror is configured
-        if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-            MVN_IMAGE="${ENV_DOCKER_MIRROR}/${MVN_IMAGE}"
-            JDK_IMAGE="${ENV_DOCKER_MIRROR}/${JDK_IMAGE}"
-        fi
-
         # Add build arguments
-        G_ARGS+=" --build-arg MVN_IMAGE=${MVN_IMAGE}"
         G_ARGS+=" --build-arg MVN_VERSION=${MVN_VERSION}"
-        G_ARGS+=" --build-arg JDK_IMAGE=${JDK_IMAGE}"
         G_ARGS+=" --build-arg JDK_VERSION=${JDK_VERSION}"
         # Check for additional installations
         for install in FFMPEG FONTS LIBREOFFICE; do
@@ -338,7 +315,7 @@ main() {
         ["code_quality"]=0
         ["security_zap"]=0
         ["security_vulmap"]=0
-        ["docker_copy"]=0
+        ["copy_image"]=0
         ["kube_pvc"]=0
     )
     ## 解析和处理命令行参数
@@ -401,8 +378,8 @@ main() {
     ## This is an independent operation that will exit after completion
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return
     ## Docker image copy operation
-    if [[ ${arg_flags["docker_copy"]} -eq 1 && -n "${arg_docker_source}" ]]; then
-        copy_docker_image "${arg_docker_source}" "${arg_docker_target}" "${arg_docker_keep}"
+    if [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_docker_source}" ]]; then
+        copy_docker_image "${arg_docker_source}" "${arg_docker_target}" "${arg_keep_tag}"
         return
     fi
 

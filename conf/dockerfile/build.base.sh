@@ -4,8 +4,8 @@ set -xe
 
 build_base_image() {
     local tag="$1"
-    local reg="registry.cn-hangzhou.aliyuncs.com/flyh5"
-    local base_tag="${reg}/${tag}-base"
+    local registry="registry.cn-hangzhou.aliyuncs.com/flyh5"
+    local base_tag="${registry}/${tag}-base"
 
     case "$tag" in
     php:*)
@@ -26,7 +26,8 @@ build_base_image() {
         ;;
     mysql:5*)
         cmd_opt+=(
-            --build-arg BASE_IMAGE="mysql/mysql-server"
+            --build-arg MIRROR="${registry}/"
+            # --build-arg MIRROR="mysql/mysql-server"
             --build-arg MYSQL_VERSION="${tag#*:}"
             -f "$me_path/Dockerfile.base.${tag%:*}"
         )

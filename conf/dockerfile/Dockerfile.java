@@ -1,8 +1,6 @@
 #### docker build stage 1 ####
 ARG MIRROR=
-ARG MVN_IMAGE=maven
 ARG MVN_VERSION=3.8-amazoncorretto-8
-ARG JDK_IMAGE=amazoncorretto
 ARG JDK_VERSION=8
 
 FROM ${MIRROR}maven:${MVN_VERSION} AS builder
