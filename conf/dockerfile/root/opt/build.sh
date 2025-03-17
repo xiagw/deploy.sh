@@ -406,7 +406,7 @@ _build_jmeter() {
     fi
     apt-get update
     apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip
-    curl -fL "https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz" | tar -C /opt/ -xz
+    curl -fL "https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz" | tar -C /opt/ -xz
     rm -rf /tmp/*
 }
 
@@ -537,6 +537,20 @@ echo "password=${MYSQL_ROOT_PASSWORD}" >>/root/.my.cnf
 chmod 600 /root/.my.cnf
 EOF
 
+    if [ -f /src/root/opt/mbk.sh ]; then
+        cp -f /src/root/opt/mbk.sh /opt/
+    else
+        mysql_bak="$url_deploy_raw/conf/dockerfile/root/opt/mbk.sh"
+        curl -fLo /opt/mbk.sh "$mysql_bak"
+    fi
+    chmod +x /opt/mbk.sh
+    if [ -f /usr/local/bin/docker-entrypoint.sh ]; then
+        sed -i '/if .* _is_sourced.* then/i /opt/mbk.sh' /usr/local/bin/docker-entrypoint.sh
+    elif [ -f /entrypoint.sh ]; then
+        sed -i '/echo ".Entrypoint. MySQL Docker Image/i /opt/mbk.sh' /entrypoint.sh
+    else
+        echo "not found entry point file"
+    fi
 }
 
 _build_redis() {
