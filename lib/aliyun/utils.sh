@@ -437,11 +437,13 @@ check_fzf() {
 select_with_fzf() {
     local prompt=$1
     local options=$2
+    shift 2
+    local args=("$@")  # 获取额外的参数，比如 -m
 
     check_fzf
 
     local selected
-    selected=$(echo "$options" | fzf --height=50% --prompt="$prompt: ")
+    selected=$(echo "$options" | fzf --height=50% --prompt="$prompt: " "${args[@]}")
     if [ -z "$selected" ]; then
         echo "未选择选项，操作取消。" >&2
         exit 1

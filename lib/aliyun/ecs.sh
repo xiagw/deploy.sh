@@ -207,12 +207,71 @@ ecs_create() {
         security_group_id=$(echo "$security_group_list" | awk '{print $1}')
         echo "自动选择唯一的安全组: ${security_group_id:? 安全组ID不能为空}"
     else
-        security_group_id=$(select_with_fzf "选择安全组" "$security_group_list" | awk '{print $1}')
-        echo "手动选择安全组: ${security_group_id:? 安全组ID不能为空}"
+        security_group_id=$(select_with_fzf "选择安全组" "$security_group_list" -m | awk '{print $1}' | paste -sd "," -)
+        echo "手动选择安全组: $security_group_id"
     fi
 
-    # 选择镜像簇
-    local image_family=acs:ubuntu_22_04_x64
+    # 选择实例类型
+    if [ -z "$instance_type" ]; then
+        local instance_type_list instance_types_json
+        instance_types_json=$(aliyun --profile "${profile:-}" ecs DescribeInstanceTypes \
+            --RegionId "$region")
+        instance_type_list=$(echo "$instance_types_json" |
+            jq -r '.InstanceTypes.InstanceType[] | "\(.InstanceTypeId) \(.CpuCoreCount)核 \(.MemorySize)GB [\(.ProcessorArchitecture)]"')
+        local selected_instance_type
+        selected_instance_type=$(select_with_fzf "选择实例类型" "$instance_type_list")
+        instance_type=$(echo "$selected_instance_type" | awk '{print $1}')
+
+        # 从原始JSON响应中获取处理器架构信息
+        local processor_arch
+        processor_arch=$(echo "$instance_types_json" |
+            jq -r --arg type "$instance_type" \
+                '.InstanceTypes.InstanceType[] | select(.InstanceTypeId == $type) | .ProcessorArchitecture')
+
+        # 如果处理器架构为空或null，根据实例类型判断  ARM: g8y c8y r8y g6r c6r
+        if [ -z "$processor_arch" ] || [ "$processor_arch" = "null" ]; then
+            if [[ $instance_type == *".g8y."* || $instance_type == *".c8y."* || $instance_type == *".r8y."* ||
+                $instance_type == *".g6r."* || $instance_type == *".c6r."* ]]; then
+                processor_arch="arm64"
+            else
+                processor_arch="x86_64"
+            fi
+        fi
+
+        echo "选择实例类型: ${instance_type:? 实例类型不能为空} (架构: $processor_arch)"
+    fi
+
+    # 选择系统盘类型
+    local system_disk_category
+    local disk_category_list disk_categories_with_info
+    disk_categories_with_info=$(get_supported_disk_categories "$zone_id")
+    disk_category_list=$(echo "$disk_categories_with_info" | while read -r line; do
+        echo "$line" | cut -d' ' -f1
+    done)
+    system_disk_category=$(select_with_fzf "选择系统盘类型" "$disk_category_list")
+    echo "选择系统盘类型: $system_disk_category"
+
+    # 选择镜像
+    local image_family image_id
+    if [[ $processor_arch == "arm64" ]] ||
+        [[ $instance_type == *".g8y."* || $instance_type == *".c8y."* || $instance_type == *".r8y."* ||
+            $instance_type == *".g6r."* || $instance_type == *".c6r."* ]]; then
+        # ARM 架构实例，需要使用具体的镜像 ID
+        local image_list
+        image_list=$(aliyun --profile "${profile:-}" ecs DescribeImages \
+            --RegionId "$region" \
+            --Architecture arm64 \
+            --OSType linux \
+            --ImageOwnerAlias system \
+            --Status Available | jq -r '.Images.Image[] | "\(.ImageId) [\(.OSName)]"')
+        image_id=$(select_with_fzf "选择 ARM 架构镜像" "$image_list" | awk '{print $1}')
+        echo "选择镜像: $image_id"
+        create_command_image_param="--ImageId ${image_id:? 镜像ID不能为空}"
+    else
+        # x86 架构实例，使用镜像簇
+        image_family="acs:ubuntu_22_04_x64"
+        create_command_image_param="--ImageFamily ${image_family:? 镜像簇不能为空}"
+    fi
 
     # 选择 SSH 密钥对
     local key_pair_name
@@ -235,28 +294,22 @@ ecs_create() {
     # 设置默认公网带宽
     local internet_max_bandwidth_out=100
 
-    # 选择实例类型
-    if [ -z "$instance_type" ]; then
-        local instance_type_list
-        instance_type_list=$(aliyun --profile "${profile:-}" ecs DescribeInstanceTypes \
-            --RegionId "$region" |
-            jq -r '.InstanceTypes.InstanceType[] | "\(.InstanceTypeId) \(.CpuCoreCount)核 \(.MemorySize)GB"')
-        local selected_instance_type
-        selected_instance_type=$(select_with_fzf "选择实例类型" "$instance_type_list")
-        instance_type=$(echo "$selected_instance_type" | awk '{print $1}')
-        echo "选择实例类型: ${instance_type:? 实例类型不能为空}"
-    fi
-
     # 创建并运行 ECS 实例
     echo "创建并运行 ECS 实例："
+
+    # 将逗号分隔的安全组ID转换为JSON数组格式
+    # local security_group_ids
+    # security_group_ids=$(echo "$security_group_id" | tr ',' '\n' | jq -R . | jq -s .)
+
     local create_command="aliyun --profile \"${profile:-}\" ecs RunInstances \
         --RegionId ${region:? 区域不能为空} \
         --ZoneId ${zone_id:? 可用区不能为空} \
         --InstanceName \"$instance_name\" \
         --InstanceType ${instance_type:? ECS 实例类型不能为空} \
-        --ImageFamily ${image_family:? 镜像簇不能为空} \
+        $create_command_image_param \
         --VSwitchId ${vswitch_id:? 交换机ID不能为空} \
         --SecurityGroupId ${security_group_id:? 安全组ID不能为空} \
+        --SystemDisk.Category ${system_disk_category:? 系统盘类型不能为空} \
         --InstanceChargeType PostPaid \
         --SpotStrategy NoSpot \
         --Amount 1 \
@@ -536,23 +589,37 @@ get_supported_disk_categories() {
         return 1
     fi
 
-    echo "API 返回结果："
-    echo "$result" | jq '.'
-
     local disk_categories
-    disk_categories=$(
-        echo "$result" |
-            jq -r '.AvailableZones.AvailableZone[].AvailableResources.AvailableResource[].SupportedResources.SupportedResource[] | select(.Code == "SystemDisk") | .SupportedSystemDiskCategories.SupportedSystemDiskCategory[]' 2>/dev/null
-    )
+    disk_categories=$(echo "$result" | jq -r '
+        .AvailableZones.AvailableZone[].AvailableResources.AvailableResource[] |
+        select(.Type == "SystemDisk") |
+        .SupportedResources.SupportedResource[] |
+        "\(.Value) [\(.Min)-\(.Max)\(.Unit)]"
+    ' | sort -u)
 
     if [ -z "$disk_categories" ]; then
         echo "警告：无法从 API 响应中提取磁盘类型。使用默认磁盘类型列表。" >&2
-        disk_categories="cloud_efficiency cloud_ssd cloud_essd"
+        if [[ $instance_type == ecs.u1* ]] || [[ $instance_type == ecs.e* ]]; then
+            disk_categories="cloud_essd_entry [20-2048GiB]
+cloud_efficiency [20-2048GiB]
+cloud_ssd [20-2048GiB]
+cloud_essd [20-2048GiB]
+cloud [5-2048GiB]
+cloud_auto [20-2048GiB]"
+        else
+            disk_categories="cloud_efficiency [20-2048GiB]
+cloud_ssd [20-2048GiB]
+cloud_essd [20-2048GiB]
+cloud [5-2048GiB]
+cloud_auto [20-2048GiB]"
+        fi
     fi
 
-    echo "支持的磁盘类型："
+    echo "支持的磁盘类型（及其容量范围）："
     echo "$disk_categories"
-    echo "$disk_categories"
+
+    # 为了保持与 select_with_fzf 兼容，只返回磁盘类型名称
+    echo "$disk_categories" | cut -d' ' -f1 | sort -u
 }
 
 # 添加启动ECS实例的函数
