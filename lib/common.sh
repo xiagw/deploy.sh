@@ -233,12 +233,12 @@ _install_packages() {
     $cmd_pkg_install "${@}"
 }
 
-_check_sudo() {
+_csudo() {
     ${already_check_sudo:-false} && return 0
     if ! _check_root; then
         if ! sudo -l -U "$USER" &>/dev/null; then
             _msg error "Permission denied: $USER lacks sudo privileges"
-            _msg info "Action required: Configure sudo access via visudo"
+            echo "Action required: Configure sudo access via visudo"
             return 1
         fi
         _msg success "Sudo privileges confirmed for $USER"
@@ -998,15 +998,15 @@ _compress_pdf_with_gs() {
         compression_ratio=$(awk "BEGIN {printf \"%.2f\", ($compressed_bytes/$original_bytes)*100}")
 
         _msg success "PDF compression completed:"
-        _msg info "Time taken: $time_str"
-        _msg info "Original size: $original_size"
-        _msg info "Compressed size: $compressed_size"
-        _msg info "Compression ratio: ${compression_ratio}%"
-        _msg info "Output file: $output_pdf"
+        echo "Time taken: $time_str"
+        echo "Original size: $original_size"
+        echo "Compressed size: $compressed_size"
+        echo "Compression ratio: ${compression_ratio}%"
+        echo "Output file: $output_pdf"
         return 0
     else
         _msg error "PDF compression failed"
-        _msg info "Time taken: $time_str"
+        echo "Time taken: $time_str"
         return 1
     fi
 }
@@ -1026,7 +1026,7 @@ _compress_document() {
 
     # 检查必要的命令
     if ! _check_commands gs libreoffice; then
-        _msg info "Installing required packages..."
+        echo "Installing required packages..."
         _install_packages "$use_china_mirror" ghostscript libreoffice
     fi
 
@@ -1054,7 +1054,7 @@ _compress_document() {
         temp_dir=$(mktemp -d)
 
         # 使用 LibreOffice 转换为 PDF
-        _msg info "Converting PPT to PDF..."
+        echo "Converting PPT to PDF..."
         libreoffice --headless --convert-to pdf --outdir "$temp_dir" "$input_file"
         local ret="$?"
 
@@ -1063,7 +1063,7 @@ _compress_document() {
             temp_pdf="$temp_dir/$(basename "${input_file%.*}").pdf"
 
             # 使用抽取的函数压缩 PDF
-            _msg info "Compressing converted PDF..."
+            echo "Compressing converted PDF..."
             if ! _compress_pdf_with_gs "$temp_pdf" "$output_file" "$quality" "$compatibility"; then
                 rm -rf "$temp_dir"
                 return 1
@@ -1080,7 +1080,7 @@ _compress_document() {
 
     *)
         _msg error "Unsupported file format: $ext"
-        _msg info "Supported formats: pdf, ppt, pptx"
+        echo "Supported formats: pdf, ppt, pptx"
         return 1
         ;;
     esac
@@ -1105,7 +1105,7 @@ _install_k9s() {
     temp_file=$(mktemp)
 
     # 下载deb包
-    _msg info "Downloading k9s..."
+    echo "Downloading k9s..."
     if ! curl -fsSL -o "$temp_file" "$download_url"; then
         _msg error "Failed to download k9s"
         rm -f "$temp_file"
@@ -1113,7 +1113,7 @@ _install_k9s() {
     fi
 
     # 安装deb包
-    _msg info "Installing k9s package..."
+    echo "Installing k9s package..."
     if ! $use_sudo dpkg -i "$temp_file"; then
         _msg error "Failed to install k9s package"
         rm -f "$temp_file"

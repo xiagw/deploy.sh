@@ -411,7 +411,7 @@ main() {
     get_lang=$(repo_language_detect)
     repo_lang=${get_lang%%:*}
     ## 解析语言类型和 docker 标识
-    echo "  - ${get_lang}"
+    echo "  ${get_lang}"
 
     ## 处理构建工具选择
     config_build_env "${get_lang}"
@@ -420,7 +420,7 @@ main() {
     repo_inject_file "${repo_lang}" "${arg_disable_inject:-false}"
     get_lang=$(repo_language_detect)
     ## 解析 docker 标识
-    echo "  - ${get_lang}"
+    echo "  ${get_lang}"
 
     ## Task Execution Phase
     ## Mode:
@@ -434,7 +434,7 @@ main() {
         _msg green "[single job: only specified tasks will be executed]"
         echo "Tasks to execute:"
         for key in "${!arg_flags[@]}"; do
-            [[ ${arg_flags[$key]} -eq 1 ]] && echo "  - ${key}"
+            [[ ${arg_flags[$key]} -eq 1 ]] && echo "  ${key}"
         done
     fi
 

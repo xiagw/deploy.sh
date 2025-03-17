@@ -52,7 +52,7 @@ get_docker_context() {
     esac
 
     G_DOCK="${G_DOCK:+"$G_DOCK "}--context $selected_context"
-    echo "  - $G_DOCK"
+    echo "  $G_DOCK"
     export G_DOCK
 }
 
@@ -66,7 +66,7 @@ build_image() {
     ## build from build.base.sh or Dockerfile.base
     local build_sh="${G_REPO_DIR}/build.base.sh"
     if [[ -f "${build_sh}" ]]; then
-        _msg info "Found ${build_sh}, running it..."
+        echo "Found ${build_sh}, running it..."
         ${DEBUG_ON:-false} && debug_flag="-x"
         bash "${build_sh}" $debug_flag
         export BASE_IMAGE_BUILT=true
@@ -76,7 +76,7 @@ build_image() {
     local base_file="${G_REPO_DIR}/Dockerfile.base"
     if [[ -f "${base_file}" ]]; then
         local base_tag="${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
-        _msg info "Found ${base_file}, building base image: $base_tag"
+        echo "Found ${base_file}, building base image: $base_tag"
         $G_DOCK build $G_ARGS --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}"
         export BASE_IMAGE_BUILT=true
         return
@@ -92,18 +92,18 @@ build_image() {
     fi
     # echo "$G_DOCK build $G_ARGS --tag ${repo_tag} ${push_flag} ${G_REPO_DIR}"  && exit
     $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | grep -v 'error reading preface from client dummy'
+    _msg time "[build] Image build completed"
 
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         local image_uuid
         image_uuid="ttl.sh/$(uuidgen):1h"
-        _msg info "Temporary image tag for ttl.sh: $image_uuid"
+        echo "Temporary image tag for ttl.sh: $image_uuid"
         $G_DOCK tag ${repo_tag} ${image_uuid}
         $G_DOCK push $image_uuid
         echo "## Then execute the following commands on REMOTE SERVER."
         echo "  $G_DOCK pull $image_uuid"
         echo "  $G_DOCK tag $image_uuid laradock_spring"
     fi
-    _msg time "[build] Image build completed"
 
     # auto mode:            push=1, keep=0, keep_image=
     # arg build:            push=0, keep=0, keep_image=remove
@@ -113,9 +113,9 @@ build_image() {
     # 根据参数决定是否保留镜像
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
         $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null &
-        _msg time "Image removed"
+        echo "Image removed"
     else
-        _msg time "Image keeped"
+        echo "Image keeped"
     fi
 }
 
@@ -363,7 +363,7 @@ build_shell() {
     command -v shfmt >/dev/null 2>&1 && sf=true
     # Process shell scripts
     while IFS= read -r script; do
-        _msg info "Processing: ${script}"
+        echo "Processing: ${script}"
 
         $sc && shellcheck "$script" || exit_code=$?
         $sf && shfmt -d "$script" || exit_code=$?
@@ -371,7 +371,7 @@ build_shell() {
     done < <(find "$G_REPO_DIR" -type f -name "*.sh") || true
 
     if [ $exit_code -eq 0 ]; then
-        _msg info "All shell scripts passed checks"
+        echo "All shell scripts passed checks"
     else
         _msg error "Some shell scripts failed checks"
     fi

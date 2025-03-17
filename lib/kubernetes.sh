@@ -153,7 +153,7 @@ kube_setup_terraform() {
   cd "$terraform_dir" || return 1
 
   if terraform init -input=false && terraform apply -auto-approve; then
-    _msg info "Kubernetes cluster created successfully"
+    echo "Kubernetes cluster created successfully"
   else
     _msg error "Failed to create Kubernetes cluster"
     return 1

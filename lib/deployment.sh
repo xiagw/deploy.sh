@@ -77,7 +77,7 @@ deploy_to_kubernetes() {
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
 
-    echo "  - Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
+    echo "  Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
     # 检查是否在忽略列表中
     if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
         _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
@@ -224,10 +224,10 @@ deploy_via_rsync_ssh() {
 
         if [[ -n "$rsync_src_from_conf" ]]; then
             rsync_src="${rsync_src_from_conf%/}/"
-            _msg info "Using configured source path: $rsync_src"
+            echo "Using configured source path: $rsync_src"
         else
             rsync_src="${G_REPO_DIR%/}/${rsync_relative_path:+${rsync_relative_path%/}/}"
-            _msg info "Using default source path: $rsync_src"
+            echo "Using default source path: $rsync_src"
         fi
 
         rsync_opt="rsync -acvzt --timeout=10 --no-times --exclude-from=${rsync_exclude}"
@@ -239,7 +239,7 @@ deploy_via_rsync_ssh() {
 
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             if is_demo_mode "deploy_aliyun_oss"; then
-                _msg info "Demo mode: Aliyun OSS deployment simulation:"
+                echo "Demo mode: Aliyun OSS deployment simulation:"
                 _msg purple "  Source: ${rsync_src}"
                 _msg purple "  Destination: ${rsync_dest}"
                 continue
@@ -248,9 +248,9 @@ deploy_via_rsync_ssh() {
             continue
         fi
 
-        _msg info "Deploying to ${ssh_host}:${rsync_dest}"
+        echo "Deploying to ${ssh_host}:${rsync_dest}"
         if is_demo_mode "deploy_rsync_ssh"; then
-            _msg info "Demo mode: Command simulation:"
+            echo "Demo mode: Command simulation:"
             _msg purple "  $ssh_opt -n \"$ssh_host\" \"mkdir -p $rsync_dest\""
             _msg purple "  ${rsync_opt} -e \"$ssh_opt\" \"$rsync_src\" \"${ssh_host}:${rsync_dest}\""
             continue

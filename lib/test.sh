@@ -10,7 +10,7 @@ test_unit() {
 
     for test_script in "${test_scripts[@]}"; do
         [[ -f "$test_script" ]] || continue
-        _msg info "Executing unit test script: $test_script"
+        echo "Executing unit test script: $test_script"
         if bash "$test_script"; then
             _msg green "Unit tests passed successfully"
         else
@@ -27,7 +27,7 @@ test_function() {
 
     for test_script in "${test_scripts[@]}"; do
         [[ -f "$test_script" ]] || continue
-        _msg info "Executing functional test script: $test_script"
+        echo "Executing functional test script: $test_script"
         if bash "$test_script"; then
             _msg green "Functional tests passed successfully"
             return 0

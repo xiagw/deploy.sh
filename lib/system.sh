@@ -77,7 +77,7 @@ system_clean_disk() {
 
     # Clean up Docker images
     if command -v docker >/dev/null 2>&1; then
-        _msg info "Cleaning up Docker resources..."
+        echo "Cleaning up Docker resources..."
         docker image prune -f
         docker builder prune -f
         docker image ls --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | xargs -r docker rmi 2>/dev/null || true
@@ -87,23 +87,23 @@ system_clean_disk() {
     fi
 
     # Clean up temporary files
-    _msg info "Cleaning up temporary files..."
+    echo "Cleaning up temporary files..."
     ${use_sudo:-} find /tmp -type f -atime +10 -delete 2>/dev/null || true
     ${use_sudo:-} find /var/tmp -type f -atime +10 -delete 2>/dev/null || true
 
     # Clean up old log files
-    _msg info "Cleaning up old log files..."
+    echo "Cleaning up old log files..."
     ${use_sudo:-} find /var/log -type f -name "*.log" -mtime +30 -delete 2>/dev/null || true
 
     # Clean up old core dumps if aggressive
     if $aggressive; then
-        _msg info "Cleaning up old core dumps..."
+        echo "Cleaning up old core dumps..."
         ${use_sudo:-} find /var/crash -type f -delete 2>/dev/null || true
     fi
 
     # Final disk usage check
     disk_usage_after=$(df -P / | awk 'NR==2 {print int($5)}')
-    _msg info "Cleanup completed. Disk usage now: ${disk_usage_after}%"
+    echo "Cleanup completed. Disk usage now: ${disk_usage_after}%"
 
     if ((disk_usage_after >= disk_usage)); then
         _msg error "Warning: Cleanup did not free up space. Further investigation may be needed."
@@ -137,7 +137,7 @@ update_nginx_geoip_db() {
     _download_and_extract "$country_url" "$tmp_dir/maxmind-Country.dat" || return 1
     _download_and_extract "$city_url" "$tmp_dir/maxmind-City.dat" || return 1
 
-    _msg info "GeoIP databases downloaded successfully"
+    echo "GeoIP databases downloaded successfully"
 
     _update_server() {
         local ip="$1"

@@ -101,31 +101,31 @@ Branche = ${G_REPO_BRANCH}"
 
     case "$type" in
     wecom)
-        _msg info "Sending WeChat Work notification..."
+        echo "Sending WeChat Work notification..."
         notify_wecom "${ENV_WECOM_KEY}" "$message"
         ;;
     telegram)
-        _msg info "Sending Telegram notification..."
+        echo "Sending Telegram notification..."
         notify_telegram "${ENV_TG_API_KEY}" "${ENV_TG_GROUP_ID}" "$message"
         ;;
     element)
-        _msg info "Sending Element notification..."
+        echo "Sending Element notification..."
         notify_element "$G_LIB" "${ENV_ELM_SERVER}" "${ENV_ELM_USERID}" "${ENV_ELM_PASSWORD}" "${ENV_ELM_ROOMID}" "$message"
         ;;
     email)
-        _msg info "Sending Email notification..."
+        echo "Sending Email notification..."
         notify_email "${G_PATH:-}" "${ENV_EMAIL_SERVER}" "${ENV_EMAIL_FROM}" "${ENV_EMAIL_TO}" "${ENV_EMAIL_SUBJECT:-Deployment Notification}" "$message"
         ;;
     zoom)
-        _msg info "Sending Zoom notification..."
+        echo "Sending Zoom notification..."
         notify_zoom "${ENV_ZOOM_CHANNEL}" "$message"
         ;;
     feishu)
-        _msg info "Sending Feishu notification..."
+        echo "Sending Feishu notification..."
         notify_feishu "${ENV_WEBHOOK_URL}" "$message"
         ;;
     skip)
-        _msg info "Notification is not enabled, skipping"
+        echo "Notification is not enabled, skipping"
         return 0
         ;;
     *)
