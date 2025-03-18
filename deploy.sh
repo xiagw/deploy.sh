@@ -118,6 +118,8 @@ Parameters:
     # Miscellaneous
     -D, --disable-inject         Disable file injection.
     -r, --renew-cert            Renew all the certs.
+    --clean-tags REPO           Clean old tags from Docker registry.
+                               REPO: Repository to clean (e.g., registry.example.com/myapp)
 EOF
 }
 
@@ -215,6 +217,7 @@ parse_command_args() {
         # Miscellaneous
         -D | --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
+        --clean-tags) arg_clean_tags="${2:?ERROR: repository parameter is required}" && shift ;;
         *) _usage && exit 1 ;;
         esac
         shift
@@ -497,6 +500,12 @@ main() {
     ## 使用acme.sh更新SSL证书
     if [[ ${arg_renew_cert:-false} = true ]]; then
         system_cert_renew
+        return
+    fi
+
+    ## 清理旧的Docker标签
+    if [[ -n "${arg_clean_tags:-}" ]]; then
+        clean_old_tags "${arg_clean_tags}"
         return
     fi
 

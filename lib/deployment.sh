@@ -77,7 +77,7 @@ deploy_to_kubernetes() {
         --set image.repository="${ENV_DOCKER_REGISTRY}" \
         --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
 
-    echo "  Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
+    echo "Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
     # 检查是否在忽略列表中
     if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
         _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
@@ -454,3 +454,79 @@ copy_docker_image() {
 # copy_docker_image "nginx" "registry.example.com/ns"              # -> registry.example.com/ns/nginx:latest
 # copy_docker_image "ubuntu:22.04" "registry.example.com/ns"       # -> registry.example.com/ns/ubuntu:22.04
 # copy_docker_image "ubuntu:22.04" "registry.example.com/ns" false # -> registry.example.com/ns:ubuntu-22.04
+
+# Clean old tags from registry / 清理注册表中的旧标签
+# This function removes tags older than 6 months from a specified Docker registry repository
+# 此函数从指定的 Docker 注册表仓库中删除 6 个月以前的标签
+#
+# @param $1 repository The repository to clean / 要清理的仓库
+# @return 0 on success, 1 on failure / 成功返回 0，失败返回 1
+#
+# Example usage / 使用示例:
+# clean_old_tags "registry.example.com/myapp"
+clean_old_tags() {
+    # Required parameter validation / 必需参数验证
+    local repository="${1:?'repository parameter is required'}" cutoff_time current_time tags_file tags_to_delete=()
+
+    _msg step "[clean] Cleaning old tags from registry"
+
+    # Calculate cutoff time (6 months ago in seconds) / 计算截止时间（6个月前的秒数）
+    current_time=$(date +%s)
+    cutoff_time=$((current_time - 180 * 24 * 60 * 60))
+
+    # Get all tags using skopeo / 使用 skopeo 获取所有标签
+    tags_file=$(mktemp)
+    if ! skopeo list-tags "docker://${repository}" > "$tags_file"; then
+        _msg error "Failed to get tags from registry / 从注册表获取标签失败"
+        rm -f "$tags_file"
+        return 1
+    fi
+
+    # Parse tags and check timestamps / 解析标签并检查时间戳
+    while read -r tag; do
+        # Skip empty tags / 跳过空标签
+        [ -z "$tag" ] && continue
+
+        # Validate tag format (must be xxxxx-timestamp) / 验证标签格式（必须是 xxxxx-时间戳）
+        # Unix timestamp should be 10 digits, starting from 1970-01-01 / Unix时间戳应该是10位数字，从1970-01-01开始
+        if [[ ! "$tag" =~ ^.+-[1-9][0-9]{9}$ ]]; then
+            _msg warn "Invalid tag format (must be xxxxx-timestamp, timestamp should be 10 digits) / 标签格式无效（必须是 xxxxx-时间戳，时间戳必须是10位数字）: $tag"
+            continue
+        fi
+
+        # Extract timestamp from tag (last part after -) / 从标签中提取时间戳（最后一个-后的部分）
+        tag_timestamp="${tag##*-}"
+
+        # Validate timestamp range (from 2000-01-01 to now) / 验证时间戳范围（从2000-01-01到现在）
+        if [ "$tag_timestamp" -lt 946684800 ] || [ "$tag_timestamp" -gt "$current_time" ]; then
+            _msg warn "Invalid timestamp range (must be between 2000-01-01 and now) / 时间戳范围无效（必须在2000-01-01到现在之间）: $tag"
+            continue
+        fi
+
+        # Compare with cutoff time / 与截止时间比较
+        if [ "$tag_timestamp" -lt "$cutoff_time" ]; then
+            tags_to_delete+=("$tag")
+        fi
+    done < <(jq -r '.Tags[]' "$tags_file")
+
+    # Print summary / 打印摘要
+    total_tags=$(jq '.Tags | length' "$tags_file")
+    _msg time "Total tags / 总标签数: $total_tags"
+    _msg time "Tags to delete / 要删除的标签数: ${#tags_to_delete[@]}"
+
+    # Clean up temporary file / 清理临时文件
+    # rm -f "$tags_file"
+
+    # Delete old tags / 删除旧标签
+    if [ "${#tags_to_delete[@]}" -gt 0 ]; then
+        _msg time "Deleting old tags... / 正在删除旧标签..."
+        for tag in "${tags_to_delete[@]}"; do
+            _msg purple "Deleting / 正在删除: $tag"
+            if ! skopeo delete "docker://${repository}:${tag}"; then
+                _msg warn "Failed to delete tag / 删除标签失败: $tag"
+            fi
+        done
+    else
+        _msg time "No old tags to delete / 没有需要删除的旧标签"
+    fi
+}
