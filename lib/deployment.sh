@@ -490,7 +490,7 @@ clean_old_tags() {
         # Validate tag format (must be xxxxx-timestamp) / 验证标签格式（必须是 xxxxx-时间戳）
         # Unix timestamp should be 10 digits, starting from 1970-01-01 / Unix时间戳应该是10位数字，从1970-01-01开始
         if [[ ! "$tag" =~ ^.+-[1-9][0-9]{9}$ ]]; then
-            _msg warn "Invalid tag format (must be xxxxx-timestamp, timestamp should be 10 digits) / 标签格式无效（必须是 xxxxx-时间戳，时间戳必须是10位数字）: $tag"
+            _msg warn "Invalid tag: $tag"
             continue
         fi
 
@@ -499,7 +499,7 @@ clean_old_tags() {
 
         # Validate timestamp range (from 2000-01-01 to now) / 验证时间戳范围（从2000-01-01到现在）
         if [ "$tag_timestamp" -lt 946684800 ] || [ "$tag_timestamp" -gt "$current_time" ]; then
-            _msg warn "Invalid timestamp range (must be between 2000-01-01 and now) / 时间戳范围无效（必须在2000-01-01到现在之间）: $tag"
+            _msg warn "Invalid timestamp range $tag"
             continue
         fi
 
