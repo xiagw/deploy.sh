@@ -29,6 +29,12 @@ init_config() {
         sleep 3
     done
     log_message "MySQL socket文件已就绪"
+    if [ -f /healthcheck.sh ]; then
+        sed -i '/mysqladmin --defaults-extra-file=/i \  mysqladmin ping' /healthcheck.sh
+        sed -i '/mysqladmin --defaults-extra-file=/d' /healthcheck.sh
+    else
+        echo "not found entry point file"
+    fi
     my_ver=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
     # 检查必要的环境变量
     if [ -z "${MYSQL_ROOT_PASSWORD}" ]; then
