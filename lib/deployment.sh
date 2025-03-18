@@ -477,10 +477,13 @@ clean_old_tags() {
     # Get all tags using skopeo / 使用 skopeo 获取所有标签
     tags_file=$(mktemp)
     echo "tags file is: ${tags_file}"
-    if ! skopeo list-tags "docker://${repository}" > "$tags_file"; then
+    if ! skopeo list-tags "docker://${repository}" >"$tags_file"; then
         _msg error "Failed to get tags from registry / 从注册表获取标签失败"
         rm -f "$tags_file"
         return 1
+    fi
+    if [[ "${repository}" =~ flyh6/flyh6 ]]; then
+        delete_force=true
     fi
 
     # Parse tags and check timestamps / 解析标签并检查时间戳
@@ -511,10 +514,12 @@ clean_old_tags() {
                 tags_to_delete+=("$tag")
             fi
         else
-            # Tag without timestamp will also be deleted / 没有时间戳的标签也会被删除
-            _msg warn "Tag without timestamp, will delete: $tag"
-            tags_to_delete+=("$tag")
-            continue
+            if [[ "${delete_force}" = true ]]; then
+                # Tag without timestamp will also be deleted / 没有时间戳的标签也会被删除
+                _msg warn "Tag without timestamp, will delete: $tag"
+                tags_to_delete+=("$tag")
+                continue
+            fi
         fi
     done < <(jq -r '.Tags[]' "$tags_file")
 
@@ -524,7 +529,7 @@ clean_old_tags() {
     _msg time "Tags to delete / 要删除的标签数: ${#tags_to_delete[@]}"
 
     # Clean up temporary file / 清理临时文件
-    # rm -f "$tags_file"
+    rm -f "$tags_file"
 
     # Delete old tags / 删除旧标签
     if [ "${#tags_to_delete[@]}" -gt 0 ]; then
