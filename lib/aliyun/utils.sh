@@ -656,7 +656,7 @@ balance_check() {
     # 检查昨日消费
     daily_spending=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
         --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
-        jq -r '.Data.Items.Item[].CashAmount | tostring | gsub(","; "")')
+        jq -r '.Data.Items.Item[].PretaxAmount | tostring | gsub(","; "")')
 
     echo "Yesterday's spending: $daily_spending"
     if ((${daily_spending%.*} > ${alarm_daily%.*})); then
