@@ -282,6 +282,7 @@ system_cert_renew() {
         dns_type=${file##*.}
         profile_name=${file%.dns_*}
         profile_name=${profile_name##*.}
+        profile_name="deploy_${profile_name:-$RANDOM}"
         system_proxy on
         case "${dns_type}" in
         dns_gd)
@@ -304,11 +305,11 @@ system_cert_renew() {
             _install_aliyun_cli
             aliyun configure set \
                 --mode AK \
-                --profile "deploy_${profile_name}" \
+                --profile "${profile_name}" \
                 --region "${SAVED_Ali_region:-none}" \
                 --access-key-id "${SAVED_Ali_Key:-none}" \
                 --access-key-secret "${SAVED_Ali_Secret:-none}"
-            domains="$(aliyun --profile "deploy_${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 | jq -r '.Data.Domain[].DomainName' || true)"
+            domains="$(aliyun --profile "${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 | jq -r '.Data.Domain[].DomainName' || true)"
             export Ali_Key=$SAVED_Ali_Key
             export Ali_Secret=$SAVED_Ali_Secret
             ;;
@@ -329,19 +330,25 @@ system_cert_renew() {
         esac
 
         ## single account may have multiple domains / 单个账号可能有多个域名
+        acme_cmd="${acme_cmd} --accountconf $file"
         for domain in ${domains}; do
             _msg orange "Checking domain: $domain"
             if "${acme_cmd}" list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --accountconf "$file" --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
+                "${acme_cmd}" --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --accountconf "$file" --issue -d "${domain}" -d "*.${domain}" --dns "$dns_type" --renew-hook "$run_touch_file" || true
+                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns "$dns_type" --renew-hook "$run_touch_file" || true
             fi
-            "${acme_cmd}" --accountconf "$file" -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
-            "${acme_cmd}" --accountconf "$file" -d "${domain}" --install-cert --key-file "${acme_home}/dest/${domain}.key" --fullchain-file "${acme_home}/dest/${domain}.pem" || true
+            "${acme_cmd}" -d "${domain}" --install-cert --key-file "${acme_home}/dest/${domain}.key" --fullchain-file "${acme_home}/dest/${domain}.pem" || true
+            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
         done
     done
+    ## deploy with custom method / 自定义部署方式
+    if [[ -f "${acme_home}/custom.sh" ]]; then
+        echo "Found ${acme_home}/custom.sh"
+        bash "${acme_home}/custom.sh"
+    fi
     ## deploy with gitlab CI/CD,
     if [ -f "$reload_nginx" ]; then
         _msg green "found $reload_nginx"
@@ -352,11 +359,6 @@ system_cert_renew() {
         rm -f "$reload_nginx"
     else
         _msg warn "not found $reload_nginx"
-    fi
-    ## deploy with custom method / 自定义部署方式
-    if [[ -f "${acme_home}/custom.acme.sh" ]]; then
-        echo "Found ${acme_home}/custom.acme.sh"
-        bash "${acme_home}/custom.acme.sh"
     fi
     _msg time "[cert] completed"
 
