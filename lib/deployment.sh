@@ -476,6 +476,7 @@ clean_old_tags() {
 
     # Get all tags using skopeo / 使用 skopeo 获取所有标签
     tags_file=$(mktemp)
+    echo "tags file is: ${tags_file}"
     if ! skopeo list-tags "docker://${repository}" > "$tags_file"; then
         _msg error "Failed to get tags from registry / 从注册表获取标签失败"
         rm -f "$tags_file"
@@ -487,25 +488,33 @@ clean_old_tags() {
         # Skip empty tags / 跳过空标签
         [ -z "$tag" ] && continue
 
-        # Validate tag format (must be xxxxx-timestamp) / 验证标签格式（必须是 xxxxx-时间戳）
-        # Unix timestamp should be 10 digits, starting from 1970-01-01 / Unix时间戳应该是10位数字，从1970-01-01开始
-        if [[ ! "$tag" =~ ^.+-[1-9][0-9]{9}$ ]]; then
-            _msg warn "Invalid tag: $tag"
-            continue
-        fi
+        # Try to extract timestamp from tag / 尝试从标签中提取时间戳
+        # .*-([0-9]+)$ means:
+        # .* - match any characters
+        # -  - match a hyphen
+        # ([0-9]+) - capture one or more digits (stored in BASH_REMATCH[1])
+        # $ - ensure the digits are at the end
+        if [[ "$tag" =~ .*-([0-9]+)$ ]]; then
+            # BASH_REMATCH[0] contains the entire match
+            # BASH_REMATCH[1] contains just the captured digits
+            tag_timestamp="${BASH_REMATCH[1]}"
 
-        # Extract timestamp from tag (last part after -) / 从标签中提取时间戳（最后一个-后的部分）
-        tag_timestamp="${tag##*-}"
+            # Validate timestamp range (from 2000-01-01 to now) / 验证时间戳范围（从2000-01-01到现在）
+            if [ "$tag_timestamp" -lt 946684800 ] || [ "$tag_timestamp" -gt "$current_time" ]; then
+                _msg warn "Invalid timestamp range, will delete: $tag"
+                tags_to_delete+=("$tag")
+                continue
+            fi
 
-        # Validate timestamp range (from 2000-01-01 to now) / 验证时间戳范围（从2000-01-01到现在）
-        if [ "$tag_timestamp" -lt 946684800 ] || [ "$tag_timestamp" -gt "$current_time" ]; then
-            _msg warn "Invalid timestamp range $tag"
-            continue
-        fi
-
-        # Compare with cutoff time / 与截止时间比较
-        if [ "$tag_timestamp" -lt "$cutoff_time" ]; then
+            # Compare with cutoff time / 与截止时间比较
+            if [ "$tag_timestamp" -lt "$cutoff_time" ]; then
+                tags_to_delete+=("$tag")
+            fi
+        else
+            # Tag without timestamp will also be deleted / 没有时间戳的标签也会被删除
+            _msg warn "Tag without timestamp, will delete: $tag"
             tags_to_delete+=("$tag")
+            continue
         fi
     done < <(jq -r '.Tags[]' "$tags_file")
 
