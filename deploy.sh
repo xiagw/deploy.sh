@@ -495,7 +495,10 @@ main() {
     config_deploy_depend env >/dev/null
 
     ## 使用acme.sh更新SSL证书
-    ${arg_renew_cert:-false} && system_cert_renew
+    if [[ ${arg_renew_cert:-false} = true ]]; then
+        system_cert_renew
+        return
+    fi
 
     ## 探测项目的程序语言
     _msg step "[lang] Probe program language"

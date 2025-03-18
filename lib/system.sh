@@ -248,8 +248,7 @@ ssytem_proxy() {
 # This function handles the actual certificate renewal process
 system_cert_renew() {
     # Check if certificate renewal is needed
-    if [[ "${MAN_RENEW_CERT:-false}" != true ]] &&
-        [[ "${GH_ACTION:-false}" = false ]]; then
+    if [[ "${GH_ACTION:-false}" = true ]]; then
         return 0
     fi
 
