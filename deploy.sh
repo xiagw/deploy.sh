@@ -584,8 +584,7 @@ main() {
 
     _msg time "[deploy] END."
 
-    ## deploy result:  0 成功， 1 失败
-    return "${deploy_result:-0}"
+    return "${deploy_result:-ok}"
 }
 
 main "$@"
