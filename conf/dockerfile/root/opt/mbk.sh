@@ -17,16 +17,16 @@ init_config() {
     my_ver=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
     # MySQL 8以下版本需要先设置root密码
     if [ "$my_ver" -lt 8 ]; then
+        # 创建健康检查用户
+        mysql -e "CREATE USER IF NOT EXISTS 'healthchecker'@'localhost' IDENTIFIED BY 'healthcheckpass'"
+        mysql -e "GRANT PROCESS ON *.* TO 'healthchecker'@'localhost'"
+        log_message "健康检查用户创建成功"
         # 检查root是否已设置密码
         if mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
             log_message "MySQL root用户未设置密码，开始设置密码"
             mysqladmin -u root password "${MYSQL_ROOT_PASSWORD}"
             log_message "MySQL root密码设置成功"
         fi
-        # 创建健康检查用户
-        mysql -e "CREATE USER IF NOT EXISTS 'healthchecker'@'localhost' IDENTIFIED BY 'healthcheckpass'"
-        mysql -e "GRANT PROCESS ON *.* TO 'healthchecker'@'localhost'"
-        log_message "健康检查用户创建成功"
         dump_opt="--master-data=2"
     else
         dump_opt="--source-data=2"
@@ -108,7 +108,7 @@ main() {
         return 0
     fi
 
-    sleep 60
+    sleep 15
     # 初始化配置
     init_config
 
