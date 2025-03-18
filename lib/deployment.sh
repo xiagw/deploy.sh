@@ -81,20 +81,8 @@ deploy_to_kubernetes() {
     local image_record_file="${G_DATA}/.${release_name}_last_image"
     local current_image="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
 
-    # Read and delete previous image if exists / 如果存在则读取并删除上一个镜像
-    if [[ -f "${image_record_file}" ]]; then
-        local previous_image
-        previous_image=$(cat "${image_record_file}")
-        if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
-            _msg time "Deleting previous image: ${previous_image}"
-            if ! skopeo delete "docker://${previous_image}"; then
-                _msg warn "Failed to delete previous image: ${previous_image}"
-            fi
-        fi
-    fi
-
     # Save current image info / 保存当前镜像信息
-    echo "${current_image}" > "${image_record_file}"
+    echo "${current_image}" >"${image_record_file}"
 
     echo "Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
     # 检查是否在忽略列表中
@@ -105,6 +93,18 @@ deploy_to_kubernetes() {
             deploy_result=1
             _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
             _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
+        fi
+    fi
+
+    # Read and delete previous image if exists / 如果存在则读取并删除上一个镜像
+    if [[ -f "${image_record_file}" && "${deploy_result:-0}" -eq 0 ]]; then
+        local previous_image
+        previous_image=$(cat "${image_record_file}")
+        if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
+            _msg time "Deleting previous image: ${previous_image}"
+            if ! skopeo delete "docker://${previous_image}"; then
+                _msg warn "Failed to delete previous image: ${previous_image}"
+            fi
         fi
     fi
 
