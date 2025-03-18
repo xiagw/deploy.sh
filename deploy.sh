@@ -303,8 +303,10 @@ build_base_image() {
     local tag="$1"
     local registry="registry.cn-hangzhou.aliyuncs.com/flyh5"
     local base_tag="${registry}/${tag}-base"
-    local cmd_opt=(
-        "${G_DOCK}"
+    local cmd
+    cmd=$(command -v docker || command -v podman || echo docker)
+    cmd_opt=(
+        "$cmd"
         build
         --pull
         --push
@@ -364,7 +366,7 @@ build_base_image() {
 
     # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
     if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
-        ${G_DOCK} run --privileged --rm tonistiigi/binfmt --install all
+        ${cmd} run --privileged --rm tonistiigi/binfmt --install all
     fi
 
     "${cmd_opt[@]}" "${G_PATH}/conf/dockerfile/"
