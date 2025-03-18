@@ -1,6 +1,8 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
 
+set -Eeuo pipefail
+
 init_config() {
     # 定义脚本变量
     G_NAME=$(basename "$0")
@@ -14,19 +16,39 @@ init_config() {
         mkdir -m 755 "${BACKUP_DIR}"
     fi
 
+    # 等待MySQL socket文件就绪
+    mysql_sock=/var/lib/mysql/mysql.sock
+    start_time=$(date +%s)
+    while [ ! -S "$mysql_sock" ]; do
+        current_time=$(date +%s)
+        if [ $((current_time - start_time)) -gt 300 ]; then
+            log_message "Error: Timeout waiting for MySQL socket"
+            return 1
+        fi
+        log_message "Waiting for MySQL socket file: $mysql_sock"
+        sleep 3
+    done
+    log_message "MySQL socket文件已就绪"
     my_ver=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
+    # 检查必要的环境变量
+    if [ -z "${MYSQL_ROOT_PASSWORD}" ]; then
+        log_message "Error: MYSQL_ROOT_PASSWORD is not set"
+        return 1
+    fi
     # MySQL 8以下版本需要先设置root密码
     if [ "$my_ver" -lt 8 ]; then
-        # 创建健康检查用户
-        mysql -e "CREATE USER IF NOT EXISTS 'healthchecker'@'localhost' IDENTIFIED BY 'healthcheckpass'"
-        mysql -e "GRANT PROCESS ON *.* TO 'healthchecker'@'localhost'"
-        log_message "健康检查用户创建成功"
-        # 检查root是否已设置密码
         if mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
+            log_message "root用户链接成功"
+        elif mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT 1" >/dev/null 2>&1; then
+            # 检查root是否已设置密码
             log_message "MySQL root用户未设置密码，开始设置密码"
-            mysqladmin -u root password "${MYSQL_ROOT_PASSWORD}"
+            mysqladmin -u root -p"${MYSQL_ROOT_PASSWORD}" password "${MYSQL_ROOT_PASSWORD}"
             log_message "MySQL root密码设置成功"
+        else
+            log_message "root用户链接失败"
+            return 1
         fi
+
         dump_opt="--master-data=2"
     else
         dump_opt="--source-data=2"
@@ -78,6 +100,7 @@ backup_mysql() {
         return
     fi
 
+    check_disk_space
     # 获取所有数据库列表（排除系统数据库）
     databases="$(mysql -Ne 'show databases' | grep -vE 'information_schema|performance_schema|^sys$|^mysql$')"
 
@@ -101,8 +124,20 @@ backup_mysql() {
     find "${BACKUP_DIR}" -type f -iname "*.sql.gz" -mtime +15 -delete
 }
 
+# 添加磁盘空间检查
+check_disk_space() {
+    local required_space=5120 # 假设需要5GB空间
+    local available_space
+    available_space=$(df -m "${BACKUP_DIR}" | awk 'NR==2 {print $4}')
+    if [ "${available_space}" -lt "${required_space}" ]; then
+        log_message "Error: Not enough disk space. Required: ${required_space}MB, Available: ${available_space}MB"
+        return 1
+    fi
+    return 0
+}
+
 main() {
-    if [ $UID -eq 0 ]; then
+    if [ "$UID" -eq 0 ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backup], daemon running"
     else
         return 0
