@@ -108,12 +108,12 @@ main() {
         return 0
     fi
 
+    sleep 60
     # 初始化配置
     init_config
 
     # 启动备份守护进程
     while true; do
-        sleep 60
         backup_mysql
         sleep 1h
     done
