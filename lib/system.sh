@@ -221,7 +221,7 @@ system_check() {
 }
 
 # 设置系统代理
-ssytem_proxy() {
+system_proxy() {
     case "$1" in
     0 | off | disable)
         _msg time "unset http_proxy https_proxy all_proxy"
