@@ -257,7 +257,7 @@ system_cert_renew() {
 
     local acme_home="${HOME}/.acme.sh"
     local acme_cmd="${acme_home}/acme.sh"
-    local acme_cert_dest="${ENV_CERT_INSTALL:-${acme_home}}/dest"
+    local acme_cert_dest="${ENV_CERT_INSTALL:-${acme_home}/dest}"
     local reload_nginx="$acme_home/reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
