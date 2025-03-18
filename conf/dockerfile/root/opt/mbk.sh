@@ -33,7 +33,7 @@ init_config() {
         sed -i '/mysqladmin --defaults-extra-file=/i \  mysqladmin ping' /healthcheck.sh
         sed -i '/mysqladmin --defaults-extra-file=/d' /healthcheck.sh
     else
-        echo "not found entry point file"
+        echo "not found /healthcheck.sh"
     fi
     my_ver=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
     # 检查必要的环境变量
