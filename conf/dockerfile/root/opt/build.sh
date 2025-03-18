@@ -545,7 +545,7 @@ EOF
     fi
     chmod +x /opt/mbk.sh
     if [ -f /usr/local/bin/docker-entrypoint.sh ]; then
-        sed -i '/if .* _is_sourced.* then/i /opt/mbk.sh' /usr/local/bin/docker-entrypoint.sh
+        sed -i '/if .* _is_sourced.* then/i (exec /opt/mbk.sh) &' /usr/local/bin/docker-entrypoint.sh
     elif [ -f /entrypoint.sh ]; then
         sed -i '/echo ".Entrypoint. MySQL Docker Image/i (exec /opt/mbk.sh) &' /entrypoint.sh
     else
