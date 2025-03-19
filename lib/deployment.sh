@@ -38,7 +38,7 @@ format_release_name() {
 deploy_to_kubernetes() {
     _msg step "[deploy] Deploy to Kubernetes with Helm"
     is_demo_mode "deploy_k8s" && return 0
-    local release_name previous_image rs0 bad_pod
+    local release_name previous_image rs0 bad_pod revision
     release_name="$(format_release_name)"
 
     # Ensure PVC exists before proceeding with deployment
@@ -91,6 +91,8 @@ deploy_to_kubernetes() {
             deploy_result=1
             _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
             _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
+            revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" | awk 'END {print $1}')"
+            echo "helm -n ${G_NAMESPACE} rollback ${release_name} ${revision}" | tee -a "$G_LOG"
         fi
     fi
 
