@@ -76,60 +76,6 @@ log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backup] $message" | tee -a "${G_LOG}"
 }
 
-backup_mysql() {
-    local backup_time backup_file databases
-    backup_date="$(date +%F)"
-    backup_time="$(date +%s)"
-
-    # Get current timezone and hour
-    local timezone get_hour
-    timezone=$(date +%Z)
-    get_hour=$(date +%H)
-
-    # Determine start hour based on timezone
-    local start_hour
-    if [ "$timezone" = "UTC" ]; then
-        start_hour=17 ## Beijing time 1:00 AM
-    else
-        start_hour=1
-    fi
-
-    # Check if within 5 hours after start time
-    if [ "$get_hour" -ge "$start_hour" ] && [ "$get_hour" -lt "$((start_hour + 5))" ]; then
-        log_message "Good time to backup (starting from $start_hour:00, within 5 hours)"
-    else
-        return
-    fi
-
-    if compgen -G "${BACKUP_DIR}/${backup_date}."* >/dev/null 2>&1; then
-        # log_message "Warning: Found backup file for today, skipping this backup"
-        return
-    fi
-
-    check_disk_space
-    # Get all database lists (excluding system databases)
-    databases="$(mysql -Ne 'show databases' | grep -vE 'information_schema|performance_schema|^sys$|^mysql$')"
-
-    for db in ${databases}; do
-        log_message "Starting backup for database: ${db}"
-        backup_file="${BACKUP_DIR}/${backup_date}.${backup_time}.full.${db}.sql"
-        if mysql "${db}" -e 'select now()' >/dev/null; then
-            if ${MYSQLDUMP} "${db}" -r "${backup_file}"; then
-                gzip -f "${backup_file}"
-                log_message "Database ${db} backup successful: ${backup_file}.gz"
-            else
-                log_message "Database ${db} backup failed"
-            fi
-        else
-            log_message "Database ${db} does not exist"
-        fi
-    done
-
-    # Clean old backups
-    log_message "Cleaning backup files older than 15 days"
-    find "${BACKUP_DIR}" -type f -iname "*.sql.gz" -mtime +15 -delete
-}
-
 # Add disk space check
 check_disk_space() {
     local required_space=5120 # Assume 5GB space needed
@@ -140,6 +86,72 @@ check_disk_space() {
         return 1
     fi
     return 0
+}
+
+backup_mysql() {
+    local backup_time backup_file databases
+    backup_date="$(date +%F)"
+    backup_time="$(date +%s)"
+
+    # Get current timezone and hour
+    local timezone current_hour
+    timezone=$(date +%Z)
+    current_hour=$(date +%H)
+
+    # Determine start hour based on timezone
+    local start_hour
+    if [ "$timezone" = "UTC" ]; then
+        start_hour=17 ## Beijing time 1:00 AM
+    else
+        start_hour=1
+    fi
+
+    # Check if within 5 hours after start time
+    if [ "$current_hour" -ge "$start_hour" ] && [ "$current_hour" -lt "$((start_hour + 3))" ]; then
+        log_message "Good time to backup (starting from $start_hour:00, within 5 hours)"
+    else
+        return
+    fi
+
+    if compgen -G "${BACKUP_DIR}/${backup_date}."* >/dev/null 2>&1; then
+        log_message "Warning: Found backup file for today, skipping this backup"
+        return
+    fi
+
+    check_disk_space
+
+    # Get all database lists (excluding system databases)
+    databases="$(mysql -Ne 'show databases' | grep -vE 'information_schema|performance_schema|^sys$|^mysql$')"
+
+    for db in ${databases}; do
+        log_message "Starting backup for database: ${db}"
+        backup_file="${BACKUP_DIR}/${backup_date}.${backup_time}.full.${db}.sql"
+        if mysql "${db}" -e 'select now()' >/dev/null; then
+            if ${MYSQLDUMP} "${db}" -r "${backup_file}"; then
+                log_message "Database ${db} backup successful: ${backup_file}.gz"
+                command -v gzip && gzip -f "${backup_file}"
+            else
+                log_message "Database ${db} backup failed"
+            fi
+        else
+            log_message "Database ${db} does not exist"
+        fi
+    done
+
+    # Clean old backups
+    if [ -f "${BACKUP_DIR}/.clean" ]; then
+        local days
+        days="$(grep -oE '[0-9]+' "${BACKUP_DIR}/.clean" | head -n1)"
+        if [ -z "$days" ]; then
+            log_message "Not found NUMBERS in ${BACKUP_DIR}/.clean, skip clean"
+            return
+        fi
+        log_message "Cleaning backup files older than $days days"
+        find "${BACKUP_DIR}" -type f -iname "*.sql" -mtime +"$days" -delete
+        find "${BACKUP_DIR}" -type f -iname "*.sql.gz" -mtime +"$days" -delete
+    else
+        log_message "Not found ${BACKUP_DIR}/.clean, skip clean backup files"
+    fi
 }
 
 main() {
