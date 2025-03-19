@@ -104,3 +104,4 @@ virt-install \
 1. Gitmoji：Git commit 表情指南 (https://gitmoji.dev/)
 1. networking - x11vnc Headless on Ubuntu is very slow until monitor connected - Ask Ubuntu https://askubuntu.com/questions/950252/x11vnc-headless-on-ubuntu-is-very-slow-until-monitor-connected
 1. PXE Boot & Install Windows 10 from a Samba Share (https://docs.j7k6.org/windows-10-pxe-installation/)
+1. wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
