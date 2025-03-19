@@ -233,7 +233,7 @@ _install_packages() {
     $cmd_pkg_install "${@}"
 }
 
-_csudo() {
+_check_sudo() {
     ${already_check_sudo:-false} && return 0
     if ! _check_root; then
         if ! sudo -l -U "$USER" &>/dev/null; then
