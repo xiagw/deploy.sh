@@ -71,7 +71,7 @@ deploy_to_kubernetes() {
     ${GH_ACTION:-false} && return 0
 
     ## helm install / helm 安装  --atomic
-    $HELM_OPT upgrade "${release_name}" "$helm_dir/" --install --history-max 1 --hide-secret --hide-notes \
+    $HELM_OPT upgrade "${release_name}" "$helm_dir/" --install --history-max 1 --hide-notes \
         --namespace "${G_NAMESPACE}" --create-namespace --timeout 120s --set image.pullPolicy='Always' \
         --set "image.repository=${ENV_DOCKER_REGISTRY},image.tag=${G_IMAGE_TAG}" >/dev/null || return 1
 
