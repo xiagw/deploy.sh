@@ -92,7 +92,7 @@ deploy_to_kubernetes() {
             _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
             _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
             revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" | awk 'END {print $1}')"
-            echo "helm -n ${G_NAMESPACE} rollback ${release_name} ${revision}" | tee -a "$G_LOG"
+            echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))" | tee -a "$G_LOG"
         fi
     fi
 
