@@ -86,7 +86,7 @@ deploy_to_kubernetes() {
     if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
         _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
     else
-        echo "Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
+        _msg time "Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
         if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
             deploy_result=1
             _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
