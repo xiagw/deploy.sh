@@ -73,8 +73,8 @@ handle_notify() {
     echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
 
     # Check if notification should be sent
-    ${GH_ACTION:-false} && deploy_result=ok
-    [[ "${deploy_result}" = ok ]] && exec_deploy_notify=true
+    ${GH_ACTION:-false} && deploy_result=0
+    [[ "${deploy_result}" -eq 0 ]] && exec_deploy_notify=true
     ${ENV_DISABLE_NOTIFY:-false} && exec_deploy_notify=false
     [[ "${ENV_DISABLE_NOTIFY_BRANCH}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false
     ${MAN_DISABLE_NOTIFY:-false} && exec_deploy_notify=true
@@ -94,7 +94,7 @@ Branche = ${G_REPO_BRANCH}"
 
     # Append required fields
     message+=$'\nDescribe = ['"${G_REPO_SHORT_SHA}]/${msg_describe:-$(get_git_last_commit_message)}"
-    message+=$'\nResult = '"$([[ "$deploy_result" = ok ]] && echo OK || echo FAIL)"
+    message+=$'\nResult = '"$([[ "$deploy_result" -eq 0 ]] && echo OK || echo FAIL)"
 
     # Append test result if it exists
     [[ -n "$test_result" ]] && message+=$'\nTest_Result = '"${test_result}"

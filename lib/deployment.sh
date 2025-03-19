@@ -90,14 +90,14 @@ deploy_to_kubernetes() {
     else
         echo "Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
         if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
-            deploy_result=fail
+            deploy_result=1
             _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
             _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
         fi
     fi
 
     # Read and delete previous image if exists / 如果存在则读取并删除上一个镜像
-    if [[ -f "${image_record_file}" && "${deploy_result:-ok}" = ok ]]; then
+    if [[ -f "${image_record_file}" && "${deploy_result:-0}" -eq 0 ]]; then
         previous_image=$(cat "${image_record_file}")
         if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
             _msg time "Deleting previous image: ${previous_image}"
@@ -125,7 +125,7 @@ deploy_to_kubernetes() {
     fi
 
     _msg time "Kubernetes deployment completed"
-    return "${deploy_result:-ok}"
+    return "${deploy_result:-0}"
 }
 
 # Deploy to Aliyun Functions
