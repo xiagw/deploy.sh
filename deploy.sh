@@ -52,7 +52,14 @@ config_deploy_vars() {
     esac
 
     ## Docker image tag format: <git-commit-sha>-<unix-timestamp-with-milliseconds>
-    G_IMAGE_TAG="${G_REPO_SHORT_SHA}-$(date +%s%3N)"
+    G_IMAGE_TAG="$(date +%s%3N)"
+    if [[ "${ENV_DOCKER_PREFIX:-false}" = true ]]; then
+        local chars chars_rand
+        chars=({a..o})
+        # 随机选取a-o当中的两个字母组合成字符串（可组合总数225个）
+        chars_rand="${chars[$((RANDOM % ${#chars[@]}))]}${chars[$((RANDOM % ${#chars[@]}))]}"
+        ENV_DOCKER_REGISTRY="${ENV_DOCKER_REGISTRY}/${chars_rand}"
+    fi
 
     # Handle crontab execution
     if ${run_with_crontab:-false}; then

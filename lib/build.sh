@@ -58,7 +58,8 @@ get_docker_context() {
 
 build_image() {
     [ "${GH_ACTION:-false}" = "true" ] && return 0
-    local keep_image="${1}"
+    local keep_image="${1}" chars chars_rand base_file push_flag image_uuid
+
     _msg step "[build] Building image"
 
     get_docker_context
@@ -73,29 +74,28 @@ build_image() {
         return
     fi
 
-    local base_file="${G_REPO_DIR}/Dockerfile.base"
+    base_file="${G_REPO_DIR}/Dockerfile.base"
     if [[ -f "${base_file}" ]]; then
-        local base_tag="${ENV_DOCKER_REGISTRY_BASE:-$ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
-        echo "Found ${base_file}, building base image: $base_tag"
-        $G_DOCK build $G_ARGS --tag "$base_tag" -f "${base_file}" "${G_REPO_DIR}"
+        base_tag="${ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
+        echo "Found ${base_file}, building base image: ${base_tag}"
+        $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}"
         export BASE_IMAGE_BUILT=true
         return
     fi
 
-    ## build from Dockerfile
-    local repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
     # 根据参数决定是否需要push
-    local push_flag=""
     if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
         docker_login
         push_flag="--push"
     fi
+
+    repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
     # echo "$G_DOCK build $G_ARGS --tag ${repo_tag} ${push_flag} ${G_REPO_DIR}"  && exit
     $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | grep -v 'error reading preface from client dummy'
     _msg time "[build] Image build completed"
 
+    ## push to ttl.sh
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
-        local image_uuid
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "Temporary image tag for ttl.sh: $image_uuid"
         $G_DOCK tag ${repo_tag} ${image_uuid}
