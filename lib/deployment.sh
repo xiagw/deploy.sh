@@ -67,15 +67,13 @@ deploy_to_kubernetes() {
         create_helm_chart "${helm_dir}"
     fi
 
-    echo "helm upgrade ${release_name} $helm_dir/ --install --history-max 1  --namespace ${G_NAMESPACE} --set image.repository=${ENV_DOCKER_REGISTRY} --set image.tag=${G_IMAGE_TAG}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
+    echo "helm upgrade ${release_name} $helm_dir/ -i -n ${G_NAMESPACE} --history-max 1 --set image.repository=${ENV_DOCKER_REGISTRY},image.tag=${G_IMAGE_TAG}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
     ${GH_ACTION:-false} && return 0
 
     ## helm install / helm 安装  --atomic
-    $HELM_OPT upgrade "${release_name}" "$helm_dir/" --install --history-max 1 \
-        --namespace "${G_NAMESPACE}" --create-namespace \
-        --timeout 120s --set image.pullPolicy='Always' \
-        --set image.repository="${ENV_DOCKER_REGISTRY}" \
-        --set image.tag="${G_IMAGE_TAG}" >/dev/null || return 1
+    $HELM_OPT upgrade "${release_name}" "$helm_dir/" --install --history-max 1 --hide-secret --hide-notes \
+        --namespace "${G_NAMESPACE}" --create-namespace --timeout 120s --set image.pullPolicy='Always' \
+        --set "image.repository=${ENV_DOCKER_REGISTRY},image.tag=${G_IMAGE_TAG}" >/dev/null || return 1
 
     # Record current image info / 记录当前镜像信息
     local image_record_file="${G_DATA}/.${release_name}_last_image"
