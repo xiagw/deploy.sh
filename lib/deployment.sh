@@ -38,7 +38,7 @@ format_release_name() {
 deploy_to_kubernetes() {
     _msg step "[deploy] Deploy to Kubernetes with Helm"
     is_demo_mode "deploy_k8s" && return 0
-    local release_name
+    local release_name previous_image rs0 bad_pod
     release_name="$(format_release_name)"
 
     # Ensure PVC exists before proceeding with deployment
@@ -84,11 +84,11 @@ deploy_to_kubernetes() {
     # Save current image info / 保存当前镜像信息
     echo "${current_image}" >"${image_record_file}"
 
-    echo "Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
-    # 检查是否在忽略列表中
+    # 检查是否在忽略列表中（不探测发布结果）
     if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
         _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
     else
+        echo "Monitoring deployment [${release_name}] in namespace [${G_NAMESPACE}] (timeout: 120s)..."
         if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
             deploy_result=fail
             _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
@@ -98,7 +98,6 @@ deploy_to_kubernetes() {
 
     # Read and delete previous image if exists / 如果存在则读取并删除上一个镜像
     if [[ -f "${image_record_file}" && "${deploy_result:-ok}" = ok ]]; then
-        local previous_image
         previous_image=$(cat "${image_record_file}")
         if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
             _msg time "Deleting previous image: ${previous_image}"
@@ -109,7 +108,6 @@ deploy_to_kubernetes() {
     fi
 
     ## Clean up rs 0 0 / 清理 rs 0 0
-    local rs0 bad_pod
     {
         while read -r rs0; do
             $KUBECTL_OPT -n "${G_NAMESPACE}" delete rs "${rs0}" &>/dev/null || true
@@ -137,9 +135,9 @@ deploy_aliyun_functions() {
         _msg time "Kubernetes deployment is disabled"
         return
     fi
-    local lang="${1:?'lang parameter is required'}"
+    local release_name lang functions_conf_tmpl functions_conf
+    lang="${1:?'lang parameter is required'}"
     _install_aliyun_cli
-    local release_name
     release_name="$(format_release_name)"
 
     ${GH_ACTION:-false} && return 0
@@ -151,8 +149,8 @@ deploy_aliyun_functions() {
 
     ## create FC
     _msg step "[deploy] Creating/updating Aliyun Functions"
-    local functions_conf_tmpl="$G_DATA/aliyun.functions.${lang}.json"
-    local functions_conf="$G_DATA/aliyun.functions.json"
+    functions_conf_tmpl="$G_DATA/aliyun.functions.${lang}.json"
+    functions_conf="$G_DATA/aliyun.functions.json"
     if [ -f "$functions_conf_tmpl" ]; then
         TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_TAG=${G_IMAGE_TAG} envsubst <"$functions_conf_tmpl" >"$functions_conf"
     else
@@ -195,14 +193,13 @@ EOF
 # Deploy via Rsync+SSH
 # @param $1 lang The programming language of the project
 deploy_via_rsync_ssh() {
-    local lang="${1:?'lang parameter is required'}"
+    local lang="${1:?'lang parameter is required'}" parse_cmd
     _msg step "[deploy] Deploy files with Rsync+SSH"
     ## rsync exclude configuration
     rsync_exclude="${G_REPO_DIR}/rsync.exclude"
     [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${G_PATH}/conf/rsync.exclude"
 
     # 检查配置文件格式并设置解析工具
-    local parse_cmd
     if [[ "${G_CONF}" =~ \.(yaml|yml)$ ]]; then
         parse_cmd="yq"
     elif [[ "${G_CONF}" =~ \.json$ ]]; then
