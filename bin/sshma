@@ -197,7 +197,7 @@ _connect_host() {
     fi
 
     local host_info
-    host_info=$(_list_hosts | grep -w "$alias_name" | tr -s ' ')
+    host_info=$(_list_hosts plain | grep -w "^${alias_name}$" | tr -s ' ')
     _msg info "Connecting to ${host_info#*)} ..."
     ssh -A -t "$alias_name" $use_byobu
 }
