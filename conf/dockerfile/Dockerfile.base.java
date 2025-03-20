@@ -22,7 +22,7 @@ ENV TZ=$TZ
 
 WORKDIR /app
 
-RUN --mount=type=cache,target=/var/cache/yum,sharing=locked \
+RUN --mount=type=cache,target=/var/cache/yum,id=var_cache_yum,sharing=shared \
     --mount=type=bind,target=/src,rw \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \

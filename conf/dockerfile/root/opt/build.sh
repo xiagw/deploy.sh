@@ -69,8 +69,6 @@ _set_mirror() {
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
                               https://maven.apache.org/xsd/settings-1.2.0.xsd">
 
-    <localRepository>/var/maven/.m2</localRepository>
-
     <mirrors>
         <mirror>
             <id>mirror-all</id>
@@ -302,7 +300,7 @@ _build_node() {
 
 _build_maven() {
     # Set up Maven options with standard parameters
-    mvn_opts="mvn -T 1C --batch-mode --update-snapshots"
+    mvn_opts="mvn -T 1C --batch-mode --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package"
     [ "$MVN_DEBUG" = off ] && mvn_opts+=" --quiet"
     [ -f /root/.m2/settings.xml ] && mvn_opts+=" --settings=/root/.m2/settings.xml"
 
