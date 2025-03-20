@@ -10,7 +10,7 @@ ARG MVN_PROFILE=main
 ARG MVN_DEBUG=off
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 WORKDIR /src
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
     --mount=type=bind,target=/src,rw \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
@@ -34,8 +34,8 @@ ENV TZ=$TZ
 WORKDIR /app
 EXPOSE 8080 8081 8082
 CMD ["bash", "/opt/run0.sh"]
-RUN --mount=type=cache,target=/var/lib/apt/lists \
-    --mount=type=cache,target=/var/cache/yum \
+RUN --mount=type=cache,target=/var/lib/apt/lists,id=apt_cache,sharing=shared  \
+    --mount=type=cache,target=/var/cache/yum,id=yum_cache,sharing=shared  \
     --mount=type=bind,target=/src,rw \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
