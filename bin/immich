@@ -170,8 +170,7 @@ _backup_with_borg() {
     immich_path="$HOME/docker/immich-app/library"
     immich_dbdump_path="$immich_path/db_dumps"
     borg_path="$HOME/docker/immich-app/backup-borg"
-    remote_host="${ENV_REMOTE_HOST}"
-    remote_path="${ENV_REMOTE_BACKUP_PATH}"
+
     ## Local setup
     [ -d "$immich_dbdump_path" ] || mkdir -p "$immich_dbdump_path"
     [ -d "$borg_path" ] || {
@@ -180,8 +179,8 @@ _backup_with_borg() {
     }
     ## Remote setup
     # shellcheck disable=SC2029
-    if ! ssh "$remote_host" "test -d \"$remote_path\""; then
-        borg init --encryption=none "$remote_host:$remote_path"
+    if ! ssh "$ENV_REMOTE_HOST" "test -d \"$ENV_REMOTE_BACKUP_PATH\""; then
+        borg init --encryption=none "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH"
     fi
 
     ### Local
@@ -198,9 +197,9 @@ _backup_with_borg() {
     # borg compact "$borg_path"
 
     ### Append to remote Borg repository
-    "${borg_opt[@]}" "$remote_host:$remote_path::{now}" "$immich_path"
-    # borg prune --keep-weekly=4 --keep-monthly=3 "$remote_host:$remote_path"
-    # borg compact "$remote_host:$remote_path"
+    "${borg_opt[@]}" "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH::{now}" "$immich_path"
+    # borg prune --keep-weekly=4 --keep-monthly=3 "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH"
+    # borg compact "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH"
 }
 
 _deduplication() {
