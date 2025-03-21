@@ -549,9 +549,7 @@ clean_old_tags() {
         _msg time "Deleting old tags... / 正在删除旧标签..."
         for tag in "${tags_to_delete[@]}"; do
             _msg purple "Deleting / 正在删除: $tag"
-            if ! skopeo delete "docker://${repository}:${tag}"; then
-                _msg warn "Failed to delete tag / 删除标签失败: $tag"
-            fi
+            skopeo delete "docker://${repository}:${tag}" &
         done
     else
         _msg time "No old tags to delete / 没有需要删除的旧标签"
