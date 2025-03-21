@@ -513,8 +513,17 @@ scale_deployment() {
 ack_auto_scale() {
     local deployment=$1
     local namespace=${2:-main}
+    local lock_file_all="/tmp/lock.scale.all"
     local lock_file_up="/tmp/lock.scale.up.$deployment"
     local lock_file_down="/tmp/lock.scale.down.$deployment"
+
+    ## disable auto scale when helm install/upgrade
+    if [[ -f "${lock_file_all}" ]]; then
+        if [[ $(stat -c %Y "$lock_file_all") -lt $(date -d "5 minutes ago" +%s) ]]; then
+            rm "${lock_file_all}"
+        fi
+        return 0
+    fi
 
     if [ -z "$deployment" ]; then
         echo "错误：部署名称不能为空。" >&2

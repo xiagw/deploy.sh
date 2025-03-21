@@ -321,10 +321,6 @@ ecs_create() {
     elif [ -n "$password" ]; then
         create_command+=" --Password $password"
     fi
-    # Check if instance type is ecs.u1 and add SystemDisk.Category parameter if true
-    if [[ $instance_type == ecs.u1* ]]; then
-        create_command+=" --SystemDisk.Category cloud_essd"
-    fi
 
     echo "正在创建 ECS 实例..."
     local result
