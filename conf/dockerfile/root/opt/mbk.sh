@@ -108,7 +108,7 @@ backup_mysql() {
 
     # Check if within 5 hours after start time
     if [ "$current_hour" -ge "$start_hour" ] && [ "$current_hour" -lt "$((start_hour + 3))" ]; then
-        log_message "Good time to backup (starting from $start_hour:00, within 5 hours)"
+        log_message "Good time to backup (starting from $start_hour:00, within 3 hours)"
     else
         return
     fi
@@ -161,7 +161,7 @@ main() {
         return 0
     fi
 
-    sleep 15
+    sleep 30
     # Initialize configuration
     init_config
 
