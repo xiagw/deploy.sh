@@ -75,10 +75,6 @@ deploy_to_kubernetes() {
         --namespace "${G_NAMESPACE}" --create-namespace --timeout 120s --set image.pullPolicy='Always' \
         --set "image.repository=${ENV_DOCKER_REGISTRY},image.tag=${G_IMAGE_TAG}" >/dev/null || return 1
 
-    # Record current image info / 记录当前镜像信息
-    local image_record_file="${G_DATA}/image_logs/${release_name}_last_image"
-    local current_image="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
-
     # 检查是否在忽略列表中（不探测发布结果）
     if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
         _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
@@ -93,14 +89,15 @@ deploy_to_kubernetes() {
         fi
     fi
 
+    # Record current image info / 记录当前镜像信息
+    local image_record_file="${G_DATA}/image_logs/${release_name}_last_image"
+    local current_image="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
     # Read and delete previous image if exists / 如果存在则读取并删除上一个镜像
     if [[ -f "${image_record_file}" && "${deploy_result:-0}" -eq 0 ]]; then
         previous_image=$(cat "${image_record_file}")
         if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
             _msg time "Deleting previous image: ${previous_image}"
-            if ! skopeo delete "docker://${previous_image}"; then
-                _msg warn "Failed to delete previous image: ${previous_image}"
-            fi
+            skopeo delete "docker://${previous_image}"
         fi
     fi
 
