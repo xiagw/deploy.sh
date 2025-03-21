@@ -550,6 +550,7 @@ clean_old_tags() {
         for tag in "${tags_to_delete[@]}"; do
             _msg purple "Deleting / 正在删除: $tag"
             skopeo delete "docker://${repository}:${tag}" &
+            sleep 1
         done
     else
         _msg time "No old tags to delete / 没有需要删除的旧标签"
