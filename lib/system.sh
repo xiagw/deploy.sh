@@ -272,6 +272,7 @@ system_cert_renew() {
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     ## support multiple account.conf.* / 支持多账号
     ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
+    local dns_type profile_name
     for file in "${acme_home}"/account.conf.*.dns_*; do
         if [ -f "$file" ]; then
             _msg blue "Found $file"
@@ -333,15 +334,15 @@ system_cert_renew() {
         acme_cmd="${acme_cmd} --accountconf $file"
         for domain in ${domains}; do
             _msg orange "Checking domain: $domain"
-            if "${acme_cmd}" list | grep -qw "$domain"; then
+            if ${acme_cmd} --list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                "${acme_cmd}" --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
+                ${acme_cmd} --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
             else
                 ## create cert / 创建证书
-                "${acme_cmd}" --issue -d "${domain}" -d "*.${domain}" --dns "$dns_type" --renew-hook "$run_touch_file" || true
+                ${acme_cmd} --issue -d "${domain}" -d "*.${domain}" --dns "$dns_type" --renew-hook "$run_touch_file" || true
             fi
-            "${acme_cmd}" -d "${domain}" --install-cert --key-file "${acme_home}/dest/${domain}.key" --fullchain-file "${acme_home}/dest/${domain}.pem" || true
-            "${acme_cmd}" -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
+            ${acme_cmd} -d "${domain}" --install-cert --key-file "${acme_home}/dest/${domain}.key" --fullchain-file "${acme_home}/dest/${domain}.pem" || true
+            ${acme_cmd} -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
         done
     done
     ## deploy with custom method / 自定义部署方式
