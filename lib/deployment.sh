@@ -97,7 +97,7 @@ deploy_to_kubernetes() {
         previous_image=$(cat "${image_record_file}")
         if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
             _msg time "Deleting previous image: ${previous_image}"
-            skopeo delete "docker://${previous_image}"
+            skopeo delete "docker://${previous_image}" &
         fi
     fi
 
