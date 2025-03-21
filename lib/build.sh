@@ -113,9 +113,9 @@ build_image() {
     # 根据参数决定是否保留镜像
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
         $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null &
-        _msg time  "Image removed"
+        _msg time  "Image removed on $G_DOCK"
     else
-        _msg time  "Image keeped"
+        _msg time  "Image keeped on $G_DOCK"
     fi
 }
 
