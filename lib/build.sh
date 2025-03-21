@@ -70,7 +70,7 @@ build_image() {
         echo "Found ${build_sh}, running it..."
         ${DEBUG_ON:-false} && debug_flag="-x"
         bash "${build_sh}" $debug_flag
-        export BASE_IMAGE_BUILT=true
+        export EXIT_MAIN=true
         return
     fi
 
@@ -79,7 +79,7 @@ build_image() {
         base_tag="${ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
         echo "Found ${base_file}, building base image: ${base_tag}"
         $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}"
-        export BASE_IMAGE_BUILT=true
+        export EXIT_MAIN=true
         return
     fi
 
@@ -130,18 +130,18 @@ build_all() {
 
     # Language specific build
     case "$lang" in
-    java) build_java ;;
-    node) build_node ;;
-    python) build_python ;;
-    android) build_android ;;
-    ios) build_ios ;;
-    ruby) build_ruby ;;
-    go) build_go ;;
-    c) build_c ;;
-    django) build_django ;;
-    php) build_php ;;
-    shell) build_shell ;;
-    docker) build_image "${keep_image}" ;;
+    *:docker) build_image "${keep_image}" ;;
+    java:*) build_java ;;
+    node:*) build_node ;;
+    python:*) build_python ;;
+    android:*) build_android ;;
+    ios:*) build_ios ;;
+    ruby:*) build_ruby ;;
+    go:*) build_go ;;
+    c:*) build_c ;;
+    django:*) build_django ;;
+    php:*) build_php ;;
+    shell:*) build_shell ;;
     *) _msg warn "No build function available for language: $lang" ;;
     esac
 }

@@ -251,10 +251,6 @@ parse_command_args() {
 config_build_env() {
     local get_lang="$1"
 
-    lang=${get_lang%%:*}
-    lang_ver=${get_lang%:*}
-    lang_ver=${lang_ver#*:}
-
     # 选择构建工具（Docker 或 Podman）
     G_DOCK=$(command -v podman || command -v docker || echo docker)
 
@@ -277,19 +273,20 @@ config_build_env() {
         G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR}/"
     fi
     # Java 项目特殊配置
-    if [ "$lang" = java ]; then
+    case "${get_lang}" in
+    java:*)
         G_ARGS+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
         if ${DEBUG_ON:-false}; then
             G_ARGS+=" --build-arg MVN_DEBUG=on"
         fi
 
-        # Set Maven and JDK versions based on lang_ver
-        case "${lang_ver:-}" in
-        1.7 | 7) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" ;;
-        11) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11-base" ;;
-        17) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17-base" ;;
-        21) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21-base" ;;
-        23) MVN_VERSION="3.9-amazoncorretto-23" && JDK_VERSION="23-base" ;;
+        # Set Maven and JDK versions based on get_lang
+        case "${get_lang:-}" in
+        java:1.7:* | java:7:*) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" ;;
+        java:11:*) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11-base" ;;
+        java:17:*) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17-base" ;;
+        java:21:*) MVN_VERSION="3.9-amazoncorretto-21" && JDK_VERSION="21-base" ;;
+        java:23:*) MVN_VERSION="3.9-amazoncorretto-23" && JDK_VERSION="23-base" ;;
         *) MVN_VERSION="3.8-amazoncorretto-8" && JDK_VERSION="8-base" ;; # Default
         esac
 
@@ -302,7 +299,8 @@ config_build_env() {
                 G_ARGS+=" --build-arg INSTALL_${install}=true"
             fi
         done
-    fi
+        ;;
+    esac
 
     # 导出环境变量
     # echo "$G_DOCK $G_RUN $G_ARGS" && exit
@@ -542,7 +540,6 @@ main() {
         _msg green "[auto mode: all tasks will be executed]"
     else
         _msg green "[single job: only specified tasks will be executed]"
-        echo "Tasks to execute:"
         for key in "${!arg_flags[@]}"; do
             [[ ${arg_flags[$key]} -eq 1 ]] && echo "  ${key}"
         done
@@ -560,13 +557,8 @@ main() {
 
     # 构建相关任务
     if [[ ${arg_flags["build_all"]} -eq 1 ]]; then
-        if [[ "$get_lang" == *":docker" ]]; then
-            b_arg="docker"
-        else
-            b_arg="${repo_lang}"
-        fi
-        build_all "$b_arg" "${keep_image:-}"
-        [[ "${BASE_IMAGE_BUILT:-false}" == "true" ]] && return 0
+        build_all "$get_lang" "${keep_image:-}"
+        [[ "${EXIT_MAIN:-false}" == "true" ]] && return 0
     fi
 
     # 发布，最优雅的写法
