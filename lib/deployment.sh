@@ -76,11 +76,8 @@ deploy_to_kubernetes() {
         --set "image.repository=${ENV_DOCKER_REGISTRY},image.tag=${G_IMAGE_TAG}" >/dev/null || return 1
 
     # Record current image info / 记录当前镜像信息
-    local image_record_file="${G_DATA}/.${release_name}_last_image"
+    local image_record_file="${G_DATA}/image_logs/${release_name}_last_image"
     local current_image="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
-
-    # Save current image info / 保存当前镜像信息
-    echo "${current_image}" >"${image_record_file}"
 
     # 检查是否在忽略列表中（不探测发布结果）
     if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
@@ -106,6 +103,9 @@ deploy_to_kubernetes() {
             fi
         fi
     fi
+
+    # Save current image info / 保存当前镜像信息
+    echo "${current_image}" >"${image_record_file}"
 
     ## Clean up rs 0 0 / 清理 rs 0 0
     {
