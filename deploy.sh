@@ -87,13 +87,6 @@ Parameters:
     # Build operations
     -B, --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
     -x, --build-base [args]       Execute build.base.sh script with optional arguments.
-    --copy-image SRC [DEST] [KEEP]  Copy Docker image from source to target registry.
-                            SRC: Source image (e.g., nginx:latest)
-                            DEST: Target registry (e.g., registry.example.com/ns)
-                            KEEP: Keep original tag format (true/false, default: true)
-                            Examples:
-                              --docker-copy nginx:latest registry.example.com/ns
-                              --docker-copy nginx:latest registry.example.com/ns false
 
     # Deployment
     -k, --deploy-k8s             Deploy to Kubernetes.
@@ -102,13 +95,6 @@ Parameters:
     -y, --deploy-rsync           Deploy to rsync server.
     -F, --deploy-ftp             Deploy to FTP server.
     -S, --deploy-sftp            Deploy to SFTP server.
-    -c, --copy-image SRC [DEST] [KEEP]  Copy Docker image from source to target registry.
-                            SRC: Source image (e.g., nginx:latest)
-                            DEST: Target registry (e.g., registry.example.com/ns)
-                            KEEP: Keep original tag format (true/false, default: true)
-                            Examples:
-                              -c nginx:latest registry.example.com/ns
-                              -c nginx:latest registry.example.com/ns false
 
     # Testing and quality
     -u, --test-unit              Run unit tests.
@@ -127,6 +113,13 @@ Parameters:
     -r, --renew-cert            Renew all the certs.
     --clean-tags REPO           Clean old tags from Docker registry.
                                REPO: Repository to clean (e.g., registry.example.com/myapp)
+    -c, --copy-image SRC [DEST] [KEEP]  Copy Docker image from source to target registry.
+                            SRC: Source image (e.g., nginx:latest)
+                            DEST: Target registry (e.g., registry.example.com/ns)
+                            KEEP: Keep original tag format (true/false, default: true)
+                            Examples:
+                              -c nginx:latest registry.example.com/ns
+                              -c nginx:latest registry.example.com/ns false
 EOF
 }
 
