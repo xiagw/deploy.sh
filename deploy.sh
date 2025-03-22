@@ -299,7 +299,7 @@ config_build_env() {
     esac
 
     # 导出环境变量
-    echo "$G_DOCK $G_RUN $G_ARGS" && exit
+    # echo "$G_DOCK $G_RUN $G_ARGS" && exit
     export G_DOCK G_RUN G_ARGS
 }
 
