@@ -258,7 +258,7 @@ config_build_env() {
     done
 
     # 构建参数配置
-    G_ARGS=" ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+    G_ARGS+=" ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
 
     # 调试模式配置
     if ${DEBUG_ON:-false}; then
@@ -299,7 +299,7 @@ config_build_env() {
     esac
 
     # 导出环境变量
-    # echo "$G_DOCK $G_RUN $G_ARGS" && exit
+    echo "$G_DOCK $G_RUN $G_ARGS" && exit
     export G_DOCK G_RUN G_ARGS
 }
 
