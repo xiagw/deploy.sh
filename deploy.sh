@@ -254,6 +254,7 @@ config_build_env() {
     # 添加所有 add-host 参数
     for host in "${ENV_ADD_HOST[@]}"; do
         G_RUN+=" --add-host=${host}"
+        G_ARGS+=" --add-host=${host}"
     done
 
     # 构建参数配置
