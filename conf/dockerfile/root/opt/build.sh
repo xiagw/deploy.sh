@@ -74,7 +74,7 @@ _set_mirror() {
             <id>mirror-all</id>
             <mirrorOf>external:*,!custom-group</mirrorOf>
             <name>mirror-all</name>
-            <url>https://mirror.flyh6.com/repository/fly-maven/</url>
+            <url>http://mirror.flyh6.com/repository/fly-maven/</url>
         </mirror>
         <mirror>
             <id>mirror-all-2</id>
