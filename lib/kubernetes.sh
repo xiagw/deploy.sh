@@ -217,6 +217,8 @@ EOF
 # @param $2 subpath The NAS subpath to use (optional)
 kube_create_pv_pvc() {
   local subpath="$1"
+  # Remove pvc- prefix if it exists in the input
+  subpath="${subpath#pvc-}"
   local pvc_name="pvc-${subpath}" pv_name="pv-${subpath}-${G_NAMESPACE}"
   local namespace="${G_NAMESPACE}" cnfs_name="cnfs-01" sc_name="alicloud-cnfs-nas"
 
