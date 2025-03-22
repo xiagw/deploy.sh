@@ -546,11 +546,11 @@ ack_auto_scale() {
 
     # 获取节点和 Pod 信息
     local node_total
-    node_total=$(kubectl get nodes -o name | grep -c "^")
+    node_total=$(kubectl get nodes -o name --no-headers | grep -c "^")
     local node_fixed=$((node_total - 1)) # 实际节点数 = 所有节点数 - 1 个虚拟节点
 
     local pod_total
-    pod_total=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" | grep -c "$deployment")
+    pod_total=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" --no-headers | grep -c "$deployment")
 
     # 计算阈值
     local pod_cpu_warn=$((pod_total * CPU_WARN_FACTOR))
@@ -560,7 +560,7 @@ ack_auto_scale() {
 
     # 获取当前 CPU 和内存使用情况
     local cpu mem
-    read -r cpu mem < <(kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment" |
+    read -r cpu mem < <(kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment" --no-headers |
         awk 'NR>1 {c+=int($2); m+=int($3)} END {printf "%d %d", c, m}')
 
     # 检查是否需要扩容
