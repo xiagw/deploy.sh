@@ -107,6 +107,7 @@ Parameters:
     # Kubernetes operations
     -H, --create-helm DIR        Create Helm chart in specified directory.
     -K, --create-k8s             Create K8s cluster with Terraform.
+    --kube-pvc NAME             Create PVC with specified name.
 
     # Miscellaneous
     -D, --disable-inject         Disable file injection.
