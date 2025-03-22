@@ -454,10 +454,10 @@ copy_docker_image() {
     fi
 
     echo "Copying multi-arch image from Docker Hub to custom registry..."
-    echo "skopeo --override-os linux copy --multi-arch all docker://docker.io/${source_image} docker://${target}"
+    echo "skopeo --override-os linux copy --multi-arch all docker://${source_image} docker://${target}"
 
     skopeo --override-os linux copy --multi-arch all \
-        "docker://docker.io/${source_image}" \
+        "docker://${source_image}" \
         "docker://${target}"
 }
 

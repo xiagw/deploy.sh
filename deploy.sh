@@ -86,7 +86,7 @@ Parameters:
 
     # Build operations
     -B, --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
-    -x, --build-base [args]       Execute build.base.sh script with optional arguments.
+    -x, --build-base [args]       Execute function build_base_image with optional arguments.
 
     # Deployment
     -k, --deploy-k8s             Deploy to Kubernetes.
@@ -140,7 +140,8 @@ parse_command_args() {
         ## call build.base.sh
         -x | --build-base)
             shift
-            local all_args=(
+            local all_tags tags
+            all_tags=(
                 "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4"
                 "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
                 "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
@@ -148,20 +149,18 @@ parse_command_args() {
                 "redis:latest"
                 "nginx:stable-alpine"
             )
-
-            if [[ "$1" == "all" ]]; then
-                for i in "${all_args[@]}"; do
-                    build_base_image "$i"
-                done
+            if [[ -z "$1" ]]; then
+                readarray -t tags < <(echo "${all_tags[@]}" | sed 's/\ /\n/g' | fzf -m --header="Use TAB to select multiple items, ENTER to confirm")
             else
-                if [ -z "$1" ]; then
-                    local select_arg
-                    select_arg=$(echo "${all_args[@]}" | sed 's/\ /\n/g' | fzf)
-                    build_base_image "$select_arg"
+                if [[ "$1" = "all" ]]; then
+                    tags=("${all_tags[@]}")
                 else
-                    build_base_image "$*"
+                    tags=("$@")
                 fi
             fi
+            for i in "${tags[@]}"; do
+                build_base_image "$i"
+            done
             exit
             ;;
         # Build operations
@@ -185,10 +184,12 @@ parse_command_args() {
             arg_flags["copy_image"]=1
             arg_docker_source="${2:?ERROR: example: nginx:stable-alpine}"
             if [ -z "$3" ]; then
-                if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-                    arg_docker_target="${ENV_DOCKER_MIRROR}"
+                local registry
+                registry=$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")
+                if [ -n "${registry}" ]; then
+                    arg_docker_target="${registry}"
                 else
-                    echo "ERROR: example registry.example.com"
+                    return 1
                 fi
             else
                 arg_docker_target="${3}"
@@ -301,10 +302,9 @@ config_build_env() {
 }
 
 build_base_image() {
-    local tag="$1"
-    local registry="registry.cn-hangzhou.aliyuncs.com/flyh5"
-    local base_tag="${registry}/${tag}-base"
-    local cmd
+    local tag="$1" registry base_tag cmd
+    registry=$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")
+    base_tag="${registry}/${tag}-base"
     cmd=$(command -v docker || command -v podman || echo docker)
     cmd_opt=(
         "$cmd"
