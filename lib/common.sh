@@ -84,31 +84,32 @@ _check_disk_space() {
 }
 
 _msg() {
-    local color_on color_off='\033[0m'
-    local time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
-    local timestamp
-    timestamp="$(date +%Y%m%d-%u-%T.%3N)"
-
+    local color_on color_off='\033[0m' time_hms timestamp log_file
     case "${1:-none}" in
     info) color_on='' ;;
     warn | warning | yellow) color_on='\033[0;33m' ;;
     error | err | red) color_on='\033[0;31m' ;;
     question | ques | purple) color_on='\033[0;35m' ;;
-    success | green) color_on='\033[0;32m' ;;
+    success | ok | green) color_on='\033[0;32m' ;;
     blue) color_on='\033[0;34m' ;;
     cyan) color_on='\033[0;36m' ;;
     orange) color_on='\033[1;33m' ;;
     step)
         ((++STEP))
+        time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
+        timestamp="$(date +%Y%m%d-%u-%T.%3N)"
         color_on="\033[0;36m$timestamp - [$STEP] \033[0m"
         color_off=" - [$time_hms]"
         ;;
     time)
+        time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
+        timestamp="$(date +%Y%m%d-%u-%T.%3N)"
         color_on="$timestamp - ${STEP:+[$STEP] }"
         color_off=" - [$time_hms]"
         ;;
     log)
-        local log_file="$2"
+        timestamp="$(date +%Y%m%d-%u-%T.%3N)"
+        log_file="$2"
         shift 2
         if [ -d "$(dirname "$log_file")" ]; then
             echo "$timestamp - $*" | tee -a "$log_file"
