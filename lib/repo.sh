@@ -60,7 +60,7 @@ repo_inject_file() {
             if [[ -n "${dockerfile_template}" ]]; then
                 ## Java项目强制注入时显示警告信息
                 [[ -f "${G_REPO_DIR}/Dockerfile" ]] && [[ "$lang_type" == "java" ]] &&
-                    _msg warning "  - Forcing Dockerfile injection for Java project"
+                    _msg warning "  Forcing Dockerfile injection for Java project"
 
                 ## 复制Dockerfile
                 cp -f "${dockerfile_template}" "${G_REPO_DIR}/Dockerfile"
