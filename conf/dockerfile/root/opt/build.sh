@@ -1,9 +1,5 @@
 #!/bin/bash
 
-_is_root() {
-    [ "$(id -u)" -eq 0 ]
-}
-
 _is_china() {
     ${IN_CHINA:-false} || ${CHANGE_SOURCE:-false}
 }
@@ -14,12 +10,6 @@ _set_mirror() {
         export TZ=Asia/Shanghai
         ln -snf /usr/share/zoneinfo/"${TZ}" /etc/localtime
         echo "${TZ}" >/etc/timezone
-        return
-        ;;
-    ppa)
-        _is_china &&
-            sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" \
-                /etc/apt/sources.list.d/ondrej-ubuntu-php-jammy.list
         return
         ;;
     esac
@@ -44,7 +34,7 @@ _set_mirror() {
         return
     fi
 
-    if _is_root; then
+    if [ "$(id -u)" -eq 0 ]; then
         ## OS ubuntu:22.04 php
         if [ -f /etc/apt/sources.list ]; then
             sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
@@ -60,10 +50,10 @@ _set_mirror() {
 
     case "$(command -v mvn || command -v composer || command -v node || command -v python || command -v python3)" in
     */mvn)
-        local m2_dir=/root/.m2
-        [ -d $m2_dir ] || mkdir -p $m2_dir
+        local dotm2=/root/.m2
+        [ -d $dotm2 ] || mkdir -p $dotm2
         # Generate Maven settings.xml
-        cat >"$m2_dir/settings.xml" <<'EOF'
+        cat >"$dotm2/settings.xml" <<'EOF'
 <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
@@ -71,21 +61,21 @@ _set_mirror() {
 
     <mirrors>
         <mirror>
-            <id>mirror-all</id>
+            <id>flyh6</id>
             <mirrorOf>external:*,!custom-group</mirrorOf>
-            <name>mirror-all</name>
+            <name>flyh6</name>
             <url>http://m.flyh6.com/repository/flymaven/</url>
         </mirror>
         <mirror>
-            <id>mirror-all-2</id>
-            <mirrorOf>external:*,!custom-group,!mirror-all</mirrorOf>
-            <name>mirror-all-2</name>
+            <id>huawei</id>
+            <mirrorOf>external:*,!custom-group,!flyh6</mirrorOf>
+            <name>huawei</name>
             <url>https://repo.huaweicloud.com/repository/maven/</url>
         </mirror>
         <mirror>
-            <id>mirror-all-3</id>
-            <mirrorOf>external:*,!custom-group,!mirror-all,!mirror-all-2</mirrorOf>
-            <name>mirror-all-3</name>
+            <id>aliyun</id>
+            <mirrorOf>external:*,!custom-group,!flyh6,!huawei</mirrorOf>
+            <name>aliyun</name>
             <url>https://maven.aliyun.com/repository/public</url>
         </mirror>
     </mirrors>
@@ -116,7 +106,7 @@ _set_mirror() {
 EOF
         ;;
     */composer)
-        _is_root || return
+        [ "$(id -u)" -eq 0 ] || return
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
         mkdir -p /var/www/.composer /.composer
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
@@ -143,22 +133,23 @@ EOF
 
 _check_run_sh() {
     for i in /opt/run.sh /opt/run0.sh; do
-        if [ -f "$i" ]; then
-            echo "Found $i, skip download."
-        elif [ -f "/src/root$i" ]; then
+        if [ ! -f "$i" ]; then
             ## Dockerfile 中 mount bind /src 内sh
-            install -m 0755 "/src/root$i" "$i"
-        else
-            echo "Not found $i, download..."
-            curl -fLo "$i" "$url_deploy_raw/conf/dockerfile/root$i"
+            local runsh="/src/root$i"
+            if [ -f "$runsh" ]; then
+                install -m 0755 "$runsh" "$i"
+            else
+                curl -fLo "$i" "$url_deploy_raw/conf/dockerfile/root$i"
+            fi
         fi
         chmod +x "$i"
     done
 
-    if [ -f "/src/root/opt/init.sh" ]; then
-        install -m 0755 "/src/root/opt/init.sh" "/opt/init.sh"
+    initsh="/src/root/opt/init.sh"
+    if [ -f "$initsh" ]; then
+        install -m 0755 "$initsh" "/opt/init.sh"
     else
-        echo "Not found /src/root/opt/init.sh, skip copy."
+        echo "Not found $initsh, skip copy."
     fi
 }
 
@@ -206,7 +197,7 @@ _build_php() {
     $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
     LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
 
-    _set_mirror ppa
+    _is_china && sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" /etc/apt/sources.list.d/ondrej-ubuntu-php-jammy.list
 
     $cmd_pkg update -yqq
 
@@ -277,7 +268,8 @@ _build_node() {
     chown -R node:node /.cache /app
 
     # Update npm and install cnpm if in China
-    if node -v | grep -E 'v1[0-9]\.'; then
+    node_ver=$(node --version | sed -E 's/^[^0-9]*([0-9]+).*/\1/')
+    if [ "$node_ver" -le 18 ]; then
         npm install -g npm@10.8
     else
         npm install -g npm
@@ -291,7 +283,11 @@ _build_node() {
 
     # Install dependencies if package.json exists
     if [ -f /app/package.json ]; then
-        su node -c "cd /app && $(_is_china && echo 'cnpm' || echo 'npm') install"
+        if command -v runuser >/dev/null 2>&1; then
+            runuser -u node -- sh -c "cd /app && $(_is_china && echo 'cnpm' || echo 'npm') install"
+        else
+            su node -c "cd /app && $(_is_china && echo 'cnpm' || echo 'npm') install"
+        fi
     else
         echo "Error: /app/package.json not found" >&2
         return 1
@@ -316,7 +312,7 @@ _build_maven() {
     # Copy config files if needed
     [ -f /src/.jvm.options ] && cp -v /src/.jvm.options /jars/
 
-    i=0
+    local i=0
     while IFS= read -r file; do
         ((++i))
         # Get only the first directory level using awk, handling all path cases
@@ -378,14 +374,14 @@ _build_jdk_runtime() {
     mkdir -p /app
     chown -R 1000:1000 /app
     [ -f /src/.jvm.options ] && cp -avf /src/.jvm.options /app/
-    command -v su || $cmd_pkg install -y util-linux
+    command -v su || command -v runuser || $cmd_pkg install -y util-linux
     command -v useradd || $cmd_pkg install -y shadow-utils
 
     # Create spring user if it doesn't exist
     id spring || useradd -u 1000 -s /bin/bash -m spring
 
     # Create profile file if no yml/yaml files exist
-    if ! find /app -maxdepth 1 -type f \( -iname "*.yml" -o -iname "*.yaml" \) | grep -q .; then
+    if ! find /app -maxdepth 2 -type f \( -iname "*.yml" -o -iname "*.yaml" \) | grep -q .; then
         if [ "${MVN_PROFILE}" != base ]; then
             touch "/app/profile.${MVN_PROFILE:-main}"
         fi
@@ -535,8 +531,9 @@ echo "password=${MYSQL_ROOT_PASSWORD}" >>/root/.my.cnf
 chmod 600 /root/.my.cnf
 EOF
 
+    ## mysql backup script
     if [ -f /src/root/opt/mbk.sh ]; then
-        cp -f /src/root/opt/mbk.sh /opt/
+        install -m 0755 /src/root/opt/mbk.sh /opt/mbk.sh
     else
         mysql_bak="$url_deploy_raw/conf/dockerfile/root/opt/mbk.sh"
         curl -fLo /opt/mbk.sh "$mysql_bak"
@@ -633,13 +630,9 @@ main() {
     *) echo "No specific build environment detected." ;;
     esac
 
-    ## copy run.sh run0.sh
-
     ## clean
-    if _is_root; then
+    if [ "$(id -u)" -eq 0 ]; then
         rm -rf /tmp/* /opt/*.{cnf,xml,log}
-    else
-        :
     fi
 
     for script in /opt/*.sh; do
