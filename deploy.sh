@@ -555,6 +555,7 @@ main() {
 
     # 构建相关任务
     if [[ ${arg_flags["build_all"]} -eq 1 ]]; then
+        unset EXIT_MAIN
         build_all "$get_lang" "${keep_image:-}"
         [[ "${EXIT_MAIN:-false}" == "true" ]] && return 0
     fi
@@ -562,7 +563,9 @@ main() {
     # 发布，最优雅的写法
     deploy_sum=0
     for key in "${!arg_flags[@]}"; do
-        [[ $key == deploy_* ]] && ((deploy_sum += arg_flags[$key]))
+        if [[ $key == deploy_* ]]; then
+            deploy_sum=$((deploy_sum + arg_flags[$key]))
+        fi
     done
     if [[ $deploy_sum -gt 0 ]] || $all_zero; then
         handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG" "$G_IMAGE_TAG"
