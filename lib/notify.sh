@@ -68,15 +68,23 @@ notify_feishu() {
 
 # Main notification function that handles all channels
 handle_notify() {
-    local type=${ENV_NOTIFY_TYPE:-skip}
+    # Skip notification in GitHub Actions
+    ${GH_ACTION:-false} && deploy_result=0 && return 0
+
     _msg step "[notify] deployment result notification"
     echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
 
-    # Check if notification should be sent
-    ${GH_ACTION:-false} && deploy_result=0
-    [[ "${deploy_result}" -eq 0 ]] && exec_deploy_notify=true
-    ${ENV_DISABLE_NOTIFY:-false} && exec_deploy_notify=false
+    # Check global notification switch first
+    ${ENV_DISABLE_NOTIFY:-false} && return 0
+
+    local type=${ENV_NOTIFY_TYPE}
+
+    # If notification type is not set, return early
+    [ -z "$type" ] && return 0
+
+    # Disable notifications for specific branches (e.g. develop, testing branches)
     [[ "${ENV_DISABLE_NOTIFY_BRANCH}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false
+    # Manual override: if MAN_DISABLE_NOTIFY is true, force enable notification regardless of other settings
     ${MAN_DISABLE_NOTIFY:-false} && exec_deploy_notify=true
 
     if ! ${exec_deploy_notify:-true}; then
@@ -123,10 +131,6 @@ Branche = ${G_REPO_BRANCH}"
     feishu)
         echo "Sending Feishu notification..."
         notify_feishu "${ENV_WEBHOOK_URL}" "$message"
-        ;;
-    skip)
-        echo "Notification is not enabled, skipping"
-        return 0
         ;;
     *)
         _msg error "Unknown notification type: $type"
