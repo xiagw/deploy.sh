@@ -438,7 +438,7 @@ select_with_fzf() {
     local prompt=$1
     local options=$2
     shift 2
-    local args=("$@")  # 获取额外的参数，比如 -m
+    local args=("$@") # 获取额外的参数，比如 -m
 
     check_fzf
 
@@ -637,38 +637,37 @@ balance_check() {
     yesterday=$(date +%F -d yesterday)
     current_month=$(date +%Y-%m -d yesterday)
 
-    echo "Checking balance for profile: $profile"
-
     # 检查当前余额
+    echo "Checking balance (aliyun account is $profile): "
     current_balance=$(aliyun -p "$profile" bssopenapi QueryAccountBalance 2>/dev/null |
         jq -r '.Data.AvailableAmount | gsub(","; "")')
-    if [[ -z "$current_balance" ]]; then
-        echo "Warning: Failed to retrieve balance for profile $profile"
-        return 1
-    fi
 
-    echo "Current balance: $current_balance"
-    if ((${current_balance%.*} < ${alarm_balance%.*})); then
-        msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
-        _notify_wecom "${WECOM_KEY_ALARM}" "$msg_body"
+    if [[ -z "$current_balance" ]]; then
+        echo "  Warning: Failed to retrieve balance for aliyun profile $profile"
+        return 1
+    else
+        echo "  $current_balance"
+        if ((${current_balance%.*} < ${alarm_balance%.*})); then
+            msg_body="Aliyun account: $profile, 余额: $current_balance 过低需要充值"
+            _notify_wecom "${WECOM_KEY_ALARM}" "$msg_body"
+        fi
     fi
 
     # 检查昨日消费
+    echo "Checking yesterday's spending: "
     daily_spending=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
         --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
         jq -r '.Data.Items.Item[].PretaxAmount | tostring | gsub(","; "")')
 
-    echo "Yesterday's spending: $daily_spending"
-    if ((${daily_spending%.*} > ${alarm_daily%.*})); then
-        msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f , 超过告警阈值：%.2f" "$profile" "$daily_spending" "${alarm_daily}")
-        _notify_wecom "${WECOM_KEY_ALARM}" "$msg_body"
-    fi
-
-    if [[ "${MAN_RENEW_CERT:-false}" == true ]] || ${arg_renew_cert:-false}; then
-        return 0
-    fi
-    if ${exec_single_job:-false}; then
-        exit 0
+    if [[ -z "$daily_spending" ]]; then
+        echo "  Warning: Failed to retrieve yesterday's spending"
+        return 1
+    else
+        echo "  $daily_spending"
+        if ((${daily_spending%.*} > ${alarm_daily%.*})); then
+            msg_body=$(printf "Aliyun account: %s, 昨日消费金额: %.2f , 超过告警阈值：%.2f" "$profile" "$daily_spending" "${alarm_daily}")
+            _notify_wecom "${WECOM_KEY_ALARM}" "$msg_body"
+        fi
     fi
 }
 
