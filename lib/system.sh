@@ -347,7 +347,7 @@ system_cert_renew() {
     done
     ## deploy with custom method / 自定义部署方式
     if [[ -f "${acme_home}/custom.sh" ]]; then
-        echo "Found ${acme_home}/custom.sh"
+        _msg blue "Found ${acme_home}/custom.sh"
         bash "${acme_home}/custom.sh"
     fi
     ## deploy with gitlab CI/CD,
