@@ -426,40 +426,51 @@ copy_docker_image() {
         return 1
     fi
 
+    # 1. image:tag --> mirror/ns/image:tag
+    # 2. xxx/image:tag --> mirror/ns/image:tag
+    # 3. 先查询 skopeo inspect mirror/ns/image:tag 是否存在， 存在就报错退出，不存在就直接copy
+
     # 移除 target_registry 末尾的斜杠（如果有）
     target_registry="${target_registry%/}"
 
-    if [[ "$keep_original_tag" == "true" ]]; then
-        # 保持原始标签，使用 / 分隔符
-        image_name="${source_image%:*}"
-        tag="${source_image#*:}"
-        # 如果没有标签，使用 latest
-        [[ "$image_name" == "$source_image" ]] && tag="latest"
-        # 移除可能存在的 docker.io/ 前缀
-        image_name="${image_name#docker.io/}"
-        # 移除 image_name 开头和结尾的斜杠（如果有）
-        image_name="${image_name#/}"
-        image_name="${image_name%/}"
-        # 构建最终的目标镜像名（使用 / 分隔符）
-        target="${target_registry}/${image_name}:${tag}"
-    else
-        # 原有的标签转换逻辑
-        # 如果镜像标签是 latest，则移除它
-        image_name="${source_image%:latest}"
-        # 将路径中的 / 替换为 -
-        tag="${image_name//\//-}"
-        # 将剩余的 : 替换为 -
-        tag="${tag//:/-}"
-        # 构建最终的目标镜像名（使用 : 分隔符）
-        target="${target_registry}:${tag}"
+    # 解析源镜像名称和标签
+    image_name="${source_image%:*}"
+    tag="${source_image#*:}"
+
+    # 如果没有标签，使用 latest
+    [[ "$image_name" == "$source_image" ]] && tag="latest"
+
+    # 移除可能存在的 docker.io/ 前缀
+    image_name="${image_name#docker.io/}"
+
+    # 移除 image_name 开头和结尾的斜杠（如果有）
+    image_name="${image_name#/}"
+    image_name="${image_name%/}"
+
+    # 获取镜像的最后一部分作为基本名称
+    base_name="${image_name##*/}"
+
+    # 构建目标镜像完整路径
+    target="${target_registry}/${base_name}:${tag}"
+
+    # 检查目标镜像是否已存在
+    if skopeo inspect "docker://${target}" &>/dev/null; then
+        _msg error "Target image already exists: ${target}"
+        return 1
     fi
 
-    echo "Copying multi-arch image from Docker Hub to custom registry..."
+    echo "Copying multi-arch image to custom registry..."
     echo "skopeo --override-os linux copy --multi-arch all docker://${source_image} docker://${target}"
 
-    skopeo --override-os linux copy --multi-arch all \
+    if skopeo --override-os linux copy --multi-arch all \
         "docker://${source_image}" \
-        "docker://${target}"
+        "docker://${target}"; then
+        _msg green "Successfully copied image to ${target}"
+        return 0
+    else
+        _msg error "Failed to copy image to ${target}"
+        return 1
+    fi
 }
 
 # Example usage:
