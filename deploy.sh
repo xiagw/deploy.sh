@@ -218,7 +218,7 @@ parse_command_args() {
         # Kubernetes operations
         -H | --create-helm) arg_create_helm=true && helm_dir="$2" && shift ;;
         -K | --create-k8s) create_k8s_with_terraform=true ;;
-        --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" && shift ;;
+        --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" namespace="${3:-$G_NAMESPACE}" && shift 2 ;;
         # Miscellaneous
         -D | --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
@@ -448,7 +448,11 @@ main() {
     config_deploy_depend file
 
     ## 检测操作系统版本、类型，安装必要的命令和软件
-    system_check
+    if [[ ${arg_flags["kube_pvc"]} -eq 1 ]]; then
+        system_check >/dev/null
+    else
+        system_check
+    fi
 
     ## 导入所有以ENV_开头的全局变量（位置不要随意变动）
     source "$G_ENV"
@@ -493,7 +497,7 @@ main() {
     kube_config_init "$G_NAMESPACE"
 
     if [[ ${arg_flags["kube_pvc"]} -eq 1 && -n "${sub_path_name}" ]]; then
-        kube_create_pv_pvc "${sub_path_name}"
+        kube_create_pv_pvc "${sub_path_name}" "${namespace}"
         return
     fi
 

@@ -216,13 +216,13 @@ EOF
 # @param $1 namespace The namespace to create resources in
 # @param $2 subpath The NAS subpath to use (optional)
 kube_create_pv_pvc() {
-  local subpath="$1"
+  local subpath="$1" namespace="${2:-$G_NAMESPACE}" pvc_name cnfs_name
   # Remove pvc- prefix if it exists in the input
   subpath="${subpath#pvc-}"
-  local pvc_name="pvc-${subpath}" pv_name="pv-${subpath}-${G_NAMESPACE}"
-  local namespace="${G_NAMESPACE}" cnfs_name="cnfs-01" sc_name="alicloud-cnfs-nas"
+  pvc_name="pvc-${subpath}" pv_name="pv-${subpath}-${namespace}"
+  cnfs_name="cnfs-01" sc_name="alicloud-cnfs-nas"
 
-  _msg step "[k8s] Creating PVC $pvc_name in namespace $namespace"
+  _msg step "[k8s] Creating PVC [$pvc_name] in namespace [$namespace]"
 
   # Check if PVC exists
   if ! $KUBECTL_OPT get pv "$pv_name" &>/dev/null; then
