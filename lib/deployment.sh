@@ -419,7 +419,7 @@ handle_deploy() {
 # @param $2 target_registry Target registry (e.g., registry.example.com)
 # @param $3 keep_original_tag Whether to keep the original tag (true/false, default: true)
 copy_docker_image() {
-    local source_image="$1" target_registry="$2" keep_original_tag="${3:-true}" image_name tag target
+    local source_image="$1" target_registry="$2" image_name tag target
 
     if ! command -v skopeo >/dev/null 2>&1; then
         _msg error "skopeo command not found. Please install skopeo first."
