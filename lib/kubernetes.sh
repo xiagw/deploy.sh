@@ -46,19 +46,22 @@ kube_config_init() {
 # Create Helm chart with customized configuration
 # @param $1 helm_chart_path The path where to create the Helm chart
 create_helm_chart() {
-  local helm_chart_path="$1"
+  local helm_chart_path="$1" protocol port port2 pvc_name mount_path dockerfile
 
-  local helm_chart_name helm_chart_env protocol port port2
-  helm_chart_name="${helm_chart_path#"$(dirname "$helm_chart_path")"/}"
-
-  # Get release name/protocol/port info from env file
-  helm_chart_env="${G_DATA}/create_helm_chart.env"
-  if [ -f "${helm_chart_env}" ]; then
-    read -ra values_array <<<"$(grep "^${helm_chart_name}\s" "${helm_chart_env}")"
-    protocol="${values_array[1]}"
-    port="${values_array[2]}"
-    port2="${values_array[3]}"
+  # 从 Dockerfile 读取端口配置
+  dockerfile="${G_REPO_DIR}/Dockerfile"
+  if [ -f "${dockerfile}" ]; then
+    read -ra ports <<<"$(grep -i "^EXPOSE" "${dockerfile}" | cut -d' ' -f2-)"
+    if [ "${#ports[@]}" -ge 1 ]; then
+      port="${ports[0]}"
+      port2="${ports[1]}"
+    fi
+    # while IFS= read -r vol; do
+    #   mount_path="$(echo "$vol" | tr '/' '-' | sed 's/^-//')"
+    # done < <(grep -i "^VOLUME" "${dockerfile}" | tr -d '[]"' | cut -d' ' -f2-)
   fi
+  pvc_name="${ENV_HELM_VALUES_CNFS:-pvc-www}"
+  mount_path="${ENV_HELM_VALUES_MOUNT_PATH:-/app2}"
   protocol="${protocol:-tcp}"
   port="${port:-8080}"
   port2="${port2:-8081}"
@@ -90,13 +93,13 @@ create_helm_chart() {
 
   # Configure volumes
   sed -i -e "/volumes: \[\]/s//volumes:/" "$file_values"
-  sed -i -e "/volumes:/ a \      claimName: ${ENV_HELM_VALUES_CNFS:-cnfs-pvc-www}" "$file_values"
+  sed -i -e "/volumes:/ a \      claimName: ${pvc_name}" "$file_values"
   sed -i -e "/volumes:/ a \    persistentVolumeClaim:" "$file_values"
   sed -i -e "/volumes:/ a \  - name: volume-cnfs" "$file_values"
 
   # Configure volumeMounts
   sed -i -e "/volumeMounts: \[\]/s//volumeMounts:/" "$file_values"
-  sed -i -e "/volumeMounts:/ a \    mountPath: \"${ENV_HELM_VALUES_MOUNT_PATH:-/app2}\"" "$file_values"
+  sed -i -e "/volumeMounts:/ a \    mountPath: \"${mount_path}\"" "$file_values"
   sed -i -e "/volumeMounts:/ a \  - name: volume-cnfs" "$file_values"
 
   ## set livenessProbe, spring delay 30s
