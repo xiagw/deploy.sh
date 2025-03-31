@@ -15,7 +15,8 @@ ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/op
 
 ENV TZ=${TZ}
 
-EXPOSE 80 81 443
+EXPOSE 80 443
+VOLUME ["/app"]
 WORKDIR /app
 RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
     --mount=type=bind,target=/src,rw \

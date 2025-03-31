@@ -32,4 +32,4 @@ jobs:
     runs-on: my_host
     steps:
       - name: deploy.sh
-        run: $HOME/runner/deploy.sh --gitea
+        run: $HOME/runner/deploy.sh

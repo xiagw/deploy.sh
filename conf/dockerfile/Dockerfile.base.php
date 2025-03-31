@@ -11,7 +11,8 @@ ARG PHP_VERSION=8.3
 
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 ENV PHP_VERSION=${PHP_VERSION}
-EXPOSE 80 8080 9000
+EXPOSE 80 9000
+VOLUME ["/app"]
 WORKDIR /app
 
 CMD ["bash", "/opt/run0.sh"]

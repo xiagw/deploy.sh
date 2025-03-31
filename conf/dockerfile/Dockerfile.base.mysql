@@ -15,7 +15,7 @@ ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/op
 ENV TZ=${TZ}
 
 EXPOSE 3306
-
+VOLUME ["/var/lib/mysql"]
 RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=bind,target=/src,rw \

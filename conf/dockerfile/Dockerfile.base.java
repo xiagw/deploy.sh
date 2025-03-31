@@ -30,8 +30,8 @@ RUN --mount=type=cache,target=/var/cache/yum,id=var_cache_yum,sharing=shared \
     [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
     [ -f $BUILD_SH ] && bash $BUILD_SH
 
-EXPOSE 8080 8081 8082
-
+EXPOSE 8080 8081
+VOLUME ["/app"]
 # 添加健康检查
 # HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
 #     CMD curl -f http://localhost:8080/ || exit 1

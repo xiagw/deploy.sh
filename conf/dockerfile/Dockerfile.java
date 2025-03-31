@@ -32,7 +32,8 @@ ARG INSTALL_LIBREOFFICE=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 ENV TZ=$TZ
 WORKDIR /app
-EXPOSE 8080 8081 8082
+EXPOSE 8080 8081
+VOLUME ["/app"]
 CMD ["bash", "/opt/run0.sh"]
 RUN --mount=type=cache,target=/var/lib/apt/lists,id=apt_cache,sharing=shared  \
     --mount=type=cache,target=/var/cache/yum,id=yum_cache,sharing=shared  \
