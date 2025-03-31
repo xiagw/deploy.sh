@@ -231,16 +231,12 @@ ram_delete() {
 }
 
 ram_create_key() {
-    local username=$1
+    local username=$1 result
     echo "为子账号创建 AccessKey："
-    local result
     result=$(aliyun ram CreateAccessKey --UserName "$username" --profile "${profile:-}" --region "${region:-}")
     if [ $? -eq 0 ]; then
         echo "AccessKey 创建成功："
         echo "$result" | jq '.'
-        local access_key_id=$(echo "$result" | jq -r '.AccessKey.AccessKeyId')
-        local access_key_secret=$(echo "$result" | jq -r '.AccessKey.AccessKeySecret')
-
         # 使用新的 save_data_file 函数保存 AccessKey 数据
         save_data_file "${profile:-}" "${region:-}" "ram" "accesskey" "$result" "${username}_accesskey.json"
     else
