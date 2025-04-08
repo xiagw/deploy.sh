@@ -233,24 +233,27 @@ deploy_ssl() {
 # 添加微信验证文件处理函数
 deploy_wechat() {
     local c c_total
-    cd "${wechat_dir:? undefined wechat_dir}" || return 1
+    cd "${WECHAT_VERIFY_SRC:? undefined WECHAT_VERIFY_SRC}" || return 1
     for file in *.txt *.TXT; do
         [ -f "$file" ] || continue
         ## 同步到服务器
-        for host in "${wechat_host_path[@]:? undefined wechat_host_path}"; do
+        for host in "${WECHAT_VERIFY_DEST_PATH[@]:? undefined WECHAT_VERIFY_DEST_PATH}"; do
+            echo "$file => $host$file"
             scp "$file" "$host"
         done
 
         ## 同步到OSS
-        $CMD_OSS cp "$file" "oss://${wechat_bucket_name:? undefined wechat_bucket_name}/" -f
+        echo "$file => oss://${WECHAT_VERIFY_DEST:? undefined WECHAT_VERIFY_DEST}/$file"
+        $CMD_OSS cp "$file" "oss://${WECHAT_VERIFY_DEST:? undefined WECHAT_VERIFY_DEST}/" -f
 
         sleep 5
         uri=${file##*/}
 
-        c_total=${#wechat_urls[@]}
+        c_total=${#WECHAT_VERIFY_URLS[@]}
         c=0
-        for url in "${wechat_urls[@]}"; do
+        for url in "${WECHAT_VERIFY_URLS[@]}"; do
             curl -x '' -fsSL "${url}/${uri}" && ((++c))
+            echo
         done
 
         if [[ "$c" -ge "$c_total" ]]; then
@@ -345,19 +348,19 @@ main() {
     # 执行命令
     case "$G_COMMAND" in
     search_project_files)
-        ## project_dir 来源于 env
-        if [[ -z "${project_dir}" ]]; then
+        ## PROJECT_PATH 来源于 env
+        if [[ -z "${PROJECT_PATH}" ]]; then
             "$G_COMMAND" "${G_ARGS[@]}"
         else
-            "$G_COMMAND" "${project_dir}" "${G_ARGS[@]}"
+            "$G_COMMAND" "${PROJECT_PATH}" "${G_ARGS[@]}"
         fi
         ;;
     sync_ssh_keys)
-        ## all_keys_file 来源于 env
-        if [[ -z "${all_keys_file}" ]]; then
+        ## PUB_KEY_FILE 来源于 env
+        if [[ -z "${PUB_KEY_FILE}" ]]; then
             "$G_COMMAND" "${G_ARGS[@]}"
         else
-            "$G_COMMAND" "${all_keys_file}" "${bucket_and_path}" "${G_ARGS[@]}"
+            "$G_COMMAND" "${PUB_KEY_FILE}" "${BUCKET_PATH}" "${G_ARGS[@]}"
         fi
         ;;
     *)
