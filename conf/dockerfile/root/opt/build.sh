@@ -156,12 +156,68 @@ _check_run_sh() {
 _build_nginx() {
     echo "Building nginx:alpine..."
     $cmd_pkg update && $cmd_pkg upgrade
-    $cmd_pkg_opt openssl bash curl shadow
+    # 安装基础包
+    # 如果只需要运行时依赖
+    if [ "${1:-build}" = runtime ]; then
+        $cmd_pkg_opt pcre geoip openssl bash curl shadow
+        touch /var/log/messages
+        # 设置用户权限
+        groupmod -g 1000 nginx
+        usermod -u 1000 -g 1000 nginx
+        return 0
+    fi
 
-    touch /var/log/messages
+    # 安装编译依赖
+    $cmd_pkg_opt \
+        gcc \
+        libc-dev \
+        make \
+        openssl \
+        openssl-dev \
+        pcre-dev \
+        zlib-dev \
+        linux-headers \
+        wget \
+        gnupg \
+        libxslt-dev \
+        gd-dev \
+        geoip-dev \
+        nginx
 
-    groupmod -g 1000 nginx
-    usermod -u 1000 -g 1000 nginx
+    # 创建构建目录
+    mkdir -p /build
+    cd /build || exit 1
+
+    # 获取当前nginx版本号
+    NGINX_VERSION=$(nginx -v 2>&1 | sed 's/.*\///;s/ .*//')
+    if [ -z "$NGINX_VERSION" ]; then
+        NGINX_VERSION="1.26.3" # 设置默认稳定版本
+    fi
+
+    # 下载并解压nginx源码
+    if ! wget -q "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz"; then
+        echo "Failed to download nginx source" >&2
+        return 1
+    fi
+
+    tar -xzf "nginx-${NGINX_VERSION}.tar.gz"
+    rm "nginx-${NGINX_VERSION}.tar.gz"
+
+    # 编译安装nginx
+    cd "nginx-${NGINX_VERSION}" || exit 1
+    CONFIGURE_SCRIPT="configure_nginx.sh"
+    echo "./configure \\" >"$CONFIGURE_SCRIPT"
+    nginx -V 2>&1 | grep 'configure arguments:' | sed 's/configure arguments: //' | sed 's/$/ --with-http_geoip_module/' >>"$CONFIGURE_SCRIPT"
+    sh "$CONFIGURE_SCRIPT"
+    rm -f "$CONFIGURE_SCRIPT"
+
+    make
+    make install
+
+    # 验证GeoIP模块安装
+    if /usr/sbin/nginx -V 2>&1 | grep -q 'with-http_geoip_module'; then
+        echo "GeoIP module successfully installed."
+    fi
 }
 
 _build_php() {
@@ -615,7 +671,7 @@ main() {
             command -v memcached ||
             command -v rabbitmq
     )" in
-    */nginx) _build_nginx ;;
+    */nginx) _build_nginx "$@" ;;
     */composer) _build_composer ;;
     */mvn) _build_maven ;;
     */jmeter) _build_jmeter ;;
