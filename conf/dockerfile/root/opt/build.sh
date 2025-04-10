@@ -158,7 +158,7 @@ _build_nginx() {
     $cmd_pkg update && $cmd_pkg upgrade
     # 安装基础包
     # 如果只需要运行时依赖
-    if [ "${1:-build}" = runtime ]; then
+    if [ "${1:-runtime}" = runtime ]; then
         $cmd_pkg_opt pcre geoip openssl bash curl shadow
         touch /var/log/messages
         # 设置用户权限
