@@ -143,29 +143,10 @@ parse_command_args() {
         -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         ## call build.base.sh
         -x | --build-base)
+            arg_flags["build_base"]=1
             shift
-            local all_tags tags
-            all_tags=(
-                "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4"
-                "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
-                "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
-                "node:18" "node:20" "node:21" "node:22"
-                "redis:latest"
-                "nginx:stable-alpine"
-            )
-            if [[ -z "$1" ]]; then
-                readarray -t tags < <(echo "${all_tags[@]}" | sed 's/\ /\n/g' | fzf -m --header="Use TAB to select multiple items, ENTER to confirm")
-            else
-                if [[ "$1" = "all" ]]; then
-                    tags=("${all_tags[@]}")
-                else
-                    tags=("$@")
-                fi
-            fi
-            for i in "${tags[@]}"; do
-                build_base_image "$i"
-            done
-            exit
+            build_base_args=("$@") # 保存剩余参数
+            return
             ;;
         # Build operations
         -B | --build)
@@ -447,6 +428,32 @@ main() {
     ## 复制示例配置文件（deploy.json、deploy.env）到data目录 添加必要的二进制文件目录到PATH环境变量
     config_deploy_depend file
 
+    # 在完成初始化后再执行 build_base
+    if [[ ${arg_flags["build_base"]} -eq 1 ]]; then
+        local all_tags tags
+        all_tags=(
+            "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4"
+            "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
+            "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
+            "node:18" "node:20" "node:21" "node:22"
+            "redis:latest"
+            "nginx:stable-alpine"
+        )
+        if [[ "${#build_base_args[@]}" -le 0 ]]; then
+            readarray -t tags < <(echo "${all_tags[@]}" | sed 's/\ /\n/g' | fzf -m --header="Use TAB to select multiple items, ENTER to confirm")
+        else
+            if [[ "${build_base_args[0]}" = "all" ]]; then
+                tags=("${all_tags[@]}")
+            else
+                tags=("${build_base_args[@]}")
+            fi
+        fi
+        for i in "${tags[@]}"; do
+            build_base_image "$i"
+        done
+        return
+    fi
+
     ## 检测操作系统版本、类型，安装必要的命令和软件
     if [[ ${arg_flags["kube_pvc"]} -eq 1 ]]; then
         system_check >/dev/null
@@ -478,6 +485,7 @@ main() {
     ## Create Helm chart directory if --create-helm flag is set
     ## This is an independent operation that will exit after completion
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return
+
     ## Docker image copy operation
     if [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_docker_source}" ]]; then
         copy_docker_image "${arg_docker_source}" "${arg_docker_target}" "${arg_keep_tag}"
