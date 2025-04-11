@@ -178,6 +178,7 @@ _build_nginx() {
         zlib-dev \
         linux-headers \
         wget \
+        git \
         gnupg \
         libxslt-dev \
         gd-dev \
@@ -204,11 +205,14 @@ _build_nginx() {
     tar -xzf "nginx-${NGINX_VERSION}.tar.gz"
     rm "nginx-${NGINX_VERSION}.tar.gz"
 
+    # 下载 ngx_http_geoip2_module
+    git clone https://github.com/leev/ngx_http_geoip2_module.git
+
     # 编译安装nginx
     cd "nginx-${NGINX_VERSION}" || exit 1
     CONFIGURE_SCRIPT="configure_nginx.sh"
     echo "./configure \\" >"$CONFIGURE_SCRIPT"
-    nginx -V 2>&1 | grep 'configure arguments:' | sed 's/configure arguments: //' | sed 's/$/ --with-http_geoip2_module/' >>"$CONFIGURE_SCRIPT"
+    nginx -V 2>&1 | grep 'configure arguments:' | sed 's/configure arguments: //' | sed 's/$/ --add-module=\/build\/ngx_http_geoip2_module/' >>"$CONFIGURE_SCRIPT"
     sh "$CONFIGURE_SCRIPT"
     rm -f "$CONFIGURE_SCRIPT"
 
