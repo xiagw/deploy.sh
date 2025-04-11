@@ -277,3 +277,98 @@ spec:
 EOF
   fi
 }
+
+# Build base Docker images for the project
+# @param $1 image_tag The tag of the base image to build
+build_base_image() {
+  local tag="$1" registry base_tag cmd
+  registry=$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")
+  base_tag="${registry}/${tag}-base"
+  cmd=$(command -v docker || command -v podman || echo docker)
+  cmd_opt=(
+    "$cmd"
+    build
+    --pull
+    --push
+    --progress=plain
+    --platform "linux/amd64,linux/arm64"
+    --build-arg CHANGE_SOURCE=true
+    --build-arg IN_CHINA=true
+    --build-arg HTTP_PROXY="${http_proxy-}"
+    --build-arg HTTPS_PROXY="${http_proxy-}"
+  )
+
+  case "$tag" in
+  php:*)
+    cmd_opt+=(
+      --build-arg PHP_VERSION="${tag#*:}"
+      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+    )
+    ;;
+  redis:*)
+    cmd_opt+=(
+      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+    )
+    ;;
+  nginx:*)
+    cmd_opt+=(
+      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+    )
+    ;;
+  mysql:5*)
+    cmd_opt+=(
+      --build-arg MIRROR="${registry}/"
+      --build-arg MYSQL_VERSION="${tag#*:}"
+      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+    )
+    ;;
+  mysql:*)
+    cmd_opt+=(
+      --build-arg MYSQL_VERSION="${tag#*:}"
+      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+    )
+    ;;
+  amazoncorretto:*)
+    cmd_opt+=(
+      --build-arg MVN_PROFILE="base"
+      --build-arg JDK_VERSION="${tag#*:}"
+      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.java"
+    )
+    ;;
+  node:*)
+    cmd_opt+=(
+      --build-arg NODE_VERSION="${tag#*:}"
+      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
+    )
+    ;;
+  esac
+  cmd_opt+=(--tag "${base_tag}")
+
+  # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
+  if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
+    ${cmd} run --privileged --rm tonistiigi/binfmt --install all
+  fi
+
+  "${cmd_opt[@]}" "${G_PATH}/conf/dockerfile/"
+}
+
+# Build selected base images
+# @param $@ Optional specific image tags to build
+select_image_tags() {
+  local all_tags=() tags=()
+
+  all_tags=(
+    "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4"
+    "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
+    "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
+    "node:18" "node:20" "node:21" "node:22"
+    "redis:latest"
+    "nginx:stable-alpine"
+  )
+
+  readarray -t tags < <(echo "${all_tags[@]}" | sed 's/\ /\n/g' | fzf -m --header="Use TAB to select multiple items, ENTER to confirm")
+
+  for i in "${tags[@]}"; do
+    build_base_image "$i"
+  done
+}

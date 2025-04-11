@@ -142,12 +142,7 @@ parse_command_args() {
         -b | --git-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         ## call build.base.sh
-        -x | --build-base)
-            arg_flags["build_base"]=1
-            shift
-            build_base_args=("$@") # 保存剩余参数
-            return
-            ;;
+        -x | --build-base) arg_flags["build_base"]=1 ;;
         # Build operations
         -B | --build)
             arg_flags["build_all"]=1
@@ -287,78 +282,6 @@ config_build_env() {
     export G_DOCK G_RUN G_ARGS
 }
 
-build_base_image() {
-    local tag="$1" registry base_tag cmd
-    registry=$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")
-    base_tag="${registry}/${tag}-base"
-    cmd=$(command -v docker || command -v podman || echo docker)
-    cmd_opt=(
-        "$cmd"
-        build
-        --pull
-        --push
-        --progress=plain
-        --platform "linux/amd64,linux/arm64"
-        --build-arg CHANGE_SOURCE=true
-        --build-arg IN_CHINA=true
-        --build-arg HTTP_PROXY="${http_proxy-}"
-        --build-arg HTTPS_PROXY="${http_proxy-}"
-    )
-
-    case "$tag" in
-    php:*)
-        cmd_opt+=(
-            --build-arg PHP_VERSION="${tag#*:}"
-            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-        )
-        ;;
-    redis:*)
-        cmd_opt+=(
-            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-        )
-        ;;
-    nginx:*)
-        cmd_opt+=(
-            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-        )
-        ;;
-    mysql:5*)
-        cmd_opt+=(
-            --build-arg MIRROR="${registry}/"
-            --build-arg MYSQL_VERSION="${tag#*:}"
-            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-        )
-        ;;
-    mysql:*)
-        cmd_opt+=(
-            --build-arg MYSQL_VERSION="${tag#*:}"
-            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-        )
-        ;;
-    amazoncorretto:*)
-        cmd_opt+=(
-            --build-arg MVN_PROFILE="base"
-            --build-arg JDK_VERSION="${tag#*:}"
-            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.java"
-        )
-        ;;
-    node:*)
-        cmd_opt+=(
-            --build-arg NODE_VERSION="${tag#*:}"
-            -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-        )
-        ;;
-    esac
-    cmd_opt+=(--tag "${base_tag}")
-
-    # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
-    if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
-        ${cmd} run --privileged --rm tonistiigi/binfmt --install all
-    fi
-
-    "${cmd_opt[@]}" "${G_PATH}/conf/dockerfile/"
-}
-
 main() {
     set -Eeo pipefail
     if [[ ${CI_DEBUG_TRACE:-false} == true ]]; then
@@ -430,27 +353,7 @@ main() {
 
     # 在完成初始化后再执行 build_base
     if [[ ${arg_flags["build_base"]} -eq 1 ]]; then
-        local all_tags tags
-        all_tags=(
-            "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4"
-            "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
-            "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
-            "node:18" "node:20" "node:21" "node:22"
-            "redis:latest"
-            "nginx:stable-alpine"
-        )
-        if [[ "${#build_base_args[@]}" -le 0 ]]; then
-            readarray -t tags < <(echo "${all_tags[@]}" | sed 's/\ /\n/g' | fzf -m --header="Use TAB to select multiple items, ENTER to confirm")
-        else
-            if [[ "${build_base_args[0]}" = "all" ]]; then
-                tags=("${all_tags[@]}")
-            else
-                tags=("${build_base_args[@]}")
-            fi
-        fi
-        for i in "${tags[@]}"; do
-            build_base_image "$i"
-        done
+        select_image_tags
         return
     fi
 
