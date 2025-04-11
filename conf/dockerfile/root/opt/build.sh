@@ -159,7 +159,7 @@ _build_nginx() {
     # 安装基础包
     # 如果只需要运行时依赖
     if [ "${1:-runtime}" = runtime ]; then
-        $cmd_pkg_opt pcre geoip openssl bash curl shadow
+        $cmd_pkg_opt pcre openssl bash curl shadow libmaxminddb
         touch /var/log/messages
         # 设置用户权限
         groupmod -g 1000 nginx
@@ -181,7 +181,8 @@ _build_nginx() {
         gnupg \
         libxslt-dev \
         gd-dev \
-        geoip-dev \
+        libmaxminddb \
+        libmaxminddb-dev \
         nginx
 
     # 创建构建目录
@@ -207,7 +208,7 @@ _build_nginx() {
     cd "nginx-${NGINX_VERSION}" || exit 1
     CONFIGURE_SCRIPT="configure_nginx.sh"
     echo "./configure \\" >"$CONFIGURE_SCRIPT"
-    nginx -V 2>&1 | grep 'configure arguments:' | sed 's/configure arguments: //' | sed 's/$/ --with-http_geoip_module/' >>"$CONFIGURE_SCRIPT"
+    nginx -V 2>&1 | grep 'configure arguments:' | sed 's/configure arguments: //' | sed 's/$/ --with-http_geoip2_module/' >>"$CONFIGURE_SCRIPT"
     sh "$CONFIGURE_SCRIPT"
     rm -f "$CONFIGURE_SCRIPT"
 
@@ -215,8 +216,8 @@ _build_nginx() {
     make install
 
     # 验证GeoIP模块安装
-    if /usr/sbin/nginx -V 2>&1 | grep -q 'with-http_geoip_module'; then
-        echo "GeoIP module successfully installed."
+    if /usr/sbin/nginx -V 2>&1 | grep -q 'with-http_geoip2_module'; then
+        echo "GeoIP2 module successfully installed."
     fi
 }
 
