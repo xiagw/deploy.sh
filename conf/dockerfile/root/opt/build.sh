@@ -168,23 +168,7 @@ _build_nginx() {
     fi
 
     # 安装编译依赖
-    $cmd_pkg_opt \
-        gcc \
-        libc-dev \
-        make \
-        openssl \
-        openssl-dev \
-        pcre-dev \
-        zlib-dev \
-        linux-headers \
-        wget \
-        git \
-        gnupg \
-        libxslt-dev \
-        gd-dev \
-        libmaxminddb \
-        libmaxminddb-dev \
-        nginx
+    $cmd_pkg_opt gcc libc-dev make openssl openssl-dev pcre-dev zlib-dev linux-headers git gnupg libxslt-dev gd-dev libmaxminddb libmaxminddb-dev
 
     # 创建构建目录
     mkdir -p /build
@@ -192,18 +176,13 @@ _build_nginx() {
 
     # 获取当前nginx版本号
     NGINX_VERSION=$(nginx -v 2>&1 | sed 's/.*\///;s/ .*//')
-    if [ -z "$NGINX_VERSION" ]; then
-        NGINX_VERSION="1.26.3" # 设置默认稳定版本
-    fi
+    NGINX_VERSION="${NGINX_VERSION:-1.26.3}" # 设置默认稳定版本
 
     # 下载并解压nginx源码
-    if ! wget -q "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz"; then
+    if ! curl -fL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" | tar -xz; then
         echo "Failed to download nginx source" >&2
         return 1
     fi
-
-    tar -xzf "nginx-${NGINX_VERSION}.tar.gz"
-    rm "nginx-${NGINX_VERSION}.tar.gz"
 
     # 下载 ngx_http_geoip2_module
     git clone https://github.com/leev/ngx_http_geoip2_module.git
@@ -214,7 +193,6 @@ _build_nginx() {
     echo "./configure \\" >"$CONFIGURE_SCRIPT"
     nginx -V 2>&1 | grep 'configure arguments:' | sed 's/configure arguments: //' | sed 's/$/ --add-module=\/build\/ngx_http_geoip2_module/' >>"$CONFIGURE_SCRIPT"
     sh "$CONFIGURE_SCRIPT"
-    rm -f "$CONFIGURE_SCRIPT"
 
     make
     make install
