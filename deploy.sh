@@ -54,15 +54,16 @@ config_deploy_vars() {
     ## Docker image tag format: <git-commit-sha>-<unix-timestamp-with-milliseconds>
     # G_IMAGE_TAG="${G_REPO_SHORT_SHA}-$(date +%s%3N)"
     G_IMAGE_TAG="$(date +%s%3N)"
-    ## 1. ENV_DOCKER_PREFIX=false, $ENV_DOCKER_REGISTRY:$G_IMAGE_TAG
-    ## 2. ENV_DOCKER_PREFIX=true,  $ENV_DOCKER_REGISTRY/$RANDOM:$G_IMAGE_TAG
-    if [[ "${ENV_DOCKER_PREFIX:-false}" = true ]]; then
+    ## 1. ENV_DOCKER_RANDOM=false, $ENV_DOCKER_REGISTRY/$G_REPO_NAME:$G_IMAGE_TAG
+    ## 2. ENV_DOCKER_RANDOM=true,  $ENV_DOCKER_REGISTRY/$RANDOM:$G_IMAGE_TAG
+    if [[ "${ENV_DOCKER_RANDOM:-false}" = true ]]; then
         local chars chars_rand
         chars=({a..o})
         ## 随机选取a-o当中的两个字母组合成字符串（可组合总数225个）
         chars_rand="${chars[$((RANDOM % ${#chars[@]}))]}${chars[$((RANDOM % ${#chars[@]}))]}"
         ENV_DOCKER_REGISTRY="${ENV_DOCKER_REGISTRY}/${chars_rand}"
     fi
+    # DOCKER_REGISTRY_BASE="${ENV_DOCKER_REGISTRY%/*}/aa"
 
     # Handle crontab execution
     if ${run_with_crontab:-false}; then
@@ -110,7 +111,7 @@ Parameters:
     # Kubernetes operations
     -H, --create-helm DIR        Create Helm chart in specified directory.
     -K, --create-k8s             Create K8s cluster with Terraform.
-    --kube-pvc NAME             Create PVC with specified name.
+    -P, --kube-pvc NAME             Create PVC with specified name.
 
     # Miscellaneous
     -D, --disable-inject         Disable file injection.
@@ -141,17 +142,12 @@ parse_command_args() {
         -g | --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         -b | --git-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
-        ## call build.base.sh
-        -x | --build-base) arg_flags["build_base"]=1 ;;
         # Build operations
+        -x | --build-base) arg_flags["build_base"]=1 ;;
         -B | --build)
             arg_flags["build_all"]=1
-            if [[ -z "$2" || ! "$2" =~ ^(push|keep)$ ]]; then
-                keep_image="remove"
-            else
-                keep_image="$2"
-                shift
-            fi
+            image_retain="${2:-remove}"
+            [[ -z "$2" ]] || shift
             ;;
         # Deployment
         -k | --deploy-k8s) arg_flags["deploy_k8s"]=1 deploy_method=deploy_k8s ;;
@@ -162,27 +158,12 @@ parse_command_args() {
         -S | --deploy-sftp) arg_flags["deploy_sftp"]=1 deploy_method=deploy_sftp ;;
         -c | --copy-image)
             arg_flags["copy_image"]=1
-            arg_docker_source="${2:?ERROR: example: nginx:stable-alpine}"
-            if [ -z "$3" ]; then
-                local registry
-                registry=$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")
-                if [ -n "${registry}" ]; then
-                    arg_docker_target="${registry}"
-                else
-                    return 1
-                fi
-            else
-                arg_docker_target="${3}"
-                shift
-            fi
-
-            if [[ -z "$4" || ! "$4" =~ ^(true|false)$ ]]; then
-                arg_keep_tag="true"
-            else
-                arg_keep_tag="$4"
-                shift
-            fi
-            shift
+            arg_src="${2:?ERROR: example: nginx:stable-alpine}"
+            arg_target="${3}"
+            arg_keep_tag="${4:-true}"
+            [ -z "$2" ] || shift
+            [ -z "$3" ] || shift
+            [ -z "$4" ] || shift
             ;;
         # Testing and quality
         -u | --test-unit) arg_flags["test_unit"]=1 ;;
@@ -194,7 +175,7 @@ parse_command_args() {
         # Kubernetes operations
         -H | --create-helm) arg_create_helm=true && helm_dir="$2" && shift ;;
         -K | --create-k8s) create_k8s_with_terraform=true ;;
-        --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" namespace="${3:-$G_NAMESPACE}" && shift 2 ;;
+        -P | --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" namespace="${3:-$G_NAMESPACE}" && shift 2 ;;
         # Miscellaneous
         -D | --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
@@ -223,7 +204,7 @@ parse_command_args() {
 
 # 配置 Docker/Podman 构建环境
 config_build_env() {
-    local get_lang="$1"
+    local lang="$1"
 
     # 选择构建工具（Docker 或 Podman）
     G_DOCK=$(command -v podman || command -v docker || echo docker)
@@ -248,15 +229,15 @@ config_build_env() {
         G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR}/"
     fi
     # Java 项目特殊配置
-    case "${get_lang}" in
+    case "${lang}" in
     java:*)
         G_ARGS+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
         if ${DEBUG_ON:-false}; then
             G_ARGS+=" --build-arg MVN_DEBUG=on"
         fi
 
-        # Set Maven and JDK versions based on get_lang
-        case "${get_lang:-}" in
+        # Set Maven and JDK versions based on lang
+        case "${lang:-}" in
         java:1.7:* | java:7:*) MVN_VERSION="3.6-jdk-7" && JDK_VERSION="7" ;;
         java:11:*) MVN_VERSION="3.9-amazoncorretto-11" && JDK_VERSION="11-base" ;;
         java:17:*) MVN_VERSION="3.9-amazoncorretto-17" && JDK_VERSION="17-base" ;;
@@ -274,6 +255,11 @@ config_build_env() {
                 G_ARGS+=" --build-arg INSTALL_${install}=true"
             fi
         done
+        ;;
+    node:*)
+        local ver="${lang#*:}"
+        ver="${ver%:*}"
+        G_ARGS+=" --build-arg NODE_VERSION=${ver:-20}"
         ;;
     esac
 
@@ -322,23 +308,8 @@ main() {
     ## 解析和处理命令行参数
     parse_command_args "$@"
 
-    ## 定义需要加载的模块列表
-    modules=(
-        "analysis"
-        "build"
-        "common"
-        "config"
-        "deployment"
-        "kubernetes"
-        "notify"
-        "repo"
-        "style"
-        "system"
-        "test"
-    )
-
     ## 按顺序加载模块
-    for module in "${modules[@]}"; do
+    for module in common config system repo test analysis style build deployment kubernetes notify; do
         if [[ -f "$G_LIB/${module}.sh" ]]; then
             source "$G_LIB/${module}.sh"
         else
@@ -390,8 +361,10 @@ main() {
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return
 
     ## Docker image copy operation
-    if [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_docker_source}" ]]; then
-        copy_docker_image "${arg_docker_source}" "${arg_docker_target}" "${arg_keep_tag}"
+    if [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_src}" ]]; then
+        [ -z "$arg_target" ] && arg_target="$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")"
+        [ -z "$arg_target" ] && return 1
+        copy_docker_image "${arg_src}" "${arg_target}" "${arg_keep_tag}"
         return
     fi
 
@@ -429,7 +402,9 @@ main() {
 
     ## 探测项目的程序语言
     _msg step "[lang] Probe program language"
+    ## get_lang=lang:ver:docker
     get_lang=$(repo_language_detect)
+    ## repo_lang=lang
     repo_lang=${get_lang%%:*}
     ## 解析语言类型和 docker 标识
     echo "  ${get_lang}"
@@ -471,7 +446,7 @@ main() {
     # 构建相关任务
     if [[ ${arg_flags["build_all"]} -eq 1 ]]; then
         unset EXIT_MAIN
-        build_all "$get_lang" "${keep_image:-}"
+        build_all "$get_lang" "${image_retain}"
         [[ "${EXIT_MAIN:-false}" == "true" ]] && return 0
     fi
 

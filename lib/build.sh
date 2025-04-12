@@ -74,19 +74,19 @@ build_image() {
         return
     fi
 
-    base_file="${G_REPO_DIR}/Dockerfile.base"
-    if [[ -f "${base_file}" ]]; then
-        base_tag="${ENV_DOCKER_REGISTRY}:${G_REPO_NAME}-${G_REPO_BRANCH}"
-        echo "Found ${base_file}, building base image: ${base_tag}"
-        $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}"
-        export EXIT_MAIN=true
-        return
-    fi
-
     # 根据参数决定是否需要push
     if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
         docker_login
         push_flag="--push"
+    fi
+
+    base_file="${G_REPO_DIR}/Dockerfile.base"
+    if [[ -f "${base_file}" ]]; then
+        base_tag="${ENV_DOCKER_REGISTRY%/*}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
+        echo "Found ${base_file}, building base image:"
+        echo "  ${base_tag}"
+        echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
+        $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}"
     fi
 
     repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
@@ -97,12 +97,12 @@ build_image() {
     ## push to ttl.sh
     if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         image_uuid="ttl.sh/$(uuidgen):1h"
-        echo "Temporary image tag for ttl.sh: $image_uuid"
+        echo "Temporary image tag: $image_uuid"
         $G_DOCK tag ${repo_tag} ${image_uuid}
         $G_DOCK push $image_uuid
         echo "## Then execute the following commands on REMOTE SERVER."
         echo "  $G_DOCK pull $image_uuid"
-        echo "  $G_DOCK tag $image_uuid laradock_spring"
+        echo "  $G_DOCK tag $image_uuid laradock-spring"
     fi
 
     # auto mode:            push=1, keep=0, keep_image=
@@ -113,9 +113,9 @@ build_image() {
     # 根据参数决定是否保留镜像
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
         $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null &
-        _msg time  "Image removed on $G_DOCK"
+        _msg time "Image removed on $G_DOCK"
     else
-        _msg time  "Image keeped on $G_DOCK"
+        _msg time "Image keeped on $G_DOCK"
     fi
 }
 

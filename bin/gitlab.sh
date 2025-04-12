@@ -143,9 +143,10 @@ add_account() {
     local gitlab_domain="$2"
     local password_rand
 
+    [ -z "${user_name}" ] && return 1
     password_rand=$(_get_random_password 2>/dev/null)
     ## check if user exists
-    if [ -n "$($cmd_gitlab user list --username "$user_name" | jq -r '.[0].name')" ]; then
+    if $cmd_gitlab user list --username "$user_name" | jq -e '.[0].name'; then
         _msg "User [$user_name] already exists"
         return 1
     fi
@@ -183,11 +184,30 @@ print_usage() {
     echo
     echo "Commands:"
     echo "  runner     Manage gitlab runner"
+    echo "  user       Manage GitLab users"
+    echo "  project    Manage GitLab projects"
     echo
     echo "Runner Commands:"
     echo "  runner install    Install and configure gitlab runner"
+    echo "  runner update     Update gitlab runner"
+    echo "  runner start      Start gitlab runner service"
+    echo "  runner stop       Stop gitlab runner service"
+    echo
+    echo "User Commands:"
+    echo "  user create       Create a new user"
+    echo "  user update       Update an existing user"
+    echo "  user list         List all users"
+    echo "  user delete       Delete a user"
+    echo
+    echo "Project Commands:"
+    echo "  project create     Create a new project"
+    echo "  project list       List all projects"
+    echo "  project delete     Delete a project"
+    echo "  project size       Check the size of a project"
     echo
     echo "Global Options:"
+    echo "  -d, --domain <domain>    Specify GitLab domain"
+    echo "  -a, --account <account>   Specify GitLab account"
     echo "  -p, --profile <profile>    Select gitlab profile"
     echo "  -h, --help                 Print this help message"
 }
@@ -258,7 +278,7 @@ check_large_repos() {
     # Get all project IDs directly with jq and process through stdin
     while read -r id; do
         # Get project statistics using curl
-        response=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/${id}?statistics=true")
+        response=$(curl -sL --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/${id}?statistics=true")
         repo_size=$(echo "$response" | jq -r '.statistics.repository_size // 0')
         storage_size=$(echo "$response" | jq -r '.statistics.storage_size // 0')
         path=$(echo "$response" | jq -r '.path_with_namespace')
@@ -269,7 +289,7 @@ check_large_repos() {
         fi
 
         # Convert to MB only for display
-        echo "${id} ${path} repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB" >>"$SCRIPT_LOG"
+        echo "repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB, ${id} https://git.flyh6.com/${path}" >>"$SCRIPT_LOG"
     done < <($cmd_gitlab project list --get-all | jq -r '.[].id')
 
     _msg time "Results saved to $SCRIPT_LOG"
@@ -294,6 +314,17 @@ delete_project_path() {
     id=$(gitlab_http_request "GET" "/projects/${encoded_path}" | jq -r '.id // empty')
 
     $cmd_gitlab project delete --id "${id:? ERROR: empty id}"
+}
+
+delete_project_pipeline_history() {
+    while read -r pid; do
+        echo "$pid"
+        $cmd_gitlab project-pipeline list --project-id "$pid" --get-all |
+            jq -r '.[].id' | sort -n | head -n -10 |
+            xargs -r -t -I {} gitlab project-pipeline delete --project-id "$pid" --id {}
+    done < <(
+        $cmd_gitlab project list --get-all | jq -r '.[].id' | sort -n
+    )
 }
 
 # Execute the saved command
@@ -326,6 +357,7 @@ execute_command() {
             ;;
         size) check_large_repos "${args[2]:-50}" ;;
         did) delete_project_path "${args[2]}" ;;
+        dp) delete_project_pipeline_history "${args[2]}" ;;
         *)
             $cmd_gitlab "${args[@]}"
             ;;

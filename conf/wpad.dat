@@ -1,0 +1,16 @@
+function FindProxyForURL(url, host) {
+    // 检查主机名是否为本地地址、简单主机名或私有网络地址
+    if (host == "127.0.0.1" ||
+        isPlainHostName(host) ||
+        shExpMatch(host, "(wpad.home)") ||
+        shExpMatch(host, "(wpad.si)") ||
+        shExpMatch(host, "(wpad.fly)") ||
+        shExpMatch(host, "10.9.*") ||
+        shExpMatch(host, "172.16.*") ||
+        shExpMatch(host, "172.31.*") ||
+        shExpMatch(host, "192.168.*")) {
+        return "DIRECT"; // 如果满足条件，直接连接，不使用代理
+    }
+
+    return "PROXY 192.168.5.1:1080; SOCKS5 192.168.5.1:1081; DIRECT;"; // 否则，使用指定的代理
+}

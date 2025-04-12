@@ -91,7 +91,7 @@ deploy_to_kubernetes() {
 
     # Record current image info / 记录当前镜像信息
     [ -d "${G_DATA}/image_logs" ] || mkdir -p "${G_DATA}/image_logs"
-    local image_record_file="${G_DATA}/image_logs/${release_name}_last_image"
+    local image_record_file="${G_DATA}/image_logs/${release_name}-${G_NAMESPACE}-last-tag"
     local current_image="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
     # Read and delete previous image if exists / 如果存在则读取并删除上一个镜像
     if [[ -f "${image_record_file}" && "${deploy_result:-0}" -eq 0 ]]; then

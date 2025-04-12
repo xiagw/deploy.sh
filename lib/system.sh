@@ -354,12 +354,12 @@ system_cert_renew() {
     if [ -f "$reload_nginx" ]; then
         _msg green "found $reload_nginx"
         for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
-            _msg "gitlab create pipeline, project id is $id"
+            _msg "create gitlab pipeline, project id is $id"
             gitlab project-pipeline create --ref main --project-id "$id"
         done
         rm -f "$reload_nginx"
     else
-        _msg warn "not found $reload_nginx"
+        _msg warn "not found $reload_nginx, skip create giltab pipeline"
     fi
     _msg time "[cert] completed"
 

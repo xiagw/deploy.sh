@@ -6,7 +6,7 @@
 # @param $1 G_DATA Directory containing data files
 # @return 0 on success, non-zero on failure
 repo_inject_file() {
-    local lang_type="$1" arg_disable_inject="${2:-false}"
+    local lang="$1" arg_disable_inject="${2:-false}"
 
     command -v rsync >/dev/null || _install_packages "$IS_CHINA" rsync
 
@@ -33,7 +33,7 @@ repo_inject_file() {
 
     ## 根据 ENV_INJECT 变量值（默认为 keep）控制配置文件注入行为：
     ## - keep: 保持现有配置不变
-    ## - overwrite: 注入 Dockerfile 和 root 目录结构（优先使用 conf/dockerfile/，其次是 data/dockerfile/）
+    ## - overwrite: 注入 Dockerfile 和 root 目录结构（优先使用 data/dockerfile/，其次是 conf/dockerfile/）
     ## - remove: 移除 Dockerfile
     ## - create: 创建 docker-compose.yml
     # echo "ENV_INJECT: ${ENV_INJECT:-keep}"
@@ -42,56 +42,46 @@ repo_inject_file() {
         echo "Keeping existing configuration, no files will be overwritten."
         ;;
     overwrite)
-        ## 定义常用路径
-        local dockerfile_data="${G_DATA}/dockerfile"
-        local dockerfile_conf="${G_PATH}/conf/dockerfile"
-
         ## 1. Dockerfile 注入
-        if [[ ! -f "${G_REPO_DIR}/Dockerfile" ]] || [[ "$lang_type" == "java" ]]; then
-            local dockerfile_template
-            ## 按优先级查找对应语言的 Dockerfile 模板
-            if [[ -f "${dockerfile_data}/Dockerfile.${lang_type}" ]]; then
-                dockerfile_template="${dockerfile_data}/Dockerfile.${lang_type}"
-            elif [[ -f "${dockerfile_conf}/Dockerfile.${lang_type}" ]]; then
-                dockerfile_template="${dockerfile_conf}/Dockerfile.${lang_type}"
-            fi
-
-            ## 如果找到模板则复制
-            if [[ -n "${dockerfile_template}" ]]; then
-                ## Java项目强制注入时显示警告信息
-                [[ -f "${G_REPO_DIR}/Dockerfile" ]] && [[ "$lang_type" == "java" ]] &&
-                    _msg warning "  Forcing Dockerfile injection for Java project"
-
-                ## 复制Dockerfile
-                cp -f "${dockerfile_template}" "${G_REPO_DIR}/Dockerfile"
-
-            fi
+        ## 按优先级查找对应语言的 Dockerfile 模板
+        if [[ -f "${G_DATA}/dockerfile/Dockerfile.${lang}" ]]; then
+            cp -f "${G_DATA}/dockerfile/Dockerfile.${lang}" "${G_REPO_DIR}/Dockerfile"
+        elif [[ -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang}" ]]; then
+            cp -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang}" "${G_REPO_DIR}/Dockerfile"
         fi
+
+        if [[ -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${lang}" ]]; then
+            case "$lang" in
+            node)
+                echo "Checking package.json hash..."
+                hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
+                mkdir -p "${G_DATA}/hash_saved"
+                hash_saved="$(cat "${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" || true)"
+                if [[ "$hash_now" = "$hash_saved" ]]; then
+                    rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
+                else
+                    cp -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${lang}" "${G_REPO_DIR}/Dockerfile.base"
+                    echo "${hash_now}" >"${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5"
+                fi
+                ;;
+            esac
+        fi
+
         ## 同时注入 .dockerignore（如果不存在）
         [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]] &&
-            cp -f "${dockerfile_conf}/.dockerignore" "${G_REPO_DIR}/"
+            cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
 
         ## 2. root 目录结构注入
-        local root_conf="${dockerfile_conf}/root" root_dir="${G_REPO_DIR}/root"
+        local conf_root="${G_PATH}/conf/dockerfile/root" repo_root="${G_REPO_DIR}/root"
         ## 创建 root 目录（如果不存在）
-        [[ ! -d "${root_dir}" ]] && mkdir -p "${root_dir}"
+        mkdir -p "${repo_root}"
 
+        local rsync_opts="rsync -r --exclude=*.cnf"
         ## 优先级1：注入基础目录结构（如果不存在 root/opt）
-        if [[ ! -d "${root_dir}/opt" ]] && [[ -d "${root_conf}" ]]; then
-            rsync -r --exclude="*.cnf" "${root_conf}/" "${root_dir}/"
-        fi
-
+        ${rsync_opts} "${conf_root}/" "${repo_root}/"
         ## 优先级2：注入自定义目录结构
-        if [[ -d "${dockerfile_data}/root" ]]; then
-            local exclude_opts="rsync -r --exclude=*.cnf"
-            if [[ "$lang_type" == "java" ]]; then
-                ## Java 项目特殊处理：根据区域决定是否保留 settings.xml
-                [[ "$IS_CHINA" != "true" ]] && exclude_opts+=" --exclude=settings.xml"
-            else
-                ## 非 Java 项目：排除所有 XML 文件
-                exclude_opts+=" --exclude=*.xml"
-            fi
-            ${exclude_opts} "${dockerfile_data}/root/" "${root_dir}/"
+        if [[ -d "${G_DATA}/dockerfile/root" ]]; then
+            ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
         fi
         ;;
     remove)
