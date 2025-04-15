@@ -238,7 +238,7 @@ deploy_via_rsync_ssh() {
 
         if [[ -n "$rsync_src_from_conf" ]]; then
             rsync_src="${rsync_src_from_conf%/}/"
-            echo "Using configured source path: $rsync_src"
+            echo "Using configured source: $rsync_src"
         else
             rsync_src="${G_REPO_DIR%/}/${rsync_relative_path:+${rsync_relative_path%/}/}"
             echo "Using default source path: $rsync_src"
@@ -261,7 +261,7 @@ deploy_via_rsync_ssh() {
             continue
         fi
 
-        echo "Deploying to ${ssh_host}:${rsync_dest}"
+        echo "Destination: ${ssh_host}:${rsync_dest}"
         if is_demo_mode "deploy_rsync_ssh"; then
             _msg purple "  $ssh_opt -n \"$ssh_host\" \"mkdir -p $rsync_dest\""
             _msg purple "  ${rsync_opt} -e \"$ssh_opt\" \"$rsync_src\" \"${ssh_host}:${rsync_dest}\""
