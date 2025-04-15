@@ -260,7 +260,9 @@ main() {
     [ -f "${AWK_SCRIPT}" ] || init_config
 
     case "${1:-connect}" in
-    list | ls | l) list_hosts ;;
+    list | ls | l)
+        list_hosts
+        ;;
     add | a)
         shift
         add_host "$@"
@@ -277,8 +279,12 @@ main() {
         shift
         connect_host "$@"
         ;;
-    help | -h | --help | h) _show_help ;;
-    *) connect_host "$@" ;;
+    help | -h | --help | h)
+        _show_help
+        ;;
+    *)
+        connect_host "$@"
+        ;;
     esac
 }
 
