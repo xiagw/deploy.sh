@@ -229,7 +229,7 @@ system_proxy() {
         ;;
     1 | on | enable)
         if [ -z "$ENV_HTTP_PROXY" ]; then
-            _msg warn "empty var ENV_HTTP_PROXY"
+            _msg warn "ENV_HTTP_PROXY is empty, proxy not set."
         else
             _msg time "set http_proxy https_proxy all_proxy"
             export http_proxy="$ENV_HTTP_PROXY"
@@ -379,6 +379,7 @@ system_install_tools() {
     local install_result=0
 
     ## 基础工具安装
+    system_proxy on
     if ! command -v jq &>/dev/null; then
         _check_sudo
         _install_packages "$IS_CHINA" jq || ((install_result++))
