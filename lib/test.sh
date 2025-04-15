@@ -45,7 +45,7 @@ handle_test() {
 
     case "$test_type" in
     "unit")
-        _msg step "[test] Running unit tests"
+        _msg step "[unit-test] Running unit tests"
         ## 在 gitlab 的 pipeline 配置环境变量 MAN_UNIT_TEST ，true 启用，false 禁用[default]
         echo "MAN_UNIT_TEST: ${MAN_UNIT_TEST:-false}"
         if ${test_arg:-false} || ${MAN_UNIT_TEST:-false}; then

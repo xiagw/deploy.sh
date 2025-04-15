@@ -60,8 +60,6 @@ build_image() {
     [ "${GH_ACTION:-false}" = "true" ] && return 0
     local keep_image="${1}" chars chars_rand base_file push_flag image_uuid
 
-    _msg step "[build] Building image"
-
     get_docker_context
 
     ## build from build.base.sh or Dockerfile.base
