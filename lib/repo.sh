@@ -60,6 +60,7 @@ repo_inject_file() {
                 if [[ "$hash_now" = "$hash_saved" ]]; then
                     rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
                 else
+                    echo "Copying Dockerfile.base..."
                     cp -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${lang}" "${G_REPO_DIR}/Dockerfile.base"
                     echo "${hash_now}" >"${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5"
                 fi
@@ -73,12 +74,13 @@ repo_inject_file() {
 
         ## 2. root 目录结构注入
         local conf_root="${G_PATH}/conf/dockerfile/root" repo_root="${G_REPO_DIR}/root"
+        local rsync_opts="rsync -r --exclude=*.cnf"
         ## 创建 root 目录（如果不存在）
         mkdir -p "${repo_root}"
-
-        local rsync_opts="rsync -r --exclude=*.cnf"
         ## 优先级1：注入基础目录结构（如果不存在 root/opt）
+        # if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
         ${rsync_opts} "${conf_root}/" "${repo_root}/"
+        # fi
         ## 优先级2：注入自定义目录结构
         if [[ -d "${G_DATA}/dockerfile/root" ]]; then
             ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
