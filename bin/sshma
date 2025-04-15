@@ -146,6 +146,10 @@ remove_host() {
 connect_host() {
     local alias_name use_byobu
     alias_name=$(select_host "$1" "Select host to connect:") || return 1
+    [ -z "$alias_name" ] && {
+        log error "Host name is empty."
+        return 1
+    }
 
     # 在非iPhone环境下且注释中有byobu，则启用byobu
     if ! uname -a | grep -i -q 'iphone.*ish'; then
