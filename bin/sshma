@@ -2,14 +2,170 @@
 # -*- coding: utf-8 -*-
 # shellcheck disable=SC2016
 
-# 全局变量定义
-SCRIPT_NAME=$(basename "$0")
-# SCRIPT_PATH=$(dirname "$(readlink -f "$0")")
-SSH_CONFIG_FILE="${HOME}/.ssh/config"
-AWK_SCRIPT=$(mktemp)
+# 辅助函数
+log() {
+    local type="$1" text="$2" now
+    now=$(date +"%Y-%m-%d %H:%M:%S")
 
-# 创建AWK脚本
-cat >"$AWK_SCRIPT" <<'EOF'
+    case "$type" in
+    error) printf "\033[31m[%s] [ERROR] %s\033[0m\n" "$now" "$text" >&2 ;;
+    success) printf "\033[32m[%s] [SUCCESS] %s\033[0m\n" "$now" "$text" ;;
+    info) printf "\033[36m[%s] [INFO] %s\033[0m\n" "$now" "$text" ;;
+    esac
+}
+
+select_host() {
+    local host_name="$1" prompt="${2:-Select host:}" selected_host
+
+    # 如果提供了主机名就直接返回
+    [ -n "$host_name" ] && echo "$host_name" && return 0
+
+    # 否则进入选择逻辑
+    if command -v fzf >/dev/null 2>&1; then
+        list_hosts | fzf --height 60% --prompt "$prompt" | awk '{print $2}'
+    else
+        select host in $(list_hosts plain); do
+            [ -n "$host" ] && {
+                selected_host="$host"
+                break
+            }
+        done
+        echo "$selected_host"
+    fi
+}
+
+list_hosts() {
+    # 如果需要验证，检查主机是否存在
+    if [[ "$1" == "verify" ]]; then
+        if awk -v format="plain" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE" | grep -qw "^${2}$"; then
+            return 0
+        else
+            return 1 # 主机不存在
+        fi
+    fi
+
+    awk -v format="${1:-pretty}" -v mode="list" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE"
+}
+
+add_host() {
+    local conn_str="$1" alias_name="$2" user host_ip port=22 config=()
+
+    if [[ "$conn_str" == *@* ]]; then
+        IFS='@:' read -r user host_ip port <<<"$conn_str"
+    else
+        host_ip="$conn_str"
+        user="root"
+    fi
+
+    [ -z "$host_ip" ] && {
+        log error "Invalid connection string format"
+        _show_help
+        return 1
+    }
+
+    # 如果未指定alias_name，根据IP生成
+    if [ -z "$alias_name" ]; then
+        # 移除IP中的点号
+        alias_name="H$(echo "$host_ip" | tr -d '.')"
+    fi
+
+    list_hosts verify "${alias_name}" && {
+        log error "Host $alias_name already exists"
+        return 1
+    }
+
+    shift 2
+    local use_byobu=0
+
+    # 处理额外选项
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        -b | --byobu) use_byobu=1 ;;
+        -i | --identity)
+            config+=("    IdentityFile $2")
+            shift
+            ;;
+        -L | --local-forward)
+            config+=("    LocalForward $2 $3")
+            shift 2
+            ;;
+        -R | --remote-forward)
+            config+=("    RemoteForward $2 $3")
+            shift 2
+            ;;
+        *) shift ;;
+        esac
+        shift
+    done
+
+    # 构建配置（移到选项处理之后）
+    config=("### ${alias_name} begin$([ $use_byobu -eq 1 ] && echo ' byobu')" "${config[@]}")
+    config+=("Host $alias_name")
+    config+=("    HostName $host_ip")
+    config+=("    User $user")
+    [[ "$port" != "22" ]] && config+=("    Port $port")
+    config+=("### ${alias_name} end")
+
+    # 写入配置
+    printf '%s\n' "${config[@]}" >>"$SSH_CONFIG_FILE"
+    log success "Added host $alias_name"
+}
+
+modify_host() {
+    local conn_str="$1" alias_name
+    alias_name=$(select_host "$2" "Select host to modify:") || return 1
+    [ -z "$conn_str" ] && read -r -p "Enter connection string (user@host:port): " conn_str
+    [ -z "$conn_str" ] && return 1
+
+    # 先删除旧配置
+    remove_host "$alias_name" || return 1
+
+    # 添加新配置
+    add_host "$conn_str" "$alias_name"
+}
+
+remove_host() {
+    local alias_name
+    alias_name=$(select_host "$1" "Select host to remove:") || return 1
+
+    # 使用 awk 删除配置块
+    awk -v host="$alias_name" -v mode="remove" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE" >"$SSH_CONFIG_FILE.tmp" &&
+        mv "$SSH_CONFIG_FILE.tmp" "$SSH_CONFIG_FILE"
+
+    # 验证删除是否成功
+    if list_hosts verify "${alias_name}"; then
+        log error "Failed to remove host $alias_name"
+        return 1
+    else
+        chmod 600 "$SSH_CONFIG_FILE"
+        log success "Removed host $alias_name"
+        return 0
+    fi
+}
+
+connect_host() {
+    local alias_name use_byobu
+    alias_name=$(select_host "$1" "Select host to connect:") || return 1
+
+    # 在非iPhone环境下且注释中有byobu，则启用byobu
+    if ! uname -a | grep -i -q 'iphone.*ish'; then
+        if grep -B1 "^Host\s\+${alias_name}$" "$SSH_CONFIG_FILE" | grep -q "byobu"; then
+            use_byobu=byobu
+        fi
+    fi
+    log info "Connecting to [${alias_name}] ..."
+    ssh -A -t "$alias_name" $use_byobu
+}
+
+init_config() {
+    # 初始化 SSH 配置
+    [ -d "${HOME}/.ssh" ] || mkdir -p "${HOME}/.ssh"
+    [ -f "$SSH_CONFIG_FILE" ] || touch "$SSH_CONFIG_FILE"
+    chmod 700 "${HOME}/.ssh"
+    chmod 600 "$SSH_CONFIG_FILE"
+
+    # 创建AWK脚本
+    cat >"$AWK_SCRIPT" <<'EOF'
 BEGIN {
     count = 0
     in_target_host = 0
@@ -52,161 +208,6 @@ function list_hosts() {
     }
 }
 EOF
-
-# 确保脚本退出时清理临时文件
-trap 'rm -f "$AWK_SCRIPT"' EXIT
-
-# 辅助函数
-_msg() {
-    local type="$1" text="$2" now
-    now=$(date +"%Y-%m-%d %H:%M:%S")
-
-    case "$type" in
-    error) printf "\033[31m[%s] [ERROR] %s\033[0m\n" "$now" "$text" >&2 ;;
-    success) printf "\033[32m[%s] [SUCCESS] %s\033[0m\n" "$now" "$text" ;;
-    info) printf "\033[34m[%s] [INFO] %s\033[0m\n" "$now" "$text" ;;
-    esac
-}
-
-_select_host() {
-    local host_name="$1" prompt="${2:-Select host:}"
-
-    # 如果提供了主机名就直接返回
-    [ -n "$host_name" ] && echo "$host_name" && return 0
-
-    # 否则进入选择逻辑
-    if command -v fzf >/dev/null 2>&1; then
-        _list_hosts plain | fzf --height 60% --prompt "$prompt"
-    else
-        local hosts selected_host
-        mapfile -t hosts < <(_list_hosts plain)
-        [ ${#hosts[@]} -eq 0 ] && return 1
-
-        _list_hosts
-        echo "Select host number (1-${#hosts[@]}):"
-        select host in "${hosts[@]}"; do
-            [ -n "$host" ] && {
-                selected_host="$host"
-                break
-            }
-        done
-        echo "$selected_host"
-    fi
-}
-
-_list_hosts() {
-    awk -v format="${1:-pretty}" -v mode="list" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE"
-}
-
-_add_host() {
-    local conn_str="$1" alias_name="$2" user host_ip port=22 config=()
-
-    if [[ "$conn_str" == *@* ]]; then
-        IFS='@:' read -r user host_ip port <<<"$conn_str"
-    else
-        host_ip="$conn_str"
-        user="root"
-    fi
-
-    [ -z "$host_ip" ] && {
-        _msg error "Invalid connection string format"
-        _show_help
-        return 1
-    }
-
-    # 如果未指定alias_name，根据IP生成
-    if [ -z "$alias_name" ]; then
-        # 移除IP中的点号
-        alias_name="H$(echo "$host_ip" | tr -d '.')"
-    fi
-
-    _list_hosts plain | grep -qw "^${alias_name}$" && {
-        _msg error "Host $alias_name already exists"
-        return 1
-    }
-
-    shift 2
-    local use_byobu=0
-
-    # 处理额外选项
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-        -b | --byobu) use_byobu=1 ;;
-        -i | --identity)
-            config+=("    IdentityFile $2")
-            shift
-            ;;
-        -L | --local-forward)
-            config+=("    LocalForward $2 $3")
-            shift 2
-            ;;
-        -R | --remote-forward)
-            config+=("    RemoteForward $2 $3")
-            shift 2
-            ;;
-        *) shift ;;
-        esac
-        shift
-    done
-
-    # 构建配置（移到选项处理之后）
-    config=("### ${alias_name} begin$([ $use_byobu -eq 1 ] && echo ' byobu')" "${config[@]}")
-    config+=("Host $alias_name")
-    config+=("    HostName $host_ip")
-    config+=("    User $user")
-    [[ "$port" != "22" ]] && config+=("    Port $port")
-    config+=("### ${alias_name} end")
-
-    # 写入配置
-    printf '%s\n' "${config[@]}" >>"$SSH_CONFIG_FILE"
-    _msg success "Added host $alias_name"
-}
-
-_modify_host() {
-    local conn_str="$1" alias_name
-    alias_name=$(_select_host "$2" "Select host to modify:") || return 1
-    [ -z "$conn_str" ] && read -r -p "Enter connection string (user@host:port): " conn_str
-    [ -z "$conn_str" ] && return 1
-
-    # 先删除旧配置
-    _remove_host "$alias_name" || return 1
-
-    # 添加新配置
-    _add_host "$conn_str" "$alias_name"
-}
-
-_remove_host() {
-    local alias_name
-    alias_name=$(_select_host "$1" "Select host to remove:") || return 1
-
-    # 使用 awk 删除配置块
-    awk -v host="$alias_name" -v mode="remove" -f "$AWK_SCRIPT" "$SSH_CONFIG_FILE" >"$SSH_CONFIG_FILE.tmp" &&
-        mv "$SSH_CONFIG_FILE.tmp" "$SSH_CONFIG_FILE"
-
-    # 验证删除是否成功
-    if ! _list_hosts plain | grep -q "^${alias_name}$"; then
-        chmod 600 "$SSH_CONFIG_FILE"
-        _msg success "Removed host $alias_name"
-        return 0
-    else
-        _msg error "Failed to remove host $alias_name"
-        return 1
-    fi
-}
-
-_connect_host() {
-    local alias_name use_byobu host_info
-    alias_name=$(_select_host "$1" "Select host to connect:") || return 1
-
-    # 在非iPhone环境下启用byobu
-    if ! uname -a | grep -i -q 'iphone.*ish'; then
-        if grep -B1 "^Host\s\+${alias_name}$" "$SSH_CONFIG_FILE" | grep -q "byobu"; then
-            use_byobu=byobu
-        fi
-    fi
-    host_info=$(_list_hosts plain | grep -w "^${alias_name}$" | tr -s ' ')
-    _msg info "Connecting to ${host_info#*)} ..."
-    ssh -A -t "$alias_name" $use_byobu
 }
 
 _show_help() {
@@ -243,32 +244,37 @@ EOF
 
 # 主函数
 main() {
-    # 初始化 SSH 配置
-    [ -d "${HOME}/.ssh" ] || mkdir -p "${HOME}/.ssh"
-    [ -f "$SSH_CONFIG_FILE" ] || touch "$SSH_CONFIG_FILE"
-    chmod 700 "${HOME}/.ssh"
-    chmod 600 "$SSH_CONFIG_FILE"
+    # 全局变量定义
+    SCRIPT_NAME=$(basename "$0")
+    # SCRIPT_PATH=$(dirname "$(readlink -f "$0")")
+    SSH_CONFIG_FILE="${HOME}/.ssh/config"
+    AWK_SCRIPT="${HOME}/.ssh/ssh.sed"
+
+    # 确保脚本退出时清理临时文件
+    # trap 'rm -f "$AWK_SCRIPT"' EXIT
+
+    [ -f "${AWK_SCRIPT}" ] || init_config
 
     case "${1:-connect}" in
-    list | ls | l) _list_hosts ;;
+    list | ls | l) list_hosts ;;
     add | a)
         shift
-        _add_host "$@"
+        add_host "$@"
         ;;
     modify | mod | m)
         shift
-        _modify_host "$@"
+        modify_host "$@"
         ;;
     remove | rm | r)
         shift
-        _remove_host "$@"
+        remove_host "$@"
         ;;
     connect | c)
         shift
-        _connect_host "$@"
+        connect_host "$@"
         ;;
     help | -h | --help | h) _show_help ;;
-    *) _connect_host "$@" ;;
+    *) connect_host "$@" ;;
     esac
 }
 
