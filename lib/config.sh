@@ -8,7 +8,7 @@ is_demo_mode() {
     # 检查是否为演示模式（环境变量或旧的配置方式）
     if [[ "${ENV_DEMO_MODE:-false}" == "true" ]] || { [[ -f "$G_ENV" ]] && grep -qE '=your_(password|username)' "$G_ENV"; }; then
         if [[ "${ENV_DEMO_MODE:-false}" != "true" ]]; then
-            _msg warning "Legacy demo mode detected. Please set ENV_DEMO_MODE=true in your deploy.env instead"
+            _msg warning "demo mode detected. Please set ENV_DEMO_MODE=false in your deploy.env instead"
         fi
         _msg purple "[Demo] Operation skipped: $skip_msg"
         return 0

@@ -60,7 +60,6 @@ system_clean_disk() {
 
     # Show cleanup plan in demo mode
     if is_demo_mode "system_clean_disk"; then
-        _msg purple "Demo mode: would execute the following cleanup operations:"
         _msg purple "1. Docker cleanup:"
         _msg purple "   - docker image prune -f"
         _msg purple "   - docker builder prune -f"

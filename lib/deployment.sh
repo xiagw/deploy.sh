@@ -253,7 +253,6 @@ deploy_via_rsync_ssh() {
 
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
             if is_demo_mode "deploy_aliyun_oss"; then
-                echo "Demo mode: Aliyun OSS deployment simulation:"
                 _msg purple "  Source: ${rsync_src}"
                 _msg purple "  Destination: ${rsync_dest}"
                 continue
@@ -264,7 +263,6 @@ deploy_via_rsync_ssh() {
 
         echo "Deploying to ${ssh_host}:${rsync_dest}"
         if is_demo_mode "deploy_rsync_ssh"; then
-            echo "Demo mode: Command simulation:"
             _msg purple "  $ssh_opt -n \"$ssh_host\" \"mkdir -p $rsync_dest\""
             _msg purple "  ${rsync_opt} -e \"$ssh_opt\" \"$rsync_src\" \"${ssh_host}:${rsync_dest}\""
             continue
