@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # shellcheck disable=2086,2016
 
-_get_input() {
+get_input() {
     # 添加输入验证
     if [[ -z "${ssh_conf_files[*]}" ]]; then
         echo "Error: No SSH config files found" >&2
@@ -33,7 +33,7 @@ _get_input() {
         fi
         read -rp "[$((++count))]. Enter SSH name: [alias name] " read_ssh_name
         # read -rp "[$((++count))]. Enable byobu? [Y/n] " read_byobu
-        ssh_name="${read_ssh_name:-host_${ssh_host//./_}}"
+        ssh_alias="${read_ssh_name:-host_${ssh_host//./_}}"
     fi
 
     if "${has_fzf:-false}"; then
@@ -69,41 +69,59 @@ _get_input() {
     fi
 }
 
-_add_host() {
-    if grep -qE "^Host.*${ssh_name}$|^### ${ssh_name} begin" "$ssh_conf"; then
-        echo "host ${ssh_name} exist, skip"
-        return 1
+list_hosts() {
+    if [ "$1" = verify ]; then
+        local alias="$2"
+        if grep -qE "^Host.*${alias}$|^### ${alias} begin" "$ssh_conf"; then
+            echo "Host ${alias} exist, skip"
+            return 0
+        else
+            echo "Host ${alias} not exist"
+            return 1
+        fi
     fi
+    if "${has_fzf}"; then
+        printf 'add\nupdate\ndelete\nport\nimport\n%s\n' "$(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*')" | fzf
+    else
+        select h in add update delete $(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*'); do
+            echo "$h"
+            break
+        done
+    fi
+}
+
+add_host() {
+    local user=$1 host=$2 port=$3 alias=$4
+    list_hosts verify ${alias} && return 1
 
     cat >>"$ssh_conf" <<EOF
 
-### ${ssh_name} begin  ##$([[ "${read_byobu:-y}" == [yY] ]] && echo " byobu")
-Host ${ssh_name}
-    HostName ${ssh_host}
-    User ${ssh_user}$([[ "${ssh_port}" == 22 ]] || echo -e "\n    Port ${ssh_port}")
-### ${ssh_name} end
+### ${alias} begin  ##$([[ "${read_byobu:-y}" == [yY] ]] && echo " byobu")
+Host ${alias}
+    HostName ${host}
+    User ${user}$([[ "${port}" == 22 ]] || echo -e "\n    Port ${port}")
+### ${alias} end
 
 EOF
 
-    [ -f "$ansible_conf" ] && echo "${ssh_name}" >>"$ansible_conf"
+    [ -f "$ansible_conf" ] && echo "${alias}" >>"$ansible_conf"
 }
 
-_delete_host() {
-    sed -i "/^### ${ssh_host:? empty ssh host} begin/,/^### ${ssh_host} end/d" "${ssh_conf:? empty ssh conf}"
+delete_host() {
+    sed -i "/^### ${ssh_host:? empty ssh_host} begin/,/^### ${ssh_host} end/d" "${ssh_conf:? empty ssh conf}"
     [ -f "$ansible_conf" ] && sed -i "/^${ssh_host}$/d" "$ansible_conf"
 }
 
-_port_forward() {
+port_forward() {
     if ! command -v nc &>/dev/null; then
         echo >&2 "I require nc but it's not installed. Aborting."
         return 1
     fi
 
     local ssh_host="${1:? ERR: ssh_host empty}"
-    local ssh_forward_port="${1:-3306}"
-    local ssh_opt='ssh -qfg -o ExitOnForwardFailure=yes'
+    local ssh_forward_port="${2:-3306}"
     ## create ssh tunnel
-    $ssh_opt -L "$ssh_forward_port":localhost:3306 $ssh_host "sleep 300" || true
+    ssh -qfg -o ExitOnForwardFailure=yes -L "$ssh_forward_port":localhost:3306 $ssh_host "sleep 300" || true
     ## kill ssh tunnel timeout
     (
         count=0
@@ -112,7 +130,7 @@ _port_forward() {
             ((count++))
             if [ $count -gt 30 ]; then
                 echo "ssh forward port $ssh_forward_port exist too long, break."
-                pkill -f "$ssh_opt -L $ssh_forward_port:localhost:3306" || true
+                pkill -f "ssh -qfg -o ExitOnForwardFailure=yes -L $ssh_forward_port:localhost:3306" || true
                 break
             fi
             sleep 10
@@ -121,25 +139,31 @@ _port_forward() {
 }
 
 # 添加批量导入功能
-_batch_import() {
+batch_import() {
     local import_file="$1"
-    while IFS=, read -r user host port alias; do
-        ssh_host="$host"
-        ssh_user="$user"
-        ssh_port="$port"
-        ssh_name="$alias"
-        _add_host
+    while IFS=, read -r ssh_user ssh_host ssh_port ssh_alias; do
+        add_host $ssh_user $ssh_host $ssh_port $ssh_alias
     done <"$import_file"
 }
 
-_show_help() {
+connect_host() {
+    local host="$1" user_name="$2"
+    if grep -B2 -E "Host\s+${host}$" "${ssh_conf_files[@]}" | grep -q 'byobu'; then
+        uname -a | grep -i -q 'iphone.*ish' || use_byobu='byobu'
+    fi
+    ## get username from $1
+    [ -n "${user_name}" ] && host="${user_name}@${host}"
+    ssh -A -t "${host}" ${use_byobu}
+}
+
+show_help() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS] [COMMAND]
 
 Commands:
-    add                 Add new SSH host
-    update             Update existing SSH host
-    delete             Delete SSH host
+    add                Add new SSH Host
+    update             Update existing SSH Host
+    delete             Delete SSH Host
     port HOST [PORT]   Create SSH port forward
     list               List all SSH hosts
     import FILE        Import hosts from CSV file
@@ -169,51 +193,39 @@ main() {
     # LC_NUMERIC="en_US.UTF-8"
     # LC_TIME="en_US.UTF-8"
 
-    if [ "$1" = port ]; then
-        shift
-        _port_forward "$@"
-        return
-    fi
-
     ssh_conf_files=("$HOME"/.ssh/config*)
     ansible_host_files=("$HOME"/src/*devops*/ansible/hosts "$HOME"/.ansible/hosts)
 
     has_fzf=$(command -v fzf >/dev/null && echo true || echo false)
 
-    if "${has_fzf}"; then
-        host=$(printf 'add\nupdate\ndelete\n%s\n' "$(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*')" | fzf)
-    else
-        select h in add update delete $(awk '/^Host/ {print $2}' "${ssh_conf_files[@]}" | grep -v '\*'); do
-            host=$h
-            break
-        done
-    fi
+    choice=$(list_hosts)
 
-    case "${host:-quit}" in
-    'quit')
-        return
+    case "${choice:-quit}" in
+    quit)
+        show_help
         ;;
-    'add')
-        _get_input
-        _add_host
+    port)
+        port_forward "$@"
         ;;
-    'update')
-        _get_input
-        _delete_host
-        _add_host
+    add)
+        get_input
+        add_host $ssh_user $ssh_host $ssh_port $ssh_alias
         ;;
-    'delete')
+    update)
+        get_input
+        delete_host
+        add_host $ssh_user $ssh_host $ssh_port $ssh_alias
+        ;;
+    delete)
         delete_flag=true
-        _get_input
-        _delete_host
+        get_input
+        delete_host
+        ;;
+    import)
+        batch_import "$@"
         ;;
     *)
-        if grep -B2 -E "Host\s+${host}$" "${ssh_conf_files[@]}" | grep -q 'byobu'; then
-            uname -a | grep -i -q 'iphone.*ish' || use_byobu='byobu'
-        fi
-        ## get username from $1
-        [ -n "${1}" ] && host="${1}@${host}"
-        ssh -A -t "${host}" ${use_byobu}
+        connect_host "$choice" "$@"
         ;;
     esac
 }
