@@ -12,5 +12,8 @@ function FindProxyForURL(url, host) {
         return "DIRECT"; // 如果满足条件，直接连接，不使用代理
     }
 
-    return "PROXY 192.168.5.1:1080; SOCKS5 192.168.5.1:1081; DIRECT;"; // 否则，使用指定的代理
+    // return "PROXY 192.168.5.1:1080; SOCKS5 192.168.5.1:1081; DIRECT;";
+    // return "PROXY 192.168.11.1:1080; SOCKS5 192.168.11.1:1081; DIRECT;";
+    // return "PROXY 10.9.0.2:1080; SOCKS5 10.9.0.2:1081; DIRECT;";
+    return "PROXY 192.168.199.1:1080; SOCKS5 192.168.199.1:1081; DIRECT;";
 }

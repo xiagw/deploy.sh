@@ -8,6 +8,8 @@ get_input() {
         echo "Error: No SSH config files found" >&2
         return 1
     fi
+    local ansible_host_files
+    ansible_host_files=("$HOME"/src/*devops*/ansible/hosts "$HOME"/.ansible/hosts)
 
     count=0
     if "${delete_flag:-false}"; then
@@ -194,7 +196,6 @@ main() {
     # LC_TIME="en_US.UTF-8"
 
     ssh_conf_files=("$HOME"/.ssh/config*)
-    ansible_host_files=("$HOME"/src/*devops*/ansible/hosts "$HOME"/.ansible/hosts)
 
     has_fzf=$(command -v fzf >/dev/null && echo true || echo false)
 

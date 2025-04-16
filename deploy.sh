@@ -317,7 +317,7 @@ main() {
         fi
     done
 
-    _msg step "[deploy] BEGIN"
+    _msg time "BEGIN"
 
     ## 复制示例配置文件（deploy.json、deploy.env）到data目录 添加必要的二进制文件目录到PATH环境变量
     config_deploy_depend file
@@ -472,7 +472,7 @@ main() {
     ## deploy notify info / 发布通知信息
     handle_notify
 
-    _msg time "[deploy] END."
+    _msg time "END."
 
     return "${deploy_result:-0}"
 }
