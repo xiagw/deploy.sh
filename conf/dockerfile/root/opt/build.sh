@@ -204,6 +204,12 @@ _build_nginx() {
 }
 
 _build_php() {
+    ext_dir="$(php -r 'echo ini_get("extension_dir");')"
+    if [ "${1}" = swoole ]; then
+        cp "$ext_dir"/swoole.so /
+        return
+    fi
+
     echo "Building PHP environment..."
     _set_mirror shanghai
 
@@ -262,6 +268,11 @@ _build_php() {
         ;;
     esac
 
+    if [ -f /swoole.so ]; then
+        mv /swoole.so "$ext_dir"/
+        echo "extension=swoole.so" >/etc/php/"${PHP_VERSION}"/mods-available/swoole.ini
+        phpenmod swoole
+    fi
     # apt update && apt install -y libpq-dev # php"${PHP_VERSION}"-dev
     # pecl channel-update pecl.php.net
     # pecl install -D 'enable-sockets="no" enable-openssl="no" enable-http2="no" enable-mysqlnd="no" enable-swoole-json="no" enable-swoole-curl="no" enable-cares="no"' swoole-4.8.13
@@ -289,7 +300,7 @@ _build_php() {
         -e "/upload_max_filesize/s/2M/1024M/" \
         -e "/max_file_uploads/s/20/1024/" \
         -e '/disable_functions/s/$/phpinfo,/' \
-        -e '/max_execution_time/s/30/60/' \
+        -e '/max_execution_time/s/30/120/' \
         /etc/php/"${PHP_VERSION}"/fpm/php.ini
 
     _check_run_sh
@@ -632,6 +643,11 @@ main() {
 
     echo "build log file: $me_log"
 
+    if [  "$1" = swoole ]; then
+        _build_php swoole
+        return
+    fi
+
     _set_mirror
 
     # 单独处理 PHP_VERSION
@@ -678,6 +694,7 @@ main() {
         [ -f "$script" ] || continue
         chmod +x "$script"
     done
+    unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
 }
 
 main "$@"

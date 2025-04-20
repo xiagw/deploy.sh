@@ -2,10 +2,8 @@
 ARG MIRROR=
 ARG MVN_VERSION=3.8-amazoncorretto-8
 ARG JDK_VERSION=8
-
-FROM ${MIRROR}maven:${MVN_VERSION} AS builder
-
 ARG IN_CHINA=false
+FROM ${MIRROR}maven:${MVN_VERSION} AS builder
 ARG MVN_PROFILE=main
 ARG MVN_DEBUG=off
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
@@ -22,7 +20,6 @@ RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
 
 #### docker build stage 2 ####
 FROM ${MIRROR}amazoncorretto:${JDK_VERSION}
-
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG TZ=Asia/Shanghai

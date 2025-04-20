@@ -1,7 +1,0 @@
-FROM flyway/flyway
-
-COPY ./flyway_conf/ /flyway/conf/
-COPY ./flyway_sql/ /flyway/sql/
-RUN printf "for i in \$@; do flyway \$i; done" >/docker-entrypoint.sh; chmod +x /docker-entrypoint.sh
-ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["info", "repair", "migrate", "info"]

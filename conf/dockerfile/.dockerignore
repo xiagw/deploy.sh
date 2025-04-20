@@ -13,8 +13,6 @@
 .dockerignore
 Dockerfile*
 docker-compose.*
-flyway_conf/
-flyway_sql/
 
 # Documentation
 *.md
@@ -52,6 +50,7 @@ storage/logs/*
 
 ## Node
 *.log*
+*.log
 package-lock.json
 logs
 ## Dependency directories

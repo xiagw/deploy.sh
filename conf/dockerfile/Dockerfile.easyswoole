@@ -1,13 +1,14 @@
-FROM phpswoole/swoole:4.6-php7.4
-WORKDIR /app
-ARG COMPOSER_INSTALL=true
+FROM phpswoole/swoole:4.7-php7.4
 ARG IN_CHINA=true
+ARG COMPOSER_INSTALL=true
+WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN set -ex \
-    && if [ "${IN_CHINA}" = true ]; then sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; fi \
-    && apt-get update \
+RUN set -ex; \
+    [ "${IN_CHINA}" = true ] && sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
+    echo $https_proxy $http_proxy; \
+    apt-get update; \
     # && apt-get install -yq nodejs \
-    && apt-get install -yq --no-install-recommends apt-utils bash curl zip unzip vim git \
+    apt-get install -yq --no-install-recommends apt-utils bash curl zip unzip vim git \
     # libssl-dev libnghttp2-dev libpcre3-dev \
     libfreetype6-dev \
     libjpeg-dev \
@@ -17,44 +18,42 @@ RUN set -ex \
     ## see https://github.com/laradock/laradock/pull/1903#issuecomment-463142846
     libzip-dev zlib1g-dev libicu-dev g++ \
     ## for image magick ext
-    jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick libgmp-dev libonig-dev libxml2-dev \
-    && pecl update-channels \
-    && pecl install redis-stable \
-    && pecl install xlswriter \
-    # && pecl install couchbase-2.6.2 \
-    && docker-php-ext-install mysqli \
-    && docker-php-ext-install pdo_mysql \
-    && docker-php-ext-install mbstring \
-    && docker-php-ext-install simplexml \
-    && docker-php-ext-configure gd --with-jpeg=/usr/lib --with-freetype=/usr/include/freetype2 \
-    && docker-php-ext-install gd \
-    && docker-php-ext-install json \
-    && docker-php-ext-install bcmath \
-    && docker-php-ext-install exif \
-    && docker-php-ext-install gmp \
-    # && docker-php-ext-enable couchbase \
-    && docker-php-ext-enable redis mysqli pdo_mysql mbstring simplexml gd json bcmath exif xlswriter \
-    && adduser --home /app -u 1000 swoole \
-    && chown -R 1000:1000 /app \
-    && rm -rf /tmp/* /usr/share/man
+    jpegoptim optipng pngquant gifsicle libmagickwand-dev imagemagick libgmp-dev libonig-dev libxml2-dev; \
+    pecl update-channels; \
+    pecl install redis-stable; \
+    pecl install xlswriter; \
+    # && pecl install couchbase-2.6.2; \
+    docker-php-ext-install mysqli; \
+    docker-php-ext-install pdo_mysql; \
+    docker-php-ext-install mbstring; \
+    docker-php-ext-install simplexml; \
+    docker-php-ext-configure gd --with-jpeg=/usr/lib --with-freetype=/usr/include/freetype2; \
+    docker-php-ext-install gd; \
+    docker-php-ext-install json; \
+    docker-php-ext-install bcmath; \
+    docker-php-ext-install exif; \
+    docker-php-ext-install gmp; \
+    # && docker-php-ext-enable couchbase; \
+    docker-php-ext-enable redis mysqli pdo_mysql mbstring simplexml gd json bcmath exif xlswriter; \
+    adduser --home /app -u 1000 swoole; \
+    chown -R 1000:1000 /app; \
+    rm -rf /tmp/* /usr/share/man
 
 EXPOSE 9501
-
-#############################################################
-ONBUILD ARG IN_CHINA=true
-ONBUILD ARG COMPOSER_INSTALL=true
-# ONBUILD COPY ./composer.json /app/
-ONBUILD COPY . /app/
-ONBUILD RUN set -xe \
-    && if [ "${IN_CHINA}" = true ]; then composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/; fi \
-    && if [ "${COMPOSER_INSTALL}" = true ] || [ ! -d vendor ]; then composer install -q; fi \
-    # && php /app/vendor/easyswoole/easyswoole/bin/easyswoole install || true \
-    && chown -R 1000:1000 /app
-ONBUILD USER 1000
-#############################################################
 
 # php easyswoole server start -mode=config
 CMD ["php", "easyswoole", "server", "start", "-mode=config"]
 
 ## docker build -t registry-intl.cn-shenzhen.aliyuncs.com/9u/dev:easyswoole -f Dockerfile.easyswoole .
 ## docker push registry-intl.cn-shenzhen.aliyuncs.com/9u/dev:easyswoole
+
+#############################################################
+# ONBUILD COPY ./composer.json /app/
+ONBUILD COPY . /app/
+ONBUILD RUN set -xe; \
+    [ "${IN_CHINA}" = true ] && composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/; \
+    if [ "${COMPOSER_INSTALL}" = true ] || [ ! -d vendor ]; then composer install -q; fi; \
+    # && php /app/vendor/easyswoole/easyswoole/bin/easyswoole install || true \
+    chown -R 1000:1000 /app
+ONBUILD USER 1000
+#############################################################
