@@ -257,7 +257,7 @@ deploy_wechat() {
         done
 
         if [[ "$c" -ge "$c_total" ]]; then
-            sudo rm -f "$file"
+            rm -f "$file"
         fi
     done
 }
