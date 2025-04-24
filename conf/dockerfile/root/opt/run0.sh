@@ -29,6 +29,7 @@ run_normal_user=false
 for u in spring node; do
     if id "$u" &>/dev/null; then
         echo "$(date '+%Y-%m-%d %H:%M:%S') - 使用普通用户 [$u] 启动服务"
+        chown -R 1000:1000 /opt
         su "$u" -c "bash /opt/run.sh" &
         pids+=("$!")
         run_normal_user=true
