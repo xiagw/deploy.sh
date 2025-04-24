@@ -34,15 +34,15 @@ _start_java() {
     ## Dockerfile ARG MVN_PROFILE=test （此处对应 git 分支名） 镜像内生成文件 profile.<分支名>
     # Find profile
     local profile_file
-    profile_file=$(find "$app_path" -maxdepth 1 -iname "profile.*" -type f -print -quit)
+    profile_file=$(find "$app_path" -maxdepth 1 -type f -iname "profile.*" -print -quit)
     if [[ -f "$profile_file" ]]; then
         profile_name="--spring.profiles.active=${profile_file##*.}"
         _msg "Found profile: $profile_name"
     fi
 
     # Find JAR and YML files
-    local jars=("$app_path"/*.jar)
-    local ymls=("$app_path"/*.{yml,yaml})
+    mapfile -t jars < <(find "$app_path" -maxdepth 1 -type f -iname "*.jar" -print)
+    mapfile -t ymls < <(find "$app_path" -maxdepth 1 -type f \( -iname "*.yml" -o -iname "*.yaml" \) -print)
 
     _msg "JAR files: ${jars[*]}"
     _msg "YML files: ${ymls[*]}"
