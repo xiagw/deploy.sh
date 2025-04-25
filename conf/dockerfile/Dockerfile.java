@@ -3,6 +3,7 @@ ARG MIRROR=
 ARG MVN_VERSION=3.8-amazoncorretto-8
 ARG JDK_VERSION=8
 FROM ${MIRROR}maven:${MVN_VERSION} AS builder
+## 构建参数 IN_CHINA 必须在 FROM 后面
 ARG IN_CHINA=false
 ARG MVN_PROFILE=main
 ARG MVN_DEBUG=off
