@@ -10,12 +10,12 @@ FROM ${MIRROR}nginx:${NGINX_VERSION} AS builder
 
 ARG TZ=UTC
 RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
---mount=type=bind,target=/src,rw \
-set -xe; \
-BUILD_SH=/src/root/opt/build.sh; \
-[ -f $BUILD_SH ] || BUILD_SH=build.sh; \
-[ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
-[ -f $BUILD_SH ] && sh $BUILD_SH geo
+    --mount=type=bind,target=/src,rw \
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    sh $BUILD_SH geo
 
 
 # 最终镜像
@@ -34,8 +34,8 @@ RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
-    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
-    [ -f $BUILD_SH ] && sh $BUILD_SH
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    sh $BUILD_SH
 
 COPY --from=builder /usr/sbin/nginx /usr/sbin/nginx
 

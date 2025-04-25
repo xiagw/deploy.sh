@@ -7,8 +7,8 @@ RUN --mount=type=bind,target=/src,rw \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
-    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
-    [ -f $BUILD_SH ] && bash $BUILD_SH swoole
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    bash $BUILD_SH
 
 ARG MIRROR=
 ARG OS_VERSION=22.04
@@ -31,8 +31,8 @@ RUN --mount=type=bind,target=/src,rw \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
-    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
-    [ -f $BUILD_SH ] && bash $BUILD_SH
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    bash $BUILD_SH
 
 ONBUILD COPY ./root/ /
 ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; else :; fi

@@ -14,8 +14,8 @@ RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
-    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
-    [ -f $BUILD_SH ] && bash $BUILD_SH
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    bash $BUILD_SH
     ## 假如此处中断，表明 maven build 失败，请检查代码
 
 
@@ -39,7 +39,7 @@ RUN --mount=type=cache,target=/var/lib/apt/lists,id=apt_cache,sharing=shared  \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
-    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
-    [ -f $BUILD_SH ] && bash $BUILD_SH
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    bash $BUILD_SH
 
 COPY --from=builder /jars/ .

@@ -27,8 +27,8 @@ RUN --mount=type=cache,target=/var/cache/yum,id=var_cache_yum,sharing=shared \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
-    [ -f $BUILD_SH ] || curl -fL "$BUILD_URL" -o $BUILD_SH; \
-    [ -f $BUILD_SH ] && bash $BUILD_SH
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    bash $BUILD_SH
 
 EXPOSE 8080 8081
 VOLUME ["/app"]
