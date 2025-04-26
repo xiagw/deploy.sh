@@ -79,7 +79,7 @@ analysis_zap() {
 
 # Run Vulmap security scan
 analysis_vulmap() {
-    _msg step "[security] vulmap scan"
+    _msg time "vulmap scan"
     echo "MAN_SCAN_VULMAP: ${MAN_SCAN_VULMAP:-false}"
     if [[ "${MAN_SCAN_VULMAP:-false}" != true ]]; then
         return 0
