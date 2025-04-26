@@ -4,15 +4,16 @@
 #=====================================================
 # 文件名: run1.sh
 # 版本: 1.0
-# 描述: Spring Boot JAR包智能启动脚本
+# 描述: Spring Boot JAR / Nodejs / PHP 智能启动脚本
 # 作者: AI Assistant
-# 创建时间: 2024-03-21
+# 创建时间: 2025-03-21
 #=====================================================
 
 # 定义全局变量
 G_NAME=$(basename "$0")
 G_PATH=$(dirname "$(readlink -f "$0")")
 G_LOG="${G_PATH}/${G_NAME}.log"
+html_path=/var/www/html
 
 # 进程ID数组
 declare -a G_PIDS=()
@@ -32,9 +33,7 @@ log() {
 
 # 函数：日志轮转
 rotate_log() {
-    local log_file="$1"
-    local max_size="$2"
-    local current_size
+    local log_file="$1" max_size="$2" current_size
 
     # 检查文件是否存在
     [ -f "$log_file" ] || return 0
@@ -148,14 +147,10 @@ find_configs() {
 
 # 函数：启动Java应用
 start_java() {
-    command -v java || return
     command -v redis-server && redis-server --daemonize yes
 
     local jar_files jvm_opts i=0 pid config_name config_path config_files start_cmd
     local config_entry config_type config_file last_config_entry
-
-    # 注册信号处理
-    trap 'cleanup' SIGTERM SIGINT SIGQUIT
 
     # 获取JVM参数
     jvm_opts=$(get_jvm_opts)
@@ -233,10 +228,7 @@ start_java() {
 
 # 函数：启动PHP应用
 start_php() {
-    command -v php || return
     php -v
-    # 应用相关路径
-    local html_path=/var/www/html
 
     local php_count=0
     for i in /usr/sbin/php-fpm*; do
@@ -299,7 +291,6 @@ start_php() {
 
 # 函数：启动Node.js应用
 start_node() {
-    command -v npm || return
     cd "/app" && npm run start &
     G_PIDS+=("$!")
     log "Node.js应用启动成功"
@@ -339,9 +330,7 @@ check_jemalloc() {
 
 # 函数：自动更新
 schedule_upgrade() {
-    local trigger_file=.trigger_file
-    local upgrade_type=""
-    local html_path=/var/www/html
+    local trigger_file=.trigger_file upgrade_type=""
     local app_path="/app"
 
     if [[ -f "$html_path/$trigger_file" ]]; then
@@ -359,8 +348,7 @@ schedule_upgrade() {
     local upgrade_file_tmp=/tmp/$upgrade_file
     touch "$upgrade_file_tmp"
     curl -fsSLo "$upgrade_file_tmp" "${upgrade_url}/$upgrade_file" 2>/dev/null
-    local app_id_remote
-    local app_ver_remote
+    local app_id_remote app_ver_remote
     app_id_remote=$(awk -F= '/^app_id=/ {print $2}' "$upgrade_file_tmp")
     app_ver_remote=$(awk -F= '/^app_ver=/ {print $2}' "$upgrade_file_tmp")
 
@@ -437,7 +425,7 @@ main() {
     G_PIDS+=("$!")
 
     # 注册信号处理
-    trap cleanup SIGTERM SIGINT SIGQUIT
+    trap cleanup SIGTERM SIGINT SIGQUIT EXIT
 
     # 根据启动模式决定后续行为
     case "${START_MODE:-wait}" in
