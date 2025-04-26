@@ -78,9 +78,9 @@ repo_inject_file() {
         ## 创建 root 目录（如果不存在）
         mkdir -p "${repo_root}"
         ## 优先级1：注入基础目录结构（如果不存在 root/opt）
-        # if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
-        ${rsync_opts} "${conf_root}/" "${repo_root}/"
-        # fi
+        if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
+            ${rsync_opts} "${conf_root}/" "${repo_root}/"
+        fi
         ## 优先级2：注入自定义目录结构
         if [[ -d "${G_DATA}/dockerfile/root" ]]; then
             ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
