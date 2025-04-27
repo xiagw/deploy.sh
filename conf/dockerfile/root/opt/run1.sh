@@ -125,21 +125,21 @@ find_configs() {
     mapfile -t profile_files < <(find . -maxdepth 2 -type f -iname "profile.*" | sort -V)
 
     # 返回找到的配置文件数组，保持类型信息
-    # 优先使用 yml 文件
-    if [ ${#yml_files[@]} -gt 0 ]; then
+    # 优先使用 profile 文件
+    if [ ${#profile_files[@]} -gt 0 ]; then
+        configs+=("profile:${profile_files[0]}")
+    # 如果没有 profile，则使用 yml 文件
+    elif [ ${#yml_files[@]} -gt 0 ]; then
         for file in "${yml_files[@]}"; do
             case "${file}" in
             *.yml|*.yaml) configs+=("yml:${file}") ;;
             esac
         done
-    # 如果没有 yml，则使用 properties
+    # 如果既没有 profile 也没有 yml，则使用 properties
     elif [ ${#properties_files[@]} -gt 0 ]; then
         for file in "${properties_files[@]}"; do
             configs+=("properties:${file}")
         done
-    # 如果既没有 yml 也没有 properties，则使用 profile
-    elif [ ${#profile_files[@]} -gt 0 ]; then
-        configs+=("profile:${profile_files[0]}")
     fi
 
     printf "%s\n" "${configs[@]}"
