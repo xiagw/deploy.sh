@@ -484,10 +484,10 @@ main "$@"
 ## - 1: Deployment failed
 
 ## Configure external service dependencies:
-## - Authentication: ssh-config
+## - Authentication: .ssh/config
 ## - SSL: acme.sh
 ## - Cloud Providers: aws, aliyun
 ## - Container Orchestration: kubernetes
-## - Version Control: python-gitlab
-## - DNS: cloudflare
+## - Version Control: GitLab, python-gitlab
+## - DNS: Aliyun, cloudflare
 ## - File Transfer: rsync
