@@ -89,7 +89,7 @@ for /f "tokens=1-3 delims=/ " %%a in ("%DATE%") do (
 echo.!HOLIDAYS! | findstr /i "!curr_date!" >nul
 if !ERRORLEVEL! EQU 0 (
     :: 是法定节假日，跳过工作日限制
-    goto :CHECK_PLAY_TIME
+    goto :BYPASS_WORKDAY
 )
 
 if !##weekday! LSS 5 (
@@ -99,7 +99,7 @@ if !##weekday! LSS 5 (
     )
 )
 
-:CHECK_PLAY_TIME
+:BYPASS_WORKDAY
 
 :: 检查关机条件
 if !##rest_elapsed! LSS %REST_MINUTES% (
