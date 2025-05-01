@@ -76,12 +76,30 @@ if !##curr_hour! LSS 8 (
     call :DO_SHUTDOWN "早上8点前不允许使用电脑"
     exit /b
 )
+
+:: 法定节假日列表（格式：MMDD）
+set "HOLIDAYS=0101 0102 0103 0405 0501 0502 0503 0624 0625 0626 1001 1002 1003 1004 1005 1006 1007"
+
+:: 获取当前日期的月和日
+for /f "tokens=1-3 delims=/ " %%a in ("%DATE%") do (
+    set "curr_date=%%b%%c"
+)
+
+:: 检查是否为法定节假日
+echo.!HOLIDAYS! | findstr /i "!curr_date!" >nul
+if !ERRORLEVEL! EQU 0 (
+    :: 是法定节假日，跳过工作日限制
+    goto :CHECK_PLAY_TIME
+)
+
 if !##weekday! LSS 5 (
     if !##curr_hour! GEQ 17 (
         call :DO_SHUTDOWN "工作日不允许使用电脑"
         exit /b
     )
 )
+
+:CHECK_PLAY_TIME
 
 :: 检查关机条件
 if !##rest_elapsed! LSS %REST_MINUTES% (
