@@ -1,7 +1,7 @@
 @echo off
 :: [保留文件头部注释段不删除]
-:: GBK编码，CRLF换行    curl.exe -Lo child.cmd https://gitee.com/xiagw/deploy.sh/raw/main/lib/utils/child.cmd
-:: 需求描述：关机前40秒倒计时；每天21:00-08:00时间段和工作日17:00后关机；每次只能开机50分钟，每次关机后120分钟内不能开机
+:: GBK编码，CRLF换行  curl.exe -Lo child.cmd https://gitee.com/xiagw/deploy.sh/raw/main/lib/utils/child.cmd
+:: 需求描述：关机前40秒倒计时；每天21:00-08:00时间段和工作日17:00后关机；每次只能开机50分钟，每次关机后90分钟内不能开机
 setlocal EnableDelayedExpansion
 
 :: 设置基础文件名和路径
