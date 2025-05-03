@@ -351,12 +351,18 @@ system_cert_renew() {
     fi
     ## deploy with gitlab CI/CD,
     if [ -f "$reload_nginx" ]; then
+        rm -f "$reload_nginx"
         _msg green "found $reload_nginx"
+        ## 如果未定义变量数组 ENV_NGINX_PROJECT_ID, 则使用 gitlab 搜索 nginx 项目
+        if [[ -z "${#ENV_NGINX_PROJECT_ID}" ]]; then
+            _msg "search nginx project"
+            mapfile -t ENV_NGINX_PROJECT_ID < <(gitlab -ojson project list --search "nginx" | jq -r '.[].id' || true)
+        fi
+        _msg "nginx project id is ${ENV_NGINX_PROJECT_ID[*]}"
         for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
             _msg "create gitlab pipeline, project id is $id"
-            gitlab project-pipeline create --ref main --project-id "$id"
+            gitlab project-pipeline create --ref main --project-id "$id" || true
         done
-        rm -f "$reload_nginx"
     else
         _msg warn "not found $reload_nginx, skip create giltab pipeline"
     fi
