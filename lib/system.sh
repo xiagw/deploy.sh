@@ -318,7 +318,7 @@ system_cert_renew() {
             tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
             domains="$(tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true)"
             ;;
-        dns_manul)
+        dns_manual)
             _msg yellow "get domains from env file"
             ;;
         *)
