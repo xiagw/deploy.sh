@@ -271,18 +271,15 @@ system_cert_renew() {
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     ## support multiple account.conf.* / 支持多账号
     ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
-    local dns_type profile_name
+    local dns_type
     for file in "${acme_home}"/account.conf.*.dns_*; do
         if [ -f "$file" ]; then
             _msg blue "Found $file"
         else
             continue
         fi
-        source "$file"
         dns_type=${file##*.}
-        profile_name=${file%.dns_*}
-        profile_name=${profile_name##*.}
-        profile_name="deploy_${profile_name:-$RANDOM}"
+        source "$file"
         system_proxy on
         case "${dns_type}" in
         dns_gd)
@@ -302,6 +299,7 @@ system_cert_renew() {
             ;;
         dns_ali)
             _msg yellow "dns type: aliyun"
+            local profile_name="deploy_${profile_name:-$RANDOM}"
             _install_aliyun_cli
             aliyun configure set \
                 --mode AK \
@@ -309,7 +307,8 @@ system_cert_renew() {
                 --region "${SAVED_Ali_region:-none}" \
                 --access-key-id "${SAVED_Ali_Key:-none}" \
                 --access-key-secret "${SAVED_Ali_Secret:-none}"
-            domains="$(aliyun --profile "${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 | jq -r '.Data.Domain[].DomainName' || true)"
+            domains="$(aliyun --profile "${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 |
+                jq -r '.Data.Domain[].DomainName' || true)"
             export Ali_Key=$SAVED_Ali_Key
             export Ali_Secret=$SAVED_Ali_Secret
             ;;
@@ -319,9 +318,8 @@ system_cert_renew() {
             tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
             domains="$(tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true)"
             ;;
-        from_env)
+        dns_manul)
             _msg yellow "get domains from env file"
-            source "$file"
             ;;
         *)
             _msg yellow "unknown dns type: $dns_type"
@@ -340,8 +338,10 @@ system_cert_renew() {
                 ## create cert / 创建证书
                 ${acme_cmd} --issue -d "${domain}" -d "*.${domain}" --dns "$dns_type" --renew-hook "$run_touch_file" || true
             fi
-            ${acme_cmd} -d "${domain}" --install-cert --key-file "${acme_home}/dest/${domain}.key" --fullchain-file "${acme_home}/dest/${domain}.pem" || true
-            ${acme_cmd} -d "${domain}" --install-cert --key-file "$acme_cert_dest/${domain}.key" --fullchain-file "$acme_cert_dest/${domain}.pem" || true
+            ## install cert / 安装证书
+            ${acme_cmd} --install-cert -d "${domain}" \
+                --key-file "${acme_cert_dest}/${domain}.key" \
+                --fullchain-file "$acme_cert_dest/${domain}.pem" || true
         done
     done
     ## deploy with custom method / 自定义部署方式
@@ -349,20 +349,26 @@ system_cert_renew() {
         _msg blue "Found ${acme_home}/custom.sh"
         bash "${acme_home}/custom.sh"
     fi
-    ## deploy with gitlab CI/CD,
+    ## deploy with gitlab CI/CD / gitlab CI/CD 部署方式（项目名包含 nginx 的项目）
     if [ -f "$reload_nginx" ]; then
         rm -f "$reload_nginx"
         _msg green "found $reload_nginx"
-        ## 如果未定义变量数组 ENV_NGINX_PROJECT_ID, 则使用 gitlab 搜索 nginx 项目
-        if [[ -z "${#ENV_NGINX_PROJECT_ID}" ]]; then
-            _msg "search nginx project"
-            mapfile -t ENV_NGINX_PROJECT_ID < <(gitlab -ojson project list --search "nginx" | jq -r '.[].id' || true)
+        ## 如果定义了变量数组 ENV_NGINX_PROJECT_ID
+        if [[ -n "${ENV_NGINX_PROJECT_ID}" ]]; then
+            _msg "nginx project id in gitlab is ${ENV_NGINX_PROJECT_ID[*]}"
+            for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
+                _msg "create gitlab pipeline, project id is $id"
+                gitlab project-pipeline create --ref main --project-id "$id" || true
+            done
+        else
+            ## 否则使用 gitlab 搜索 nginx 项目
+            _msg "search nginx project in gitlab project list"
+            local id
+            while read -r id; do
+                _msg "create gitlab pipeline, project id is $id"
+                gitlab project-pipeline create --ref main --project-id "$id" || true
+            done < <(gitlab -ojson project list --search "nginx" | jq -r '.[].id' || true)
         fi
-        _msg "nginx project id is ${ENV_NGINX_PROJECT_ID[*]}"
-        for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
-            _msg "create gitlab pipeline, project id is $id"
-            gitlab project-pipeline create --ref main --project-id "$id" || true
-        done
     else
         _msg warn "not found $reload_nginx, skip create giltab pipeline"
     fi
