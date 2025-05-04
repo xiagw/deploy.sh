@@ -48,8 +48,8 @@ select_ssh_host() {
 
 cleanup() {
     local exit_code=$?
-    echo -e "\n正在执行清理..."
     if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
+        echo -e "\n正在执行清理..."
         echo "清理临时目录: $TEMP_DIR"
         rm -rf "$TEMP_DIR"
     fi
@@ -202,8 +202,6 @@ search_project_files() {
 }
 
 deploy_ssl() {
-    trap cleanup EXIT INT TERM HUP QUIT
-
     local source_dir="${1:-$HOME/Downloads}" source_file extracted_path target_host target_path="docker/laradock/nginx/sites/ssl/"
 
     source_file=$(select_file "$source_dir") || return 1
@@ -325,7 +323,7 @@ process_args() {
 main() {
     # 处理命令行参数
     process_args "$@"
-
+    trap cleanup EXIT INT TERM HUP QUIT
     # 设置全局变量
     G_NAME="${BASH_SOURCE[0]##*/}"
     G_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
