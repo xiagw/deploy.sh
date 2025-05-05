@@ -344,10 +344,10 @@ system_cert_renew() {
                 --fullchain-file "$acme_cert_dest/${domain}.pem" || true
         done
     done
-    ## deploy with custom method / 自定义部署方式
-    if [[ -f "${acme_home}/custom.sh" ]]; then
-        _msg blue "Found ${acme_home}/custom.sh"
-        bash "${acme_home}/custom.sh"
+    ## deploy with my_deploy / 自定义部署方式
+    if [[ -f "${acme_home}/my_deploy.sh" ]]; then
+        _msg blue "Found ${acme_home}/my_deploy.sh"
+        bash "${acme_home}/my_deploy.sh"
     fi
     ## deploy with gitlab CI/CD / gitlab CI/CD 部署方式（项目名包含 nginx 的项目）
     if [ -f "$reload_nginx" ]; then
