@@ -8,7 +8,7 @@ RUN --mount=type=bind,target=/src,rw \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
     [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
-    bash $BUILD_SH
+    bash $BUILD_SH swoole
 
 ARG MIRROR=
 ARG OS_VERSION=22.04
