@@ -77,8 +77,20 @@ if !##curr_hour! LSS 8 (
     exit /b
 )
 
-:: 法定节假日列表（格式：MMDD）
-set "HOLIDAYS=0101 0102 0103 0405 0501 0502 0503 0624 0625 0626 1001 1002 1003 1004 1005 1006 1007"
+:: 设置节假日缓存文件
+set "HOLIDAY_CACHE=%BASE_PATH%_holiday.txt"
+
+:: 获取节假日数据
+call :GET_HOLIDAY_DATA
+if !ERRORLEVEL! NEQ 0 (
+    :: 如果API调用失败，使用缓存数据
+    if exist "%HOLIDAY_CACHE%" (
+        for /f "tokens=1,2 delims==" %%a in ('type "%HOLIDAY_CACHE%"') do set "%%a=%%b"
+    ) else (
+        :: 默认节假日列表（格式：MMDD）
+        set "HOLIDAYS=0101 0102 0103 0405 0501 0502 0503 0504 0505 0624 0625 0626 1001 1002 1003 1004 1005 1006 1007"
+    )
+)
 
 :: 获取当前日期的月和日
 for /f "tokens=1-3 delims=/ " %%a in ("%DATE%") do (
@@ -254,6 +266,62 @@ if %ERRORLEVEL% NEQ 0 (
 )
 call :LOG "更新成功完成"
 exit /b 0
+
+:GET_HOLIDAY_DATA
+:: 使用提莫API获取节假日数据
+for /f "tokens=1-3 delims=/" %%a in ("%DATE%") do (
+    set "curr_year=%%a"
+)
+
+:: 检查缓存文件是否存在且为当前年份的数据
+if exist "%HOLIDAY_CACHE%" (
+    for /f "tokens=1,2 delims==" %%i in ('type "%HOLIDAY_CACHE%"') do (
+        if "%%i"=="YEAR" set "cache_year=%%j"
+    )
+    if "%cache_year%"=="%curr_year%" (
+        for /f "tokens=1,2 delims==" %%i in ('type "%HOLIDAY_CACHE%"') do (
+            if "%%i"=="HOLIDAYS" set "HOLIDAYS=%%j"
+        )
+        if defined HOLIDAYS exit /b 0
+    )
+)
+
+:: 如果缓存不存在或已过期，则调用API获取新数据
+powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
+"try { ^
+    $year = '%curr_year%'; ^
+    $apiUrl = 'http://timor.tech/api/holiday/year/' + $year; ^
+    $response = Invoke-RestMethod -Uri $apiUrl -Method Get; ^
+    if ($response.code -eq 0) { ^
+        $holidayList = @(); ^
+        foreach ($property in $response.holiday.PSObject.Properties) { ^
+            $date = $property.Name; ^
+            $info = $property.Value; ^
+            if ($info.holiday -eq $true) { ^
+                $mmdd = $date.Replace('-', ''); ^
+                $holidayList += $mmdd; ^
+            } ^
+        } ^
+        $holidays = [string]::Join(' ', $holidayList); ^
+        Set-Content -Path '%HOLIDAY_CACHE%' -Value ('YEAR=' + '%curr_year%') -Force; ^
+        Add-Content -Path '%HOLIDAY_CACHE%' -Value ('HOLIDAYS=' + $holidays) -Force; ^
+        Write-Output ('HOLIDAYS=' + $holidays); ^
+        exit 0; ^
+    } else { ^
+        Write-Error ('API返回错误: ' + $response.message); ^
+        exit 1; ^
+    } ^
+} catch { ^
+    Write-Error ('请求失败: ' + $_.Exception.Message); ^
+    exit 1; ^
+}^
+" > "%DEBUG_FILE%"
+
+if "%DEBUG_MODE%"=="1" ( type "%DEBUG_FILE%" )
+for /f "tokens=1,2 delims==" %%a in ('type "%DEBUG_FILE%"') do (set "%%a=%%b")
+del /Q /F "%DEBUG_FILE%" 2>nul
+
+exit /b !ERRORLEVEL!
 
 :END
 exit /b 0
