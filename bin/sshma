@@ -108,6 +108,8 @@ add_host() {
     config+=("### ${alias_name} end")
 
     # 写入配置
+    # 确保文件以空行结尾
+    [ -z "$(tail -c1 "$SSH_CONFIG_FILE")" ] || echo >>"$SSH_CONFIG_FILE"
     printf '%s\n' "${config[@]}" >>"$SSH_CONFIG_FILE"
     log success "Added host $alias_name"
 }
