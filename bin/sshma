@@ -48,11 +48,12 @@ list_hosts() {
 }
 
 add_host() {
-    local conn_str="$1" alias_name="$2" user host_ip port=22 config=()
-
+    local conn_str="$1" alias_name="$2" user host_ip port config=()
+    ## 示例 user@ip / user@ip:port / user@domain:port
     if [[ "$conn_str" == *@* ]]; then
         IFS='@:' read -r user host_ip port <<<"$conn_str"
     else
+        ## 示例 ip / domain
         host_ip="$conn_str"
         user="root"
     fi
@@ -103,7 +104,7 @@ add_host() {
     config+=("Host $alias_name")
     config+=("    HostName $host_ip")
     config+=("    User $user")
-    [[ "$port" != "22" ]] && config+=("    Port $port")
+    [[ -z "$port" || "$port" != "22" ]] && config+=("    Port ${port:-22}")
     config+=("### ${alias_name} end")
 
     # 写入配置

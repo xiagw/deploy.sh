@@ -287,6 +287,7 @@ if exist "%HOLIDAY_CACHE%" (
 )
 
 :: 如果缓存不存在或已过期，则调用API获取新数据
+:: https://github.com/NateScarlet/holiday-cn
 powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
 "try { ^
     $year = '%curr_year%'; ^
