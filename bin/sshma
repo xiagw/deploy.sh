@@ -48,7 +48,7 @@ list_hosts() {
 }
 
 add_host() {
-    local conn_str="$1" alias_name="$2" user host_ip port config=()
+    local conn_str="$1" alias_name="$2" user host_ip port config=() config_ext=()
     ## 示例 user@ip / user@ip:port / user@domain:port
     if [[ "$conn_str" == *@* ]]; then
         IFS='@:' read -r user host_ip port <<<"$conn_str"
@@ -76,22 +76,22 @@ add_host() {
     }
 
     shift 2
-    local use_byobu=0
-
     # 处理额外选项
     while [[ $# -gt 0 ]]; do
         case "$1" in
-        -b | --byobu) use_byobu=1 ;;
+        -b | --byobu)
+            local use_byobu=" byobu"
+            ;;
         -i | --identity)
-            config+=("    IdentityFile $2")
+            config_ext+=("    IdentityFile $2")
             shift
             ;;
         -L | --local-forward)
-            config+=("    LocalForward $2 $3")
+            config_ext+=("    LocalForward $2 $3")
             shift 2
             ;;
         -R | --remote-forward)
-            config+=("    RemoteForward $2 $3")
+            config_ext+=("    RemoteForward $2 $3")
             shift 2
             ;;
         *) shift ;;
@@ -100,17 +100,16 @@ add_host() {
     done
 
     # 构建配置（移到选项处理之后）
-    config=("### ${alias_name} begin$([ $use_byobu -eq 1 ] && echo ' byobu')" "${config[@]}")
+    config=("### ${alias_name} begin$use_byobu")
     config+=("Host $alias_name")
+    config+=("${config_ext[@]}")
     config+=("    HostName $host_ip")
     config+=("    User $user")
     [[ -n "$port" && "$port" != "22" ]] && config+=("    Port ${port:-22}")
     config+=("### ${alias_name} end")
 
     # 写入配置
-    # 确保文件以空行结尾
-    [ -z "$(tail -c1 "$SSH_CONFIG_FILE")" ] || echo >>"$SSH_CONFIG_FILE"
-    printf '%s\n' "${config[@]}" >>"$SSH_CONFIG_FILE"
+    printf '\n%s\n' "${config[@]}" >>"$SSH_CONFIG_FILE"
     log success "Added host $alias_name"
 }
 
