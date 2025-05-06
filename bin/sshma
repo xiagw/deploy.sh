@@ -104,7 +104,7 @@ add_host() {
     config+=("Host $alias_name")
     config+=("    HostName $host_ip")
     config+=("    User $user")
-    [[ -z "$port" || "$port" != "22" ]] && config+=("    Port ${port:-22}")
+    [[ -n "$port" || "$port" != "22" ]] && config+=("    Port ${port:-22}")
     config+=("### ${alias_name} end")
 
     # 写入配置
