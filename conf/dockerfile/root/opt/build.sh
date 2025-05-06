@@ -62,19 +62,19 @@ _set_mirror() {
     <mirrors>
         <mirror>
             <id>flyh6</id>
-            <mirrorOf>external:*,!custom-group</mirrorOf>
+            <mirrorOf>central</mirrorOf>
             <name>flyh6</name>
             <url>http://m.flyh6.com/repository/flymaven/</url>
         </mirror>
         <mirror>
             <id>huawei</id>
-            <mirrorOf>external:*,!custom-group,!flyh6</mirrorOf>
+            <mirrorOf>*,!flyh6</mirrorOf>
             <name>huawei</name>
             <url>https://repo.huaweicloud.com/repository/maven/</url>
         </mirror>
         <mirror>
             <id>aliyun</id>
-            <mirrorOf>external:*,!custom-group,!flyh6,!huawei</mirrorOf>
+            <mirrorOf>*,!flyh6,!huawei</mirrorOf>
             <name>aliyun</name>
             <url>https://maven.aliyun.com/repository/public</url>
         </mirror>
