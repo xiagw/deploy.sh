@@ -115,7 +115,7 @@ find_and_sync_files() {
                     if [[ $ret -eq 0 ]]; then
                         sync_status=0
                         echo "通过 HOME 目录同步成功"
-                        ssh "$target_host" "cd docker/laradock && docker compose exec nginx nginx -s reload"
+                        ssh -t "$target_host" "cd docker/laradock && docker compose exec nginx nginx -s reload"
                     else
                         echo "通过 HOME 目录同步失败" >&2
                     fi
