@@ -255,7 +255,9 @@ deploy_wechat() {
         done
 
         if [[ "$c" -ge "$c_total" ]]; then
-            rm -f "$file"
+            rm "$file" || {
+                echo -e "Unable to automatically remove file: $file\nFile removal failed but the file can be safely deleted manually.\n无法自动删除文件：$file\n文件删除失败，但可以安全地手动删除。" >"${file}.MANUAL.DELETE.REQUIRED"
+            }
         fi
     done
 }
