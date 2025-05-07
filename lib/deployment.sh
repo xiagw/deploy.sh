@@ -67,7 +67,7 @@ deploy_to_kubernetes() {
         create_helm_chart "${helm_dir}"
     fi
 
-    echo "helm upgrade ${release_name} $helm_dir/ -i -n ${G_NAMESPACE} --set image.pullPolicy=Always,image.repository=${ENV_DOCKER_REGISTRY},image.tag=${G_IMAGE_TAG}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
+    echo "  helm upgrade ${release_name} $helm_dir/ -i -n ${G_NAMESPACE} --set image.pullPolicy=Always,image.repository=${ENV_DOCKER_REGISTRY},image.tag=${G_IMAGE_TAG}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
     ${GH_ACTION:-false} && return 0
 
     ## helm install / helm 安装  --atomic

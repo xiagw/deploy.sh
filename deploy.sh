@@ -425,9 +425,9 @@ main() {
     ################################################################################
     ## 全自动执行，或根据 arg_flags 执行相应的任务
     if $all_zero; then
-        _msg green "[auto mode: all tasks will be executed]"
+        _msg green "mode: auto [all tasks will be executed]"
     else
-        _msg green "[single job: only specified tasks will be executed]"
+        _msg yellow "mode: spec [only specified tasks will be executed]"
         for key in "${!arg_flags[@]}"; do
             [[ ${arg_flags[$key]} -eq 1 ]] && echo "  ${key}"
         done

@@ -52,7 +52,7 @@ get_docker_context() {
     esac
 
     G_DOCK="${G_DOCK:+"$G_DOCK "}--context $selected_context"
-    echo "  $G_DOCK"
+    # echo "  $G_DOCK"
     export G_DOCK
 }
 
