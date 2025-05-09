@@ -191,10 +191,11 @@ cdn_pay() {
     # 查询当前资源包剩余容量
     local remaining_amount
     remaining_amount="$(
-        aliyun --profile "${profile:-}" bssopenapi QueryResourcePackageInstances \
-            --ProductCode dcdn | jq -r '.Data.Instances.Instance[] |
-            select(.RemainingAmount != "0" and .RemainingAmountUnit != "GB" and .RemainingAmountUnit != "次") |
-            .RemainingAmount' | awk '{s+=$1} END {printf "%.3f", s}'
+        aliyun --profile "${profile:-}" bssopenapi QueryResourcePackageInstances --ProductCode dcdn |
+            jq -r '.Data.Instances.Instance[] |
+            select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") |
+            if .RemainingAmountUnit == "GB" then .RemainingAmount / 1024 else .RemainingAmount end' |
+            awk '{s+=$1} END {printf "%.3f", s}'
     )"
 
     # 如果剩余容量充足，则跳过购买
