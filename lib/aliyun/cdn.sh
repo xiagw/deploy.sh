@@ -190,13 +190,21 @@ cdn_pay() {
 
     # 查询当前资源包剩余容量
     local remaining_amount
+    local query_result
+    query_result=$(aliyun --profile "${profile:-}" bssopenapi QueryResourcePackageInstances --ProductCode dcdn) || {
+        [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;31m查询资源包失败\033[0m"
+        return 1
+    }
+
     remaining_amount="$(
-        aliyun --profile "${profile:-}" bssopenapi QueryResourcePackageInstances --ProductCode dcdn |
-            jq -r '.Data.Instances.Instance[] |
-            select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") |
-            if .RemainingAmountUnit == "GB" then .RemainingAmount / 1024 else .RemainingAmount end' |
-            awk '{s+=$1} END {printf "%.3f", s}'
+        echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") | if .RemainingAmountUnit == "GB" then (. | .RemainingAmount | tonumber) / 1024 elif .RemainingAmountUnit == "TB" then (. | .RemainingAmount | tonumber) else 0 end' | awk '{s+=$1} END {printf "%.3f", s}' 2>/dev/null || echo "-1"
     )"
+
+    # 检查是否获取到有效的剩余容量值
+    if [ "$remaining_amount" = "-1" ]; then
+        [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;31m无法获取资源包剩余容量信息\033[0m"
+        return 1
+    fi
 
     # 如果剩余容量充足，则跳过购买
     if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
