@@ -77,9 +77,10 @@ dns_list() {
 
     echo "列出 DNS 记录："
     local result
-    result=$(aliyun --profile "${profile:-}" alidns DescribeDomainRecords --DomainName "$domain")
+    result=$(aliyun --profile "${profile:-}" alidns DescribeDomainRecords --DomainName "$domain" --PageSize 100)
 
-    if [ $? -ne 0 ]; then
+    ret="$?"
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取 DNS 记录列表。请检查您的凭证和权限。" >&2
         return 1
     fi
