@@ -322,7 +322,7 @@ main() {
     ## 复制示例配置文件（deploy.json、deploy.env）到data目录 添加必要的二进制文件目录到PATH环境变量
     config_deploy_depend file
 
-    # 在完成初始化后再执行 build_base
+    # 在完成初始化等依赖关系后才能执行 build_base（独立功能）
     if [[ ${arg_flags["build_base"]} -eq 1 ]]; then
         select_image_tags
         return
@@ -346,21 +346,22 @@ main() {
         setup_git_repo "${GITEA_ACTIONS:-false}" "${arg_git_clone_url:-}" "${arg_git_clone_branch:-main}"
     fi
 
-    ## SVN仓库检出
+    ## SVN仓库检出（如果指定了svn-checkout-url）
     if [ -n "${arg_svn_checkout_url:-}" ]; then
         setup_svn_repo
     fi
 
-    ## 设置手动执行deploy.sh时的GitLab默认配置（位置不要随意变动）
+    ## 设置手动执行deploy.sh时的全局变量和默认配置（位置不要随意变动）
     config_deploy_vars
 
-    ## 处理 --in-china 参数
+    ## 处理 --in-china 参数（在中国地区需要处理的代理或镜像等配置）
     ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
+
     ## Create Helm chart directory if --create-helm flag is set
-    ## This is an independent operation that will exit after completion
+    ## This is an independent operation that will exit after completion （独立功能）
     ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return
 
-    ## Docker image copy operation
+    ## Docker image copy operation / 复制镜像到自定义的 registry（独立功能）
     if [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_src}" ]]; then
         [ -z "$arg_target" ] && arg_target="$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")"
         [ -z "$arg_target" ] && return 1
@@ -368,18 +369,18 @@ main() {
         return
     fi
 
-    ## 安装所需的系统工具
+    ## 依赖：安装所需的系统工具
     system_install_tools "$@"
 
-    ## 系统维护：清理磁盘空间
+    ## 系统维护：空间不足时自动清理磁盘空间
     system_clean_disk
 
-    ## Kubernetes集群创建
+    ## Kubernetes集群创建（独立功能）
     ${create_k8s_with_terraform:-false} && kube_setup_terraform
 
-    ## 注意：Kubernetes配置初始化，此步骤位置不可调整
+    ## 注意：Kubernetes 配置初始化，此步骤位置不可调整
     kube_config_init "$G_NAMESPACE"
-
+    ## Kubernetes 创建 pv pvc（独立功能）
     if [[ ${arg_flags["kube_pvc"]} -eq 1 && -n "${sub_path_name}" ]]; then
         kube_create_pv_pvc "${sub_path_name}" "${namespace}"
         return
@@ -388,7 +389,7 @@ main() {
     ## 设置ssh-config/acme.sh/aws/kube/aliyun/python-gitlab/cloudflare/rsync
     config_deploy_depend env >/dev/null
 
-    ## 使用acme.sh更新SSL证书
+    ## 使用acme.sh更新SSL证书（独立功能）
     if [[ ${arg_renew_cert:-false} = true ]]; then
         system_cert_renew
         return
@@ -402,28 +403,27 @@ main() {
 
     ## 探测项目的程序语言
     _msg step "[lang] Probe program language"
-    ## get_lang=lang:ver:docker
+    ## 解析语言类型:版本:docker 标识 get_lang=lang:ver:docker
     get_lang=$(repo_language_detect)
-    ## repo_lang=lang
+    ## 单独的语言类型变量 repo_lang=lang
     repo_lang=${get_lang%%:*}
-    ## 解析语言类型和 docker 标识
     echo "  ${get_lang}"
 
-    ## 处理构建工具选择
+    ## 处理构建时全局环境变量
     config_build_env "${get_lang}"
-    ## preprocess project config files / 预处理业务项目配置文件，覆盖配置文件等特殊处理
+
+    ## 注入文件：preprocess project config files / 预处理项目配置文件，覆盖配置文件等特殊处理
     # arg_disable_inject: 命令参数强制不注入文件
     repo_inject_file "${repo_lang}" "${arg_disable_inject:-false}"
     get_lang=$(repo_language_detect)
-    ## 解析 docker 标识
     echo "  ${get_lang}"
 
+    ################################################################################
     ## Task Execution Phase
     ## Mode:
     ## - Auto: All tasks will be executed if no specific flags are set
     ## - Single: Only specified tasks will be executed based on arg_flags
-    ################################################################################
-    ## 全自动执行，或根据 arg_flags 执行相应的任务
+    ## 无参数时全自动执行，有参数时执行相应的任务
     if $all_zero; then
         _msg green "mode: auto [all tasks will be executed]"
     else
@@ -443,7 +443,7 @@ main() {
     # API文档生成
     [[ ${arg_flags["apidoc"]} -eq 1 ]] && generate_apidoc
 
-    # 构建相关任务
+    # 构建任务
     if [[ ${arg_flags["build_all"]} -eq 1 ]]; then
         unset EXIT_MAIN
         build_all "$get_lang" "${image_retain}"
