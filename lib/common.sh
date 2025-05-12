@@ -515,7 +515,7 @@ _install_helm() {
 
 _install_tencent_cli() {
     local flag="$1" use_china_mirror=${2:-false}
-    if [ "$flag" != "upgrade" ] && python3 -m pip show --quiet tccli >/dev/null 2>&1 && command -v tccli >/dev/null; then
+    if [ "$flag" != "upgrade" ] && command -v tccli >/dev/null; then
         return
     fi
     _msg green "install tencent cli..."
