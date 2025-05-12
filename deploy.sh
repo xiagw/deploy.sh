@@ -160,10 +160,10 @@ parse_command_args() {
             arg_flags["copy_image"]=1
             arg_src="${2:?ERROR: example: nginx:stable-alpine}"
             arg_target="${3}"
-            arg_keep_tag="${4:-true}"
-            [ -z "$2" ] || shift
-            [ -z "$3" ] || shift
-            [ -z "$4" ] || shift
+            arg_keep_tag="${4}"
+            [ -z "$arg_src" ] || shift
+            [ -z "$arg_target" ] || shift
+            [ -z "$arg_keep_tag" ] || shift
             ;;
         # Testing and quality
         -u | --test-unit) arg_flags["test_unit"]=1 ;;
@@ -365,7 +365,7 @@ main() {
     if [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_src}" ]]; then
         [ -z "$arg_target" ] && arg_target="$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")"
         [ -z "$arg_target" ] && return 1
-        copy_docker_image "${arg_src}" "${arg_target}" "${arg_keep_tag}"
+        copy_docker_image "${arg_src}" "${arg_target}" "${arg_keep_tag:-true}"
         return
     fi
 
