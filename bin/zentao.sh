@@ -71,7 +71,7 @@ LIMIT ${offset},${batch_size};
 EOF
 
             # 执行查询并追加到结果文件
-            mysql zentao -N <"$tmp_sql" | sed 's/$/,/' >>"$tmp_result"
+            mysql --defaults-file="$HOME/.my.cnf.mysql04" -D zentao -N <"$tmp_sql" | sed 's/$/,/' >>"$tmp_result"
 
             # 获取当前查询的行数
             local current_rows
@@ -256,7 +256,7 @@ main() {
 
     # Create example env file if not exists
     if [ ! -f "$SCRIPT_ENV" ]; then
-        cat > "$SCRIPT_ENV" << 'EOF'
+        cat >"$SCRIPT_ENV" <<'EOF'
 # Zentao API Configuration
 case "$domain" in
 "example.com")
