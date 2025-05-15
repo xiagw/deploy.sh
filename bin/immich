@@ -156,7 +156,7 @@ _rename_file() {
 
 _backup_with_borg() {
     local immich_path borg_opt
-    set -e
+    set -euo pipefail
     immich_path="$HOME/docker/immich-app/library"
     borg_opt=(borg create --exclude "$immich_path"/thumbs/ --exclude "$immich_path"/encoded-video/)
 
