@@ -168,34 +168,30 @@ _rename_file() {
 _backup_with_borg() {
     set -e
     immich_path="$HOME/docker/immich-app/library"
-    immich_dbdump_path="$immich_path/db_dumps"
-    borg_path="$HOME/docker/immich-app/backup-borg"
+    borg_opt=(borg create --exclude "$immich_path"/thumbs/ --exclude "$immich_path"/encoded-video/)
+
+    # Backup Immich database
+    mkdir -p "$immich_path/db_dumps"
+    docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres >"$immich_path"/db_dumps/immich-database.sql
+    # For deduplicating backup programs such as Borg or Restic, compressing the content can increase backup size by making it harder to deduplicate. If you are using a different program or still prefer to compress, you can use the following command instead:
+    # docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres | /usr/bin/gzip --rsyncable > "$immich_path"/db_dumps/immich-database.sql.gz
 
     ## Local setup
-    [ -d "$immich_dbdump_path" ] || mkdir -p "$immich_dbdump_path"
-    [ -d "$borg_path" ] || {
-        mkdir -p "$borg_path"
-        borg init --encryption=none "$borg_path"
-    }
+    # backup_local="$HOME/docker/immich-app/backup-borg"
+    # [ -d "$backup_local" ] || {
+    #     mkdir -p "$backup_local"
+    #     borg init --encryption=none "$backup_local"
+    # }
+    ### Append to local Borg repository
+    # "${borg_opt[@]}" "$backup_local::{now}" "$immich_path"
+    # borg prune --keep-weekly=4 --keep-monthly=3 "$backup_local"
+    # borg compact "$backup_local"
+
     ## Remote setup
     # shellcheck disable=SC2029
     if ! ssh "$ENV_REMOTE_HOST" "test -d \"$ENV_REMOTE_BACKUP_PATH\""; then
         borg init --encryption=none "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH"
     fi
-
-    ### Local
-    # Backup Immich database
-    docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres >"$immich_dbdump_path"/immich-database.sql
-    # For deduplicating backup programs such as Borg or Restic, compressing the content can increase backup size by making it harder to deduplicate. If you are using a different program or still prefer to compress, you can use the following command instead:
-    # docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres | /usr/bin/gzip --rsyncable > "$immich_dbdump_path"/immich-database.sql.gz
-
-    borg_opt=(borg create --exclude "$immich_path"/thumbs/ --exclude "$immich_path"/encoded-video/)
-
-    ### Append to local Borg repository
-    # "${borg_opt[@]}" "$borg_path::{now}" "$immich_path"
-    # borg prune --keep-weekly=4 --keep-monthly=3 "$borg_path"
-    # borg compact "$borg_path"
-
     ### Append to remote Borg repository
     "${borg_opt[@]}" "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH::{now}" "$immich_path"
     # borg prune --keep-weekly=4 --keep-monthly=3 "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH"
@@ -384,7 +380,6 @@ _upgrade_immich_apk() {
     ossutil cp -f immich.apk oss://"${ENV_OSS_BUCKET:? empty bucket name}"/d/immich.apk
     rm -f immich.apk
 }
-
 
 main() {
     _color
