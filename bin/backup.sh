@@ -205,7 +205,7 @@ _backup_zfs() {
     # If we found a previous snapshot, verify it exists on destination
     if [[ -n "$prev_snap" && "$do_full_backup" != "true" ]]; then
         local prev_snap_name=${prev_snap##*@} # Extract just the snapshot part
-        if ! zfs list "${zfs_dest}${prev_snap_name}" >/dev/null 2>&1; then
+        if ! zfs list "${zfs_dest}@${prev_snap_name}" >/dev/null 2>&1; then
             _log $LOG_LEVEL_WARNING "Previous snapshot ${prev_snap_name} not found on destination. Will perform full backup."
             do_full_backup=true
             prev_snap=""
