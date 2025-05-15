@@ -181,73 +181,82 @@ _backup_directories() {
 }
 
 _backup_zfs() {
-    local zfs_src="${1:-zfs01/share}"
-    local zfs_dest="${2:-zfs02/share}"
-    local snap
-    snap="$(date +%s)"
+    set -eo pipefail
+    local zfs_src="${1:-zfs01/test}"
+    local zfs_dest="${2:-zfs02/test}"
+    local timestamp
+    timestamp="$(date +%Y%m%d_%H%M%S)"
+    local start_time
+    start_time="$(date +%s)"
 
-    _log $LOG_LEVEL_INFO "Starting backup at $(date +%Y%m%d-%u-%T.%3N)"
-    zfs list -t snapshot
+    _log $LOG_LEVEL_INFO "Starting backup at $(date +%Y%m%d-%u-%T.%3N)" # Check if destination filesystem exists
+    if ! zfs list "$zfs_dest" >/dev/null 2>&1; then
+        _log $LOG_LEVEL_ERROR "Destination filesystem $zfs_dest does not exist. Please create it first."
+        return 1
+    fi
 
-    # Rename existing snapshots
-    for fs in "$zfs_src" "$zfs_dest"; do
-        if zfs list -t snapshot -o name -s creation -H -r "${fs}@now"; then
-            zfs list -t snapshot -o name -s creation -H -r "${fs}@last" &&
-                zfs rename "${fs}@last" "${fs}@${snap}"
-            zfs rename "${fs}@now" "${fs}@last"
-        fi
-    done
+    # Define snapshot name
+    local snap_name="${zfs_src}@${timestamp}"
 
-    # Create new snapshot
-    zfs snapshot "${zfs_src}@now"
+    # Find the most recent previous snapshot for incremental backup
+    local prev_snap
+    prev_snap=$(zfs list -t snapshot -o name -s creation -H -r "$zfs_src" | tail -n1)
 
-    # Check for pv command
-    local has_pv=0
-    command -v pv >/dev/null 2>&1 && has_pv=1
-
-    # Perform incremental or full backup
-    if zfs list -t snapshot -o name -s creation -H -r "${zfs_src}@last" >/dev/null 2>&1; then
-        # Incremental backup
-        _log $LOG_LEVEL_INFO "Incremental backup"
-        if [[ "$has_pv" -eq 1 ]]; then
-            # 修改这里：使用 awk 将大小转换为字节
-            size="$(zfs send -vnRi "${zfs_src}@last" "${zfs_src}@now" 2>&1 | awk '
-                function convert(size) {
-                    multiplier = 1
-                    if (size ~ /K$/) { multiplier = 1024 }
-                    else if (size ~ /M$/) { multiplier = 1024 * 1024 }
-                    else if (size ~ /G$/) { multiplier = 1024 * 1024 * 1024 }
-                    else if (size ~ /T$/) { multiplier = 1024 * 1024 * 1024 * 1024 }
-                    gsub(/[KMGT]$/, "", size)
-                    return size * multiplier
-                }
-                /estimated size is/ {
-                    gsub(/estimated size is /, "")
-                    print convert($0)
-                    exit
-                }
-            ')"
-            zfs send -i "${zfs_src}@last" "${zfs_src}@now" | pv -pertb -s "$size" | zfs recv "${zfs_dest}"
-        else
-            zfs send -i "${zfs_src}@last" "${zfs_src}@now" | zfs recv "${zfs_dest}"
-        fi
-    else
-        _log $LOG_LEVEL_INFO "Full backup"
-        zfs snapshot "${zfs_src}@last"
-        if [[ "$has_pv" -eq 1 ]]; then
-            size="$(zfs list -p -o used "${zfs_src}" | awk 'END {print $NF}')"
-            zfs send "${zfs_src}@last" | pv -pertb -s "$size" | zfs recv "${zfs_dest}"
-        else
-            zfs send -v "${zfs_src}@last" | zfs recv "${zfs_dest}"
+    # If we found a previous snapshot, verify it exists on destination
+    if [[ -n "$prev_snap" && "$do_full_backup" != "true" ]]; then
+        local prev_snap_name=${prev_snap##*/} # Extract just the snapshot part
+        if ! zfs list "${zfs_dest}${prev_snap_name}" >/dev/null 2>&1; then
+            _log $LOG_LEVEL_WARNING "Previous snapshot ${prev_snap_name} not found on destination. Will perform full backup."
+            do_full_backup=true
+            prev_snap=""
         fi
     fi
 
-    # Clear snapshots
-    zfs destroy "${zfs_src}@${snap}"
-    zfs destroy "${zfs_dest}@${snap}"
+    # Create new snapshot with timestamp
+    _log $LOG_LEVEL_INFO "Creating new snapshot $snap_name"
+    zfs snapshot "$snap_name"
+
+    # Check for pv command for progress display
+    local has_pv=0
+    command -v pv >/dev/null 2>&1 && has_pv=1
+
+    if [[ -n "$prev_snap" && "$do_full_backup" != "true" ]]; then
+        # Incremental backup
+        _log $LOG_LEVEL_INFO "Performing incremental backup from ${prev_snap} to ${snap_name}"
+        if [[ "$has_pv" -eq 1 ]]; then
+            size="$(zfs send -vnRi "${prev_snap}" "${snap_name}" 2>&1 | awk '
+                /estimated size is/ {gsub(/estimated size is /, ""); print $1}')"
+            if ! zfs send -i "${prev_snap}" "${snap_name}" | pv -pertb -s "$size" | zfs recv -F "${zfs_dest}"; then
+                _log $LOG_LEVEL_ERROR "Incremental backup failed, falling back to full backup"
+                do_full_backup=true
+            fi
+        else
+            if ! zfs send -i "${prev_snap}" "${snap_name}" | zfs recv -F "${zfs_dest}"; then
+                _log $LOG_LEVEL_ERROR "Incremental backup failed, falling back to full backup"
+                do_full_backup=true
+            fi
+        fi
+    fi
+
+    if [[ -z "$prev_snap" || "$do_full_backup" == "true" ]]; then
+        # Full backup
+        _log $LOG_LEVEL_INFO "Performing full backup of ${snap_name}"
+        if [[ "$has_pv" -eq 1 ]]; then
+            size="$(zfs list -p -o used "${zfs_src}" | tail -n1)"
+            zfs send "${snap_name}" | pv -pertb -s "$size" | zfs recv -F "${zfs_dest}"
+        else
+            zfs send "${snap_name}" | zfs recv -F "${zfs_dest}"
+        fi
+    fi
+
+    # Keep only the last 3 snapshots
+    _log $LOG_LEVEL_INFO "Cleaning up old snapshots"
+    for fs in "$zfs_src" "$zfs_dest"; do
+        zfs list -t snapshot -o name -s creation -H -r "$fs" | head -n -3 | xargs -r -n1 zfs destroy
+    done
 
     _log $LOG_LEVEL_INFO "Backup completed at $(date +%Y%m%d-%u-%T.%3N)"
-    _log $LOG_LEVEL_INFO "Total duration: $(($(date +%s) - snap)) seconds"
+    _log $LOG_LEVEL_INFO "Total duration: $(($(date +%s) - start_time)) seconds"
 }
 
 _compress_file() {
@@ -495,7 +504,6 @@ main() {
 
     case "$1" in
     zfs*)
-        set -e
         _backup_zfs "$@"
         return
         ;;
