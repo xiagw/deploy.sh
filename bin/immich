@@ -2,13 +2,11 @@
 # shellcheck disable=SC1090
 
 _cleanup() {
-    trap - SIGINT SIGTERM ERR EXIT
-    # script cleanup here
-    # rm -rf "${param:-empty-var-for-path}"
-    test -f "${tmp_file-}" && rm -f "${tmp_file-}"
+    rm -rf "${TMPS-}"
 }
 
 _loading_rotate() {
+    local pid frames frame
     sleep "${1:-10}" &
     pid=$!
     frames='/ - \ |'
@@ -22,6 +20,7 @@ _loading_rotate() {
 }
 
 _loading_second() {
+    local s i
     s="${1:-10}"
     for i in $(seq 1 "$s"); do
         printf "\rLoading... %s/$s" "$i"
@@ -42,6 +41,7 @@ _loading_left_right() {
 }
 
 _msg_color() {
+    local bold underline italic info error warn reset
     bold=$(tput bold)
     underline=$(tput smul)
     italic=$(tput sitm)
@@ -72,15 +72,15 @@ _log() {
 }
 
 _die() {
-    local msg=$1
-    local code=${2-1} # default exit status 1
+    local msg=$1 code=${2-1} # default exit status 1
     _msg "$msg"
     exit "$code"
 }
 
 _get_confirm() {
-    read -rp "${1:-Do you want to proceed?} [y/N] " confirm_choice
-    if [[ ${confirm_choice:-n} =~ ^(y|Y|yes|YES)$ ]]; then
+    local confirm
+    read -rp "${1:-Do you want to proceed?} [y/N] " confirm
+    if [[ ${confirm:-n} =~ ^(y|Y|yes|YES)$ ]]; then
         return 0 # true
     else
         return 1 # false
@@ -107,6 +107,7 @@ EOF
 }
 
 _parse_params() {
+    local args
     # default values of variables set from params
     # flag=0
     param=''
@@ -137,35 +138,24 @@ _parse_params() {
 }
 
 _rename_file() {
-    # Specify the directory where the files are located
-    directory="/path/to/your/directory"
-
-    # Check if the directory exists
-    if [ ! -d "$directory" ]; then
-        echo "Directory does not exist."
-        exit 1
-    fi
-
-    # Move to the directory
-    cd "$directory" || exit
+    local directory="$1" file new_name
 
     # Loop through each file in the directory
-    for file in *; do
-        # Check if it's a regular file
-        if [ -f "$file" ]; then
-            # Remove special characters from the file name
-            new_name=$(echo "$file" | tr -cd '[:alnum:]\n\r._-')
+    for file in "$directory"/*; do
+        [ -f "$file" ] || continue
+        # Remove special characters from the file name
+        new_name=$(echo "$file" | tr -cd '[:alnum:]\n\r._-')
 
-            # Rename the file if the new name is different
-            if [ "$file" != "$new_name" ]; then
-                mv "$file" "$new_name"
-                echo "Renamed '$file' to '$new_name'"
-            fi
+        # Rename the file if the new name is different
+        if [ "$file" != "$new_name" ]; then
+            mv "$file" "$new_name"
+            echo "Renamed $file -> $new_name"
         fi
     done
 }
 
 _backup_with_borg() {
+    local immich_path borg_opt
     set -e
     immich_path="$HOME/docker/immich-app/library"
     borg_opt=(borg create --exclude "$immich_path"/thumbs/ --exclude "$immich_path"/encoded-video/)
@@ -199,12 +189,13 @@ _backup_with_borg() {
 }
 
 _deduplication() {
-    input_path="$1"
+    local input_path="$1" tmp_file file_size hash
     # Associative array to store file hashes
     declare -A file_hashes
     # Traverse the directory and calculate hashes
     size_thread=$((1024 * 1024))
     tmp_file=$(mktemp)
+    TMPS+=("$tmp_file")
     while read -r file; do
         file_size="$(stat -c %s "$file")"
         if [ "${file_size}" -gt $size_thread ]; then
@@ -349,7 +340,7 @@ _set_file_time() {
 }
 
 _immich_upload() {
-    input_path="$1"
+    local input_path="$1" import_path args
     if [ -d "$input_path" ]; then
         echo "found $input_path, go on..."
     else
@@ -385,6 +376,7 @@ main() {
     _color
     _parse_params "$@"
     set -Eeo pipefail
+    declare -a TMPS
     trap _cleanup SIGINT SIGTERM ERR EXIT
 
     ## script logic here
@@ -420,7 +412,6 @@ main() {
     [ "${flag_backup-}" = 1 ] && _backup_with_borg
     [ "${flag_fixtime-}" = 1 ] && _set_file_time "$param"
     [ "${flag_upload-}" = 1 ] && _immich_upload "$param"
-
 }
 
 main "$@"
