@@ -352,7 +352,7 @@ _upload_file() {
     done
 }
 
-_notify_wecom() {
+_notify_wecom_work() {
     local path="$1"
     local file="${2}.tar.gz"
     local sleep_time="$3"
