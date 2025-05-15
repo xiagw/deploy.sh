@@ -184,8 +184,6 @@ _backup_zfs() {
     set -eo pipefail
     local zfs_src="${1:-zfs01/test}"
     local zfs_dest="${2:-zfs02/test}"
-    local timestamp
-    timestamp="$(date +%Y%m%d_%H%M%S)"
     local start_time
     start_time="$(date +%s)"
 
@@ -195,23 +193,17 @@ _backup_zfs() {
         return 1
     fi
 
-    # Define snapshot name
-    local snap_name="${zfs_src}@${timestamp}"
-
     # Find the most recent previous snapshot for incremental backup
-    local prev_snap
-    prev_snap=$(zfs list -t snapshot -o name -s creation -H -r "$zfs_src" | tail -n1)
-
-    # If we found a previous snapshot, verify it exists on destination
-    if [[ -n "$prev_snap" && "$do_full_backup" != "true" ]]; then
-        local prev_snap_name=${prev_snap##*@} # Extract just the snapshot part
-        if ! zfs list "${zfs_dest}@${prev_snap_name}" >/dev/null 2>&1; then
-            _log $LOG_LEVEL_WARNING "Previous snapshot ${prev_snap_name} not found on destination. Will perform full backup."
-            do_full_backup=true
-            prev_snap=""
-        fi
+    local snap_name prev_snap dest_snap_last do_full_backup=false
+    dest_snap_last="$(zfs list -t snapshot -o name -s creation -H -r "$zfs_dest" | tail -n1 | cut -d'@' -f2)"
+    prev_snap="$(zfs list -t snapshot -o name -s creation -H -r "$zfs_src" | grep "${dest_snap_last}" | tail -n1)"
+    if [[ -z "${prev_snap}" ]]; then
+        _log $LOG_LEVEL_INFO "No previous snapshot found, will perform full backup."
+        do_full_backup=true
     fi
 
+    # Define snapshot name
+    snap_name="${zfs_src}@$(date +%Y%m%d_%H%M%S)"
     # Create new snapshot with timestamp
     _log $LOG_LEVEL_INFO "Creating new snapshot $snap_name"
     zfs snapshot "$snap_name"
@@ -252,7 +244,7 @@ _backup_zfs() {
     # Keep only the last 3 snapshots
     _log $LOG_LEVEL_INFO "Cleaning up old snapshots"
     for fs in "$zfs_src" "$zfs_dest"; do
-        zfs list -t snapshot -o name -s creation -H -r "$fs" | head -n -3 | xargs -r -n1 zfs destroy
+        zfs list -t snapshot -o name -s creation -H -r "$fs" | head -n -15 | xargs -r -n1 zfs destroy
     done
 
     _log $LOG_LEVEL_INFO "Backup completed at $(date +%Y%m%d-%u-%T.%3N)"
