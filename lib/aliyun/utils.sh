@@ -655,7 +655,7 @@ balance_check() {
 
     # 检查昨日消费
     echo "Checking yesterday's spending: "
-    daily_spending=$(aliyun -p "$profile" bssopenapi QueryAccountBill \
+    daily_spending=$(aliyun --profile "${profile:-}" bssopenapi QueryAccountBill \
         --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
         jq -r '.Data.Items.Item[].PretaxAmount | tostring | gsub(","; "")')
 
@@ -750,9 +750,9 @@ list_all_services() {
 }
 
 query_daily_cost() {
-    local query_date=${1:-$(date -d "yesterday" +%Y-%m-%d)}
+    local query_date=${1:-$(date +%F -d "yesterday")}
     local current_month
-    current_month=$(date -d "$query_date" +%Y-%m)
+    current_month=$(date +%Y-%m -d "$query_date")
     local format=${2:-human}
 
     local result
@@ -770,12 +770,12 @@ query_daily_cost() {
         tsv)
             echo "查询 $query_date 的消费总额："
             echo -e "日期\t消费金额\t货币单位"
-            echo "$result" | jq -r '.Data.Items.Item[] | [.BillingDate, .CashAmount, "CNY"] | @tsv'
+            echo "$result" | jq -r '.Data.Items.Item[] | [.BillingDate, .PretaxAmount, "CNY"] | @tsv'
             ;;
         human | *)
             echo "查询 $query_date 的消费总额："
             local total_amount
-            total_amount=$(echo "$result" | jq -r '.Data.Items.Item[0].CashAmount')
+            total_amount=$(echo "$result" | jq -r '.Data.Items.Item[0].PretaxAmount')
             local currency
             currency=$(echo "$result" | jq -r '.Data.Items.Item[0].Currency')
             if [ -n "$total_amount" ] && [ "$total_amount" != "null" ]; then
