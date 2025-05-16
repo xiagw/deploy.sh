@@ -109,6 +109,7 @@ add_host() {
     config+=("### ${alias_name} end")
 
     # 写入配置
+    echo "" >>"$SSH_CONFIG_FILE"
     printf '%s\n' "${config[@]}" >>"$SSH_CONFIG_FILE"
     log success "Added host $alias_name"
 }
