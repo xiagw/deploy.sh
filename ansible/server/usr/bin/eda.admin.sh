@@ -321,7 +321,6 @@ _usage() {
 }
 
 main() {
-    _check_root || return 1
     me_name="$(basename "$0")"
     me_path="$(dirname "$(readlink -f "$0")")"
     me_path_bin="$me_path/bin"
@@ -353,6 +352,7 @@ main() {
         -l | --backup-pull) backup_pull=1 ;;
         -b | --backup-borg) backup_borg=1 ;;
         --debug) backup_borg_debug=1 ;;
+        --no-root) no_root=1 ;;
         --local-path)
             borg_local_path+=("$2")
             shift
@@ -375,6 +375,9 @@ main() {
         esac
         shift
     done
+
+    # Only check root if --no-root is not specified
+    [ "${no_root:-0}" -eq 0 ] && _check_root || return 1
 
     [ "$show_help" = 1 ] && _usage
 
