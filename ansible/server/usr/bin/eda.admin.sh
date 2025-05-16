@@ -202,7 +202,7 @@ _backup_rsync() {
 
 _backup_borg() {
     set -e
-    local borg_opt=(borg create --remote-path /usr/bin/borg)
+    local borg_opt=(borg create)
     if [ "${backup_borg_debug:-0}" -eq 1 ]; then
         borg_opt+=(
             --verbose
@@ -240,22 +240,35 @@ _backup_borg() {
     shift 2
     IFS=" " read -r -a local_path <<<"${*}"
 
-    # shellcheck disable=SC2029
-    if ssh "$remote_host" true; then
-        if ssh "$remote_host" "test -f $remote_path/config"; then
-            :
-        else
-            borg init --encryption=none "ssh://$remote_host$remote_path"
+    local repo_url
+    # Check if remote_host is "local" for local backup
+    if [ "$remote_host" = "local" ]; then
+        repo_url="$remote_path"
+        if [ ! -f "$remote_path/config" ]; then
+            borg init --encryption=none "$repo_url"
         fi
     else
-        echo "fail ssh to nas"
-        return 1
+        # Remote backup configuration
+        borg_opt+=(--remote-path /usr/bin/borg)
+        repo_url="ssh://$remote_host$remote_path"
+        # shellcheck disable=SC2029
+        if ssh "$remote_host" true; then
+            if ssh "$remote_host" "test -f $remote_path/config"; then
+                :
+            else
+                borg init --encryption=none "$repo_url"
+            fi
+        else
+            echo "fail ssh to $remote_host"
+            return 1
+        fi
     fi
+
     _msg log "borg backup start..."
-    _msg log "ssh://$remote_host$remote_path::{now} ${local_path[*]}"
-    "${borg_opt[@]}" "ssh://$remote_host$remote_path::{now}" "${local_path[@]}"
-    # borg prune --keep-weekly=4 --keep-monthly=3 "$remote_host:$remote_path"
-    # borg compact "$remote_host:$remote_path"
+    _msg log "$repo_url::{now} ${local_path[*]}"
+    "${borg_opt[@]}" "$repo_url::{now}" "${local_path[@]}"
+    # borg prune --keep-weekly=4 --keep-monthly=3 "$repo_url"
+    # borg compact "$repo_url"
     _msg log "borg backup end."
 }
 
