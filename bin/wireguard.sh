@@ -44,9 +44,17 @@ _set_peer2peer() {
                 echo "# PresharedKey = $client_key_pre"
                 echo "endpoint = $svr_ip_pub:$svr_ip_port"
                 if [[ -z "$svr_lan_cidr" ]]; then
-                    echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128"
+                    if [ -z "${svr_ip6_pri}" ]; then
+                        echo "AllowedIPs = ${svr_ip_pri}/32"
+                    else
+                        echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128"
+                    fi
                 else
-                    echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128, ${svr_lan_cidr}"
+                    if [ -z "${svr_ip6_pri}" ]; then
+                        echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_lan_cidr}"
+                    else
+                        echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128, ${svr_lan_cidr}"
+                    fi
                 fi
                 echo "PersistentKeepalive = 60"
                 echo "### ${svr_conf##*/} end"
@@ -216,24 +224,25 @@ _update_ddns() {
     $use_sudo wg show all dump | awk 'NR>1 {print $4"\t"$5"\t"$6}'
 }
 
-_common_lib() {
-    common_lib="$g_me_path/../lib/common.sh"
-    if [ ! -f "$common_lib" ]; then
-        common_lib='/tmp/common.sh'
-        include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
-        [ -f "$common_lib" ] || curl -fsSL "$include_url" >"$common_lib"
+get_lib_common() {
+    local lib url
+    lib="$(dirname "$g_me_path")/lib/common.sh"
+    if [ ! -f "$lib" ]; then
+        lib='/tmp/common.sh'
+        url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
+        curl -fsSLo "$lib" "$url"
     fi
     # shellcheck source=/dev/null
-    . "$common_lib"
+    . "$lib"
 }
 
 main() {
     g_me_name="$(basename "$0")"
     g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
-    g_me_data_path="${g_me_path}/../data/wireguard"
+    g_me_data_path="$(dirname "${g_me_path}")/data/wireguard"
     g_me_log="${g_me_data_path}/${g_me_name}.log"
 
-    _common_lib
+    get_lib_common
 
     _msg "log file: $g_me_log"
 
@@ -263,7 +272,7 @@ What do you want to do?
         read -rp "Select wireguard network [gitlab|jump|demo]: [1-3]: " -e -i1 wireguard_network
     done
     if [ "${wireguard_network:-1}" -gt 1 ]; then
-        g_me_data_path="${g_me_path}/../data/wireguard${wireguard_network}"
+        g_me_data_path="$(dirname "${g_me_path}")/data/wireguard${wireguard_network}"
         mkdir -p "$g_me_data_path"
     fi
     _msg green "wireguard data path: $g_me_data_path"
