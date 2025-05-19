@@ -200,6 +200,14 @@ cdn_pay() {
         echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") | if .RemainingAmountUnit == "GB" then (. | .RemainingAmount | tonumber) / 1024 elif .RemainingAmountUnit == "TB" then (. | .RemainingAmount | tonumber) else 0 end' | awk '{s+=$1} END {printf "%.3f", s}' 2>/dev/null || echo "-1"
     )"
 
+    # 查询当前资源包静态https请求次数剩余量
+    local remaining_https_request
+    remaining_https_request="$(
+        echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit == "次") | .RemainingAmount' | awk '{s+=$1} END {printf "%.0f", s}' 2>/dev/null || echo "0"
+    )"
+    [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;32m剩余HTTPS请求次数: ${remaining_https_request:-0}次\033[0m"
+
+
     # 检查是否获取到有效的剩余容量值
     if [ "$remaining_amount" = "-1" ]; then
         [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;31m无法获取资源包剩余容量信息\033[0m"
