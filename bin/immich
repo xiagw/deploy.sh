@@ -154,38 +154,30 @@ _rename_file() {
     done
 }
 
-_backup_with_borg() {
-    local immich_path borg_opt
+backup_with_borg() {
     set -euo pipefail
-    immich_path="$HOME/docker/immich-app/library"
-    borg_opt=(borg create --exclude "$immich_path"/thumbs/ --exclude "$immich_path"/encoded-video/)
-
-    # Backup Immich database
-    mkdir -p "$immich_path/db_dumps"
-    docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres >"$immich_path"/db_dumps/immich-database.sql
-    # For deduplicating backup programs such as Borg or Restic, compressing the content can increase backup size by making it harder to deduplicate. If you are using a different program or still prefer to compress, you can use the following command instead:
-    # docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres | /usr/bin/gzip --rsyncable > "$immich_path"/db_dumps/immich-database.sql.gz
-
-    ## Local setup
-    # backup_local="$HOME/docker/immich-app/backup-borg"
-    # [ -d "$backup_local" ] || {
-    #     mkdir -p "$backup_local"
-    #     borg init --encryption=none "$backup_local"
-    # }
-    ### Append to local Borg repository
-    # "${borg_opt[@]}" "$backup_local::{now}" "$immich_path"
-    # borg prune --keep-weekly=4 --keep-monthly=3 "$backup_local"
-    # borg compact "$backup_local"
-
-    ## Remote setup
-    # shellcheck disable=SC2029
-    if ! ssh "$ENV_REMOTE_HOST" "test -d \"$ENV_REMOTE_BACKUP_PATH\""; then
-        borg init --encryption=none "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH"
+    local immich_home="$HOME/docker/immich-app" borg_opt
+    local remote_host=root@192.168.11.10 remote_backup_path=/zfs02/bak/borg-immich
+    [ -d "$immich_home/db_dumps" ] || mkdir -p "$immich_home/db_dumps"
+    echo "Backing up Immich database to $immich_home/db_dumps/immich-database.sql"
+    docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres >"$immich_home"/db_dumps/immich-database.sql
+    echo "Backing up Immich files to $remote_backup_path"
+    if ssh "$remote_host" "ls \"$remote_backup_path\"" | grep -qwE 'config|data'; then
+        echo "Found existing Borg repository, skipping initialization."
+    else
+        echo "Initializing Borg repository at $remote_backup_path"
+        ssh "$remote_host" "mkdir -p \"$remote_backup_path\""
+        borg init --encryption=none "$remote_host:$remote_backup_path"
     fi
-    ### Append to remote Borg repository
-    "${borg_opt[@]}" "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH::{now}" "$immich_path"
-    # borg prune --keep-weekly=4 --keep-monthly=3 "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH"
-    # borg compact "$ENV_REMOTE_HOST:$ENV_REMOTE_BACKUP_PATH"
+    borg_opt=(
+        borg create --list --stats --progress
+        --exclude "$immich_home/cache"
+        --exclude "$immich_home/library/thumbs"
+        --exclude "$immich_home/library/encoded-video"
+        "$remote_host:$remote_backup_path::{hostname}-{now}"
+        "$immich_home"
+    )
+    "${borg_opt[@]}"
 }
 
 _deduplication() {
@@ -243,7 +235,7 @@ _file_time_or_hand_time() {
     esac
 }
 
-_set_file_time() {
+set_file_time() {
     input_path="$1"
     cd "$input_path"/ || return 1
 
@@ -339,7 +331,7 @@ _set_file_time() {
     fi
 }
 
-_immich_upload() {
+immich_upload() {
     local input_path="$1" import_path args
     if [ -d "$input_path" ]; then
         echo "found $input_path, go on..."
@@ -365,7 +357,7 @@ _immich_upload() {
         ghcr.io/immich-app/immich-cli:latest upload "$import_path" "${args[@]}"
 }
 
-_upgrade_immich_apk() {
+upgrade_immich_apk() {
     url_down="$(curl -fsSL https://api.github.com/repos/immich-app/immich/releases/latest | jq -r '.assets[].browser_download_url' | grep 'app-release.apk' | tail -n1)"
     curl -Lo immich.apk "$url_down"
     ossutil cp -f immich.apk oss://"${ENV_OSS_BUCKET:? empty bucket name}"/d/immich.apk
@@ -408,10 +400,10 @@ main() {
         param="$(readlink -f .)"
     fi
 
-    [ "${flag_upgrade-}" = 1 ] && _upgrade_immich_apk
-    [ "${flag_backup-}" = 1 ] && _backup_with_borg
-    [ "${flag_fixtime-}" = 1 ] && _set_file_time "$param"
-    [ "${flag_upload-}" = 1 ] && _immich_upload "$param"
+    [ "${flag_upgrade-}" = 1 ] && upgrade_immich_apk
+    [ "${flag_backup-}" = 1 ] && backup_with_borg
+    [ "${flag_fixtime-}" = 1 ] && set_file_time "$param"
+    [ "${flag_upload-}" = 1 ] && immich_upload "$param"
 }
 
 main "$@"
