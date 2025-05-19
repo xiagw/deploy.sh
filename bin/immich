@@ -163,7 +163,8 @@ backup_with_borg() {
     docker exec -t immich_postgres pg_dumpall --clean --if-exists --username=postgres >"$immich_home"/db_dumps/immich-database.sql
     echo "Backing up Immich files to $remote_backup_path"
     if ssh "$remote_host" "ls \"$remote_backup_path\"" | grep -qwE 'config|data'; then
-        echo "Found existing Borg repository, skipping initialization."
+        # echo "Found existing Borg repository, skipping initialization."
+        :
     else
         echo "Initializing Borg repository at $remote_backup_path"
         ssh "$remote_host" "mkdir -p \"$remote_backup_path\""
