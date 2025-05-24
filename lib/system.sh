@@ -342,6 +342,10 @@ system_cert_renew() {
             ${acme_cmd} --install-cert -d "${domain}" \
                 --key-file "${acme_cert_dest}/${domain}.key" \
                 --fullchain-file "$acme_cert_dest/${domain}.pem" || true
+            ## 随机停顿 5-30分钟
+            random_minute=$((RANDOM % 26 + 5))
+            _msg green "sleep ${random_minute} minutes"
+            sleep "${random_minute}"m
         done
     done
     ## deploy with my_deploy / 自定义部署方式
