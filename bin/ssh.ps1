@@ -192,7 +192,11 @@ function Install-OpenSSH {
     }
 
     # 设置 PowerShell 为默认 shell
-    New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Force
+    # New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value $DEFAULT_SHELL -Force
+    ## 恢复默认shell 为 cmd
+    # New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\System32\cmd.exe" -PropertyType String -Force
+    # Restart-Service sshd
+
 
     # 配置 SSH 密钥
     $sshPaths = @{
