@@ -21,8 +21,8 @@ _set_peer2peer() {
         client_ip6_pri=$(awk '/^Address/ {print $4}' "$client_conf" | cut -d'/' -f1)
         client_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$client_conf")
     fi
-    ## select server
-    _msg red "select peer conf..."
+    ## 选择peer对端服务器
+    _msg red "select peer conf file..."
     cd "$g_me_data_path" || exit 1
     # select svr_conf in $g_me_data_path/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
     select svr_conf in wg*.conf quit; do
@@ -34,7 +34,7 @@ _set_peer2peer() {
         svr_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$svr_conf")
         svr_lan_cidr=$(awk '/^### site2site_lan_cidr:/ {print $3; exit}' "$svr_conf")
 
-        _msg red "From: $svr_conf to ${client_conf##*/}"
+        _msg red "Setup peer, from: $svr_conf to ${client_conf##*/}"
         if ! grep -q "### ${svr_conf##*/} begin" "$client_conf"; then
             {
                 echo ""
@@ -62,7 +62,7 @@ _set_peer2peer() {
             } >>"$client_conf"
         fi
 
-        _msg green "From ${client_conf##*/} to $svr_conf"
+        _msg green "Setup peer, from ${client_conf##*/} to $svr_conf"
         if ! grep -q "### ${client_conf##*/} begin" "$svr_conf"; then
             {
                 echo ""
@@ -255,11 +255,11 @@ main() {
 
     echo "
 What do you want to do?
-    1) New key (key for client/server)
-    2) Set peer to peer (exists conf)
-    3) Upload conf and reload (client/server)
-    4) Convert conf to qrcode
-    5) Revoke client/server conf
+    1) Add a new conf (server/client)
+    2) Set peer to peer (existing conf)
+    3) Upload conf and reload wireguard (server/client)
+    4) Convert conf to qrcode (iPhone scan with camera)
+    5) Revoke existing conf
     6) Update DDNS
     7) Quit
 "
