@@ -216,7 +216,7 @@ cdn_pay() {
 
     # 如果剩余容量充足，则跳过购买
     if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
-        [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;32m当前剩余: ${remaining_amount:-0}TB\033[0m，无需购买。"
+        [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;32m剩余下行流量: ${remaining_amount:-0}TB\033[0m，无需购买。"
         return 0
     fi
 

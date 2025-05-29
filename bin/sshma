@@ -82,6 +82,9 @@ add_host() {
         -b | --byobu)
             local use_byobu=" byobu"
             ;;
+        -t | --tmux)
+            local use_byobu=" tmux"
+            ;;
         -i | --identity)
             config_ext+=("    IdentityFile $2")
             shift
@@ -156,8 +159,10 @@ connect_host() {
 
     # 在非iPhone环境下且注释中有byobu，则启用byobu
     if ! uname -a | grep -i -q 'iphone.*ish'; then
-        if grep -B1 "^Host\s\+${alias_name}$" "$SSH_CONFIG_FILE" | grep -q "byobu"; then
+        if grep -q "### ${alias_name} begin.*byobu" "$SSH_CONFIG_FILE"; then
             use_byobu=byobu
+        elif grep -q "### ${alias_name} begin.*tmux" "$SSH_CONFIG_FILE"; then
+            use_byobu="tmux a"
         fi
     fi
     log info "Connecting to [${alias_name}] ..."
@@ -230,6 +235,7 @@ Commands:
 
 Options:
     -b, --byobu                         Enable byobu session
+    -t, --tmux                          Enable tmux session
     -i, --identity <file>               Specify identity file
     -L <local> <remote>                 Forward local port to remote
     -R <remote> <local>                 Forward remote port to local
