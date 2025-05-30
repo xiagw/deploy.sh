@@ -211,7 +211,6 @@ cdn_pay() {
                 echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit == "次") | .RemainingAmount' | awk '{s+=$1} END {printf "%.0f", s}' 2>/dev/null || echo "0"
             )" | bc -l
         )"
-        # total_count="$(echo "$query_result" | jq -r '.Data.TotalCount')"
 
         # 如果当前页的结果数量小于 100，说明没有更多页了
         if [[ $(echo "$query_result" | jq '.Data.Instances.Instance | length') -lt 100 ]]; then
@@ -221,7 +220,7 @@ cdn_pay() {
         ((page_num++))
     done
 
-    [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;32m剩余HTTPS请求次数: $(
+    [[ -n "$show_message" ]] && echo -e "[CDN] 剩余HTTPS请求次数: \033[0;32m$(
         echo "$remaining_https_request" | awk '{
             if ($1 >= 100000000) {
                 printf "%.2f亿", $1/100000000
@@ -243,7 +242,8 @@ cdn_pay() {
 
     # 如果剩余容量充足，则跳过购买
     if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
-        [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;32m剩余下行流量: ${remaining_amount:-0}TB\033[0m，无需购买。"
+        [[ -n "$show_message" ]] && echo -e "[CDN] 剩余下行流量: \033[0;32m${remaining_amount:-0}TB\033[0m"
+        [[ -n "$show_message" ]] && echo -e "[CDN] 无需购买。"
         return 0
     fi
 
@@ -257,7 +257,7 @@ cdn_pay() {
 
     # 检查账户余额是否充足
     if ((available_balance < (balance_threshold + package_unit_price))); then
-        echo "[CDN] 账户余额 $available_balance 元不足，无法购买资源包。"
+        echo -e "[CDN] \033[0;31m账户余额 $available_balance 元不足，无法购买资源包。\033[0m"
         return 1
     fi
 
