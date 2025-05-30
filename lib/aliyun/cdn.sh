@@ -221,7 +221,19 @@ cdn_pay() {
         ((page_num++))
     done
 
-    [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;32m剩余HTTPS请求次数: ${remaining_https_request:-0}次\033[0m"
+    [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;32m剩余HTTPS请求次数: $(
+        echo "$remaining_https_request" | awk '{
+            if ($1 >= 100000000) {
+                printf "%.2f亿", $1/100000000
+            } else if ($1 >= 10000000) {
+                printf "%.2f千万", $1/10000000
+            } else if ($1 >= 10000) {
+                printf "%.2f万", $1/10000
+            } else {
+                printf "%d", $1
+            }
+        }'
+    )次\033[0m"
 
     # 检查是否获取到有效的剩余容量值
     if [ "$remaining_amount" = "-1" ]; then
