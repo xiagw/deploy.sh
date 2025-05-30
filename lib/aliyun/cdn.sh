@@ -189,24 +189,39 @@ cdn_pay() {
     local balance_threshold=700     # 账户余额阈值 700 元
 
     # 查询当前资源包剩余容量
-    local remaining_amount
     local query_result
-    query_result=$(aliyun --profile "${profile:-}" bssopenapi QueryResourcePackageInstances --ProductCode dcdn) || {
-        [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;31m查询资源包失败\033[0m"
-        return 1
-    }
+    local page_num=1
+    local remaining_amount=0
+    local remaining_https_request=0
 
-    remaining_amount="$(
-        echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") | if .RemainingAmountUnit == "GB" then (. | .RemainingAmount | tonumber) / 1024 elif .RemainingAmountUnit == "TB" then (. | .RemainingAmount | tonumber) else 0 end' | awk '{s+=$1} END {printf "%.3f", s}' 2>/dev/null || echo "-1"
-    )"
+    while true; do
+        query_result=$(aliyun --profile "${profile:-}" bssopenapi QueryResourcePackageInstances --ProductCode dcdn --PageNum "$page_num" --PageSize 100) || {
+            [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;31m查询资源包失败\033[0m"
+            return 1
+        }
 
-    # 查询当前资源包静态https请求次数剩余量
-    local remaining_https_request
-    remaining_https_request="$(
-        echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit == "次") | .RemainingAmount' | awk '{s+=$1} END {printf "%.0f", s}' 2>/dev/null || echo "0"
-    )"
+        # 直接处理当前页的数据
+        remaining_amount="$(
+            echo "$remaining_amount + $(
+                echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") | if .RemainingAmountUnit == "GB" then (. | .RemainingAmount | tonumber) / 1024 elif .RemainingAmountUnit == "TB" then (. | .RemainingAmount | tonumber) else 0 end' | awk '{s+=$1} END {printf "%.3f", s}' 2>/dev/null || echo "-1"
+            )" | bc -l
+        )"
+        remaining_https_request="$(
+            echo "$remaining_https_request + $(
+                echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit == "次") | .RemainingAmount' | awk '{s+=$1} END {printf "%.0f", s}' 2>/dev/null || echo "0"
+            )" | bc -l
+        )"
+        # total_count="$(echo "$query_result" | jq -r '.Data.TotalCount')"
+
+        # 如果当前页的结果数量小于 100，说明没有更多页了
+        if [[ $(echo "$query_result" | jq '.Data.Instances.Instance | length') -lt 100 ]]; then
+            break
+        fi
+
+        ((page_num++))
+    done
+
     [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;32m剩余HTTPS请求次数: ${remaining_https_request:-0}次\033[0m"
-
 
     # 检查是否获取到有效的剩余容量值
     if [ "$remaining_amount" = "-1" ]; then
