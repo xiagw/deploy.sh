@@ -159,9 +159,9 @@ connect_host() {
 
     # 在非iPhone环境下且注释中有byobu，则启用byobu
     if ! uname -a | grep -i -q 'iphone.*ish'; then
-        if grep -q "### ${alias_name} begin.*byobu" "$SSH_CONFIG_FILE"; then
+        if grep -q "### ${alias_name}.*byobu" "$SSH_CONFIG_FILE"; then
             use_byobu=byobu
-        elif grep -q "### ${alias_name} begin.*tmux" "$SSH_CONFIG_FILE"; then
+        elif grep -q "### ${alias_name}.*tmux" "$SSH_CONFIG_FILE"; then
             use_byobu="tmux a"
         fi
     fi
