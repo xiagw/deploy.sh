@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-export http_proxy='http://192.168.6.1:1080'
-export https_proxy='http://192.168.6.1:1080'
-export all_proxy='http://192.168.6.1:1080'
+export http_proxy='http://192.168.5.1:1080'
+export https_proxy='http://192.168.5.1:1080'
+export all_proxy='http://192.168.5.1:1080'
 apt_opt='sudo -E apt'
 ## 不升级 kernel
 sudo -E apt-mark hold linux-image-generic linux-headers-generic
@@ -76,7 +76,7 @@ $apt_opt install -y vim curl git
 # echo '/dev/mapper/vg0-lv0    /media/lvm     ext4     defaults       0      0' | sudo tee -a /etc/fstab
 
 # https://askubuntu.com/questions/4474/enable-remote-vnc-from-the-commandline
-#!/bin/bash
+
 $apt_opt install -y vino
 export DISPLAY=:0
 # read -r -e -p "VNC Password: " -i"xia" password
@@ -84,7 +84,7 @@ dconf write /org/gnome/desktop/remote-access/enabled true
 dconf write /org/gnome/desktop/remote-access/prompt-enabled false
 dconf write /org/gnome/desktop/remote-access/authentication-methods "['vnc']"
 dconf write /org/gnome/desktop/remote-access/require-encryption false
-dconf write /org/gnome/desktop/remote-access/vnc-password \"\'"$(echo -n "xiamima" | base64)"\'\"
+dconf write /org/gnome/desktop/remote-access/vnc-password \"\'"$(echo -n "mypassword" | base64)"\'\"
 dconf dump /org/gnome/desktop/remote-access/
 sudo -E service lightdm restart
 dconf write /org/gnome/desktop/screensaver/lock-enabled false
