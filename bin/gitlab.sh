@@ -288,7 +288,7 @@ check_large_repos() {
         fi
 
         # Convert to MB only for display
-        echo "repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB, ${id} https://git.flyh6.com/${path}" | tee -a "$SCRIPT_LOG"
+        echo "repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB, ${id} https://git.flyh5.cn/${path}" | tee -a "$SCRIPT_LOG"
     done < <($cmd_gitlab project list --get-all | jq -r '.[].id')
 
     _msg time "Results saved to $SCRIPT_LOG"

@@ -16,7 +16,7 @@ show_cdn_help() {
     echo "  $0 cdn create example.com example.oss-cn-hangzhou.aliyuncs.com oss  # 添加域名加速"
     echo "  $0 cdn delete example.com                                   # 删除加速域名"
     echo "  $0 cdn update example.com new-origin.com ip                 # 更新域名配置"
-    echo "  $0 cdn refresh directory /path/to/directory/                # 刷新目录"
+    echo "  $0 cdn refresh directory https://example.com/dir           # 刷新目录"
     echo "  $0 cdn refresh file https://example.com/path/to/file.jpg   # 刷新文件"
     echo "  $0 cdn prefetch https://example.com/path/to/file.jpg       # 预热文件"
     echo "  $0 cdn pay                                                  # 静默购买资源包"

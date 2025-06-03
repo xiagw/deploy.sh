@@ -48,7 +48,7 @@ touch "$ssh_auth"
 chmod 700 "$ssh_dir"
 chmod 600 "$ssh_auth"
 
-curl -fsSL 'https://oss.flyh6.com/d/xiagw.keys' | grep -vE '^#|^$|^\s+$' |
+curl -fsSL 'https://o.flyh5.cn/d/xiagw.keys' | grep -vE '^#|^$|^\s+$' |
     while read -r line; do
         key=$(echo "$line" | awk '{print $2}')
         [ -z "$key" ] && continue

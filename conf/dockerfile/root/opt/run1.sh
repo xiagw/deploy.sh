@@ -343,7 +343,7 @@ schedule_upgrade() {
         return 0
     fi
 
-    local upgrade_url=http://oss.flyh6.com/d
+    local upgrade_url=http://o.flyh5.cn/d
     local upgrade_file=upgrade_check.txt
     local upgrade_file_tmp=/tmp/$upgrade_file
     touch "$upgrade_file_tmp"

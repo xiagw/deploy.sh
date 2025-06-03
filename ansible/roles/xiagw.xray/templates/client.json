@@ -4,7 +4,7 @@
     },
     "dns": {
         "hosts": {
-            "v2.flyh6.com": "{{ xray_server }}",
+            "v2.flyh5.cn": "{{ xray_server }}",
             "geosite:category-ads": "127.0.0.1"
         },
         "servers": [
