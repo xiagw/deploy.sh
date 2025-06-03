@@ -57,8 +57,8 @@ sudo apt install -y git
 sudo apt install -y zsh
 sudo usermod -s /usr/bin/zsh "$USER"
 ## 此处假如失败，可以尝试代理:
-# export http_proxy=http://192.168.6.1:1080
-# export https_proxy=http://192.168.6.1:1080
+# export http_proxy=http://192.168.5.1:1080
+# export https_proxy=http://192.168.5.1:1080
 sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 sed -i -e "s/robbyrussell/ys/" ~/.zshrc
 # plugins=(sudo git docker docker-compose zsh-syntax-highlighting rsync systemd)
@@ -162,7 +162,7 @@ disable_function() {
     dbus-launch gsettings set org.gnome.Vino vnc-password "$(echo -n "mypassword" | base64)"
 
     # https://askubuntu.com/questions/4474/enable-remote-vnc-from-the-commandline
-    #!/bin/bash
+
     sudo apt install vino
     export DISPLAY=:0
     read -r -e -p "VNC Password: " -i"ubuntu" password
