@@ -132,7 +132,7 @@ EOF
 }
 
 _check_run_sh() {
-    for i in /opt/run.sh /opt/run0.sh; do
+    for i in /opt/run0.sh /opt/run1.sh; do
         if [ ! -f "$i" ]; then
             ## Dockerfile 中 mount bind /src 内sh
             local runsh="/src/root$i"
