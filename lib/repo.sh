@@ -72,16 +72,16 @@ repo_inject_file() {
         [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]] &&
             cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
 
-        ## 2. root 目录结构注入
+        ## 2. Dockerfile 所需 root/ 目录结构注入
         local conf_root="${G_PATH}/conf/dockerfile/root" repo_root="${G_REPO_DIR}/root"
         local rsync_opts="rsync -r --exclude=*.cnf"
-        ## 创建 root 目录（如果不存在）
+        ## 创建 root/ 目录（如果不存在）
         mkdir -p "${repo_root}"
-        ## 优先级1：注入基础目录结构（如果不存在 root/opt）
+        ## 优先级1：从 conf/dockerfile/root/ 注入基础目录结构（如果不存在 root/opt）
         if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
             ${rsync_opts} "${conf_root}/" "${repo_root}/"
         fi
-        ## 优先级2：注入自定义目录结构
+        ## 优先级2：从 data/dockerfile/root/ 注入自定义目录结构
         if [[ -d "${G_DATA}/dockerfile/root" ]]; then
             ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
         fi
