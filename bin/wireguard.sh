@@ -292,3 +292,5 @@ What do you want to do?
 }
 
 main "$@"
+
+# wg syncconf wg0 <(wg-quick strip wg0)
