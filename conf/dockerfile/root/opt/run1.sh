@@ -9,24 +9,21 @@
 # 创建时间: 2025-03-21
 #=====================================================
 
-# 定义全局变量
-G_NAME=$(basename "$0")
-G_PATH=$(dirname "$(readlink -f "$0")")
-G_LOG="${G_PATH}/${G_NAME}.log"
-html_path=/var/www/html
-
-# 进程ID数组
-declare -a G_PIDS=()
-
 # 函数：日志记录
 log() {
     case "${1:-}" in
-    log)
-        shift
-        echo "[$(date +%Y%m%d-%u-%T.%3N)] - [RUN] $*" >>"$G_LOG"
+    file)
+        log_file="$2"
+        if [ -f "$log_file" ]; then
+            shift 2
+        else
+            log_file="/tmp/$(date +%Y%m%d).log"
+            shift
+        fi
+        echo "[$(date +%Y%m%d_%u_%T.%3N)] [RUN1] $*" | tee -a "$log_file"
         ;;
     *)
-        echo "[$(date +%Y%m%d-%u-%T.%3N)] - [RUN] $*"
+        echo "[$(date +%Y%m%d_%u_%T.%3N)] [RUN1] $*"
         ;;
     esac
 }
@@ -132,7 +129,7 @@ find_configs() {
     elif [ ${#yml_files[@]} -gt 0 ]; then
         for file in "${yml_files[@]}"; do
             case "${file}" in
-            *.yml|*.yaml) configs+=("yml:${file}") ;;
+            *.yml | *.yaml) configs+=("yml:${file}") ;;
             esac
         done
     # 如果既没有 profile 也没有 yml，则使用 properties
@@ -238,8 +235,8 @@ start_php() {
 
     [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
     [ -d /run/php ] || mkdir -p /run/php
-    [ -d "$html_path" ] || mkdir "$html_path"
-    [ -f "$html_path/index.html" ] || date >>"$html_path/index.html"
+    [ -d "$G_HTML" ] || mkdir "$G_HTML"
+    [ -f "$G_HTML/index.html" ] || date >>"$G_HTML/index.html"
 
     # 启动PHP-FPM
     for fpm in /usr/sbin/php-fpm*; do
@@ -264,8 +261,8 @@ start_php() {
     fi
 
     # 创建ThinkPHP运行时目录
-    while [ -d "$html_path" ]; do
-        for dir in "$html_path"/ "$html_path"/*/ "$html_path"/*/*/; do
+    while [ -d "$G_HTML" ]; do
+        for dir in "$G_HTML"/ "$G_HTML"/*/ "$G_HTML"/*/*/; do
             [ -d "$dir" ] || continue
             if [[ -f "${dir}"think && -d ${dir}thinkphp ]]; then
                 if [[ -d ${dir}application || -d ${dir}app ]]; then
@@ -280,8 +277,8 @@ start_php() {
     done &
 
     # 清理运行时日志文件
-    while [ -d "$html_path" ]; do
-        for dir in "$html_path/runtime/" "$html_path"/*/runtime/ "$html_path"/*/*/runtime/; do
+    while [ -d "$G_HTML" ]; do
+        for dir in "$G_HTML/runtime/" "$G_HTML"/*/runtime/ "$G_HTML"/*/*/runtime/; do
             [ -d "$dir" ] || continue
             find "${dir}" -type f -iname '*.log' -ctime +3 -print0 | xargs -0 rm -f >/dev/null 2>&1
         done
@@ -333,8 +330,8 @@ schedule_upgrade() {
     local trigger_file=.trigger_file upgrade_type=""
     local app_path="/app"
 
-    if [[ -f "$html_path/$trigger_file" ]]; then
-        upgrade_type="$html_path"
+    if [[ -f "$G_HTML/$trigger_file" ]]; then
+        upgrade_type="$G_HTML"
     fi
     if [[ -f "$app_path/$trigger_file" ]]; then
         upgrade_type="$app_path"
@@ -376,6 +373,14 @@ schedule_upgrade() {
 main() {
     set -Eeo pipefail
 
+    # 定义全局变量
+    G_NAME=$(basename "$0")
+    G_PATH=$(dirname "$(readlink -f "$0")")
+    G_HTML=/var/www/html
+
+    # 进程ID数组
+    declare -a G_PIDS=()
+
     # 初始化日志文件路径
     if [ -w "/app" ]; then
         G_LOG="/app/${G_NAME}.log"
@@ -384,8 +389,9 @@ main() {
     else
         G_LOG="/tmp/${G_NAME}.log"
     fi
+    touch "$G_LOG"
 
-    log "log" "$G_PATH/$G_NAME 开始执行..."
+    log file "$G_LOG" "$G_PATH/$G_NAME 开始执行..."
 
     # 设置jemalloc
     # set_jemalloc
