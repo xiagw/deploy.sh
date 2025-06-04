@@ -42,7 +42,7 @@ _set_peer2peer() {
                 echo "[Peer]"
                 echo "PublicKey = $svr_key_pub"
                 echo "# PresharedKey = $client_key_pre"
-                echo "endpoint = $svr_ip_pub:$svr_ip_port"
+                echo "Endpoint = $svr_ip_pub:$svr_ip_port"
                 if [[ -z "$svr_lan_cidr" ]]; then
                     if [ -z "${svr_ip6_pri}" ]; then
                         echo "AllowedIPs = ${svr_ip_pri}/32"
