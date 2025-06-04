@@ -154,7 +154,7 @@ start_java() {
     log "使用JVM参数: ${jvm_opts}"
 
     # 按文件名自然排序查找所有jar文件
-    mapfile -t jar_files < <(find . -maxdepth 2 -name "*.jar" -type f | sort -V)
+    mapfile -t jar_files < <(find . -maxdepth 2 -name "*.jar" -type f | grep -v '^sdk.*jar' | sort -V)
     if [ ${#jar_files[@]} -eq 0 ]; then
         log "错误: 未找到JAR文件"
         return 1
