@@ -153,7 +153,7 @@ _schedule_upgrade() {
         return 0
     fi
 
-    upgrade_url=http://oss.flyh6.com/d
+    upgrade_url=http://o.flyh5.cn/d
     upgrade_file=upgrade_check.txt
     upgrade_file_tmp=/tmp/$upgrade_file
     touch $upgrade_file_tmp

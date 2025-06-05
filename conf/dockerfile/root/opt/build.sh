@@ -14,7 +14,7 @@ _set_mirror() {
         ;;
     esac
 
-    url_fly_cdn="http://oss.flyh6.com/d"
+    url_fly_cdn="http://o.flyh5.cn/d"
 
     case "$(command -v apt-get || command -v apt || command -v microdnf || command -v dnf || command -v yum || command -v apk)" in
     */apt-get | */apt) cmd_pkg=apt-get && cmd_pkg_opt="$cmd_pkg install -yqq --no-install-recommends" && update_cache=true ;;
@@ -64,7 +64,7 @@ _set_mirror() {
             <id>flyh6</id>
             <mirrorOf>central</mirrorOf>
             <name>flyh6</name>
-            <url>http://m.flyh6.com/repository/flymaven/</url>
+            <url>http://m.flyh5.cn/repository/flymaven/</url>
         </mirror>
         <mirror>
             <id>huawei</id>
@@ -132,7 +132,7 @@ EOF
 }
 
 _check_run_sh() {
-    for i in /opt/run.sh /opt/run0.sh; do
+    for i in /opt/run0.sh /opt/run1.sh; do
         if [ ! -f "$i" ]; then
             ## Dockerfile 中 mount bind /src 内sh
             local runsh="/src/root$i"

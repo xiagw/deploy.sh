@@ -17,20 +17,20 @@ _set_peer2peer() {
         client_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$client_conf")
         client_key_pre=$(awk '/PresharedKey/ {print $4; exit}' "$client_conf")
         client_ip_public=$(awk '/^### public_ip:/ {print $3; exit}' "$client_conf")
-        client_ip_pri=$(awk '/^Address/ {print $3}' "$client_conf" | cut -d'/' -f1)
-        client_ip6_pri=$(awk '/^Address/ {print $4}' "$client_conf" | cut -d'/' -f1)
+        client_ip_pri=$(awk '/^Address/ {print $3}' "$client_conf" | grep '[0-9]\.' | head -n1 | cut -d'/' -f1)
+        client_ip6_pri=$(awk '/^Address/ {print $3}' "$client_conf" | grep '[A-Za-z0-9]:' | tail -n1 | cut -d'/' -f1)
         client_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$client_conf")
     fi
-    ## 选择peer对端服务器
-    _msg red "select peer conf file..."
+    ## 选择对端配置文件
+    _msg red "select peer conf..."
     cd "$g_me_data_path" || exit 1
     # select svr_conf in $g_me_data_path/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
     select svr_conf in wg*.conf quit; do
         [[ "$svr_conf" == 'quit' ]] && break
         svr_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$svr_conf")
         svr_ip_pub=$(awk '/^### public_ip:/ {print $3; exit}' "$svr_conf")
-        svr_ip_pri=$(awk '/^Address/ {print $3}' "$svr_conf" | cut -d'/' -f1)
-        svr_ip6_pri=$(awk '/^Address/ {print $4}' "$svr_conf" | cut -d'/' -f1)
+        svr_ip_pri=$(awk '/^Address/ {print $3}' "$client_conf" | grep '[0-9]\.' | head -n1 | cut -d'/' -f1)
+        svr_ip6_pri=$(awk '/^Address/ {print $3}' "$client_conf" | grep '[A-Za-z0-9]:' | tail -n1 | cut -d'/' -f1)
         svr_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$svr_conf")
         svr_lan_cidr=$(awk '/^### site2site_lan_cidr:/ {print $3; exit}' "$svr_conf")
 
@@ -42,18 +42,18 @@ _set_peer2peer() {
                 echo "[Peer]"
                 echo "PublicKey = $svr_key_pub"
                 echo "# PresharedKey = $client_key_pre"
-                echo "endpoint = $svr_ip_pub:$svr_ip_port"
+                echo "Endpoint = $svr_ip_pub:$svr_ip_port"
                 if [[ -z "$svr_lan_cidr" ]]; then
                     if [ -z "${svr_ip6_pri}" ]; then
                         echo "AllowedIPs = ${svr_ip_pri}/32"
                     else
-                        echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128"
+                        echo "AllowedIPs = ${svr_ip_pri}/32,${svr_ip6_pri}/128"
                     fi
                 else
                     if [ -z "${svr_ip6_pri}" ]; then
-                        echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_lan_cidr}"
+                        echo "AllowedIPs = ${svr_ip_pri}/32,${svr_lan_cidr}"
                     else
-                        echo "AllowedIPs = ${svr_ip_pri}/32, ${svr_ip6_pri}/128, ${svr_lan_cidr}"
+                        echo "AllowedIPs = ${svr_ip_pri}/32,${svr_ip6_pri}/128,${svr_lan_cidr}"
                     fi
                 fi
                 echo "PersistentKeepalive = 60"
@@ -70,7 +70,7 @@ _set_peer2peer() {
                 echo "[Peer]"
                 echo "PublicKey = $client_key_pub"
                 echo "# PresharedKey = $client_key_pre"
-                echo "AllowedIPs = ${client_ip_pri}/32, ${client_ip6_pri}/128"
+                echo "AllowedIPs = ${client_ip_pri}/32,${client_ip6_pri}/128"
                 echo "### ${client_conf##*/} end"
                 echo ""
             } >>"$svr_conf"
@@ -115,7 +115,8 @@ _new_key() {
 ### ${client_conf##*/} $client_comment
 [Interface]
 PrivateKey = $client_key_pri
-Address = $client_ip_pri/24, $client_ip6_pri/64
+Address = $client_ip_pri/24
+# Address = $client_ip6_pri/64
 ListenPort = $client_ip_port
 ### PresharedKey = $client_key_pre
 ### public_key: $client_key_pub
@@ -292,3 +293,5 @@ What do you want to do?
 }
 
 main "$@"
+
+# wg syncconf wg0 <(wg-quick strip wg0)

@@ -166,7 +166,8 @@ connect_host() {
         fi
     fi
     log info "Connecting to [${alias_name}] ..."
-    ssh -A -t "$alias_name" $use_byobu
+    ssh -A -t "$alias_name" $use_byobu ||
+        ssh -A -t "$alias_name"
 }
 
 init_config() {
