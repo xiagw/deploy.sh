@@ -9,6 +9,9 @@
 # 创建时间: 2025-03-21
 #=====================================================
 
+# 进程ID数组
+declare -a G_PIDS=()
+
 # 函数：日志记录
 log() {
     case "${1:-}" in
@@ -377,9 +380,6 @@ main() {
     G_NAME=$(basename "$0")
     G_PATH=$(dirname "$(readlink -f "$0")")
     G_HTML=/var/www/html
-
-    # 进程ID数组
-    declare -a G_PIDS=()
 
     # 初始化日志文件路径
     if [ -w "/app" ]; then
