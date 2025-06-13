@@ -18,15 +18,15 @@ repo_inject_file() {
     local inject_code_path_branch="${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE}"
 
     ## 代码注入逻辑：
-    ## 1. 优先从 ${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE} 注入（对应项目的对应命名空间的代码）
+    ## 1. 优先从 ${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE} 注入（对应项目的对应命名空间[git分支]的代码）
     ## 2. 如果命名空间目录不存在，从 ${G_DATA}/inject/${G_REPO_NAME} 注入（对应项目通用代码）
     ## 3. 使用 rsync 进行文件同步，保持文件属性并覆盖目标文件
     if [ -d "$inject_code_path_branch" ]; then
         _msg warning "Found custom code in $inject_code_path_branch, syncing to ${G_REPO_DIR}/"
-        rsync -r "$inject_code_path_branch/" "${G_REPO_DIR}/"
+        rsync -a "$inject_code_path_branch/" "${G_REPO_DIR}/"
     elif [ -d "$inject_code_path" ]; then
         _msg warning "Found custom code in $inject_code_path, syncing to ${G_REPO_DIR}/"
-        rsync -r "$inject_code_path/" "${G_REPO_DIR}/"
+        rsync -a "$inject_code_path/" "${G_REPO_DIR}/"
     fi
 
     ${arg_disable_inject:-false} && ENV_INJECT=keep
@@ -36,7 +36,7 @@ repo_inject_file() {
     ## - overwrite: 注入 Dockerfile 和 root 目录结构（优先使用 data/dockerfile/，其次是 conf/dockerfile/）
     ## - remove: 移除 Dockerfile
     ## - create: 创建 docker-compose.yml
-    # echo "ENV_INJECT: ${ENV_INJECT:-keep}"
+    echo "ENV_INJECT: ${ENV_INJECT:-keep}"
     case ${ENV_INJECT:-keep} in
     keep)
         echo "Keeping existing configuration, no files will be overwritten."
@@ -60,10 +60,12 @@ repo_inject_file() {
                 if [[ "$hash_now" = "$hash_saved" ]]; then
                     rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
                 else
-                    echo "Copying Dockerfile.base..."
+                    echo "Copying Dockerfile.base.${lang}..."
                     cp -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${lang}" "${G_REPO_DIR}/Dockerfile.base"
                     echo "${hash_now}" >"${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5"
                 fi
+                base_tag="${ENV_DOCKER_REGISTRY%/*}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
+                echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
                 ;;
             esac
         fi
@@ -97,9 +99,6 @@ repo_inject_file() {
         ;;
     esac
 }
-
-# Export the function
-# export -f repo_inject_file
 
 # Detect the programming language of the project
 # Uses various project files to determine the language
@@ -237,11 +236,11 @@ repo_language_detect() {
 
     lang_type=${lang_type:-unknown}
     # 如果检测到版本信息，将其附加到语言类型后
-    lang_type="${lang_type}:${version}:"
+    lang_type+=":${version}"
     # 如果检测到 Dockerfile，附加 docker 类型
     for file in "${G_REPO_DIR}"/Dockerfile "${G_REPO_DIR}"/Dockerfile.*; do
         [[ -f "${file}" ]] && {
-            lang_type="${lang_type}docker"
+            lang_type+=":docker"
             break
         }
     done
