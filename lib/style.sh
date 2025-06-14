@@ -166,10 +166,10 @@ parallel_style_check() {
 style_check() {
     local lang="$1"
 
-    ## 在 gitlab 的 pipeline 配置环境变量 MAN_CODE_STYLE ，true 启用，false 禁用[default]
+    ## 在 gitlab 的 pipeline 配置环境变量 PP_CODE_STYLE ，true 启用，false 禁用[default]
     _msg step "[style] Running code style checks"
-    echo "MAN_CODE_STYLE: ${MAN_CODE_STYLE:-false}"
-    if ! ${MAN_CODE_STYLE:-false}; then
+    echo "PP_CODE_STYLE: ${PP_CODE_STYLE:-false}"
+    if ! ${PP_CODE_STYLE:-false}; then
         return 0
     fi
 

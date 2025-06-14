@@ -72,7 +72,7 @@ handle_notify() {
     ${GH_ACTION:-false} && deploy_result=0 && return 0
 
     _msg step "[notify] deployment result notification"
-    echo "MAN_NOTIFY: ${MAN_NOTIFY:-false}"
+    echo "PP_NOTIFY: ${PP_NOTIFY:-false}"
 
     # Check global notification switch first
     ${ENV_DISABLE_NOTIFY:-false} && return 0
@@ -84,8 +84,8 @@ handle_notify() {
 
     # Disable notifications for specific branches (e.g. develop, testing branches)
     [[ "${ENV_DISABLE_NOTIFY_BRANCH}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false
-    # Manual override: if MAN_DISABLE_NOTIFY is true, force enable notification regardless of other settings
-    ${MAN_DISABLE_NOTIFY:-false} && exec_deploy_notify=true
+    # Manual override: if PP_DISABLE_NOTIFY is true, force enable notification regardless of other settings
+    ${PP_DISABLE_NOTIFY:-false} && exec_deploy_notify=true
 
     if ! ${exec_deploy_notify:-true}; then
         return 0

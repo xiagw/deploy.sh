@@ -93,7 +93,7 @@ build_image() {
     _msg time "[build] Image build completed"
 
     ## push to ttl.sh
-    if [[ "${MAN_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
+    if [[ "${PP_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "Temporary image tag: $image_uuid"
         $G_DOCK tag ${repo_tag} ${image_uuid}
