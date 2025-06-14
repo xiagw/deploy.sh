@@ -21,14 +21,13 @@ repo_inject_file() {
     ## 1. 优先从 ${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE} 注入（对应项目的对应命名空间[git分支]的代码）
     ## 2. 如果命名空间目录不存在，从 ${G_DATA}/inject/${G_REPO_NAME} 注入（对应项目通用代码）
     ## 3. 使用 rsync 进行文件同步，保持文件属性并覆盖目标文件
-    local inject_src
     if [ -d "$inject_code_path_branch" ]; then
-        inject_src="$inject_code_path_branch"
+        echo "Found custom code in $inject_code_path_branch/, syncing to ${G_REPO_DIR}/"
+        rsync -a "$inject_code_path_branch/" "${G_REPO_DIR}/"
     elif [ -d "$inject_code_path" ]; then
-        inject_src="$inject_code_path"
+        echo "Found custom code in $inject_code_path_branch/, syncing to ${G_REPO_DIR}/"
+        rsync -a "$inject_code_path_branch/" "${G_REPO_DIR}/"
     fi
-    echo "Found custom code in $inject_src/, syncing to ${G_REPO_DIR}/"
-    rsync -a "$inject_src/" "${G_REPO_DIR}/"
 
     ${arg_disable_inject:-false} && ENV_INJECT=keep
 
