@@ -407,7 +407,7 @@ main() {
     get_lang=$(repo_language_detect)
     ## 单独的语言类型变量 repo_lang=lang
     repo_lang=${get_lang%%:*}
-    echo "  ${get_lang}"
+    echo "${get_lang}"
 
     ## 处理构建时全局环境变量
     config_build_env "${get_lang}"
@@ -416,7 +416,7 @@ main() {
     # arg_disable_inject: 命令参数强制不注入文件
     repo_inject_file "${repo_lang}" "${arg_disable_inject:-false}"
     get_lang=$(repo_language_detect)
-    echo "  ${get_lang}"
+    echo "${get_lang}"
 
     ################################################################################
     ## Task Execution Phase

@@ -79,15 +79,9 @@ _set_peer2peer() {
 }
 
 _new_key() {
-    if [ "${wireguard_network:-1}" -eq 1 ]; then
-        ip_prefix="10.9.0."
-        ip6_prefix="fd00:9::"
-        port_prefix="39000"
-    else
-        ip_prefix="10.10.10."
-        ip6_prefix="fd00:10::"
-        port_prefix="40000"
-    fi
+    ip_prefix="10.9.0."
+    ip6_prefix="fd00:9::"
+    port_prefix="39000"
     client_num="${1:-21}"
     client_conf="$g_me_data_path/wg${client_num}.conf"
     until [[ "${client_num}" -lt 254 ]]; do
@@ -206,25 +200,6 @@ _reload_conf() {
 # ssh root@"$host" "systemctl restart wg-quick@wg0"
 # wg genkey | tee privatekey | wg pubkey > publickey; cat privatekey publickey; rm privatekey publickey
 
-_update_ddns() {
-    _get_root
-
-    for wg_interface in $(${use_sudo-} wg show interfaces); do
-        while read -r line; do
-            read -r -a array <<<"$line"
-            wg_peer=${array[0]}
-            wg_endpoint=$(
-                $use_sudo wg-quick strip wg0 | grep -A5 "$wg_peer" |
-                    grep -v '^#' | awk '/[Ee]ndpoint/ {print $3}'
-            )
-            # wg_endpoint=${array[1]}
-            sudo wg set "$wg_interface" peer "${wg_peer}" endpoint "${wg_endpoint}"
-        done < <($use_sudo wg show "$wg_interface" endpoints)
-    done
-    date +%s
-    $use_sudo wg show all dump | awk 'NR>1 {print $4"\t"$5"\t"$6}'
-}
-
 get_lib_common() {
     local lib url
     lib="$(dirname "$g_me_path")/lib/common.sh"
@@ -249,33 +224,20 @@ main() {
 
     [ -d "$g_me_data_path" ] || mkdir -p "$g_me_data_path"
 
-    if [[ "$1" = u ]]; then
-        _update_ddns
-        return
-    fi
-
     echo "
 What do you want to do?
-    1) Add a new conf (server/client)
-    2) Set peer to peer (existing conf)
-    3) Upload conf and reload wireguard (server/client)
-    4) Convert conf to qrcode (iPhone scan with camera)
-    5) Revoke existing conf
-    6) Update DDNS
-    7) Quit
+    1) New key / 新建客户/服务端配置文件
+    2) Set peer to peer / 设置对端配置文件
+    3) Upload conf and reload / 上传配置并重载（客户端/服务端）
+    4) Convert conf to qrcode / 转换配置为二维码
+    5) Revoke client/server conf / 撤销客户端/服务端配置
+    7) Quit / 退出
 "
     until [[ ${MENU_OPTION} =~ ^[1-7]$ ]]; do
         read -rp "Select an option [1-7]: " MENU_OPTION
     done
     [[ ${MENU_OPTION} == 7 ]] && return
 
-    until [[ ${wireguard_network} =~ ^[1-3]$ ]]; do
-        read -rp "Select wireguard network [gitlab|jump|demo]: [1-3]: " -e -i1 wireguard_network
-    done
-    if [ "${wireguard_network:-1}" -gt 1 ]; then
-        g_me_data_path="$(dirname "${g_me_path}")/data/wireguard${wireguard_network}"
-        mkdir -p "$g_me_data_path"
-    fi
     _msg green "wireguard data path: $g_me_data_path"
 
     case "${MENU_OPTION}" in
@@ -284,7 +246,6 @@ What do you want to do?
     3) _reload_conf ;;
     4) _get_qrcode ;;
     5) _revoke_client ;;
-    6) _update_ddns ;;
     *)
         echo "Invalid option: $MENU_OPTION"
         exit 0

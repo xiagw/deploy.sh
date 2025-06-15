@@ -185,7 +185,7 @@ cdn_pay() {
     local package_unit_price=126 # 每 TB 单价 126 元
 
     # 阈值配置
-    local remaining_threshold=1.900 # 剩余容量阈值 1.9TB
+    local remaining_threshold=1.000 # 剩余容量阈值 1.9TB
     local balance_threshold=700     # 账户余额阈值 700 元
 
     # 查询当前资源包剩余容量
@@ -220,30 +220,45 @@ cdn_pay() {
         ((page_num++))
     done
 
-    [[ -n "$show_message" ]] && echo -e "[CDN] 剩余HTTPS请求次数: \033[0;32m$(
-        echo "$remaining_https_request" | awk '{
+    if [[ -n "$show_message" ]]; then
+        local https_color_code="\033[0;31m" # 默认红色
+        if ((remaining_https_request >= 20000000)); then
+            https_color_code="\033[0;32m" # 大于2000万次时显示绿色
+        fi
+        echo -e "[CDN] 剩余HTTPS请求次数: ${https_color_code}$(
+            echo "$remaining_https_request" | awk '{
             if ($1 >= 100000000) {
-                printf "%.2f亿", $1/100000000
+                printf "%.6f亿", $1/100000000
             } else if ($1 >= 10000000) {
-                printf "%.2f千万", $1/10000000
+                printf "%.4f千万", $1/10000000
             } else if ($1 >= 10000) {
                 printf "%.2f万", $1/10000
             } else {
                 printf "%d", $1
             }
         }'
-    )次\033[0m"
+        )次\033[0m"
+    fi
 
     # 检查是否获取到有效的剩余容量值
     if [ "$remaining_amount" = "-1" ]; then
-        [[ -n "$show_message" ]] && echo -e "[CDN] \033[0;31m无法获取资源包剩余容量信息\033[0m"
+        if [[ -n "$show_message" ]]; then
+            echo -e "[CDN] \033[0;31m无法获取资源包剩余容量信息\033[0m"
+        fi
         return 1
+    fi
+
+    # 显示剩余容量信息并判断是否需要购买
+    if [[ -n "$show_message" ]]; then
+        local traffic_color_code="\033[0;31m" # 默认红色
+        if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
+            traffic_color_code="\033[0;32m" # 充足时显示绿色
+        fi
+        echo -e "[CDN] 剩余下行流量: ${traffic_color_code}${remaining_amount:-0}TB\033[0m"
     fi
 
     # 如果剩余容量充足，则跳过购买
     if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
-        [[ -n "$show_message" ]] && echo -e "[CDN] 剩余下行流量: \033[0;32m${remaining_amount:-0}TB\033[0m"
-        [[ -n "$show_message" ]] && echo -e "[CDN] 无需购买。"
         return 0
     fi
 

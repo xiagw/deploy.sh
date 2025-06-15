@@ -2,16 +2,17 @@
 # shellcheck disable=1090
 
 new_element_user() {
+    local user="$1"
     cd ~/src/matrix-docker-ansible-deploy || exit 1
     # file_secret=inventory/host_vars/matrix.example.com/user_pass.txt
-    _msg log "$SCRIPT_LOG" "username=${user_name} / password=${password_rand}"
+    _msg log "$ME_LOG" "username=${user} / password=${password_rand}"
     sed -i -e 's/^matrix.example1.com/#matrix.example2.com/' inventory/hosts
-    ansible-playbook -i inventory/hosts setup.yml --extra-vars="username=$user_name password=$password_rand admin=no" --tags=register-user
+    ansible-playbook -i inventory/hosts setup.yml --extra-vars="username=$user password=$password_rand admin=no" --tags=register-user
     # ansible-playbook -i inventory/hosts setup.yml --extra-vars='username=fangzheng password=Eefaiyau6de1' --tags=update-user-password
 }
 
 install_gitlab_runner() {
-    local user_name user_home repo_url
+    local user user_home repo_url
 
     # Install latest gitlab-runner if needed
     if _get_yes_no "[+] Install/Update gitlab-runner?"; then
@@ -23,17 +24,17 @@ install_gitlab_runner() {
 
     # Setup runner user
     if _get_yes_no "[+] Create CI user for gitlab-runner?"; then
-        user_name=ops
+        user=ops
         user_home=/home/ops
-        sudo useradd --comment 'GitLab Runner' --create-home --shell /bin/bash "$user_name"
+        sudo useradd --comment 'GitLab Runner' --create-home --shell /bin/bash "$user"
     else
-        user_name=$USER
+        user=$USER
         user_home=$HOME
     fi
 
     # Install and start service
     if _get_yes_no "[+] Install as service?"; then
-        sudo gitlab-runner install --user "$user_name" --working-directory "$user_home/runner"
+        sudo gitlab-runner install --user "$user" --working-directory "$user_home/runner"
         sudo gitlab-runner start
     fi
 
@@ -93,7 +94,7 @@ EOF
         gitlab project create --name "pms"
         git clone "git@${url_git#*//}:root/pms.git"
         mkdir -p pms/templates
-        cp "$(dirname "$SCRIPT_DIR")/conf/gitlab-ci.yml" pms/templates
+        cp "$(dirname "$ME_PATH")/conf/gitlab-ci.yml" pms/templates
         (cd pms && git add . && git commit -m 'add templates file' && git push origin main)
     fi
     if _get_yes_no "[+] Create project [devops]?"; then
@@ -102,17 +103,17 @@ EOF
 }
 
 add_account_to_groups() {
-    local user_name="$1" user_id level
+    local user="$1" user_id level
 
-    _msg "add user [$user_name] to groups..."
-    user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
+    _msg "add user [$user] to groups..."
+    user_id=$($cmd_gitlab user list --username "$user" | jq -r '.[].id')
 
     # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
     # Get selected groups using fzf multi-select
     while IFS=$'\t' read -r group_id group_name; do
         [[ $group_name == "pms" ]] && level=30 || level=40
         $cmd_gitlab group-member create --access-level "$level" --group-id "$group_id" --user-id "$user_id"
-        _msg "Added user [$user_name] to group [$group_name]"
+        _msg "Added user [$user] to group [$group_name]"
     done < <(
         $cmd_gitlab group list --skip-groups 2 --top-level-only 1 |
             jq -r '.[] | select(.name | test("(back-|front-|pms)")) | "\(.id)\t\(.name)"' |
@@ -121,62 +122,57 @@ add_account_to_groups() {
 }
 
 update_account_password() {
-    local user_name="$1"
-    local gitlab_domain="$2"
+    local user="$1"
+    local domain="$2"
     local password_rand="$3"
     local user_id
 
-    user_id=$($cmd_gitlab user list --username "$user_name" | jq -r '.[].id')
+    user_id=$($cmd_gitlab user list --username "$user" | jq -r '.[].id')
     $cmd_gitlab user update --id "${user_id}" \
-        --username "$user_name" \
+        --username "$user" \
         --password "${password_rand}" \
-        --name "$user_name" \
-        --email "$user_name@${gitlab_domain}" \
+        --name "$user" \
+        --email "$user@${domain}" \
         --skip-reconfirmation 1
 
-    _msg log "$SCRIPT_LOG" "Update password for $user_name: $password_rand"
+    _msg log "$ME_LOG" "Update password for $user: $password_rand"
     return 0
 }
 
 add_account() {
-    local user_name="$1"
-    local gitlab_domain="$2"
+    local user="$1"
+    local domain="$2"
     local password_rand
 
-    [ -z "${user_name}" ] && return 1
+    [ -z "${user}" ] && return 1
     password_rand=$(_get_random_password 2>/dev/null)
     ## check if user exists
-    if $cmd_gitlab user list --username "$user_name" | jq -e '.[0].name'; then
-        _msg "User [$user_name] already exists"
+    if $cmd_gitlab user list --username "$user" | jq -e '.[0].name'; then
+        _msg "User [$user] already exists"
         return 1
     fi
     ## create user
-    $cmd_gitlab user create --name "$user_name" \
-        --username "$user_name" \
+    $cmd_gitlab user create --name "$user" \
+        --username "$user" \
         --password "${password_rand}" \
-        --email "${user_name}@${gitlab_domain}" \
+        --email "${user}@${domain}" \
         --skip-confirmation 1 \
         --can-create-group 0
-    _msg log "$SCRIPT_LOG" "username=$user_name / password=$password_rand"
+    _msg log "$ME_LOG" "username=$user / password=$password_rand"
 
-    send_msg="https://git.$gitlab_domain  /  username=$user_name / password=$password_rand"
+    send_msg="https://git.$domain  /  username=$user / password=$password_rand"
     _notify_wecom "${gitlab_wecom_key:? ERR: empty wecom_key}" "$send_msg"
 }
 
-common_lib() {
-    local common_lib
-    common_lib="$(dirname "$SCRIPT_DIR")/lib/common.sh"
-    # 1. First check /lib/ directory
-    if [ ! -f "$common_lib" ]; then
-        # 2. Then check /tmp directory
-        common_lib='/tmp/common.sh'
-        if [ ! -f "$common_lib" ]; then
-            # 3. Download if not found
-            curl -fsSL "https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh" >"$common_lib"
-        fi
+import_lib() {
+    local file
+    file="$(dirname "$ME_PATH")/lib/common.sh"
+    if [ ! -f "$file" ]; then
+        file='/tmp/common.sh'
+        curl -fsSLo "$file" "https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
     fi
     # shellcheck source=/dev/null
-    . "$common_lib"
+    . "$file"
 }
 
 print_usage() {
@@ -212,43 +208,6 @@ print_usage() {
     echo "  -h, --help                 Print this help message"
 }
 
-# Process only global options and save command for later execution
-process_global_options() {
-    [ $# -eq 0 ] && print_usage && exit 1
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-        -d | --domain) gitlab_domain=$2 && shift ;;
-        -a | --account) gitlab_account=$2 && shift ;;
-        -p | --profile) gitlab_profile=$2 && shift ;;
-        -h | --help) print_usage && exit 0 ;;
-        # user) action=$2 && shift ;;
-        *) args+=("$1") ;;
-        esac
-        shift
-    done
-}
-
-# Setup GitLab configuration
-setup_gitlab_config() {
-    gitlab_python_config="$HOME/.python-gitlab.cfg"
-    if [[ ! -f "$gitlab_python_config" ]]; then
-        gitlab_python_config="$HOME/.config/python-gitlab.cfg"
-    fi
-    [[ -f "$gitlab_python_config" ]] || {
-        _msg error "not found python-gitlab.cfg"
-        return 1
-    }
-
-    cmd_gitlab="gitlab -o json"
-    if [ -n "$gitlab_profile" ]; then
-        cmd_gitlab="gitlab -o json --gitlab $gitlab_profile"
-    fi
-
-    if [ -f "$SCRIPT_ENV" ]; then
-        . "$SCRIPT_ENV" "$gitlab_profile"
-    fi
-}
-
 format_table() {
     local header="$1"
     local jq_filter="$2"
@@ -272,7 +231,7 @@ check_large_repos() {
         return 1
     }
 
-    _msg time "Check repositories larger than ${size_threshold}MB (profile: ${gitlab_profile:-default}):" | tee -a "$SCRIPT_LOG"
+    _msg time "Check repositories larger than ${size_threshold}MB (profile: ${gitlab_profile:-default}):" | tee -a "$ME_LOG"
 
     # Get all project IDs directly with jq and process through stdin
     while read -r id; do
@@ -288,10 +247,10 @@ check_large_repos() {
         fi
 
         # Convert to MB only for display
-        echo "repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB, ${id} https://git.flyh5.cn/${path}" | tee -a "$SCRIPT_LOG"
+        echo "repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB, ${id} https://git.flyh5.cn/${path}" | tee -a "$ME_LOG"
     done < <($cmd_gitlab project list --get-all | jq -r '.[].id')
 
-    _msg time "Results saved to $SCRIPT_LOG"
+    _msg time "Results saved to $ME_LOG"
 }
 
 # GitLab API 请求函数
@@ -328,8 +287,41 @@ delete_project_pipeline_history() {
 
 # Execute the saved command
 execute_command() {
+    [ $# -eq 0 ] && print_usage && exit 1
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        -d | --domain) gitlab_domain=$2 && shift ;;
+        -a | --account) gitlab_account=$2 && shift ;;
+        -p | --profile) gitlab_profile=$2 && shift ;;
+        -h | --help) print_usage && exit 0 ;;
+        # user) action=$2 && shift ;;
+        *) args+=("$1") ;;
+        esac
+        shift
+    done
+
+    gitlab_python_config="$HOME/.python-gitlab.cfg"
+    if [[ ! -f "$gitlab_python_config" ]]; then
+        gitlab_python_config="$HOME/.config/python-gitlab.cfg"
+    fi
+    [[ -f "$gitlab_python_config" ]] || {
+        _msg error "not found python-gitlab.cfg"
+        return 1
+    }
+
+    cmd_gitlab="gitlab -o json"
+    if [ -n "$gitlab_profile" ]; then
+        cmd_gitlab="gitlab -o json --gitlab $gitlab_profile"
+    fi
+
+    if [ -f "$ME_ENV" ]; then
+        . "$ME_ENV" "$gitlab_profile"
+    fi
+
     case "${args[0]}" in
-    runner) install_gitlab_runner ;;
+    runner)
+        install_gitlab_runner
+        ;;
     user)
         case "${args[1]}" in
         list)
@@ -338,12 +330,12 @@ execute_command() {
                 "${args[@]}"
             ;;
         create)
-            add_account "$gitlab_account" "$gitlab_domain" "${args[@]}"
-            add_account_to_groups "$gitlab_account" "${args[@]}"
+            add_account "${gitlab_account:? require user name}" "${gitlab_domain:? require domain}" "${args[@]}"
+            add_account_to_groups "${gitlab_account:? require user name}" "${args[@]}"
             ;;
         update)
             password_rand=$(_get_random_password 2>/dev/null)
-            update_account_password "$gitlab_account" "$gitlab_domain" "$password_rand"
+            update_account_password "${gitlab_account:? require user name}" "${gitlab_domain:? require domain}" "$password_rand"
             ;;
         esac
         ;;
@@ -369,22 +361,15 @@ execute_command() {
 }
 
 main() {
-    SCRIPT_NAME="$(basename "$0")"
-    SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-    SCRIPT_DATA="$(dirname "$SCRIPT_DIR")/data"
-    SCRIPT_LOG="$SCRIPT_DATA/${SCRIPT_NAME}.log"
-    SCRIPT_ENV="$SCRIPT_DATA/${SCRIPT_NAME}.env"
+    ME_NAME="$(basename "$0")"
+    ME_PATH="$(dirname "$(readlink -f "$0")")"
+    ME_DATA="$(dirname "$ME_PATH")/data"
+    ME_LOG="$ME_DATA/${ME_NAME}.log"
+    ME_ENV="$ME_DATA/${ME_NAME}.env"
 
-    common_lib
+    import_lib
 
-    # 1. Process global options and save command for later
-    process_global_options "$@"
-
-    # 2. Setup GitLab configuration and define cmd_gitlab
-    setup_gitlab_config
-
-    # 3. Execute the command now that cmd_gitlab is defined
-    execute_command
+    execute_command "$@"
 }
 
 main "$@"

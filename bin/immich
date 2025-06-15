@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090
 
+declare -a TMPS
+
 _cleanup() {
     rm -rf "${TMPS-}"
 }
@@ -369,7 +371,7 @@ main() {
     _color
     _parse_params "$@"
     set -Eeo pipefail
-    declare -a TMPS
+
     trap _cleanup SIGINT SIGTERM ERR EXIT
 
     ## script logic here

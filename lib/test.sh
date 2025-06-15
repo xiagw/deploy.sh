@@ -46,9 +46,9 @@ handle_test() {
     case "$test_type" in
     "unit")
         _msg step "[unit-test] Running unit tests"
-        ## 在 gitlab 的 pipeline 配置环境变量 MAN_UNIT_TEST ，true 启用，false 禁用[default]
-        echo "MAN_UNIT_TEST: ${MAN_UNIT_TEST:-false}"
-        if ${test_arg:-false} || ${MAN_UNIT_TEST:-false}; then
+        ## 在 gitlab 的 pipeline 配置环境变量 PP_UNIT_TEST ，true 启用，false 禁用[default]
+        echo "PP_UNIT_TEST: ${PP_UNIT_TEST:-false}"
+        if ${test_arg:-false} || ${PP_UNIT_TEST:-false}; then
             if test_unit; then
                 _msg green "Unit tests completed successfully"
             else
@@ -59,9 +59,9 @@ handle_test() {
         ;;
     "func")
         _msg step "[test] Running functional tests"
-        ## 在 gitlab 的 pipeline 配置环境变量 MAN_FUNCTION_TEST ，true 启用，false 禁用[default]
-        echo "MAN_FUNCTION_TEST: ${MAN_FUNCTION_TEST:-false}"
-        if ${test_arg:-false} || ${MAN_FUNCTION_TEST:-false}; then
+        ## 在 gitlab 的 pipeline 配置环境变量 PP_FUNCTION_TEST ，true 启用，false 禁用[default]
+        echo "PP_FUNCTION_TEST: ${PP_FUNCTION_TEST:-false}"
+        if ${test_arg:-false} || ${PP_FUNCTION_TEST:-false}; then
             if test_function; then
                 _msg green "Functional tests completed successfully"
             else

@@ -55,8 +55,8 @@ analysis_gitleaks() {
 # Run OWASP ZAP security scan
 analysis_zap() {
     _msg step "[security] ZAP scan"
-    echo "MAN_SCAN_ZAP: ${MAN_SCAN_ZAP:-false}"
-    if [[ "${MAN_SCAN_ZAP:-false}" != true ]]; then
+    echo "PP_SCAN_ZAP: ${PP_SCAN_ZAP:-false}"
+    if [[ "${PP_SCAN_ZAP:-false}" != true ]]; then
         return 0
     fi
 
@@ -80,8 +80,8 @@ analysis_zap() {
 # Run Vulmap security scan
 analysis_vulmap() {
     _msg time "vulmap scan"
-    echo "MAN_SCAN_VULMAP: ${MAN_SCAN_VULMAP:-false}"
-    if [[ "${MAN_SCAN_VULMAP:-false}" != true ]]; then
+    echo "PP_SCAN_VULMAP: ${PP_SCAN_VULMAP:-false}"
+    if [[ "${PP_SCAN_VULMAP:-false}" != true ]]; then
         return 0
     fi
 
@@ -108,9 +108,9 @@ analysis_vulmap() {
 
 analysis_sonarqube() {
     _msg step "[quality] Checking code with sonarqube"
-    ## 在 gitlab 的 pipeline 配置环境变量 MAN_SONAR ，true 启用，false 禁用[default]
-    echo "MAN_SONAR: ${MAN_SONAR:-false}"
-    if ! ${MAN_SONAR:-false}; then
+    ## 在 gitlab 的 pipeline 配置环境变量 PP_SONAR ，true 启用，false 禁用[default]
+    echo "PP_SONAR: ${PP_SONAR:-false}"
+    if ! ${PP_SONAR:-false}; then
         return 0
     fi
 
@@ -153,8 +153,8 @@ EOF
 # Run PMD code analysis
 analysis_pmd() {
     _msg step "[quality] Running PMD code analysis"
-    echo "MAN_PMD: ${MAN_PMD:-false}"
-    if ! ${MAN_PMD:-false}; then
+    echo "PP_PMD: ${PP_PMD:-false}"
+    if ! ${PP_PMD:-false}; then
         return 0
     fi
 
@@ -191,8 +191,8 @@ analysis_pmd() {
 # Run CodeClimate analysis
 analysis_codeclimate() {
     _msg step "[quality] Running CodeClimate analysis"
-    echo "MAN_CODECLIMATE: ${MAN_CODECLIMATE:-false}"
-    if ! ${MAN_CODECLIMATE:-false}; then
+    echo "PP_CODECLIMATE: ${PP_CODECLIMATE:-false}"
+    if ! ${PP_CODECLIMATE:-false}; then
         return 0
     fi
 
@@ -291,8 +291,8 @@ EOF
 # Run Spotbugs analysis for Java code
 analysis_spotbugs() {
     _msg step "[quality] Running Spotbugs analysis"
-    echo "MAN_SPOTBUGS: ${MAN_SPOTBUGS:-false}"
-    if ! ${MAN_SPOTBUGS:-false}; then
+    echo "PP_SPOTBUGS: ${PP_SPOTBUGS:-false}"
+    if ! ${PP_SPOTBUGS:-false}; then
         return 0
     fi
 
@@ -344,8 +344,8 @@ EOF
 # Run Pylint analysis for Python code
 analysis_pylint() {
     _msg step "[quality] Running Pylint analysis"
-    echo "MAN_PYLINT: ${MAN_PYLINT:-false}"
-    if ! ${MAN_PYLINT:-false}; then
+    echo "PP_PYLINT: ${PP_PYLINT:-false}"
+    if ! ${PP_PYLINT:-false}; then
         return 0
     fi
 
@@ -385,8 +385,8 @@ analysis_pylint() {
 # Run Checkstyle analysis for Java code
 analysis_checkstyle() {
     _msg step "[quality] Running Checkstyle analysis"
-    echo "MAN_CHECKSTYLE: ${MAN_CHECKSTYLE:-false}"
-    if ! ${MAN_CHECKSTYLE:-false}; then
+    echo "PP_CHECKSTYLE: ${PP_CHECKSTYLE:-false}"
+    if ! ${PP_CHECKSTYLE:-false}; then
         return 0
     fi
 

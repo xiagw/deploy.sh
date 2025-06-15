@@ -116,9 +116,7 @@ EOF
         # 转换名称中的特殊字符为短横线
         name="${name//[[:space:][:punct:]]/-}"
         # 移除连续的短横线
-        while [[ $name =~ -- ]]; do
-            name="${name//--/-}"
-        done
+        name="${name//--/-}"
         # 移除首尾的短横线
         name="${name#-}"
         name="${name%-}"
@@ -152,9 +150,7 @@ EOF
         # 转换名称中的特殊字符为短横线
         name="${name//[[:space:][:punct:]]/-}"
         # 移除连续的短横线
-        while [[ $name =~ -- ]]; do
-            name="${name//--/-}"
-        done
+        name="${name//--/-}"
         # 移除首尾的短横线
         name="${name#-}"
         name="${name%-}"
@@ -230,14 +226,18 @@ _get_token() {
 }
 
 _common_lib() {
-    common_lib="${SCRIPT_PATH_PARENT}/lib/common.sh"
-    if [ ! -f "$common_lib" ]; then
-        common_lib='/tmp/common.sh'
-        include_url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
-        [ -f "$common_lib" ] || "curl" -fsSL "$include_url" >"$common_lib"
+    local file="${SCRIPT_PATH_PARENT}/lib/common.sh"
+    if [ ! -f "$file" ]; then
+        file='/tmp/common.sh'
+        curl -fsSLo "$file" "https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
     fi
-
-    . "$common_lib"
+    if grep -q 'shellcheck shell=bash' "$file"; then
+        . "$file"
+        return 0
+    else
+        echo "Library $file file is not valid"
+        return 1
+    fi
 }
 
 main() {
