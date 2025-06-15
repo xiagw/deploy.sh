@@ -2,111 +2,113 @@
 # shellcheck disable=SC2029
 # set -xe
 
-_set_peer2peer() {
-    ## 新建的client，直接选择 服务器端
-    if [[ "$new_key_flag" -eq 1 ]]; then
-        _msg green "is new key..."
+set_peer() {
+    local file="$1"
+    ## 新建的client，直接选择对端配置文件
+    if [[ "$NEW_FLAG" -eq 1 ]]; then
+        _msg green "is new key/是新建的密钥"
     ## 不是新建的client，需要选择已存在的client
     else
-        _msg green "select exist conf..."
-        cd "$g_me_data_path" || exit 1
-        select client_conf in wg*.conf quit; do
-            [[ "$client_conf" == 'quit' ]] && exit
+        _msg green "select exist conf/选择已存在的配置"
+        cd "$G_DATA" || exit 1
+        select file in wg*.conf quit; do
+            [[ "$file" == 'quit' ]] && exit
             break
         done
-        client_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$client_conf")
-        client_key_pre=$(awk '/PresharedKey/ {print $4; exit}' "$client_conf")
-        client_ip_public=$(awk '/^### public_ip:/ {print $3; exit}' "$client_conf")
-        client_ip_pri=$(awk '/^Address/ {print $3}' "$client_conf" | grep '[0-9]\.' | head -n1 | cut -d'/' -f1)
-        client_ip6_pri=$(awk '/^Address/ {print $3}' "$client_conf" | grep '[A-Za-z0-9]:' | tail -n1 | cut -d'/' -f1)
-        client_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$client_conf")
+        client_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$file")
+        client_key_pre=$(awk '/PresharedKey/ {print $4; exit}' "$file")
+        client_ip_public=$(awk '/^### public_ip:/ {print $3; exit}' "$file")
+        client_ip_pri=$(awk '/^Address/ {print $3}' "$file" | grep '[0-9]\.' | head -n1 | cut -d'/' -f1)
+        client_ip6_pri=$(awk '/^Address/ {print $3}' "$file" | grep '[A-Za-z0-9]:' | tail -n1 | cut -d'/' -f1)
+        client_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$file")
     fi
     ## 选择对端配置文件
-    _msg red "select peer conf..."
-    cd "$g_me_data_path" || exit 1
-    # select svr_conf in $g_me_data_path/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
-    select svr_conf in wg*.conf quit; do
-        [[ "$svr_conf" == 'quit' ]] && break
-        svr_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$svr_conf")
-        svr_ip_pub=$(awk '/^### public_ip:/ {print $3; exit}' "$svr_conf")
-        svr_ip_pri=$(awk '/^Address/ {print $3}' "$client_conf" | grep '[0-9]\.' | head -n1 | cut -d'/' -f1)
-        svr_ip6_pri=$(awk '/^Address/ {print $3}' "$client_conf" | grep '[A-Za-z0-9]:' | tail -n1 | cut -d'/' -f1)
-        svr_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$svr_conf")
-        svr_lan_cidr=$(awk '/^### site2site_lan_cidr:/ {print $3; exit}' "$svr_conf")
+    _msg red "select peer conf/选择对端配置文件"
+    cd "$G_DATA" || exit 1
+    # select peer_conf in $G_DATA/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
+    select peer_conf in wg*.conf quit; do
+        [[ "$peer_conf" == 'quit' ]] && break
+        peer_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$peer_conf")
+        peer_ip_pub=$(awk '/^### public_ip:/ {print $3; exit}' "$peer_conf")
+        peer_ip_pri=$(awk '/^Address/ {print $3}' "$file" | grep '[0-9]\.' | head -n1 | cut -d'/' -f1)
+        peer_ip6_pri=$(awk '/^Address/ {print $3}' "$file" | grep '[A-Za-z0-9]:' | tail -n1 | cut -d'/' -f1)
+        peer_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$peer_conf")
+        peer_lan_cidr=$(awk '/^### add_route:/ {print $3; exit}' "$peer_conf")
 
-        _msg red "From: $svr_conf to ${client_conf##*/}"
-        if ! grep -q "### ${svr_conf##*/} begin" "$client_conf"; then
+        _msg red "From $peer_conf to ${file##*/}"
+        if ! grep -q "### ${peer_conf##*/} begin" "$file"; then
             {
                 echo ""
-                echo "### ${svr_conf##*/} begin"
+                echo "### ${peer_conf##*/} begin"
                 echo "[Peer]"
-                echo "PublicKey = $svr_key_pub"
+                echo "PublicKey = $peer_key_pub"
                 echo "# PresharedKey = $client_key_pre"
-                echo "Endpoint = $svr_ip_pub:$svr_ip_port"
-                if [[ -z "$svr_lan_cidr" ]]; then
-                    if [ -z "${svr_ip6_pri}" ]; then
-                        echo "AllowedIPs = ${svr_ip_pri}/32"
+                echo "Endpoint = $peer_ip_pub:$peer_ip_port"
+                if [[ -z "$peer_lan_cidr" ]]; then
+                    if [ -z "${peer_ip6_pri}" ]; then
+                        echo "AllowedIPs = ${peer_ip_pri}/32"
                     else
-                        echo "AllowedIPs = ${svr_ip_pri}/32,${svr_ip6_pri}/128"
+                        echo "AllowedIPs = ${peer_ip_pri}/32,${peer_ip6_pri}/128"
                     fi
                 else
-                    if [ -z "${svr_ip6_pri}" ]; then
-                        echo "AllowedIPs = ${svr_ip_pri}/32,${svr_lan_cidr}"
+                    if [ -z "${peer_ip6_pri}" ]; then
+                        echo "AllowedIPs = ${peer_ip_pri}/32,${peer_lan_cidr}"
                     else
-                        echo "AllowedIPs = ${svr_ip_pri}/32,${svr_ip6_pri}/128,${svr_lan_cidr}"
+                        echo "AllowedIPs = ${peer_ip_pri}/32,${peer_ip6_pri}/128,${peer_lan_cidr}"
                     fi
                 fi
                 echo "PersistentKeepalive = 60"
-                echo "### ${svr_conf##*/} end"
+                echo "### ${peer_conf##*/} end"
                 echo ""
-            } >>"$client_conf"
+            } >>"$file"
         fi
 
-        _msg green "From ${client_conf##*/} to $svr_conf"
-        if ! grep -q "### ${client_conf##*/} begin" "$svr_conf"; then
+        _msg green "From ${file##*/} to $peer_conf"
+        if ! grep -q "### ${file##*/} begin" "$peer_conf"; then
             {
                 echo ""
-                echo "### ${client_conf##*/} begin  $client_comment"
+                echo "### ${file##*/} begin $client_comment"
                 echo "[Peer]"
                 echo "PublicKey = $client_key_pub"
                 echo "# PresharedKey = $client_key_pre"
                 echo "AllowedIPs = ${client_ip_pri}/32,${client_ip6_pri}/128"
-                echo "### ${client_conf##*/} end"
+                echo "### ${file##*/} end"
                 echo ""
-            } >>"$svr_conf"
+            } >>"$peer_conf"
         fi
     done
 }
 
-_new_key() {
-    ip_prefix="10.9.0."
-    ip6_prefix="fd00:9::"
-    port_prefix="39000"
-    client_num="${1:-21}"
-    client_conf="$g_me_data_path/wg${client_num}.conf"
-    until [[ "${client_num}" -lt 254 ]]; do
-        read -rp "Error! enter ip again [1-254]: " client_num
-        client_conf="$g_me_data_path/wg${client_num}.conf"
+new_key() {
+    local ip_net="10.9.0."
+    local ip6_net="fd00:9::"
+    local port="39000"
+    local num="${1:-21}"
+    local file="$G_DATA/wg${num}.conf"
+    until [[ "${num}" -lt 254 ]]; do
+        read -rp "Error! enter ip again [1-254]: " num
+        file="$G_DATA/wg${num}.conf"
     done
-    while [ -f "$client_conf" ]; do
-        _msg warn "File exists: $client_conf"
-        ((client_num++))
-        client_conf="$g_me_data_path/wg${client_num}.conf"
+    while [ -f "$file" ]; do
+        _msg warn "File exists/文件已存在: $file"
+        ((num++))
+        file="$G_DATA/wg${num}.conf"
     done
-    _msg green "Generate: $client_conf , client IP: $ip_prefix${client_num}, $ip6_prefix${client_num}"
-    read -rp "Comment? (Options: username or hostname): " -e -i "host${client_num}" client_comment
-    read -rp 'Public IP (Options: as wg server): ' -e -i "wg${client_num}.vpn.lan" client_ip_public
+    _msg green "info/信息: ${file} ${ip_net}${num} ${ip6_net}${num}"
+    read -rp "Enter comment/输入可选项备注: username or hostname: " -e -i "host${num}" client_comment
+    read -rp 'Enter Public IP/输入可选项公网IP，如果作为服务器: ' -e -i "wg${num}.vpn.lan" client_ip_public
 
-    client_ip_pri="$ip_prefix${client_num}"
-    client_ip6_pri="$ip6_prefix${client_num}"
-    client_ip_port="$((client_num + port_prefix))"
+    client_ip_pri="${ip_net}${num}"
+    client_ip6_pri="${ip6_net}${num}"
+    client_ip_port="$((num + port))"
+    local client_key_pri
     client_key_pri="$(wg genkey)"
     client_key_pub="$(echo "$client_key_pri" | wg pubkey)"
     client_key_pre="$(wg genpsk)"
 
-    cat >"$client_conf" <<EOF
+    cat >"$file" <<EOF
 
-### ${client_conf##*/} $client_comment
+### ${file##*/} $client_comment
 [Interface]
 PrivateKey = $client_key_pri
 Address = $client_ip_pri/24
@@ -121,12 +123,12 @@ ListenPort = $client_ip_port
 ## PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 
 EOF
-    ## set peer 2 peer
-    new_key_flag=1
-    _set_peer2peer
+
+    NEW_FLAG=1
+    set_peer "${file}"
 }
 
-_get_qrcode() {
+get_qrcode() {
     if ! command -v qrencode; then
         if uname -s | grep -q Linux; then
             sudo apt install qrencode
@@ -137,7 +139,7 @@ _get_qrcode() {
         fi
     fi
     local conf
-    cd "$g_me_data_path" || exit 1
+    cd "$G_DATA" || exit 1
     select conf in wg*.conf quit; do
         [[ "${conf}" == 'quit' || ! -f "${conf}" ]] && break
         _msg green "${conf}.png"
@@ -145,23 +147,25 @@ _get_qrcode() {
     done
 }
 
-_revoke_client() {
-    _msg green "Select conf to revoke..."
-    cd "$g_me_data_path" || exit 1
+revoke_client() {
+    _msg green "Select conf to revoke/选择要撤销的配置文件"
+    cd "$G_DATA" || exit 1
+    local conf
     select conf in wg*.conf quit; do
         [[ "$conf" == 'quit' ]] && break
-        _msg green "Selected: $conf"
-        _msg yellow "revoke ${conf##*/} from all conf."
-        grep --color "^### ${conf##*/} begin" "$g_me_data_path"/wg*.conf
-        sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$g_me_data_path"/wg*.conf
-        _msg yellow "remove $conf."
+        _msg green "Selected/已选择: $conf"
+        _msg yellow "revoke from all conf/撤销在所有配置文件中的引用: ${conf##*/}"
+        grep --color "^### ${conf##*/} begin" "$G_DATA"/wg*.conf
+        sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$G_DATA"/wg*.conf
+        _msg yellow "remove/删除: $conf"
         rm -f "$conf"
-        _msg red "!!! DONT forget update conf to Server/Client and restart wireguard !!!"
+        _msg red "!!! DONT forget update conf to Server/Client and restart wireguard/不要忘记更新配置到服务器/客户端并重启 WireGuard !!!"
         break
     done
 }
 
-_restart_host() {
+restart_host() {
+    local conf="$1" host="$2"
     _msg yellow "scp $conf to root@$host:/etc/wireguard/wg0.conf"
     if scp "${conf}" root@"$host":/etc/wireguard/wg0.conf; then
         _msg yellow "Setting up WireGuard with infinite DNS retries..."
@@ -177,22 +181,22 @@ _restart_host() {
     fi
 }
 
-_reload_conf() {
-    _msg red "Please select conf."
-    cd "$g_me_data_path" || exit 1
+reload_conf() {
+    _msg red "Please select conf/请选择配置文件"
+    cd "$G_DATA" || exit 1
     select conf in wg*.conf quit; do
         [[ "${conf}" == 'quit' ]] && break
-        _msg red "selected $conf"
+        _msg red "selected/已选择配置文件: $conf"
         if [ -f "$HOME/.ssh/config" ]; then
             select host in $(awk 'NR>1' "$HOME/.ssh/config"* | awk '/^Host/ {print $2}') quit; do
                 [[ "${host}" == 'quit' ]] && break
-                _restart_host
+                restart_host "$conf" "$host"
                 break
             done
         else
-            _msg yellow "not found $HOME/.ssh/config"
-            read -rp "Enter host IP: " host
-            _restart_host
+            _msg yellow "not found/未找到: $HOME/.ssh/config"
+            read -rp "Enter host IP/输入主机IP: " host
+            restart_host "$conf" "$host"
         fi
         break
     done
@@ -200,9 +204,9 @@ _reload_conf() {
 # ssh root@"$host" "systemctl restart wg-quick@wg0"
 # wg genkey | tee privatekey | wg pubkey > publickey; cat privatekey publickey; rm privatekey publickey
 
-get_lib_common() {
+import_common() {
     local lib url
-    lib="$(dirname "$g_me_path")/lib/common.sh"
+    lib="$(dirname "$G_PATH")/lib/common.sh"
     if [ ! -f "$lib" ]; then
         lib='/tmp/common.sh'
         url="https://gitee.com/xiagw/deploy.sh/raw/main/lib/common.sh"
@@ -213,16 +217,16 @@ get_lib_common() {
 }
 
 main() {
-    g_me_name="$(basename "$0")"
-    g_me_path="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
-    g_me_data_path="$(dirname "${g_me_path}")/data/wireguard"
-    g_me_log="${g_me_data_path}/${g_me_name}.log"
+    G_NAME="$(basename "$0")"
+    G_PATH="$(dirname "$($(command -v greadlink || command -v readlink) -f "$0")")"
+    G_DATA="$(dirname "${G_PATH}")/data/wireguard"
+    G_LOG="${G_DATA}/${G_NAME}.log"
 
-    get_lib_common
+    import_common
 
-    _msg "log file: $g_me_log"
+    _msg "log file: $G_LOG"
 
-    [ -d "$g_me_data_path" ] || mkdir -p "$g_me_data_path"
+    mkdir -p "$G_DATA"
 
     echo "
 What do you want to do?
@@ -231,21 +235,21 @@ What do you want to do?
     3) Upload conf and reload / 上传配置并重载（客户端/服务端）
     4) Convert conf to qrcode / 转换配置为二维码
     5) Revoke client/server conf / 撤销客户端/服务端配置
-    7) Quit / 退出
+    6) Quit / 退出
 "
-    until [[ ${MENU_OPTION} =~ ^[1-7]$ ]]; do
-        read -rp "Select an option [1-7]: " MENU_OPTION
+    until [[ ${MENU_OPTION} =~ ^[1-6]$ ]]; do
+        read -rp "Select an option [1-6]: " MENU_OPTION
     done
-    [[ ${MENU_OPTION} == 7 ]] && return
+    [[ ${MENU_OPTION} == 6 ]] && return
 
-    _msg green "wireguard data path: $g_me_data_path"
+    _msg green "wireguard data path: $G_DATA"
 
     case "${MENU_OPTION}" in
-    1) _new_key "$@" ;;
-    2) _set_peer2peer ;;
-    3) _reload_conf ;;
-    4) _get_qrcode ;;
-    5) _revoke_client ;;
+    1) new_key "$@" ;;
+    2) set_peer "$@" ;;
+    3) reload_conf "$@" ;;
+    4) get_qrcode "$@" ;;
+    5) revoke_client "$@" ;;
     *)
         echo "Invalid option: $MENU_OPTION"
         exit 0
