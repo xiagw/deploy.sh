@@ -157,16 +157,16 @@ start_java() {
     log "使用JVM参数: ${jvm_opts}"
 
     # 按文件名自然排序查找所有jar文件
-    mapfile -t jar_files < <(find . -maxdepth 2 -name "*.jar" -type f | grep -v '^sdk.*jar' | sort -V)
+    mapfile -t jar_files < <(find . -maxdepth 2 -name "*.jar" -type f | sort -V)
     if [ ${#jar_files[@]} -eq 0 ]; then
         log "错误: 未找到JAR文件"
         return 1
     fi
-    log "找到 ${#jar_files[@]} 个JAR文件"
+    log "找到 ${#jar_files[@]} 个JAR文件: ${jar_files[*]}"
 
     # 按文件名自然排序查找所有配置文件
     mapfile -t config_files < <(find_configs)
-    log "找到 ${#config_files[@]} 个配置文件"
+    log "找到 ${#config_files[@]} 个配置文件: ${config_files[*]}"
 
     # 获取最后一个配置文件
     if [ ${#config_files[@]} -gt 0 ]; then
@@ -175,6 +175,17 @@ start_java() {
 
     # 启动每个jar文件
     for jar_file in "${jar_files[@]}"; do
+        # 检查jar文件是否存在
+        if [ ! -f "${jar_file}" ]; then
+            log "错误: JAR文件 ${jar_file} 不存在"
+            continue
+        fi
+        ## 跳过sdk开头的jar文件
+        if [[ "$(basename "${jar_file}")" == sdk* ]]; then
+            log "跳过sdk开头的JAR文件: ${jar_file}"
+            continue
+        fi
+
         start_cmd="java ${jvm_opts} -jar ${jar_file}"
 
         # 使用对应序号的配置文件（如果存在），否则使用最后一个配置文件
