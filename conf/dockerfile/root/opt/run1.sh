@@ -181,10 +181,12 @@ start_java() {
             continue
         fi
         ## 跳过sdk开头的jar文件
-        if [[ "$(basename "${jar_file}")" == sdk* ]]; then
+        case "$(basename "${jar_file}")" in
+        sdk* | core*)
             log "跳过sdk开头的JAR文件: ${jar_file}"
             continue
-        fi
+            ;;
+        esac
 
         start_cmd="java ${jvm_opts} -jar ${jar_file}"
 
