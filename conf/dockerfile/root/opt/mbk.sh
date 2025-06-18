@@ -8,12 +8,6 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backup] $message" | tee -a "${G_LOG}"
 }
 
-wait_mysql() {
-    while [ ! -f "/var/lib/mysql/ibdata1" ] && ! mysqladmin ping -h"localhost" --silent; do
-        sleep 1
-    done
-}
-
 init_config() {
     # Define script variables
     G_NAME=$(basename "$0")
@@ -27,19 +21,6 @@ init_config() {
         mkdir -m 755 "${BACKUP_DIR}"
     fi
 
-    # Wait for MySQL socket file to be ready
-    mysql_sock=/var/lib/mysql/mysql.sock
-    start_time=$(date +%s)
-    while [ ! -S "$mysql_sock" ]; do
-        current_time=$(date +%s)
-        if [ $((current_time - start_time)) -gt 300 ]; then
-            log "Error: Timeout waiting for MySQL socket"
-            return 1
-        fi
-        log "Waiting for MySQL socket file: $mysql_sock"
-        sleep 3
-    done
-    log "MySQL socket file is ready"
     if [ -f /healthcheck.sh ]; then
         sed -i '/mysqladmin --defaults-extra-file=/i \  mysqladmin ping' /healthcheck.sh
         sed -i '/mysqladmin --defaults-extra-file=/d' /healthcheck.sh
@@ -52,6 +33,11 @@ init_config() {
         log "Error: MYSQL_ROOT_PASSWORD is not set"
         return 1
     fi
+
+    # 等待数据文件存在且MySQL服务可用
+    while ! { [ -f "/var/lib/mysql/ibdata1" ] && mysqladmin ping -h"localhost" --silent; }; do
+        sleep 1
+    done
 
     # MySQL versions below 8 need to set root password first
     if [ "$my_ver" -lt 8 ]; then
@@ -71,16 +57,16 @@ init_config() {
         dump_opt="--source-data=2"
     fi
 
-    my_conf=/root/.my.cnf
-    (
+    my_cnf=/root/.my.cnf
+    {
         echo "[client]"
         echo "password=$MYSQL_ROOT_PASSWORD"
-    ) >"$my_conf"
-    chmod 600 "$my_conf"
+    } >"$my_cnf"
+    chmod 600 "$my_cnf"
 
     # Configure mysqldump command
-    MYSQL_CLI="mysqldump --defaults-file=$my_conf"
-    MYSQLDUMP="mysqldump --defaults-file=$my_conf --set-gtid-purged=OFF -E -R --triggers $dump_opt"
+    MYSQL_CLI="mysql --defaults-file=$my_cnf"
+    MYSQLDUMP="mysqldump --defaults-file=$my_cnf --set-gtid-purged=OFF -E -R --triggers $dump_opt"
 }
 
 # Add disk space check
@@ -114,15 +100,17 @@ backup_mysql() {
     fi
 
     # Check if within 5 hours after start time
+    log "Current timezone: ${timezone}, current hour: ${current_hour}, start hour: ${start_hour}"
     if [ "$current_hour" -ge "$start_hour" ] && [ "$current_hour" -lt "$((start_hour + 3))" ]; then
-        log "Good time to backup (starting from $start_hour:00, within 3 hours)"
+        log "Good time to backup (starting from ${start_hour}:00, within 3 hours)"
     else
-        return
+        log "Not good time($current_hour) to backup"
+        # return
     fi
 
     if compgen -G "${BACKUP_DIR}/${backup_date}."* >/dev/null 2>&1; then
         log "Warning: Found backup file for today, skipping this backup"
-        return
+        # return
     fi
 
     check_disk_space
@@ -163,12 +151,11 @@ backup_mysql() {
 
 main() {
     if [ "$UID" -eq 0 ]; then
-        log "daemon running"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backup] daemon running"
     else
         return 0
     fi
 
-    wait_mysql
     # Initialize configuration
     init_config
 
