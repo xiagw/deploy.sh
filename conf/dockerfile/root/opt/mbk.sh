@@ -1,6 +1,7 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
 
+# set -x
 set -Eeo pipefail
 
 log() {
@@ -35,7 +36,11 @@ init_config() {
     fi
 
     # 等待数据文件存在且MySQL服务可用
-    while ! { [ -f "/var/lib/mysql/ibdata1" ] && mysqladmin ping -h"localhost" --silent; }; do
+    while ! {
+        [ -f "/var/lib/mysql/ibdata1" ] &&
+            [ -e "/var/lib/mysql/mysql.sock" ] &&
+            mysqladmin ping -h"localhost" --silent
+    }; do
         sleep 1
     done
 
@@ -115,6 +120,18 @@ backup_mysql() {
 
     check_disk_space
 
+#     $MYSQL_CLI <<'EOF'
+# START TRANSACTION;
+# CREATE DATABASE IF NOT EXISTS `test2`;
+# USE `test2`;
+# CREATE TABLE IF NOT EXISTS `test2` (
+#     id INT AUTO_INCREMENT PRIMARY KEY,
+#     name VARCHAR(255),
+#     time DATETIME
+# );
+# INSERT INTO `test2` (name, time) VALUES ('test', NOW());
+# COMMIT;
+# EOF
     # Get all database lists (excluding system databases)
     databases="$($MYSQL_CLI -Ne 'show databases' | grep -vE 'information_schema|performance_schema|^sys$|^mysql$')"
 
@@ -161,6 +178,7 @@ main() {
 
     # Start backup daemon process
     while true; do
+        sleep 30
         backup_mysql
         sleep 1h
     done
