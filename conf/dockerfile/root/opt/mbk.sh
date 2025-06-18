@@ -104,13 +104,13 @@ backup_mysql() {
     if [ "$current_hour" -ge "$start_hour" ] && [ "$current_hour" -lt "$((start_hour + 3))" ]; then
         log "Good time to backup (starting from ${start_hour}:00, within 3 hours)"
     else
-        log "Not good time($current_hour) to backup"
-        # return
+        # log "Not good time($current_hour) to backup"
+        return
     fi
 
     if compgen -G "${BACKUP_DIR}/${backup_date}."* >/dev/null 2>&1; then
         log "Warning: Found backup file for today, skipping this backup"
-        # return
+        return
     fi
 
     check_disk_space
