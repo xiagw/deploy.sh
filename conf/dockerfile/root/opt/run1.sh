@@ -16,12 +16,12 @@ declare -a G_PIDS=()
 log() {
     case "${1:-}" in
     file)
+        shift
         log_file="$2"
         if [ -f "$log_file" ]; then
-            shift 2
+            shift
         else
             log_file="/tmp/$(date +%Y%m%d).log"
-            shift
         fi
         echo "[$(date +%Y%m%d_%u_%T.%3N)] [RUN1] $*" | tee -a "$log_file"
         ;;
@@ -33,32 +33,22 @@ log() {
 
 # 函数：日志轮转
 rotate_log() {
-    local log_file="$1" max_size="$2" current_size
-
+    local log_file="$1" max_size="$2"
+    local current_size timestamp base_name dir_name archive_name
     # 检查文件是否存在
     [ -f "$log_file" ] || return 0
-
     # 获取文件大小
     current_size=$(stat -c%s "$log_file" 2>/dev/null || stat -f%z "$log_file" 2>/dev/null)
-
     # 如果文件大小超过阈值，进行轮转
     if [ "${current_size:-0}" -gt "$max_size" ]; then
-        local timestamp
         timestamp=$(date +%Y%m%d-%H%M%S)
-        local base_name
         base_name=$(basename "$log_file")
-        local dir_name
         dir_name=$(dirname "$log_file")
-        local archive_name="${dir_name}/${base_name}.${timestamp}"
-
+        archive_name="${dir_name}/${base_name}.${timestamp}"
         # 重命名旧日志文件
-        if [ -f "$log_file" ]; then
-            mv "$log_file" "${archive_name}"
-        fi
-
+        [ -f "$log_file" ] && mv "$log_file" "${archive_name}"
         # 创建新的日志文件
         touch "$log_file"
-
         # 清理旧的日志文件（5天前）
         find "$dir_name" -name "${base_name}.*" -type f -mtime +5 -delete 2>/dev/null
     fi
@@ -181,10 +171,12 @@ start_java() {
             continue
         fi
         ## 跳过sdk开头的jar文件
-        if [[ "$(basename "${jar_file}")" == sdk* ]]; then
-            log "跳过sdk开头的JAR文件: ${jar_file}"
+        case "$(basename "${jar_file}")" in
+        sdk* | core*)
+            log "跳过sdk/core开头的JAR文件: ${jar_file}"
             continue
-        fi
+            ;;
+        esac
 
         start_cmd="java ${jvm_opts} -jar ${jar_file}"
 
@@ -302,7 +294,8 @@ start_php() {
 
 # 函数：启动Node.js应用
 start_node() {
-    cd "/app" && npm run start &
+    cd "/app" || return
+    npm run start &
     G_PIDS+=("$!")
     log "Node.js应用启动成功"
 }

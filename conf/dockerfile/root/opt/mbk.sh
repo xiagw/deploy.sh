@@ -1,7 +1,13 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
 
-set -Eeuo pipefail
+# set -x
+set -Eeo pipefail
+
+log() {
+    local message="$1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backup] $message" | tee -a "${G_LOG}"
+}
 
 init_config() {
     # Define script variables
@@ -16,42 +22,38 @@ init_config() {
         mkdir -m 755 "${BACKUP_DIR}"
     fi
 
-    # Wait for MySQL socket file to be ready
-    mysql_sock=/var/lib/mysql/mysql.sock
-    start_time=$(date +%s)
-    while [ ! -S "$mysql_sock" ]; do
-        current_time=$(date +%s)
-        if [ $((current_time - start_time)) -gt 300 ]; then
-            log_message "Error: Timeout waiting for MySQL socket"
-            return 1
-        fi
-        log_message "Waiting for MySQL socket file: $mysql_sock"
-        sleep 3
-    done
-    log_message "MySQL socket file is ready"
     if [ -f /healthcheck.sh ]; then
         sed -i '/mysqladmin --defaults-extra-file=/i \  mysqladmin ping' /healthcheck.sh
         sed -i '/mysqladmin --defaults-extra-file=/d' /healthcheck.sh
     else
-        log_message "not found /healthcheck.sh"
+        log "not found /healthcheck.sh"
     fi
     my_ver=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
     # Check required environment variables
     if [ -z "${MYSQL_ROOT_PASSWORD}" ]; then
-        log_message "Error: MYSQL_ROOT_PASSWORD is not set"
+        log "Error: MYSQL_ROOT_PASSWORD is not set"
         return 1
     fi
+
+    # 等待数据文件存在且MySQL服务可用
+    while ! {
+        [ -f "/var/lib/mysql/ibdata1" ] &&
+            [ -e "/var/lib/mysql/mysql.sock" ] &&
+            mysqladmin ping -h"localhost" --silent
+    }; do
+        sleep 1
+    done
+
     # MySQL versions below 8 need to set root password first
     if [ "$my_ver" -lt 8 ]; then
+        # Check if root password is already set
         if mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
-            log_message "Root user connection successful"
+            log "Initial password for root@localhost"
+            mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';"
         elif mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT 1" >/dev/null 2>&1; then
-            # Check if root password is already set
-            log_message "MySQL root user password not set, starting password setup"
-            mysqladmin -u root -p"${MYSQL_ROOT_PASSWORD}" password "${MYSQL_ROOT_PASSWORD}" >/dev/null 2>&1
-            log_message "MySQL root password setup successful"
+            log "Root user connection successful"
         else
-            log_message "Root user connection failed"
+            log "Root user connection failed"
             return 1
         fi
 
@@ -60,20 +62,16 @@ init_config() {
         dump_opt="--source-data=2"
     fi
 
-    my_conf=/root/.my.cnf
-    (
+    my_cnf=/root/.my.cnf
+    {
         echo "[client]"
         echo "password=$MYSQL_ROOT_PASSWORD"
-    ) >"$my_conf"
-    chmod 600 "$my_conf"
+    } >"$my_cnf"
+    chmod 600 "$my_cnf"
 
     # Configure mysqldump command
-    MYSQLDUMP="mysqldump --defaults-extra-file=$my_conf --set-gtid-purged=OFF -E -R --triggers $dump_opt"
-}
-
-log_message() {
-    local message="$1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backup] $message" | tee -a "${G_LOG}"
+    MYSQL_CLI="mysql --defaults-file=$my_cnf"
+    MYSQLDUMP="mysqldump --defaults-file=$my_cnf --set-gtid-purged=OFF -E -R --triggers $dump_opt"
 }
 
 # Add disk space check
@@ -82,7 +80,7 @@ check_disk_space() {
     local available_space
     available_space=$(df -m "${BACKUP_DIR}" | awk 'NR==2 {print $4}')
     if [ "${available_space}" -lt "${required_space}" ]; then
-        log_message "Error: Not enough disk space. Required: ${required_space}MB, Available: ${available_space}MB"
+        log "Error: Not enough disk space. Required: ${required_space}MB, Available: ${available_space}MB"
         return 1
     fi
     return 0
@@ -107,34 +105,48 @@ backup_mysql() {
     fi
 
     # Check if within 5 hours after start time
+    log "Current timezone: ${timezone}, current hour: ${current_hour}, start hour: ${start_hour}"
     if [ "$current_hour" -ge "$start_hour" ] && [ "$current_hour" -lt "$((start_hour + 3))" ]; then
-        log_message "Good time to backup (starting from $start_hour:00, within 3 hours)"
+        log "Good time to backup (starting from ${start_hour}:00, within 3 hours)"
     else
+        # log "Not good time($current_hour) to backup"
         return
     fi
 
     if compgen -G "${BACKUP_DIR}/${backup_date}."* >/dev/null 2>&1; then
-        log_message "Warning: Found backup file for today, skipping this backup"
+        log "Warning: Found backup file for today, skipping this backup"
         return
     fi
 
     check_disk_space
 
+#     $MYSQL_CLI <<'EOF'
+# START TRANSACTION;
+# CREATE DATABASE IF NOT EXISTS `test2`;
+# USE `test2`;
+# CREATE TABLE IF NOT EXISTS `test2` (
+#     id INT AUTO_INCREMENT PRIMARY KEY,
+#     name VARCHAR(255),
+#     time DATETIME
+# );
+# INSERT INTO `test2` (name, time) VALUES ('test', NOW());
+# COMMIT;
+# EOF
     # Get all database lists (excluding system databases)
-    databases="$(mysql -Ne 'show databases' | grep -vE 'information_schema|performance_schema|^sys$|^mysql$')"
+    databases="$($MYSQL_CLI -Ne 'show databases' | grep -vE 'information_schema|performance_schema|^sys$|^mysql$')"
 
     for db in ${databases}; do
-        log_message "Starting backup for database: ${db}"
+        log "Starting backup for database: ${db}"
         backup_file="${BACKUP_DIR}/${backup_date}.${backup_time}.full.${db}.sql"
-        if mysql "${db}" -e 'select now()' >/dev/null; then
+        if $MYSQL_CLI "${db}" -e 'select now()' >/dev/null; then
             if ${MYSQLDUMP} "${db}" -r "${backup_file}"; then
-                log_message "Database ${db} backup successful: ${backup_file}.gz"
                 command -v gzip && gzip -f "${backup_file}"
+                log "Database ${db} backup successful: ${backup_file}"
             else
-                log_message "Database ${db} backup failed"
+                log "Database ${db} backup failed"
             fi
         else
-            log_message "Database ${db} does not exist"
+            log "Database ${db} does not exist"
         fi
     done
 
@@ -143,30 +155,30 @@ backup_mysql() {
         local days
         days="$(grep -oE '[0-9]+' "${BACKUP_DIR}/.clean" | head -n1)"
         if [ -z "$days" ]; then
-            log_message "Not found NUMBERS in ${BACKUP_DIR}/.clean, skip clean"
+            log "Not found NUMBERS in ${BACKUP_DIR}/.clean, skip clean"
             return
         fi
-        log_message "Cleaning backup files older than $days days"
+        log "Cleaning backup files older than $days days"
         find "${BACKUP_DIR}" -type f -iname "*.sql" -mtime +"$days" -delete
         find "${BACKUP_DIR}" -type f -iname "*.sql.gz" -mtime +"$days" -delete
     else
-        log_message "Not found ${BACKUP_DIR}/.clean, skip clean backup files"
+        log "Not found ${BACKUP_DIR}/.clean, skip clean backup files"
     fi
 }
 
 main() {
     if [ "$UID" -eq 0 ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backup], daemon running"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [backup] daemon running"
     else
         return 0
     fi
 
-    sleep 30
     # Initialize configuration
     init_config
 
     # Start backup daemon process
     while true; do
+        sleep 30
         backup_mysql
         sleep 1h
     done
