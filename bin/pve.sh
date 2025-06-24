@@ -128,6 +128,8 @@ fi
 # zpool create tank /vdisk/2G.1 /vdisk/2G.2
 # zpool create tank mirror /vdisk/2G.1 /vdisk/2G.2
 # zpool attach tank raidz /vdisk/2G.1 /vdisk/2G.2 /vdisk/2G.3
+# zfs-2.3.2
+# zpool attach tank raidz1-0 /vdisk/1G.4
 
 # sysctl -w vm.swappiness=10
 # /etc/sysctl.conf
