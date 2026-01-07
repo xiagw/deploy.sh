@@ -70,8 +70,8 @@ set_peer() {
         [[ "$peer_conf" == 'quit' ]] && break
         peer_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$peer_conf")
         peer_ip_pub=$(awk '/^### public_ip:/ {print $3; exit}' "$peer_conf")
-        peer_ip_pri=$(awk '/^Address/ {print $3}' "$file" | grep '[0-9]\.' | head -n1 | cut -d'/' -f1)
-        peer_ip6_pri=$(awk '/^Address/ {print $3}' "$file" | grep '[A-Za-z0-9]:' | tail -n1 | cut -d'/' -f1)
+        peer_ip_pri=$(awk '/^Address/ {print $3}' "$peer_conf" | grep '[0-9]\.' | head -n1 | cut -d'/' -f1)
+        peer_ip6_pri=$(awk '/^Address/ {print $3}' "$peer_conf" | grep '[A-Za-z0-9]:' | tail -n1 | cut -d'/' -f1)
         peer_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$peer_conf")
         peer_lan_cidr=$(awk '/^### add_route:/ {print $3; exit}' "$peer_conf")
 
