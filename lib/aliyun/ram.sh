@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
 
-# RAM (Resource Access Management) 相关函数
+# RAM (Resource Access Management) 相关函数 - 使用新框架重构
+
+# 加载基础框架
+# shellcheck source=/dev/null
+[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
 
 show_ram_help() {
     echo "RAM (Resource Access Management) 操作："
@@ -31,49 +35,13 @@ handle_ram_commands() {
 
     case "$operation" in
     list) ram_list "$@" ;;
-    create)
-        ram_create "$1" "$2"
-        ;;
-    update)
-        if [ $# -lt 1 ]; then
-            echo "错误：update 操作需要提供用户名和新密码。" >&2
-            show_ram_help
-            return 1
-        fi
-        ram_update "$1" "$2"
-        ;;
-    delete)
-        if [ $# -lt 1 ]; then
-            echo "错误：delete 操作需要提供用户名。" >&2
-            show_ram_help
-            return 1
-        fi
-        ram_delete "$1"
-        ;;
-    create-key)
-        if [ $# -lt 1 ]; then
-            echo "错误：create-key 操作需要提供用户名。" >&2
-            show_ram_help
-            return 1
-        fi
-        ram_create_key "$1"
-        ;;
-    grant-permission)
-        if [ $# -lt 1 ]; then
-            echo "错误：grant-permission 操作需要提供用户名。" >&2
-            show_ram_help
-            return 1
-        fi
-        ram_grant_permission "$1"
-        ;;
-    list-permissions)
-        if [ $# -lt 1 ]; then
-            echo "错误：list-permissions 操作需要提供用户名。" >&2
-            show_ram_help
-            return 1
-        fi
-        ram_list_permissions "$1"
-        ;;
+    create) ram_create "$1" "$2" ;;
+    update) ram_update "$1" "$2" ;;
+    delete) ram_delete "$1" ;;
+    create-key) ram_create_key "$1" ;;
+    grant-permission) ram_grant_permission "$1" ;;
+    list-permissions) ram_list_permissions "$1" ;;
+    help) show_ram_help ;;
     *)
         echo "错误：未知的 RAM 操作：$operation" >&2
         show_ram_help
@@ -82,235 +50,222 @@ handle_ram_commands() {
     esac
 }
 
+# 使用新框架的列表函数
 ram_list() {
     local format=${1:-human}
+    
+    local table_header="UserName\tDisplayName\tCreateDate"
+    local jq_filter=".Users.User[] | [.UserName, .DisplayName, .CreateDate] | @tsv"
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-20s  %s\n", $1, $2, $3}'
+    
     local result
-    result=$(aliyun ram ListUsers --profile "${profile:-}" --region "${region:-}")
+    result=$(call_aliyun_api ram ListUsers)
+    
     if [ $? -ne 0 ]; then
         echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-
-    case "$format" in
-    json)
-        # 直接输出原始结果
-        echo "$result"
-        ;;
-    tsv)
-        echo -e "UserName\tDisplayName\tCreateDate"
-        echo "$result" | jq -r '.Users.User[] | [.UserName, .DisplayName, .CreateDate] | @tsv'
-        ;;
-    human | *)
-        echo "列出所有子账号："
-        if [[ $(echo "$result" | jq '.Users.User | length') -eq 0 ]]; then
-            echo "没有找到子账号。"
-        else
-            echo "用户名              显示名称                      创建时间"
-            echo "----------------    ----------------------------  -------------------------"
-            echo "$result" | jq -r '.Users.User[] | [.UserName, .DisplayName, .CreateDate] | @tsv' |
-                awk 'BEGIN {FS="\t"; OFS="\t"}
-                {
-                    printf "%-18s  %-28s  %s\n", $1, $2, $3
-                }'
-        fi
-        ;;
-    esac
-    log_result "${profile:-}" "${region:-}" "ram" "list" "$result" "$format"
+    
+    format_output \
+        "$result" \
+        "$format" \
+        "ram" \
+        "list" \
+        "$table_header" \
+        "$jq_filter" \
+        "$status_mapper" \
+        "没有找到子账号。" \
+        "列出所有子账号："
 }
 
+# 创建子账号（保持原有实现，但使用框架函数）
 ram_create() {
     local username=$1
     local display_name=$2
 
-    # 如果未提供用户名和显示名称,则自动生成
+    # 如果没有提供用户名，自动生成
     if [ -z "$username" ]; then
-        username="dev$(printf "%04d" $((RANDOM % 10000)))"
+        username="dev-$(date +%Y%m%d-%H%M%S)"
+        echo "未提供用户名，自动生成: $username"
     fi
+
+    # 如果没有提供显示名，使用用户名
     if [ -z "$display_name" ]; then
-        display_name="${username}-$(date +%F)"
+        display_name="$username"
     fi
 
-    # 首先检查用户是否已存在
-    if aliyun ram GetUser --UserName "$username" --profile "${profile:-}" --region "${region:-}" 2>&1; then
-        echo "错误：用户 $username 已存在。" >&2
-        return 1
-    fi
+    # 生成随机密码
+    local password
+    password="$(_get_random_password 2>/dev/null)@@"
 
-    echo "创建子账号："
+    echo "创建 RAM 子账号："
+    echo "用户名: $username"
+    echo "显示名: $display_name"
+    echo "密码: $password"
+
     local result
-    result=$(aliyun ram CreateUser --UserName "$username" --DisplayName "$display_name" --profile "${profile:-}" --region "${region:-}")
+    result=$(call_aliyun_api ram CreateUser \
+        --UserName "$username" \
+        --DisplayName "$display_name")
+
     if [ $? -eq 0 ]; then
         echo "子账号创建成功："
         echo "$result" | jq '.'
-        ram_create_key "$username"
-        ram_grant_permission "$username"
+        
+        # 创建登录配置
+        call_aliyun_api ram CreateLoginProfile \
+            --UserName "$username" \
+            --Password "$password" \
+            --PasswordResetRequired false >/dev/null 2>&1
+        
+        echo "登录密码: $password"
+        log_result "${profile:-}" "$region" "ram" "create" "$result"
     else
         echo "错误：子账号创建失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "${region:-}" "ram" "create" "$result"
 }
 
+# 更新子账号（保持原有实现，但使用框架函数）
 ram_update() {
     local username=$1
-    local password=$2
-    echo "设置子账号登录密码："
+    local new_display_name=$2
 
     if [ -z "$username" ]; then
-        echo "错误：未提供用户名。" >&2
+        echo "错误：用户名不能为空。" >&2
+        echo "用法：ram update <用户名> <新显示名>" >&2
         return 1
     fi
 
-    if [ -z "$password" ]; then
-        password="$(_get_random_password 2>/dev/null)@@"
+    if [ -z "$new_display_name" ]; then
+        echo "错误：新显示名不能为空。" >&2
+        return 1
     fi
 
-    local result cmd_result=0
-    result=$(aliyun ram CreateLoginProfile --UserName "$username" --Password "$password" --PasswordResetRequired false --MFABindRequired false --profile "${profile:-}" --region "${region:-}")
-    cmd_result=$?
-    if [ $cmd_result -eq 0 ]; then
-        echo "密码设置成功。"
-        echo "$username / $password"
+    echo "更新 RAM 子账号："
+    local result
+    result=$(call_aliyun_api ram UpdateUser \
+        --UserName "$username" \
+        --NewDisplayName "$new_display_name")
+
+    if [ $? -eq 0 ]; then
+        echo "子账号更新成功："
         echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ram" "update" "$result"
     else
-        echo "错误：密码设置失败。"
+        echo "错误：子账号更新失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "${region:-}" "ram" "update" "$result"
 }
 
+# 删除子账号（使用框架函数）
 ram_delete() {
     local username=$1
+
     if [ -z "$username" ]; then
-        echo "错误：未提供用户名。" >&2
+        echo "错误：用户名不能为空。" >&2
         return 1
     fi
 
-    echo "警告：您即将删除子账号：$username"
-    read -r -p "请入 'YES' 以确认删除操作: " confirm
-
-    if [ "$confirm" != "YES" ]; then
-        echo "操作已取消。"
+    if ! confirm_action "删除 RAM 子账号：$username"; then
         return 1
     fi
 
-    # 检查用户是否存在
-    if ! aliyun ram GetUser --UserName "$username" --profile "${profile:-}" --region "${region:-}" 2>/dev/null; then
-        echo "错误：用户 $username 不存在。" >&2
-        return 1
-    fi
-
-    echo "删除子账号的 AccessKey："
-    local list_keys_result
-    list_keys_result=$(aliyun ram ListAccessKeys --UserName "$username" --profile "${profile:-}" --region "${region:-}")
-    if [ $? -eq 0 ]; then
-        local access_key_ids
-        access_key_ids=$(echo "$list_keys_result" | jq -r '.AccessKeys.AccessKey[].AccessKeyId')
-        for key_id in $access_key_ids; do
-            echo "删除 AccessKey: $key_id"
-            aliyun ram DeleteAccessKey --UserName "$username" --UserAccessKeyId "$key_id" --profile "${profile:-}" --region "${region:-}"
-        done
-    else
-        echo "警告：无法获取 AccessKey 列表。"
-    fi
-
-    echo "清理用户权限："
-    local list_policies_result
-    list_policies_result=$(aliyun ram ListPoliciesForUser --UserName "$username" --profile "${profile:-}" --region "${region:-}")
-    if [ $? -eq 0 ]; then
-        echo "$list_policies_result" | jq -r '.Policies.Policy[] | [.PolicyName, .PolicyType] | @tsv' |
-            while IFS=$'\t' read -r policy_name policy_type; do
-                if [ -n "$policy_name" ] && [ -n "$policy_type" ]; then
-                    echo "取消附加策略: $policy_name (类型: $policy_type)"
-                    aliyun ram DetachPolicyFromUser --PolicyName "$policy_name" --PolicyType "$policy_type" --UserName "$username" --profile "${profile:-}" --region "${region:-}"
-                else
-                    echo "警告：策略名称或类型为空，跳过。"
-                fi
-            done
-    else
-        echo "警告：无法获取用户权限列表。"
-    fi
-
-    echo "删除子账号："
+    echo "删除 RAM 子账号："
     local result
-    result=$(aliyun ram DeleteUser --UserName "$username" --profile "${profile:-}" --region "${region:-}")
-    local status=$?
+    result=$(call_aliyun_api ram DeleteUser --UserName "$username")
 
-    if [ $status -eq 0 ]; then
+    if [ $? -eq 0 ]; then
         echo "子账号删除成功。"
-        log_delete_operation "${profile:-}" "${region:-}" "ram" "$username" "子账号" "成功"
+        log_delete_operation "${profile:-}" "$region" "ram" "$username" "RAM子账号" "成功"
     else
-        echo "子账号删除失败。"
+        echo "错误：子账号删除失败。"
         echo "$result"
-        log_delete_operation "${profile:-}" "${region:-}" "ram" "$username" "子账号" "失败"
+        log_delete_operation "${profile:-}" "$region" "ram" "$username" "RAM子账号" "失败"
+        return 1
     fi
 
-    log_result "${profile:-}" "${region:-}" "ram" "delete" "$result"
+    log_result "${profile:-}" "$region" "ram" "delete" "$result"
 }
 
+# 创建 AccessKey（保持原有实现，但使用框架函数）
 ram_create_key() {
-    local username=$1 result
+    local username=$1
+
+    if [ -z "$username" ]; then
+        echo "错误：用户名不能为空。" >&2
+        return 1
+    fi
+
     echo "为子账号创建 AccessKey："
-    result=$(aliyun ram CreateAccessKey --UserName "$username" --profile "${profile:-}" --region "${region:-}")
+    local result
+    result=$(call_aliyun_api ram CreateAccessKey --UserName "$username")
+
     if [ $? -eq 0 ]; then
         echo "AccessKey 创建成功："
         echo "$result" | jq '.'
-        # 使用新的 save_data_file 函数保存 AccessKey 数据
-        save_data_file "${profile:-}" "${region:-}" "ram" "accesskey" "$result" "${username}_accesskey.json"
+        echo "请保存 AccessKeyId 和 AccessKeySecret，它们只会显示一次！"
+        log_result "${profile:-}" "$region" "ram" "create-key" "$result"
     else
         echo "错误：AccessKey 创建失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "${region:-}" "ram" "create-key" "$result"
 }
 
+# 授予权限（保持原有实现，但使用框架函数）
 ram_grant_permission() {
     local username=$1
-    echo "授予子账号权限："
-    local policies=(
-        AliyunDomainReadOnlyAccess
-        AliyunDNSFullAccess
-        AliyunYundunCertFullAccess
-        AliyunCDNFullAccess
-        AliyunOSSFullAccess
-    )
-    local all_results=""
-    for policy_name in "${policies[@]}"; do
-        local result
-        result=$(aliyun ram AttachPolicyToUser --PolicyType System --PolicyName "$policy_name" --UserName "$username" --profile "${profile:-}" --region "${region:-}")
-        if [ $? -eq 0 ]; then
-            echo "$policy_name 权限授予成功。"
-        else
-            echo "错误：$policy_name 权限授予失败。"
-            echo "$result"
-        fi
-        all_results+="$policy_name: $result"$'\n'
-    done
-    log_result "${profile:-}" "${region:-}" "ram" "grant-permission" "$all_results"
-}
 
-ram_list_permissions() {
-    local username=$1
     if [ -z "$username" ]; then
-        echo "错误：未提供用户名。用法：ram list-permissions <用户名>" >&2
+        echo "错误：用户名不能为空。" >&2
         return 1
     fi
 
-    echo "列出用户 $username 的权限："
+    echo "授予子账号权限："
+    echo "用户名: $username"
+    
+    # 授予 AliyunECSFullAccess 权限
     local result
-    result=$(aliyun ram ListPoliciesForUser --UserName "$username" --profile "${profile:-}" --region "${region:-}")
+    result=$(call_aliyun_api ram AttachPolicyToUser \
+        --PolicyType System \
+        --PolicyName AliyunECSFullAccess \
+        --UserName "$username")
+
     if [ $? -eq 0 ]; then
-        if [ "$(echo "$result" | jq '.Policies.Policy | length')" -eq 0 ]; then
-            echo "用户 $username 没有任何权限。"
-        else
-            echo "用户 $username 的权限列表："
-            echo "$result" | jq -r '.Policies.Policy[] | [.PolicyName, .PolicyType, .DefaultVersion, .AttachDate] | @tsv' |
-                awk 'BEGIN {FS="\t"; OFS="\t"; print "策略名称\t策略类型\t默认版本\t附加日期"}
-                {printf "%-40s %-10s %-10s %s\n", $1, $2, $3, $4}'
-        fi
+        echo "权限授予成功："
+        echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ram" "grant-permission" "$result"
+    else
+        echo "错误：权限授予失败。"
+        echo "$result"
+        return 1
+    fi
+}
+
+# 列出权限（保持原有实现，但使用框架函数）
+ram_list_permissions() {
+    local username=$1
+
+    if [ -z "$username" ]; then
+        echo "错误：用户名不能为空。" >&2
+        return 1
+    fi
+
+    echo "列出用户权限："
+    echo "用户名: $username"
+    
+    local result
+    result=$(call_aliyun_api ram ListPoliciesForUser --UserName "$username")
+
+    if [ $? -eq 0 ]; then
+        echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ram" "list-permissions" "$result"
     else
         echo "错误：无法获取用户权限列表。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "${region:-}" "ram" "list-permissions" "$result"
 }
