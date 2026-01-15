@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
 
-# DNS (域名解析服务) 相关函数
+# DNS (域名解析服务) 相关函数 - 使用新框架重构
+
+# 加载基础框架
+# shellcheck source=/dev/null
+[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
 
 show_dns_help() {
     echo "DNS 操作："
@@ -36,6 +40,7 @@ handle_dns_commands() {
     create) dns_create "$@" ;;
     update) dns_update "$@" ;;
     delete) dns_delete "$@" ;;
+    help) show_dns_help ;;
     *)
         echo "错误：未知的 DNS 操作：$operation" >&2
         show_dns_help
@@ -61,10 +66,11 @@ handle_domain_commands() {
 
 get_domain_list() {
     local result
-    result=$(aliyun --profile "${profile:-}" alidns DescribeDomains)
+    result=$(call_aliyun_api alidns DescribeDomains)
     echo "$result" | jq -r '.Domains.Domain[] | .DomainName'
 }
 
+# 使用新框架的 DNS 列表函数
 dns_list() {
     local domain=$1
     local format=${2:-human}
@@ -75,54 +81,44 @@ dns_list() {
         return
     fi
 
-    echo "列出 DNS 记录："
+    local table_header="RecordId\tRR\tType\tValue\tStatus"
+    local jq_filter=".DomainRecords.Record[] | [.RecordId, .RR, .Type, .Value, .Status] | @tsv"
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-10s  %-6s  %-22s  %s\n", $1, $2, $3, $4, $5}'
+    
     local result
-    result=$(aliyun --profile "${profile:-}" alidns DescribeDomainRecords --DomainName "$domain" --PageSize 100)
-
-    ret="$?"
-    if [ $ret -ne 0 ]; then
+    result=$(call_aliyun_api alidns DescribeDomainRecords \
+        --DomainName "$domain" \
+        --PageSize 100)
+    
+    if [ $? -ne 0 ]; then
         echo "错误：无法获取 DNS 记录列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-
-    case "$format" in
-    json)
-        # 直接输出原始结果
-        echo "$result"
-        ;;
-    tsv)
-        echo -e "RecordId\tRR\tType\tValue\tStatus"
-        echo "$result" | jq -r '.DomainRecords.Record[] | [.RecordId, .RR, .Type, .Value, .Status] | @tsv'
-        ;;
-    human | *)
-        if [[ $(echo "$result" | jq '.DomainRecords.Record | length') -eq 0 ]]; then
-            echo "没有找到 DNS 记录。"
-        else
-            echo "记录ID            主机记录    类型    记录值                  状态"
-            echo "----------------  ----------  ------  ----------------------  ------"
-            echo "$result" | jq -r '.DomainRecords.Record[] | [.RecordId, .RR, .Type, .Value, .Status] | @tsv' |
-                awk 'BEGIN {FS="\t"; OFS="\t"}
-                {
-                    printf "%-16s  %-10s  %-6s  %-22s  %s\n", $1, $2, $3, $4, $5
-                }'
-        fi
-        ;;
-    esac
-    log_result "${profile:-}" "${region:-}" "dns" "list" "$result" "$format"
+    
+    format_output \
+        "$result" \
+        "$format" \
+        "dns" \
+        "list" \
+        "$table_header" \
+        "$jq_filter" \
+        "$status_mapper" \
+        "没有找到 DNS 记录。" \
+        "列出 DNS 记录："
 }
 
+# 使用新框架的创建函数
 dns_create() {
     local domain=$1 rr=$2 type=$3 value=$4
 
-    if [ -z "$domain" ] || [ -z "$rr" ] || [ -z "$type" ] || [ -z "$value" ]; then
-        echo "错误：所有参数都不能为空。" >&2
+    if ! validate_required_params "$domain" "$rr" "$type" "$value" "错误：域名、主机记录、类型和值不能为空。"; then
         echo "用法：dns create <域名> <主机记录> <类型> <值>" >&2
         return 1
     fi
 
     echo "创建 DNS 记录："
     local result
-    result=$(aliyun --profile "${profile:-}" alidns AddDomainRecord \
+    result=$(call_aliyun_api alidns AddDomainRecord \
         --DomainName "$domain" \
         --RR "$rr" \
         --Type "$type" \
@@ -131,25 +127,26 @@ dns_create() {
     if [ $? -eq 0 ]; then
         echo "DNS 记录创建成功："
         echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "dns" "create" "$result"
     else
         echo "错误：DNS 记录创建失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "$region" "dns" "create" "$result"
 }
 
+# 使用新框架的更新函数
 dns_update() {
     local record_id=$1 rr=$2 type=$3 value=$4
 
-    if [ -z "$record_id" ] || [ -z "$rr" ] || [ -z "$type" ] || [ -z "$value" ]; then
-        echo "错误：所有参数都不能为空。" >&2
+    if ! validate_required_params "$record_id" "$rr" "$type" "$value" "错误：记录ID、主机记录、类型和值不能为空。"; then
         echo "用法：dns update <记录ID> <主机记录> <类型> <值>" >&2
         return 1
     fi
 
     echo "更新 DNS 记录："
     local result
-    result=$(aliyun --profile "${profile:-}" alidns UpdateDomainRecord \
+    result=$(call_aliyun_api alidns UpdateDomainRecord \
         --RecordId "$record_id" \
         --RR "$rr" \
         --Type "$type" \
@@ -158,33 +155,30 @@ dns_update() {
     if [ $? -eq 0 ]; then
         echo "DNS 记录更新成功："
         echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "dns" "update" "$result"
     else
         echo "错误：DNS 记录更新失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "$region" "dns" "update" "$result"
 }
 
+# 使用新框架的删除函数
 dns_delete() {
     local record_id=$1
 
     if [ -z "$record_id" ]; then
         echo "错误：记录ID不能为空。" >&2
-        echo "用法：dns delete <记录ID>" >&2
         return 1
     fi
 
-    echo "警告：您即将删除 DNS 记录：$record_id"
-    read -r -p "请输入 'YES' 以确认删除操作: " confirm
-
-    if [ "$confirm" != "YES" ]; then
-        echo "操作已取消。"
+    if ! confirm_action "删除 DNS 记录：$record_id"; then
         return 1
     fi
 
     echo "删除 DNS 记录："
     local result
-    result=$(aliyun --profile "${profile:-}" alidns DeleteDomainRecord --RecordId "$record_id")
+    result=$(call_aliyun_api alidns DeleteDomainRecord --RecordId "$record_id")
 
     if [ $? -eq 0 ]; then
         echo "DNS 记录删除成功。"
@@ -193,44 +187,36 @@ dns_delete() {
         echo "DNS 记录删除失败。"
         echo "$result"
         log_delete_operation "${profile:-}" "$region" "dns" "$record_id" "DNS记录" "失败"
+        return 1
     fi
 
     log_result "${profile:-}" "$region" "dns" "delete" "$result"
 }
 
+# 使用新框架的域名列表函数
 dns_domain_list() {
     local format=${1:-human}
-    echo "列出所有域名："
+    
+    local table_header="DomainId\tDomainName\tInstanceId\tVersionCode"
+    local jq_filter=".Domains.Domain[] | [.DomainId, .DomainName, .InstanceId, .VersionCode] | @tsv"
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-20s  %-16s  %s\n", $1, $2, $3, $4}'
+    
     local result
-    result=$(aliyun --profile "${profile:-}" alidns DescribeDomains)
-
+    result=$(call_aliyun_api alidns DescribeDomains)
+    
     if [ $? -ne 0 ]; then
         echo "错误：无法获取域名列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-
-    case "$format" in
-        json)
-            echo "$result" | jq '.Domains.Domain'
-            ;;
-        tsv)
-            echo -e "DomainId\tDomainName\tInstanceId\tVersionCode"
-            echo "$result" | jq -r '.Domains.Domain[] | [.DomainId, .DomainName, .InstanceId, .VersionCode] | @tsv'
-            ;;
-        human|*)
-            if [[ $(echo "$result" | jq '.Domains.Domain | length') -eq 0 ]]; then
-                echo "没有找到域名。"
-            else
-                echo "域名ID            域名                  实例ID            版本代码"
-                echo "----------------  --------------------  ----------------  ----------"
-                echo "$result" | jq -r '.Domains.Domain[] | [.DomainId, .DomainName, .InstanceId, .VersionCode] | @tsv' |
-                    awk 'BEGIN {FS="\t"; OFS="\t"}
-                {
-                    printf "%-16s  %-20s  %-16s  %s\n", $1, $2, $3, $4
-                }'
-            fi
-            ;;
-    esac
-    log_result "${profile:-}" "$region" "domain" "list" "$result" "$format"
+    
+    format_output \
+        "$result" \
+        "$format" \
+        "domain" \
+        "list" \
+        "$table_header" \
+        "$jq_filter" \
+        "$status_mapper" \
+        "没有找到域名。" \
+        "列出所有域名："
 }
-
