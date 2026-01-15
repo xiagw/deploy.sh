@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
 
-# 证书服务（Certificate Authority Service）相关函数
+# 证书服务（Certificate Authority Service）相关函数 - 使用新框架重构
+
+# 加载基础框架
+# shellcheck source=/dev/null
+[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
 
 # 使用通用数据目录
 CAS_CERT_FILE="${SCRIPT_DATA:? ERR: SCRIPT_DATA empty}/cas/cas_certs.json"
@@ -12,7 +16,7 @@ show_cas_help() {
     echo "  create <证书名称> <证书文件> <私钥文件>    - 上传并创建新证书"
     echo "  delete <证书ID>                          - 删除指定证书"
     echo "  detail <证书ID>                          - 获取证书详情"
-    echo "  batch-upload [domain...]           - 批量上传证书并部署到CDN"
+    echo "  batch-upload [domain...]                 - 批量上传证书并部署到CDN"
     echo
     echo "示例："
     echo "  $0 cas list"
@@ -32,7 +36,9 @@ handle_cas_commands() {
     create) cas_create "$@" ;;
     update) cas_update "$@" ;;
     delete) cas_delete "$@" ;;
+    detail) cas_detail "$@" ;;
     batch-upload) cas_batch_upload_deploy "$@" ;;
+    help) show_cas_help ;;
     *)
         echo "错误：未知的证书服务操作：$operation" >&2
         show_cas_help
@@ -41,6 +47,7 @@ handle_cas_commands() {
     esac
 }
 
+# CAS 列表使用本地文件，需要特殊处理
 cas_list() {
     local format=${1:-human}
     local result
@@ -52,46 +59,46 @@ cas_list() {
     fi
 
     case "$format" in
-        json)  ##此处非标准化数据不需要变更代码
-            if [ -n "$result" ]; then
-                echo "$result" | jq -R -s '
-                    split("\n") |
-                    map(select(length > 0) | split("\t")) |
-                    map({"CertId": .[0], "Name": .[1], "UploadTime": .[2]})
-                '
-            else
-                echo "[]"
-            fi
-            ;;
-        tsv)
-            echo -e "CertId\tName\tUploadTime"
-            if [ -n "$result" ]; then
-                echo "$result" | jq -r '.[] | [.CertId, .Name, .UploadTime] | @tsv'
-            fi
-            ;;
-        human|*)
-            echo "列出所有已上传的证书："
-            if [ -n "$result" ]; then
-                echo "证书ID            名称                          上传时间"
-                echo "----------------  ----------------------------  -------------------------"
-                echo "$result" | jq -r '.[] | [.CertId, .Name, .UploadTime] | @tsv' |
-                    awk 'BEGIN {FS="\t"; OFS="\t"}
-                    {printf "%-16s  %-28s  %s\n", $1, $2, $3}'
-            else
-                echo "没有找到已上传的证书记录。"
-            fi
-            ;;
+    json)
+        if [ -n "$result" ]; then
+            echo "$result" | jq -R -s '
+                split("\n") |
+                map(select(length > 0) | split("\t")) |
+                map({"CertId": .[0], "Name": .[1], "UploadTime": .[2]})
+            '
+        else
+            echo "[]"
+        fi
+        ;;
+    tsv)
+        echo -e "CertId\tName\tUploadTime"
+        if [ -n "$result" ]; then
+            echo "$result"
+        fi
+        ;;
+    human | *)
+        echo "列出所有已上传的证书："
+        if [ -n "$result" ]; then
+            echo "证书ID            名称                          上传时间"
+            echo "----------------  ----------------------------  -------------------------"
+            echo "$result" | awk 'BEGIN {FS="\t"; OFS="\t"}
+            {printf "%-16s  %-28s  %s\n", $1, $2, $3}'
+        else
+            echo "没有找到已上传的证书记录。"
+        fi
+        ;;
     esac
     log_result "${profile:-}" "${region:-}" "cas" "list" "$result" "$format"
 }
 
+# 使用框架的创建函数（但需要特殊处理文件读取）
 cas_create() {
     local name=$1
     local cert_file=$2
     local key_file=$3
 
-    if [ -z "$name" ] || [ -z "$cert_file" ] || [ -z "$key_file" ]; then
-        echo "错误：缺少必要参数。用法：$0 cas create <证书名称> <证书文件> <私钥文件>" >&2
+    if ! validate_required_params "$name" "$cert_file" "$key_file" "错误：证书名称、证书文件和私钥文件不能为空。"; then
+        echo "用法：cas create <证书名称> <证书文件> <私钥文件>" >&2
         return 1
     fi
 
@@ -102,7 +109,7 @@ cas_create() {
 
     echo "上传并创建新证书："
     local result
-    result=$(aliyun --profile "${profile:-}" cas UploadUserCertificate \
+    result=$(call_aliyun_api cas UploadUserCertificate \
         --Name "$name" \
         --Cert "$(cat "$cert_file")" \
         --Key "$(cat "$key_file")")
@@ -121,8 +128,8 @@ cas_create() {
         # 将新证书信息添加到本地文件
         if [ -f "$CAS_CERT_FILE" ]; then
             jq --arg id "$cert_id" --arg name "$name" --arg time "$upload_time" \
-               '. += [{"CertId": $id, "Name": $name, "UploadTime": $time}]' "$CAS_CERT_FILE" > "${CAS_CERT_FILE}.tmp" &&
-            mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
+                '. += [{"CertId": $id, "Name": $name, "UploadTime": $time}]' "$CAS_CERT_FILE" > "${CAS_CERT_FILE}.tmp" &&
+                mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
         else
             echo '[{"CertId": "'"$cert_id"'", "Name": "'"$name"'", "UploadTime": "'"$upload_time"'"}]' > "$CAS_CERT_FILE"
         fi
@@ -133,54 +140,55 @@ cas_create() {
     log_result "${profile:-}" "${region:-}" "cas" "create" "$result"
 }
 
+# 使用框架的删除函数
 cas_delete() {
     local cert_id=$1
 
     if [ -z "$cert_id" ]; then
-        echo "错误：缺少证书ID。用法：$0 cas delete <证书ID>" >&2
+        echo "错误：证书ID不能为空。" >&2
+        echo "用法：cas delete <证书ID>" >&2
         return 1
     fi
 
-    echo "警告：您即将删除证书 ID: $cert_id"
-    read -r -p "请输入 'YES' 以确认删除操作: " confirm
-
-    if [ "$confirm" != "YES" ]; then
-        echo "操作已取消。"
+    if ! confirm_action "删除证书 ID: $cert_id"; then
         return 1
     fi
 
     echo "删除证书："
     local result
-    result=$(aliyun --profile "${profile:-}" cas DeleteUserCertificate --CertId "$cert_id")
+    result=$(call_aliyun_api cas DeleteUserCertificate --CertId "$cert_id")
 
     if [ $? -eq 0 ]; then
         echo "证书删除成功。"
         # 从本地文件中删除证书信息
         if [ -f "$CAS_CERT_FILE" ]; then
             jq --arg id "$cert_id" 'map(select(.CertId != $id))' "$CAS_CERT_FILE" > "${CAS_CERT_FILE}.tmp" &&
-            mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
+                mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
         fi
         log_delete_operation "${profile:-}" "${region:-}" "cas" "$cert_id" "证书" "成功"
     else
         echo "错误：证书删除失败。"
         echo "$result"
         log_delete_operation "${profile:-}" "${region:-}" "cas" "$cert_id" "证书" "失败"
+        return 1
     fi
 
     log_result "${profile:-}" "${region:-}" "cas" "delete" "$result"
 }
 
+# 使用框架的详情函数
 cas_detail() {
     local cert_id=$1
 
     if [ -z "$cert_id" ]; then
-        echo "错误：缺少证书ID。用法：$0 cas detail <证书ID>" >&2
+        echo "错误：证书ID不能为空。" >&2
+        echo "用法：cas detail <证书ID>" >&2
         return 1
     fi
 
     echo "获取证书详情："
     local result
-    result=$(aliyun --profile "${profile:-}" cas GetUserCertificateDetail --CertId "$cert_id")
+    result=$(call_aliyun_api cas GetUserCertificateDetail --CertId "$cert_id")
 
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
@@ -191,7 +199,13 @@ cas_detail() {
     log_result "${profile:-}" "${region:-}" "cas" "detail" "$result"
 }
 
-# 添加新函数用于批量上传和部署证书
+# 更新函数（如果存在）
+cas_update() {
+    echo "错误：证书服务不支持更新操作，请删除后重新创建。" >&2
+    return 1
+}
+
+# 批量上传和部署证书（保持原有实现，但使用框架函数）
 cas_batch_upload_deploy() {
     local domains=("$@")
     local today
@@ -199,9 +213,13 @@ cas_batch_upload_deploy() {
 
     # 如果没有提供域名参数,则从CDN域名列表获取
     if [ ${#domains[@]} -eq 0 ]; then
-        readarray -t domains < <(aliyun --profile "${profile:-}" cdn DescribeUserDomains |
-            jq -r '.Domains.PageData[].DomainName' |
-            awk -F. '{$1=""; print $0}' | sort | uniq)
+        local cdn_result
+        cdn_result=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            readarray -t domains < <(echo "$cdn_result" |
+                jq -r '.Domains.PageData[].DomainName' |
+                awk -F. '{$1=""; print $0}' | sort | uniq)
+        fi
     fi
 
     # 遍历处理每个域名
@@ -230,13 +248,16 @@ cas_batch_upload_deploy() {
             remove_cert_id=$(jq -r '.CertId' "$upload_log")
             if [ -n "$remove_cert_id" ] && [ "$remove_cert_id" != "null" ]; then
                 echo "删除旧证书 ID: $remove_cert_id"
-                cas_delete_cert "$remove_cert_id" || true
+                cas_delete "$remove_cert_id" 2>/dev/null || true
             fi
         fi
 
         # 上传新证书
         local result
-        result=$(cas_upload_cert "$upload_name" "$file_key" "$file_pem")
+        result=$(call_aliyun_api cas UploadUserCertificate \
+            --Name "$upload_name" \
+            --Cert "$(cat "$file_pem")" \
+            --Key "$(cat "$file_key")")
         local status=$?
 
         # 创建日志目录
@@ -245,6 +266,20 @@ cas_batch_upload_deploy() {
 
         if [ $status -eq 0 ]; then
             echo "证书上传成功"
+            local cert_id
+            cert_id=$(echo "$result" | jq -r '.CertId')
+            local upload_time
+            upload_time=$(date "+%Y-%m-%d %H:%M:%S")
+
+            # 更新本地文件
+            mkdir -p "$(dirname "$CAS_CERT_FILE")"
+            if [ -f "$CAS_CERT_FILE" ]; then
+                jq --arg id "$cert_id" --arg name "$upload_name" --arg time "$upload_time" \
+                    '. += [{"CertId": $id, "Name": $name, "UploadTime": $time}]' "$CAS_CERT_FILE" > "${CAS_CERT_FILE}.tmp" &&
+                    mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
+            else
+                echo '[{"CertId": "'"$cert_id"'", "Name": "'"$upload_name"'", "UploadTime": "'"$upload_time"'"}]' > "$CAS_CERT_FILE"
+            fi
         else
             echo "错误：证书上传失败" >&2
             continue
@@ -253,20 +288,23 @@ cas_batch_upload_deploy() {
 
     # 为CDN域名部署证书
     echo "正在为CDN域名部署证书..."
-    local cdn_domains
-    readarray -t cdn_domains < <(aliyun --profile "${profile:-}" cdn DescribeUserDomains |
-        jq -r '.Domains.PageData[].DomainName')
+    local cdn_result
+    cdn_result=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        local cdn_domains
+        readarray -t cdn_domains < <(echo "$cdn_result" | jq -r '.Domains.PageData[].DomainName')
 
-    for domain_cdn in "${cdn_domains[@]}"; do
-        local domain="${domain_cdn#*.}"
-        local upload_name="${domain//./-}-$today"
-        echo "CDN域名: ${domain_cdn}"
-        echo "设置证书: ${upload_name}"
+        for domain_cdn in "${cdn_domains[@]}"; do
+            local domain="${domain_cdn#*.}"
+            local upload_name="${domain//./-}-$today"
+            echo "CDN域名: ${domain_cdn}"
+            echo "设置证书: ${upload_name}"
 
-        aliyun --profile "${profile:-}" cdn BatchSetCdnDomainServerCertificate \
-            --SSLProtocol on \
-            --CertType cas \
-            --DomainName "${domain_cdn}" \
-            --CertName "${upload_name}"
-    done
+            call_aliyun_api cdn BatchSetCdnDomainServerCertificate \
+                --SSLProtocol on \
+                --CertType cas \
+                --DomainName "${domain_cdn}" \
+                --CertName "${upload_name}" >/dev/null 2>&1
+        done
+    fi
 }
