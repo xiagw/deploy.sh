@@ -1,0 +1,49 @@
+{
+    "version": "1.0",
+    "project": "root/example",
+    "description": "示例项目配置",
+    "documentation": {
+        "description": "此文件用于单个项目的部署配置，放在 data/projects/namespace/project-name.json",
+        "advantages": [
+            "避免全局配置文件过大",
+            "减少版本冲突",
+            "更好的权限控制",
+            "提高解析性能"
+        ],
+        "fallback": "如果此文件不存在，会依次查找: namespace.json -> deploy.json"
+    },
+    "branches": [
+        {
+            "branch": "develop",
+            "description": "开发环境配置",
+            "hosts": [
+                {
+                    "ssh_host": "dev@192.168.100.102",
+                    "ssh_port": "22",
+                    "rsync_src": "dist",
+                    "rsync_dest": "/www/develop/example",
+                    "db_host": "m01.example.com",
+                    "db_user": "dev",
+                    "db_name": "example_dev",
+                    "helm_dir": "/runner/data/helm/root/example"
+                }
+            ]
+        },
+        {
+            "branch": "main",
+            "description": "生产环境配置",
+            "hosts": [
+                {
+                    "ssh_host": "prod@192.168.100.104",
+                    "ssh_port": "2222",
+                    "rsync_src": "dist",
+                    "rsync_dest": "/www/main/example",
+                    "db_host": "mm01.example.com",
+                    "db_user": "prod",
+                    "db_name": "example_prod",
+                    "helm_dir": "/runner/data/helm/root/example"
+                }
+            ]
+        }
+    ]
+}

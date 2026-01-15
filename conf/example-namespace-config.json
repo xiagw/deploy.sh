@@ -1,0 +1,47 @@
+{
+    "version": "1.0",
+    "description": "命名空间级部署配置文件",
+    "documentation": {
+        "description": "此文件用于整个命名空间下所有项目的共享配置，放在 data/projects/namespace.json",
+        "use_case": "适用于同一命名空间下多个项目使用相同部署配置的场景",
+        "fallback": "如果项目专用配置不存在，会使用此文件；如果此文件也不存在，会使用全局 deploy.json"
+    },
+    "projects": [
+        {
+            "project": "root/project1",
+            "description": "项目1配置",
+            "branches": [
+                {
+                    "branch": "develop",
+                    "description": "开发环境",
+                    "hosts": [
+                        {
+                            "ssh_host": "dev@192.168.100.102",
+                            "ssh_port": "22",
+                            "rsync_src": "dist",
+                            "rsync_dest": "/www/develop/project1"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "project": "root/project2",
+            "description": "项目2配置",
+            "branches": [
+                {
+                    "branch": "develop",
+                    "description": "开发环境",
+                    "hosts": [
+                        {
+                            "ssh_host": "dev@192.168.100.102",
+                            "ssh_port": "22",
+                            "rsync_src": "dist",
+                            "rsync_dest": "/www/develop/project2"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -29,6 +29,78 @@ is_demo_mode() {
 }
 
 ################################################################################
+# 函数: find_project_config
+# 描述: 查找项目配置文件，支持多级查找策略
+# 参数:
+#   $1 - project_path: 项目路径，格式为 "namespace/project_name"
+# 返回: 配置文件路径（通过全局变量 G_CONF 返回）
+# 说明:
+#   查找优先级（从高到低）:
+#     1. 项目专用配置: data/projects/namespace/project-name.json
+#     2. 命名空间配置: data/projects/namespace.json
+#     3. 全局配置: data/deploy.json (或 data/deploy.yaml)
+#   优势:
+#     - 支持成千上万项目，每个项目独立配置文件
+#     - 避免单文件过大导致的性能问题
+#     - 减少版本冲突，不同项目可以独立管理配置
+#     - 更好的权限控制和安全性
+################################################################################
+find_project_config() {
+    local project_path="${1:-}"
+    local namespace project_name
+    local project_conf namespace_conf global_json_conf global_yaml_conf
+
+    ## 如果未提供项目路径，使用全局配置
+    if [[ -z "${project_path}" ]]; then
+        global_json_conf="${G_DATA}/deploy.json"
+        global_yaml_conf="${G_DATA}/deploy.yaml"
+        if [[ -f "${global_json_conf}" ]]; then
+            G_CONF="${global_json_conf}"
+        elif [[ -f "${global_yaml_conf}" ]]; then
+            G_CONF="${global_yaml_conf}"
+        fi
+        return
+    fi
+
+    ## 解析项目路径，提取命名空间和项目名
+    namespace="${project_path%%/*}"
+    project_name="${project_path##*/}"
+
+    ## 创建项目配置目录
+    mkdir -p "${G_DATA}/projects/${namespace}"
+
+    ## 优先级 1: 项目专用配置文件
+    ## 路径格式: data/projects/namespace/project-name.json
+    project_conf="${G_DATA}/projects/${namespace}/${project_name}.json"
+    if [[ -f "${project_conf}" ]]; then
+        G_CONF="${project_conf}"
+        return
+    fi
+
+    ## 优先级 2: 命名空间配置文件
+    ## 路径格式: data/projects/namespace.json
+    namespace_conf="${G_DATA}/projects/${namespace}.json"
+    if [[ -f "${namespace_conf}" ]]; then
+        G_CONF="${namespace_conf}"
+        return
+    fi
+
+    ## 优先级 3: 全局配置文件（向后兼容）
+    ## 路径格式: data/deploy.json 或 data/deploy.yaml
+    global_json_conf="${G_DATA}/deploy.json"
+    global_yaml_conf="${G_DATA}/deploy.yaml"
+    if [[ -f "${global_json_conf}" ]]; then
+        G_CONF="${global_json_conf}"
+    elif [[ -f "${global_yaml_conf}" ]]; then
+        G_CONF="${global_yaml_conf}"
+    else
+        ## 如果全局配置也不存在，创建默认的 JSON 配置文件
+        G_CONF="${global_json_conf}"
+        cp -v "${G_PATH}/conf/example-deploy.json" "${G_CONF}"
+    fi
+}
+
+################################################################################
 # 函数: config_deploy_file
 # 描述: 初始化部署配置文件，优先使用JSON格式，YAML作为备选
 # 参数: 无
@@ -42,32 +114,27 @@ is_demo_mode() {
 #   - 优先使用 JSON 格式配置文件（deploy.json）
 #   - 如果 JSON 文件不存在，则使用 YAML 格式（deploy.yaml）
 #   - 如果都不存在，则从示例文件复制创建
+#   - 注意: 此函数在项目路径确定之前调用，只初始化全局配置
 ################################################################################
 config_deploy_file() {
     ## 初始化环境变量配置文件
     [[ ! -f "${G_ENV}" ]] && cp -v "${G_PATH}/conf/example-deploy.env" "${G_ENV}"
 
-    ## 初始化部署配置文件（优先使用JSON格式）
-    ## 检查逻辑:
-    ##   1. 如果 G_CONF 已指向的文件存在，则使用它
-    ##   2. 如果不存在，优先尝试 JSON 格式
-    ##   3. 如果 JSON 不存在，则使用 YAML 格式作为备选
-    if [[ ! -f "${G_CONF}" ]]; then
-        ## 优先使用 JSON 格式配置文件
-        local json_conf="${G_DATA}/deploy.json"
-        local yaml_conf="${G_DATA}/deploy.yaml"
+    ## 初始化全局部署配置文件（优先使用JSON格式）
+    ## 注意: 项目专用配置会在 config_deploy_vars 之后通过 find_project_config 查找
+    local json_conf="${G_DATA}/deploy.json"
+    local yaml_conf="${G_DATA}/deploy.yaml"
 
-        if [[ -f "${json_conf}" ]]; then
-            ## 如果 JSON 文件已存在，使用它
-            G_CONF="${json_conf}"
-        elif [[ -f "${yaml_conf}" ]]; then
-            ## 如果 YAML 文件已存在，使用它
-            G_CONF="${yaml_conf}"
-        else
-            ## 如果都不存在，优先创建 JSON 格式的配置文件
-            G_CONF="${json_conf}"
-            cp -v "${G_PATH}/conf/example-deploy.json" "${G_CONF}"
-        fi
+    if [[ -f "${json_conf}" ]]; then
+        ## 如果 JSON 文件已存在，使用它（作为默认值）
+        G_CONF="${json_conf}"
+    elif [[ -f "${yaml_conf}" ]]; then
+        ## 如果 YAML 文件已存在，使用它
+        G_CONF="${yaml_conf}"
+    else
+        ## 如果都不存在，优先创建 JSON 格式的全局配置文件
+        G_CONF="${json_conf}"
+        cp -v "${G_PATH}/conf/example-deploy.json" "${G_CONF}"
     fi
 
     ## ========================================================================
