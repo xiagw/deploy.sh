@@ -2,7 +2,11 @@
 # -*- coding: utf-8 -*-
 # shellcheck disable=SC2016
 
-# OSS (对象存储服务) 相关函数
+# OSS (对象存储服务) 相关函数 - 使用新框架重构（保留 ossutil 特殊处理）
+
+# 加载基础框架
+# shellcheck source=/dev/null
+[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
 
 # 在文件开头添加全局变量
 endpoint_url=""
@@ -236,6 +240,7 @@ handle_oss_commands() {
     batch-delete) oss_batch_delete "${args[@]}" ;;
     logs) oss_parse_cdn_logs "${args[@]}" ;;
     uris) set_object_standard "${args[@]}" ;;
+    help) show_oss_help ;;
     *)
         echo "错误：未知的 OSS 操作：$operation" >&2
         show_oss_help
@@ -391,23 +396,39 @@ oss_list() {
 
 oss_create() {
     local bucket_name=$1
+    
+    if [ -z "$bucket_name" ]; then
+        echo "错误：存储桶名称不能为空。" >&2
+        return 1
+    fi
+    
     echo "创建 OSS 存储桶："
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     local result
     result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" mb "oss://$bucket_name")
-    echo "$result"
-    log_result "$profile" "$region" "oss" "create" "$result"
+    
+    if [ $? -eq 0 ]; then
+        echo "$result"
+        log_result "${profile:-}" "$region" "oss" "create" "$result"
+    else
+        echo "错误：存储桶创建失败。"
+        echo "$result"
+        return 1
+    fi
 }
 
-# 修改 oss_delete 函数，添加 endpoint 支持
+# 修改 oss_delete 函数，添加 endpoint 支持，使用框架确认
 oss_delete() {
     local bucket_name=$1
+    
+    if [ -z "$bucket_name" ]; then
+        echo "错误：存储桶名称不能为空。" >&2
+        return 1
+    fi
+    
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
-    echo "警告：您即将删除 OSS 存储桶：$bucket_name"
-    read -r -p "请输入 'YES' 以确认删除操作: " confirm
-
-    if [ "$confirm" != "YES" ]; then
-        echo "操作已取消。"
+    
+    if ! confirm_action "删除 OSS 存储桶：$bucket_name"; then
         return 1
     fi
 
@@ -439,11 +460,11 @@ oss_delete() {
 
     if [ $delete_bucket_status -eq 0 ]; then
         echo "OSS 存储桶删除成功。"
-        log_delete_operation "$profile" "$region" "oss" "$bucket_name" "$bucket_name" "成功"
+        log_delete_operation "${profile:-}" "$region" "oss" "$bucket_name" "存储桶" "成功"
     else
         echo "错误：存储桶删除失败。"
         echo "$delete_bucket_result"
-        log_delete_operation "$profile" "$region" "oss" "$bucket_name" "$bucket_name" "失败"
+        log_delete_operation "${profile:-}" "$region" "oss" "$bucket_name" "存储桶" "失败"
         return 1
     fi
 
@@ -468,7 +489,7 @@ oss_delete() {
         return 1
     fi
 
-    log_result "$profile" "$region" "oss" "delete" "$delete_bucket_result"
+    log_result "${profile:-}" "$region" "oss" "delete" "$delete_bucket_result"
 }
 
 get_cname_token() {
@@ -501,7 +522,7 @@ oss_bind_domain() {
 
     echo "绑定域名响应："
     echo "$result"
-    log_result "$profile" "$region" "oss" "bind-domain" "$result"
+    log_result "${profile:-}" "$region" "oss" "bind-domain" "$result"
 
     local token
     token=$(echo "$result" | grep -oP '(?<=<Token>)[^<]+')
@@ -554,7 +575,7 @@ oss_bind_domain() {
     verify_result=$(aliyun --profile "${profile:-}" oss bucket-cname --method put --item cname "oss://${bucket_name}" "${domain}" --region "$region")
     echo "验证结果："
     echo "$verify_result"
-    log_result "$profile" "$region" "oss" "verify-domain" "$verify_result"
+    log_result "${profile:-}" "$region" "oss" "verify-domain" "$verify_result"
 
     if echo "$verify_result" | grep -q "<Code>NoSuchCnameInDns</Code>"; then
         echo "错误： DNS 验证失败。请确保 TXT 记录已经生效，然后重试。" >&2
@@ -780,9 +801,7 @@ oss_batch_delete() {
 
     # 如果不是强制模式，需要确认
     if [ "$force" = false ]; then
-        read -r -p "请输入 'YES' 以确认删除操作: " confirm
-        if [ "$confirm" != "YES" ]; then
-            echo "操作已取消。"
+        if ! confirm_action "批量删除：$bucket_path (存储类型: $storage_class)"; then
             [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
             return 1
         fi
@@ -806,10 +825,10 @@ oss_batch_delete() {
 
     if [ $status -eq 0 ]; then
         echo "批量删除操作完成"
-        log_result "$profile" "$region" "oss" "batch-delete" "成功：$result"
+        log_result "${profile:-}" "$region" "oss" "batch-delete" "成功：$result"
     else
         echo "批量删除操作失败"
-        log_result "$profile" "$region" "oss" "batch-delete" "失败：$result"
+        log_result "${profile:-}" "$region" "oss" "batch-delete" "失败：$result"
         return 1
     fi
 }
