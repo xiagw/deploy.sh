@@ -5,12 +5,6 @@
 CLOUD_CLI_HOME=$(dirname "$(dirname "$(readlink -f "$0")")")
 export CLOUD_CLI_HOME
 
-# 导入通用库
-# shellcheck source=/dev/null
-source "${CLOUD_CLI_HOME}/lib/common/utils.sh"
-source "${CLOUD_CLI_HOME}/lib/common/logger.sh"
-source "${CLOUD_CLI_HOME}/lib/common/validator.sh"
-
 show_help() {
     echo "Usage: cloud [--provider <provider>] <command> [options]"
     echo
@@ -20,31 +14,35 @@ show_help() {
     echo "  tencent  - Tencent Cloud"
     echo "  aws      - Amazon Web Services"
     echo
-    echo "Common commands:"
-    echo "  compute  - Compute service operations"
-    echo "  network  - Network service operations"
-    echo "  storage  - Storage service operations"
-    echo "  ...more commands"
+    echo "Examples:"
+    echo "  cloud --provider aliyun ecs list"
+    echo "  cloud --provider aws ec2 list"
+    echo "  cloud --provider huawei ecs list"
+    echo "  cloud --provider tencent cvm list"
 }
 
 main() {
     local provider="aliyun"  # 默认使用阿里云
-    local command=""
     local args=()
 
     # 解析参数
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --provider)
+                if [[ -z "$2" || "$2" == -* ]]; then
+                    echo "错误：--provider 选项需要指定一个云服务提供商" >&2
+                    show_help
+                    exit 1
+                fi
                 provider="$2"
                 shift 2
                 ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
             *)
-                if [ -z "$command" ]; then
-                    command="$1"
-                else
-                    args+=("$1")
-                fi
+                args+=("$1")
                 shift
                 ;;
         esac
@@ -53,24 +51,20 @@ main() {
     # 验证提供商
     case "$provider" in
         aliyun|huawei|tencent|aws)
-            # 加载对应提供商的实现
-            # shellcheck source=/dev/null
-            source "${CLOUD_CLI_HOME}/cloud/${provider}/main.sh"
+            # 直接执行对应提供商的 main.sh
+            local provider_script="${CLOUD_CLI_HOME}/cloud/${provider}/main.sh"
+            if [[ ! -f "$provider_script" ]]; then
+                echo "错误：未找到云服务提供商脚本：$provider_script" >&2
+                exit 1
+            fi
+            exec "$provider_script" "${args[@]}"
             ;;
         *)
-            echo "Error: Unsupported cloud provider: $provider" >&2
+            echo "错误：不支持的云服务提供商：$provider" >&2
             show_help
             exit 1
             ;;
     esac
-
-    # 执行命令
-    if [ -z "$command" ]; then
-        show_help
-        exit 1
-    fi
-
-    handle_command "$command" "${args[@]}"
 }
 
 main "$@"
