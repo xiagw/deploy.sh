@@ -227,52 +227,139 @@ cdn_prefetch() {
 
 # 购买资源包功能（保持原有实现，但使用框架函数）
 cdn_pay() {
-    local show_message=${1:-false}
+    set -e
+    local show_message="$1"
+    local color_reset="\033[0m"
+    local color_green="\033[0;32m"
+    local color_red="\033[0;31m"
+
+    # 资源包规格和价格配置
+    local package_unit_size=1024 # 1TB = 1024GB
+    local package_unit_price=126 # 每 TB 单价 126 元
+
+    # 阈值配置
+    local remaining_threshold=4.000 # 剩余容量阈值 4TB
     local balance_threshold=700     # 账户余额阈值 700 元
 
-    # 查询账户可用余额
+    # 查询当前资源包剩余容量
+    local query_result
+    local page_num=1
+    local remaining_amount=0
+    local remaining_https_request=0
+
+    while true; do
+        query_result=$(call_aliyun_api bssopenapi QueryResourcePackageInstances \
+            --ProductCode dcdn \
+            --PageNum "$page_num" \
+            --PageSize 100 2>/dev/null) || {
+            [[ -n "$show_message" ]] && echo -e "[CDN] ${color_red}查询资源包失败${color_reset}"
+            return 1
+        }
+
+        # 直接处理当前页的数据
+        remaining_amount="$(
+            echo "$remaining_amount + $(
+                echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") | if .RemainingAmountUnit == "GB" then (. | .RemainingAmount | tonumber) / 1024 elif .RemainingAmountUnit == "TB" then (. | .RemainingAmount | tonumber) else 0 end' | awk '{s+=$1} END {printf "%.3f", s}' 2>/dev/null || echo "-1"
+            )" | bc -l
+        )"
+        remaining_https_request="$(
+            echo "$remaining_https_request + $(
+                echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit == "次") | .RemainingAmount' | awk '{s+=$1} END {printf "%.0f", s}' 2>/dev/null || echo "0"
+            )" | bc -l
+        )"
+
+        # 如果当前页的结果数量小于 100，说明没有更多页了
+        if [[ $(echo "$query_result" | jq '.Data.Instances.Instance | length') -lt 100 ]]; then
+            break
+        fi
+
+        ((page_num++))
+    done
+
+    if [[ -n "$show_message" ]]; then
+        local https_color_code="${color_red}" # 默认红色
+        if ((remaining_https_request >= 20000000)); then
+            https_color_code="${color_green}" # 大于2000万次时显示绿色
+        fi
+        echo -e "[$(date +'%F %T')] 剩余HTTPS请求次数: ${https_color_code}$(
+            echo "$remaining_https_request" | awk '{
+            if ($1 >= 100000000) {
+                printf "%.6f亿", $1/100000000
+            } else if ($1 >= 10000000) {
+                printf "%.4f千万", $1/10000000
+            } else if ($1 >= 10000) {
+                printf "%.2f万", $1/10000
+            } else {
+                printf "%d", $1
+            }
+        }'
+        )次${color_reset}"
+    fi
+
+    # 检查是否获取到有效的剩余容量值
+    if [ "$remaining_amount" = "-1" ]; then
+        if [[ -n "$show_message" ]]; then
+            echo -e "[$(date +'%F %T')] ${color_red}无法获取资源包剩余容量信息${color_reset}"
+        fi
+        return 1
+    fi
+
+    # 显示剩余容量信息并判断是否需要购买
+    if [[ -n "$show_message" ]]; then
+        local traffic_color_code="${color_red}" # 默认红色
+        if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
+            traffic_color_code="${color_green}" # 充足时显示绿色
+        fi
+        echo -e "[$(date +'%F %T')] 剩余下行流量: ${traffic_color_code}${remaining_amount:-0}TB${color_reset}"
+    fi
+
+    # 如果剩余容量充足，则跳过购买
+    if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
+        return 0
+    fi
+
+    # 查询账户可用余额（处理逗号分隔的数字）
+    local available_balance
     local balance_result
     balance_result=$(call_aliyun_api bssopenapi QueryAccountBalance 2>/dev/null)
-    
     if [ $? -ne 0 ]; then
         echo "错误：无法查询账户余额。" >&2
         return 1
     fi
     
-    local available_balance
-    available_balance=$(echo "$balance_result" | jq -r '.Data.AvailableAmount // 0')
-    
+    available_balance="$(
+        echo "$balance_result" | jq -r '.Data.AvailableAmount // "0"' |
+            awk '{gsub(/,/,""); print int($0)}'
+    )"
+
     # 检查账户余额是否充足
-    if (( $(echo "$available_balance < $balance_threshold" | bc -l) )); then
+    if ((available_balance < (balance_threshold + package_unit_price))); then
         echo -e "[$(date +'%F %T')] ${color_red}账户剩余 $available_balance 元，余额不足，无法购买资源包。${color_reset}"
         return 1
     fi
-    
+
     # 根据账户余额计算可购买的资源包规格
-    local package_spec
-    if (( $(echo "$available_balance >= 5000" | bc -l) )); then
-        package_spec="5000"
-    elif (( $(echo "$available_balance >= 2000" | bc -l) )); then
-        package_spec="2000"
-    elif (( $(echo "$available_balance >= 1000" | bc -l) )); then
-        package_spec="1000"
-    else
-        package_spec="500"
-    fi
-    
-    if [ "$show_message" = "true" ]; then
-        echo "账户余额：$available_balance 元"
-        echo "将购买资源包规格：$package_spec 元"
-    fi
-    
-    echo "购买 CDN 资源包："
+    local package_size
+    for size in 200 50 10 5 1; do
+        local special_discount=$((size == 200 ? 7870 : 0)) # 200TB 包有特殊优惠
+        if ((available_balance > balance_threshold + package_unit_price * size - special_discount)); then
+            package_size=$((package_unit_size * size))
+            break
+        fi
+    done
+
+    # 执行购买操作
+    log_result "${profile:-}" "$region" "cdn" "pay" "当前剩余: ${remaining_amount:-0}TB，准备购买 $((package_size / package_unit_size))TB 资源包..."
+    ## 特殊方式，修改为只买1TB时长1月的（1月的单价108¥，6-12月的单价126¥）
+    echo -e "[$(date +'%F %T')] 购买 1TB 资源包..."
     local result
-    result=$(call_aliyun_api cdn AddCdnDomain \
-        --ProductCode cdn \
-        --SubscriptionType PayAsYouGo \
-        --PackageType Standard \
-        --PackageSpec "$package_spec")
-    
+    result=$(call_aliyun_api bssopenapi CreateResourcePackage \
+        --ProductCode dcdn \
+        --PackageType FPT_dcdnpaybag_deadlineAcc_1541405199 \
+        --Duration 1 \
+        --PricingCycle Month \
+        --Specification "$package_unit_size")
+
     if [ $? -eq 0 ]; then
         echo "CDN 资源包购买成功："
         echo "$result" | jq '.'
