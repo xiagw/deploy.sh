@@ -46,7 +46,7 @@ main() {
     # 导入其他脚本
     for file in "${SCRIPT_DIR}"/*.sh "${SCRIPT_LIB}"/common.sh; do
         case "$file" in
-        */run.sh | */main.sh | */base_service.sh | */service_template.sh) continue ;;
+        */run.sh | */main.sh | */base_service.sh | */service_template.sh | */test_*.sh) continue ;;
         *.sh)
             # shellcheck source=/dev/null
             [[ -f "$file" ]] && source "$file"
