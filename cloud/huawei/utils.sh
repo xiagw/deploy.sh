@@ -6,7 +6,7 @@
 check_dependencies() {
     if ! command -v huaweicloud &>/dev/null; then
         echo "错误：未安装华为云 CLI。请先安装华为云 CLI。" >&2
-        echo "安装方法：https://support.huaweicloud.com/usermanual-cli/cli_01_0001.html" >&2
+        echo "安装方法：https://bbs.huaweicloud.com/forum/thread-16597-1-1.html" >&2
         exit 1
     fi
 
