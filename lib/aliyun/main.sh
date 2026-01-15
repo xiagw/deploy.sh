@@ -42,7 +42,7 @@ main() {
     # 先加载基础服务框架
     # shellcheck source=/dev/null
     [[ -f "${SCRIPT_DIR}/base_service.sh" ]] && source "${SCRIPT_DIR}/base_service.sh"
-    
+
     # 导入其他脚本
     for file in "${SCRIPT_DIR}"/*.sh "${SCRIPT_LIB}"/common.sh; do
         case "$file" in

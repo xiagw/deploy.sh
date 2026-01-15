@@ -139,3 +139,5 @@
 ```bash
 ./main.sh <服务> help
 ```
+
+测试 Hook
