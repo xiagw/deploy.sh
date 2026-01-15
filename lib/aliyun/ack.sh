@@ -2,7 +2,11 @@
 # shellcheck disable=SC2034
 # -*- coding: utf-8 -*-
 
-# ACK (容器服务 Kubernetes 版) 相关函数
+# ACK (容器服务 Kubernetes 版) 相关函数 - 使用新框架重构
+
+# 加载基础框架
+# shellcheck source=/dev/null
+[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
 
 show_ack_help() {
     echo "ACK (容器服务 Kubernetes 版) 操作："
@@ -11,7 +15,7 @@ show_ack_help() {
     echo "  delete <集群ID>                         - 删除集群"
     echo "  update <集群ID> <新名称>                - 更新集群"
     echo "  detail <集群ID>                         - 获取集群详情"
-    echo "  node-list <集群ID>                      - 列出集群节点"
+    echo "  node-list <集群ID> [format]            - 列出集群节点"
     echo "  node-add <集群ID> [数量]                - 添加集群节点"
     echo "  node-remove <集群ID> <节点ID>           - 移除集群节点"
     echo "  kubeconfig <集群ID>                     - 获取集群的 kubeconfig"
@@ -29,7 +33,7 @@ show_ack_help() {
     echo "  $0 ack node-add c-xxx 2"
     echo "  $0 ack node-remove c-xxx i-xxx"
     echo "  $0 ack kubeconfig c-xxx"
-    echo "  $0 ack auto-scale my-deployment default  # 自动扩缩容指定部署"
+    echo "  $0 ack auto-scale my-deployment default"
 }
 
 handle_ack_commands() {
@@ -47,6 +51,7 @@ handle_ack_commands() {
     node-remove) ack_node_remove "$@" ;;
     kubeconfig) ack_get_kubeconfig "$@" ;;
     auto-scale) ack_auto_scale "$@" >>"${SCRIPT_LOG:-/tmp/ack_auto_scale.log}" ;;
+    help) show_ack_help ;;
     *)
         echo "错误：未知的 ACK 操作：$operation" >&2
         show_ack_help
@@ -55,41 +60,35 @@ handle_ack_commands() {
     esac
 }
 
+# 使用新框架的列表函数
 ack_list() {
     local format=${1:-human}
+    
+    local table_header="ClusterId\tName\tState\tRegionId\tVersion\tNodeCount\tCreated"
+    local jq_filter=".[] | [.cluster_id, .name, .state, .region_id, .version, .size, .created] | @tsv"
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-18s  %-8s  %-12s  %-7s  %-6s  %s\n", $1, $2, $3, $4, $5, $6, $7}'
+    
     local result
-    if ! result=$(aliyun --profile "${profile:-}" cs DescribeClusters --region "${region:-}"); then
+    result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
+    
+    if [ $? -ne 0 ]; then
         echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-
-    case "$format" in
-    json)
-        # 直接输出原始结果
-        echo "$result"
-        ;;
-    tsv)
-        echo -e "ClusterId\tName\tState\tRegionId\tVersion\tNodeCount\tCreated"
-        echo "$result" | jq -r '.[] | [.cluster_id, .name, .state, .region_id, .version, .size, .created] | @tsv'
-        ;;
-    human | *)
-        echo "列出 ACK 集群："
-        if [[ $(echo "$result" | jq '. | length') -eq 0 ]]; then
-            echo "没有找到 ACK 集群。"
-        else
-            echo "集群ID            名称                状态      地域          版本     节点数  创建时间"
-            echo "----------------  ------------------  --------  ------------  -------  ------  -------------------------"
-            echo "$result" | jq -r '.[] | [.cluster_id, .name, .state, .region_id, .version, .size, .created] | @tsv' |
-                awk 'BEGIN {FS="\t"; OFS="\t"}
-                {
-                    printf "%-16s  %-18s  %-8s  %-12s  %-7s  %-6s  %s\n", $1, $2, $3, $4, $5, $6, $7
-                }'
-        fi
-        ;;
-    esac
-    log_result "${profile:-}" "${region:-}" "ack" "list" "$result" "$format"
+    
+    format_output \
+        "$result" \
+        "$format" \
+        "ack" \
+        "list" \
+        "$table_header" \
+        "$jq_filter" \
+        "$status_mapper" \
+        "没有找到 ACK 集群。" \
+        "列出 ACK 集群："
 }
 
+# 创建集群（保持原有复杂逻辑，但使用框架函数）
 ack_create() {
     local name=$1
     shift
@@ -136,17 +135,31 @@ ack_create() {
         esac
     done
 
-    # 获取VPC信息
+    # 获取VPC信息（需要调用 vpc 函数）
     local vpc_id
-    vpc_id=$(get_vpc_id)
-    ret=$?
-    if [ $ret -ne 0 ]; then
-        return $ret
+    if type get_vpc_id >/dev/null 2>&1; then
+        vpc_id=$(get_vpc_id)
+    else
+        local vpc_result
+        vpc_result=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null)
+        vpc_id=$(echo "$vpc_result" | jq -r '.Vpcs.Vpc[0].VpcId // empty')
+    fi
+    
+    if [ -z "$vpc_id" ]; then
+        echo "错误：未找到可用的 VPC。" >&2
+        return 1
     fi
 
     # 获取交换机信息
     local vswitch_id
-    vswitch_id=$(vpc_vswitch_list "$vpc_id" json | jq -r '.[0].VSwitchId')
+    if type vpc_vswitch_list >/dev/null 2>&1; then
+        vswitch_id=$(vpc_vswitch_list "$vpc_id" json 2>/dev/null | jq -r '.[0].VSwitchId // .VSwitches.VSwitch[0].VSwitchId // empty')
+    else
+        local vswitch_result
+        vswitch_result=$(call_aliyun_api vpc DescribeVSwitches --VpcId "$vpc_id" --RegionId "$region" 2>/dev/null)
+        vswitch_id=$(echo "$vswitch_result" | jq -r '.VSwitches.VSwitch[0].VSwitchId // empty')
+    fi
+    
     if [ -z "$vswitch_id" ]; then
         echo "错误：未找到可用的交换机。" >&2
         return 1
@@ -163,7 +176,7 @@ ack_create() {
     echo "交换机 ID: $vswitch_id"
 
     local result
-    result=$(aliyun --profile "${profile:-}" cs CreateCluster \
+    result=$(call_aliyun_api cs CreateCluster \
         --region "$region" \
         --name "$name" \
         --cluster-type "ManagedKubernetes" \
@@ -179,8 +192,7 @@ ack_create() {
         --is-enterprise-security-group true \
         --cloud-monitor-flags 1)
 
-    ret=$?
-    if [ $ret -eq 0 ]; then
+    if [ $? -eq 0 ]; then
         echo "ACK 集群创建请求已提交："
         echo "$result" | jq '.'
 
@@ -204,8 +216,8 @@ ack_create() {
             fi
 
             local status
-            status=$(aliyun --profile "${profile:-}" cs DescribeClusterDetail \
-                --ClusterId "$cluster_id" | jq -r '.state')
+            status=$(call_aliyun_api cs DescribeClusterDetail \
+                --ClusterId "$cluster_id" 2>/dev/null | jq -r '.state')
 
             echo "集群状态: $status"
             if [ "$status" = "running" ]; then
@@ -218,13 +230,15 @@ ack_create() {
 
             sleep 30
         done
+        log_result "${profile:-}" "$region" "ack" "create" "$result"
     else
         echo "错误：集群创建请求失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "$region" "ack" "create" "$result"
 }
 
+# 使用新框架的删除函数
 ack_delete() {
     local cluster_id=$1
 
@@ -235,67 +249,65 @@ ack_delete() {
 
     # 获取集群详情
     local cluster_info
-    cluster_info=$(aliyun --profile "${profile:-}" cs DescribeClusterDetail --ClusterId "$cluster_id")
+    cluster_info=$(call_aliyun_api cs DescribeClusterDetail --ClusterId "$cluster_id" 2>/dev/null)
     local cluster_name
-    cluster_name=$(echo "$cluster_info" | jq -r '.name')
+    cluster_name=$(echo "$cluster_info" | jq -r '.name // "未知"')
 
     echo "警告：您即将删除以下集群："
     echo "  集群ID: $cluster_id"
     echo "  名称: $cluster_name"
     echo "  地域: $region"
-    echo
-    read -r -p "请输入 'YES' 以确认删除操作: " confirm
-
-    if [ "$confirm" != "YES" ]; then
-        echo "操作已取消。"
+    
+    if ! confirm_action "删除 ACK 集群：$cluster_id"; then
         return 1
     fi
 
     echo "删除 ACK 集群："
     local result
-    result=$(aliyun --profile "${profile:-}" cs DeleteCluster \
+    result=$(call_aliyun_api cs DeleteCluster \
         --ClusterId "$cluster_id" \
         --retain-resources '[""]')
-    local status=$?
-
-    if [ $status -eq 0 ]; then
+    
+    if [ $? -eq 0 ]; then
         echo "ACK 集群删除请求已提交。"
-        log_delete_operation "${profile:-}" "$region" "ack" "$cluster_id" "$cluster_name" "成功"
+        log_delete_operation "${profile:-}" "$region" "ack" "$cluster_id" "ACK集群" "成功"
     else
         echo "ACK 集群删除请求失败。"
         echo "$result"
-        log_delete_operation "${profile:-}" "$region" "ack" "$cluster_id" "$cluster_name" "失败"
+        log_delete_operation "${profile:-}" "$region" "ack" "$cluster_id" "ACK集群" "失败"
+        return 1
     fi
 
     log_result "${profile:-}" "$region" "ack" "delete" "$result"
 }
 
+# 使用新框架的更新函数
 ack_update() {
     local cluster_id=$1
     local new_name=$2
 
-    if [ -z "$cluster_id" ] || [ -z "$new_name" ]; then
-        echo "错误：集群ID和新名称不能为空。" >&2
+    if ! validate_required_params "$cluster_id" "$new_name" "错误：集群ID和新名称不能为空。"; then
         return 1
     fi
 
     echo "更新 ACK 集群："
     local result
-    result=$(aliyun --profile "${profile:-}" cs ModifyCluster \
+    result=$(call_aliyun_api cs ModifyCluster \
         --ClusterId "$cluster_id" \
         --name "$new_name")
-
-    ret=$?
-    if [ $ret -eq 0 ]; then
+    
+    if [ $? -eq 0 ]; then
         echo "集群更新成功："
         echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ack" "update" "$result"
     else
         echo "错误：集群更新失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "$region" "ack" "update" "$result"
 }
 
+# 获取集群详情（使用框架函数）
 ack_detail() {
     local cluster_id=$1
 
@@ -306,18 +318,19 @@ ack_detail() {
 
     echo "获取集群详情："
     local result
-    result=$(aliyun --profile "${profile:-}" cs DescribeClusterDetail --ClusterId "$cluster_id")
-
-    ret=$?
-    if [ $ret -eq 0 ]; then
+    result=$(call_aliyun_api cs DescribeClusterDetail --ClusterId "$cluster_id")
+    
+    if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ack" "detail" "$result"
     else
         echo "错误：无法获取集群详情。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "$region" "ack" "detail" "$result"
 }
 
+# 节点列表（使用框架函数）
 ack_node_list() {
     local cluster_id=$1
     local format=${2:-human}
@@ -327,36 +340,31 @@ ack_node_list() {
         return 1
     fi
 
-    echo "列出集群节点："
+    local table_header="NodeId\tNodeName\tStatus\tInstanceType\tCreated"
+    local jq_filter=".nodes[] | [.instance_id, .instance_name, .state, .instance_type, .creation_time] | @tsv"
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-18s  %-8s  %-15s  %s\n", $1, $2, $3, $4, $5}'
+    
     local result
-    result=$(aliyun --profile "${profile:-}" cs DescribeClusterNodes \
-        --ClusterId "$cluster_id")
-
-    case "$format" in
-    json)
-        echo "$result"
-        ;;
-    tsv)
-        echo -e "NodeId\tNodeName\tStatus\tInstanceType\tCreated"
-        echo "$result" | jq -r '.nodes[] | [.instance_id, .instance_name, .state, .instance_type, .creation_time] | @tsv'
-        ;;
-    human | *)
-        if [[ $(echo "$result" | jq '.nodes | length') -eq 0 ]]; then
-            echo "没有找到节点。"
-        else
-            echo "节点ID            节点名称            状态      实例类型         创建时间"
-            echo "----------------  ------------------  --------  ---------------  -------------------------"
-            echo "$result" | jq -r '.nodes[] | [.instance_id, .instance_name, .state, .instance_type, .creation_time] | @tsv' |
-                awk 'BEGIN {FS="\t"; OFS="\t"}
-                {
-                    printf "%-16s  %-18s  %-8s  %-15s  %s\n", $1, $2, $3, $4, $5
-                }'
-        fi
-        ;;
-    esac
-    log_result "${profile:-}" "$region" "ack" "node-list" "$result" "$format"
+    result=$(call_aliyun_api cs DescribeClusterNodes --ClusterId "$cluster_id")
+    
+    if [ $? -ne 0 ]; then
+        echo "错误：无法获取节点列表。" >&2
+        return 1
+    fi
+    
+    format_output \
+        "$result" \
+        "$format" \
+        "ack" \
+        "node-list" \
+        "$table_header" \
+        "$jq_filter" \
+        "$status_mapper" \
+        "没有找到节点。" \
+        "列出集群节点："
 }
 
+# 添加节点（使用框架函数）
 ack_node_add() {
     local cluster_id=$1
     local count=${2:-1}
@@ -368,56 +376,53 @@ ack_node_add() {
 
     echo "添加集群节点："
     local result
-    result=$(aliyun --profile "${profile:-}" cs ScaleOutCluster \
+    result=$(call_aliyun_api cs ScaleOutCluster \
         --ClusterId "$cluster_id" \
         --count "$count")
-
-    ret=$?
-    if [ $ret -eq 0 ]; then
+    
+    if [ $? -eq 0 ]; then
         echo "节点添加请求已提交："
         echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ack" "node-add" "$result"
     else
         echo "错误：节点添加请求失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "$region" "ack" "node-add" "$result"
 }
 
+# 移除节点（使用框架函数）
 ack_node_remove() {
     local cluster_id=$1
     local node_id=$2
 
-    if [ -z "$cluster_id" ] || [ -z "$node_id" ]; then
-        echo "错误：集群ID和节点ID不能为空。" >&2
+    if ! validate_required_params "$cluster_id" "$node_id" "错误：集群ID和节点ID不能为空。"; then
         return 1
     fi
 
-    echo "警告：您即将从集群中移除节点：$node_id"
-    read -r -p "请输入 'YES' 以确认移除操作: " confirm
-
-    if [ "$confirm" != "YES" ]; then
-        echo "操作已取消。"
+    if ! confirm_action "从集群中移除节点：$node_id"; then
         return 1
     fi
 
     echo "移除集群节点："
     local result
-    result=$(aliyun --profile "${profile:-}" cs DeleteClusterNodes \
+    result=$(call_aliyun_api cs DeleteClusterNodes \
         --ClusterId "$cluster_id" \
         --nodes "[$node_id]" \
         --release-node true)
-
-    ret=$?
-    if [ $ret -eq 0 ]; then
+    
+    if [ $? -eq 0 ]; then
         echo "节点移除请求已提交："
         echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ack" "node-remove" "$result"
     else
         echo "错误：节点移除请求失败。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "$region" "ack" "node-remove" "$result"
 }
 
+# 获取 kubeconfig（使用框架函数）
 ack_get_kubeconfig() {
     local cluster_id=$1
     local private=${2:-false}
@@ -429,21 +434,21 @@ ack_get_kubeconfig() {
 
     echo "获取集群 kubeconfig："
     local result
-    result=$(aliyun --profile "${profile:-}" cs DescribeClusterUserKubeconfig \
+    result=$(call_aliyun_api cs DescribeClusterUserKubeconfig \
         --ClusterId "$cluster_id" \
         --PrivateIpAddress "$private")
-
-    ret=$?
-    if [ $ret -eq 0 ]; then
+    
+    if [ $? -eq 0 ]; then
         echo "$result" | jq -r '.config'
+        log_result "${profile:-}" "$region" "ack" "kubeconfig" "$result"
     else
         echo "错误：无法获取 kubeconfig。"
         echo "$result"
+        return 1
     fi
-    log_result "${profile:-}" "$region" "ack" "kubeconfig" "$result"
 }
 
-# 检查锁文件和冷却时间
+# 检查锁文件和冷却时间（保持原有逻辑）
 check_cooldown() {
     local action=$1
     local lock_file=$2
@@ -458,11 +463,9 @@ check_cooldown() {
 
     if [[ -f $lock_file ]]; then
         if [[ $(stat -c %Y "$lock_file") -lt $(date -d "$cooldown_minutes minutes ago" +%s) ]]; then
-            # echo "[$(date '+%Y-%m-%d %H:%M:%S')] 删除过期的（${action_name}）锁文件..." >&2
             rm -f "$lock_file"
             return 1
         else
-            # echo "[$(date '+%Y-%m-%d %H:%M:%S')] 在冷却期（$cooldown_minutes 分钟）内，跳过（${action_name}）操作..." >&2
             return 0
         fi
     else
@@ -470,7 +473,7 @@ check_cooldown() {
     fi
 }
 
-# 扩缩容函数
+# 扩缩容函数（保持原有逻辑）
 scale_deployment() {
     local action=$1
     local new_total=$2
@@ -506,10 +509,15 @@ scale_deployment() {
     # 记录操作日志
     msg_body="${msg_body}，结果: ${result}"
     log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
-    _notify_wecom "${WECOM_KEY:-}" "$msg_body"
+    
+    # 如果存在通知函数，则调用
+    if type _notify_wecom >/dev/null 2>&1; then
+        _notify_wecom "${WECOM_KEY:-}" "$msg_body"
+    fi
     echo ""
 }
 
+# 自动扩缩容（保持原有复杂逻辑）
 ack_auto_scale() {
     local deployment=$1
     local namespace=${2:-main}
@@ -576,6 +584,7 @@ ack_auto_scale() {
     if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
         return
     fi
+    
     # 检查是否需要缩容
     if ((cpu < pod_cpu_normal)); then
         if ((pod_total > node_fixed)); then
