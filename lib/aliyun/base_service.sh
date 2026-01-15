@@ -65,8 +65,8 @@ format_output() {
             echo "$empty_message"
         else
             if [ -n "$table_header" ]; then
-                # 输出表头（TSV 格式的第一行）
-                echo "$table_header" | head -1
+                # 输出表头（TSV 格式的第一行，需要解析 \t）
+                echo -e "$table_header" | head -1
             fi
             if [ -n "$temp_output" ] && [ "$temp_output" != "null" ] && [ "$temp_output" != "" ]; then
                 if [ -n "$status_mapper" ]; then
