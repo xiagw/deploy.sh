@@ -214,13 +214,18 @@ deploy_via_rsync_ssh() {
     rsync_exclude="${G_REPO_DIR}/rsync.exclude"
     [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${G_PATH}/conf/rsync.exclude"
 
-    # 检查配置文件格式并设置解析工具
-    if [[ "${G_CONF}" =~ \.(yaml|yml)$ ]]; then
-        parse_cmd="yq"
-    elif [[ "${G_CONF}" =~ \.json$ ]]; then
+    ## 检查配置文件格式并设置相应的解析工具
+    ## 优先级: JSON > YAML
+    ## 支持的格式:
+    ##   - JSON: 使用 jq 工具解析
+    ##   - YAML: 使用 yq 工具解析
+    if [[ "${G_CONF}" =~ \.json$ ]]; then
         parse_cmd="jq"
+    elif [[ "${G_CONF}" =~ \.(yaml|yml)$ ]]; then
+        parse_cmd="yq"
     else
         _msg error "Unsupported configuration file format: ${G_CONF}"
+        _msg error "Supported formats: .json, .yaml, .yml"
         return 1
     fi
     if ! $parse_cmd -e ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .branches[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]" "$G_CONF"; then
