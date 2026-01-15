@@ -47,44 +47,38 @@ handle_cas_commands() {
     esac
 }
 
-# CAS 列表使用本地文件，需要特殊处理
+# CAS 列表：从 API 获取证书列表
 cas_list() {
     local format=${1:-human}
     local result
 
-    if [ -f "$CAS_CERT_FILE" ]; then
-        result=$(jq -r '.[] | [.CertId, .Name, .UploadTime] | @tsv' "$CAS_CERT_FILE")
-    else
-        result=""
+    # 从 API 获取证书列表
+    result=$(call_aliyun_api cas ListCert --SourceType user)
+    if [ $? -ne 0 ]; then
+        echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
+        return 1
     fi
 
     case "$format" in
     json)
-        if [ -n "$result" ]; then
-            echo "$result" | jq -R -s '
-                split("\n") |
-                map(select(length > 0) | split("\t")) |
-                map({"CertId": .[0], "Name": .[1], "UploadTime": .[2]})
-            '
-        else
-            echo "[]"
-        fi
+        echo "$result" | jq '.'
         ;;
     tsv)
         echo -e "CertId\tName\tUploadTime"
-        if [ -n "$result" ]; then
-            echo "$result"
-        fi
+        echo "$result" | jq -r '.CertList[]? | [.CertId, .Name, .UploadTime] | @tsv'
         ;;
     human | *)
         echo "列出所有已上传的证书："
-        if [ -n "$result" ]; then
+        local cert_count
+        cert_count=$(echo "$result" | jq '.CertList | length // 0')
+        if [ "$cert_count" -eq 0 ]; then
+            echo "没有找到已上传的证书记录。"
+        else
             echo "证书ID            名称                          上传时间"
             echo "----------------  ----------------------------  -------------------------"
-            echo "$result" | awk 'BEGIN {FS="\t"; OFS="\t"}
-            {printf "%-16s  %-28s  %s\n", $1, $2, $3}'
-        else
-            echo "没有找到已上传的证书记录。"
+            echo "$result" | jq -r '.CertList[]? | [.CertId, .Name, .UploadTime] | @tsv' |
+                awk 'BEGIN {FS="\t"; OFS="\t"}
+                {printf "%-16s  %-28s  %s\n", $1, $2, $3}'
         fi
         ;;
     esac
