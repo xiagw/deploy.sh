@@ -55,7 +55,7 @@ main() {
         aliyun|huawei|tencent|aws)
             # 加载对应提供商的实现
             # shellcheck source=/dev/null
-            source "${CLOUD_CLI_HOME}/lib/${provider}/main.sh"
+            source "${CLOUD_CLI_HOME}/cloud/${provider}/main.sh"
             ;;
         *)
             echo "Error: Unsupported cloud provider: $provider" >&2
