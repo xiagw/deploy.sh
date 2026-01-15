@@ -78,42 +78,63 @@ ecs_list() {
     # 获取 EIP 列表（用于合并显示）
     eip_result=$(call_aliyun_api vpc DescribeEipAddresses --RegionId "${region:-}" 2>/dev/null)
     
-    local table_header="InstanceId\tInstanceName\tStatus\tImageId\tPublicIpAddress\tPrivateIpAddress\tExpiredTime\tInstanceChargeType"
-    local jq_filter=".Instances.Instance[] |
-        . as \$instance |
-        (\$eips.EipAddresses.EipAddress[] | select(.InstanceId == \$instance.InstanceId and .InstanceType == \"EcsInstance\") | .IpAddress) as \$eip |
-        [
-            .InstanceId,
-            .InstanceName,
-            .Status,
-            .ImageId,
-            (if (.PublicIpAddress.IpAddress | length > 0) then .PublicIpAddress.IpAddress[0]
-             elif \$eip then \$eip
-             else \"-\"
-             end),
-            (.VpcAttributes.PrivateIpAddress.IpAddress[0] // \"-\"),
-            .ExpiredTime,
-            .InstanceChargeType
-        ] | @tsv"
-    local status_mapper='BEGIN {FS="\t"; OFS="\t"}
-    {
-        printf "%-22s  %-16s  %-6s  %-18s  %-13s  %-13s  %-21s  %s\n", $1, substr($2, 1, 14), $3, substr($4, 1, 12), $5, $6, $7, $8
-    }'
-    
-    # 使用 format_output，但需要传入 EIP 数据
-    local combined_result
-    combined_result=$(echo "$result" | jq --argjson eips "$eip_result" '.')
-    
-    format_output \
-        "$combined_result" \
-        "$format" \
-        "ecs" \
-        "list" \
-        "$table_header" \
-        "$jq_filter" \
-        "$status_mapper" \
-        "没有找到 ECS 实例。" \
-        "列出 ECS 实例："
+    case "$format" in
+    json)
+        # 直接输出原始结果
+        echo "$result"
+        ;;
+    tsv)
+        echo -e "InstanceId\tInstanceName\tStatus\tImageId\tPublicIpAddress\tPrivateIpAddress\tExpiredTime\tInstanceChargeType"
+        echo "$result" | jq -r --argjson eips "$eip_result" '
+            .Instances.Instance[] |
+            . as $instance |
+            ($eips.EipAddresses.EipAddress[] | select(.InstanceId == $instance.InstanceId and .InstanceType == "EcsInstance") | .IpAddress) as $eip |
+            [
+                .InstanceId,
+                .InstanceName,
+                .Status,
+                .ImageId,
+                (if (.PublicIpAddress.IpAddress | length > 0) then .PublicIpAddress.IpAddress[0]
+                 elif $eip then $eip
+                 else "-"
+                 end),
+                (.VpcAttributes.PrivateIpAddress.IpAddress[0] // "-"),
+                .ExpiredTime,
+                .InstanceChargeType
+            ] | @tsv'
+        ;;
+    human | *)
+        echo "列出 ECS 实例："
+        if [[ $(echo "$result" | jq '.Instances.Instance | length') -eq 0 ]]; then
+            echo "没有找到 ECS 实例。"
+        else
+            echo "实例ID                  名称               状态    镜像ID              公网IP         私网IP         到期时间               计费方式"
+            echo "---------------------- ------------------ ------ ------------------ ------------- -------------  ---------------------  ----------"
+            echo "$result" | jq -r --argjson eips "$eip_result" '
+                .Instances.Instance[] |
+                . as $instance |
+                ($eips.EipAddresses.EipAddress // [] | map(select(.InstanceId == $instance.InstanceId and .InstanceType == "EcsInstance")) | first | .IpAddress) as $eip |
+                [
+                    .InstanceId,
+                    .InstanceName,
+                    .Status,
+                    .ImageId,
+                    (if (.PublicIpAddress.IpAddress | length > 0) then .PublicIpAddress.IpAddress[0]
+                     elif $eip then $eip
+                     else "-"
+                     end),
+                    (.VpcAttributes.PrivateIpAddress.IpAddress[0] // "-"),
+                    .ExpiredTime,
+                    .InstanceChargeType
+                ] | @tsv' |
+                awk 'BEGIN {FS="\t"; OFS="\t"}
+                {
+                    printf "%-22s  %-16s  %-6s  %-18s  %-13s  %-13s  %-21s  %s\n", $1, substr($2, 1, 14), $3, substr($4, 1, 12), $5, $6, $7, $8
+                }'
+        fi
+        ;;
+    esac
+    log_result "${profile:-}" "${region:-}" "ecs" "list" "$result" "$format"
 }
 
 # ECS 创建（保持原有复杂逻辑，但使用框架函数）
