@@ -115,6 +115,7 @@ main() {
     oss) handle_oss_commands "${args[@]}" ;;
     lbs) handle_lbs_commands "${args[@]}" ;;
     rds) handle_rds_commands "${args[@]}" ;;
+    polardb) handle_polardb_commands "${args[@]}" ;;
     kvstore) handle_kvstore_commands "${args[@]}" ;;
     vpc) handle_vpc_commands "${args[@]}" ;;
     nat) handle_nat_commands "${args[@]}" ;;

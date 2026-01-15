@@ -462,7 +462,7 @@ rds_account_grant() {
 
     if [ -z "$instance_id" ] || [ -z "$account_name" ] || [ -z "$db_name" ]; then
         echo "错误：实例ID、账号名和数据库名不能为空。" >&2
-        echo "用法：rds account-grant <实例ID> <账��> <数据库名> [权限]" >&2
+        echo "用法：rds account-grant <实例ID> <账号> <数据库名> [权限]" >&2
         return 1
     fi
 

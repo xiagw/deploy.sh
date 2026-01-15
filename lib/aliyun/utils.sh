@@ -27,6 +27,7 @@ show_help() {
     echo "  cdn      - 内容分发网络"
     echo "  lbs      - 负载均衡服务"
     echo "  rds      - 关系型数据库服务"
+    echo "  polardb  - 云数据库 PolarDB"
     echo "  kvstore  - 键值存储服务(Redis)"
     echo "  vpc      - 专有网络"
     echo "  nat      - NAT网关"
