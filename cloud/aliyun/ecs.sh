@@ -174,19 +174,22 @@ ecs_create() {
 
     # 选择交换机（需要调用 vpc_vswitch_list 函数）
     local vswitch_id
+    local vswitch_list_raw
     local vswitch_list
     if type vpc_vswitch_list >/dev/null 2>&1; then
-        vswitch_list=$(vpc_vswitch_list "$vpc_id" json 2>/dev/null)
+        vswitch_list_raw=$(vpc_vswitch_list "$vpc_id" json 2>/dev/null)
+        local vswitch_list_ret=$?
     else
-        vswitch_list=$(call_aliyun_api vpc DescribeVSwitches --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null)
+        vswitch_list_raw=$(call_aliyun_api vpc DescribeVSwitches --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null)
+        local vswitch_list_ret=$?
     fi
     
-    if [ $? -ne 0 ] || [ -z "$vswitch_list" ]; then
+    if [ $vswitch_list_ret -ne 0 ] || [ -z "$vswitch_list_raw" ]; then
         echo "错误：在选定的 VPC 中没有找到交换机，请先创建交换机。" >&2
         return 1
     fi
 
-    vswitch_list=$(echo "$vswitch_list" | jq -r '. | select(.VSwitchId != null) | "\(.VSwitchId) (\(.VSwitchName)) [\(.ZoneId)]"')
+    vswitch_list=$(echo "$vswitch_list_raw" | jq -r '.VSwitches.VSwitch[]? | select(.VSwitchId != null) | "\(.VSwitchId) (\(.VSwitchName // "")) [\(.ZoneId)]"')
     if [ -z "$vswitch_list" ]; then
         echo "错误：在选定的 VPC 中没有找到交换机，请先创建交换机。" >&2
         return 1
@@ -210,12 +213,22 @@ ecs_create() {
 
     # 选择安全组（需要调用 vpc_sg_list 函数）
     local security_group_id
+    local security_group_list_raw
     local security_group_list
     if type vpc_sg_list >/dev/null 2>&1; then
-        security_group_list=$(vpc_sg_list "$vpc_id" json 2>/dev/null | jq -r '.[] | select(.SecurityGroupId != null and .SecurityGroupName != null) | "\(.SecurityGroupId) (\(.SecurityGroupName))"')
+        security_group_list_raw=$(vpc_sg_list "$vpc_id" json 2>/dev/null)
+        local security_group_list_ret=$?
     else
-        security_group_list=$(call_aliyun_api ecs DescribeSecurityGroups --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null | jq -r '.SecurityGroups.SecurityGroup[] | select(.SecurityGroupId != null and .SecurityGroupName != null) | "\(.SecurityGroupId) (\(.SecurityGroupName))"')
+        security_group_list_raw=$(call_aliyun_api ecs DescribeSecurityGroups --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null)
+        local security_group_list_ret=$?
     fi
+    
+    if [ $security_group_list_ret -ne 0 ] || [ -z "$security_group_list_raw" ]; then
+        echo "错误：无法获取安全组列表。请检查您的凭证和权限。" >&2
+        return 1
+    fi
+    
+    security_group_list=$(echo "$security_group_list_raw" | jq -r '.SecurityGroups.SecurityGroup[]? | select(.SecurityGroupId != null and .SecurityGroupName != null) | "\(.SecurityGroupId) (\(.SecurityGroupName))"')
 
     if [ -z "$security_group_list" ]; then
         echo "错误：没有找到安全组，请先创建安全组。" >&2
