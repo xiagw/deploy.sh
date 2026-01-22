@@ -73,6 +73,23 @@ find_project_config() {
         return
     fi
 
+    ## 如果项目专用配置文件不存在，自动创建默认配置
+    local template_file="${G_PATH}/conf/templates/project-config.json"
+    if [[ -f "${template_file}" ]]; then
+        ## 从模板创建配置文件，并替换项目路径
+        if command -v jq >/dev/null 2>&1; then
+            jq --arg project_path "${project_path}" '.project = $project_path' \
+                "${template_file}" > "${project_conf}"
+        else
+            ## 如果没有 jq，使用 sed 替换
+            sed "s|\"project\": \"root/example\"|\"project\": \"${project_path}\"|g" \
+                "${template_file}" > "${project_conf}"
+        fi
+        _msg info "Created default project config: ${project_conf}"
+        G_CONF="${project_conf}"
+        return
+    fi
+
     ## 优先级 2: 全局配置文件
     ## 路径格式: data/deploy.json
     global_json_conf="${G_DATA}/deploy.json"
@@ -95,7 +112,7 @@ find_project_config() {
 #   - G_ENV: 环境变量配置文件路径
 #   - G_DATA: 数据目录路径
 #   - G_PATH: 脚本根目录路径
-# 说明: 
+# 说明:
 #   - 使用 JSON 格式配置文件（deploy.json）
 #   - 如果文件不存在，则从模板文件复制创建
 #   - 注意: 此函数在项目路径确定之前调用，只初始化全局配置
@@ -146,7 +163,7 @@ config_deploy_file() {
 # 描述: 设置部署环境配置，包括SSH密钥、配置文件链接等
 # 参数: 无
 # 返回: 无
-# 说明: 
+# 说明:
 #   - 创建SSH密钥对（如果不存在）
 #   - 创建配置目录的符号链接
 #   - 设置适当的文件权限
