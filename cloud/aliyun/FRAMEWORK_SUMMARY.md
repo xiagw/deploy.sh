@@ -20,19 +20,18 @@
 - 帮助信息模板
 - 命令处理模板
 
-### 3. `polardb_new.sh.example` - 重构示例
-展示如何使用新框架重构现有服务：
-- 列表操作使用 `generic_list`
-- 创建操作使用 `generic_create`
-- 更新操作使用 `generic_update`
-- 删除操作使用 `generic_delete`
-- 特殊操作使用 `call_aliyun_api` 和 `format_output`
+### 3. `service_template.sh` - 服务模板
+新服务创建的模板文件，包含：
+- 标准 CRUD 操作实现
+- 帮助信息模板
+- 命令处理模板
 
-### 4. `REFACTORING_GUIDE.md` - 重构指南
-详细的迁移文档，包括：
+### 4. `FRAMEWORK_GUIDE.md` - 框架使用指南
+详细的框架使用文档，包括：
 - 框架优势说明
 - 核心函数使用说明
-- 迁移步骤
+- 开发新服务步骤
+- 使用示例（RDS 和 EIP）
 - 特殊情况处理
 - 新服务添加流程
 
@@ -171,9 +170,9 @@ rds_create() {
 
 ## 📚 相关文档
 
-- `REFACTORING_GUIDE.md` - 详细的重构指南
+- `FRAMEWORK_GUIDE.md` - 详细的框架使用指南（包含 RDS 和 EIP 完整示例）
 - `service_template.sh` - 服务模板
-- `polardb_new.sh.example` - 重构示例
+- `MIGRATION_STATUS.md` - 迁移状态记录
 
 ## 💡 最佳实践
 
