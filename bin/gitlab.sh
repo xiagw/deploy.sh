@@ -105,7 +105,7 @@ EOF
         gitlab project create --name "pms"
         git clone "git@${url_git#*//}:root/pms.git"
         mkdir -p pms/templates
-        cp "$(dirname "$ME_PATH")/conf/gitlab-ci.yml" pms/templates
+        cp "$(dirname "$ME_PATH")/conf/templates/gitlab-ci.yml" pms/templates
         (cd pms && git add . && git commit -m 'add templates file' && git push origin main)
     fi
     if _get_yes_no "[+] Create project [devops]?"; then

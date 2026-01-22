@@ -12,7 +12,7 @@ cache/
 
 ## deploy.sh conf/
 conf/deploy.*
-!conf/example-*
+!conf/templates/*
 
 ## data/
 data/**

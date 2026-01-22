@@ -489,7 +489,7 @@ main() {
     _log $LOG_LEVEL_INFO "Backup start"
 
     # Load configuration
-    [ -f "${SCRIPT_ENV}" ] || cp "${SCRIPT_CONF_PATH}/example-${SCRIPT_NAME%.sh}.env" "${SCRIPT_ENV}"
+    [ -f "${SCRIPT_ENV}" ] || cp "${SCRIPT_CONF_PATH}/templates/${SCRIPT_NAME%.sh}.env" "${SCRIPT_ENV}"
     _load_config "$SCRIPT_ENV" "$@"
 
     ## 检查必要的命令

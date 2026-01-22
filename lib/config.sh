@@ -96,7 +96,7 @@ find_project_config() {
     else
         ## 如果全局配置也不存在，创建默认的 JSON 配置文件
         G_CONF="${global_json_conf}"
-        cp -v "${G_PATH}/conf/example-deploy.json" "${G_CONF}"
+        cp -v "${G_PATH}/conf/templates/deploy.json" "${G_CONF}"
     fi
 }
 
@@ -118,7 +118,7 @@ find_project_config() {
 ################################################################################
 config_deploy_file() {
     ## 初始化环境变量配置文件
-    [[ ! -f "${G_ENV}" ]] && cp -v "${G_PATH}/conf/example-deploy.env" "${G_ENV}"
+    [[ ! -f "${G_ENV}" ]] && cp -v "${G_PATH}/conf/templates/deploy.env" "${G_ENV}"
 
     ## 初始化全局部署配置文件（优先使用JSON格式）
     ## 注意: 项目专用配置会在 config_deploy_vars 之后通过 find_project_config 查找
@@ -134,7 +134,7 @@ config_deploy_file() {
     else
         ## 如果都不存在，优先创建 JSON 格式的全局配置文件
         G_CONF="${json_conf}"
-        cp -v "${G_PATH}/conf/example-deploy.json" "${G_CONF}"
+        cp -v "${G_PATH}/conf/templates/deploy.json" "${G_CONF}"
     fi
 
     ## ========================================================================
