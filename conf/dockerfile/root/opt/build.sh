@@ -259,10 +259,10 @@ _build_php() {
 
     # Upgrade and install PHP packages
     $cmd_pkg upgrade -yqq
-    $cmd_pkg_opt php"${PHP_VERSION}" php"${PHP_VERSION}"-{bcmath,bz2,curl,fpm,gd,gmp,imagick,intl,mbstring,msgpack,mysql,redis,soap,sqlite3,xml,zip}
+    $cmd_pkg_opt php"${PHP_VERSION}" php"${PHP_VERSION}"-{bcmath,bz2,curl,fpm,gd,gmp,imagick,intl,mbstring,msgpack,mysql,pdo-pgsql,pgsql,redis,soap,sqlite3,xml,zip}
     case "$PHP_VERSION" in
     8.5) : ;;
-    *) $cmd_pkg_opt php"${PHP_VERSION}" php"${PHP_VERSION}"-{mongodb,xmlrpc} ;;
+    *) $cmd_pkg_opt php"${PHP_VERSION}" php"${PHP_VERSION}"-{mongodb,opcache,xmlrpc} ;;
     esac
 
     # Install and configure web server
