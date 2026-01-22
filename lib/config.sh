@@ -86,6 +86,7 @@ find_project_config() {
                 "${template_file}" > "${project_conf}"
         fi
         _msg info "Created default project config: ${project_conf}"
+        _msg warning "This is a default template configuration. Please review and modify it according to your actual needs."
         G_CONF="${project_conf}"
         return
     fi
