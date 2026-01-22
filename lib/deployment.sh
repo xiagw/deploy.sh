@@ -214,62 +214,52 @@ deploy_via_rsync_ssh() {
     rsync_exclude="${G_REPO_DIR}/rsync.exclude"
     [[ ! -f "$rsync_exclude" ]] && rsync_exclude="${G_PATH}/conf/rsync.exclude"
 
-    ## 检查配置文件格式并设置相应的解析工具
-    ## 优先级: JSON > YAML
-    ## 支持的格式:
-    ##   - JSON: 使用 jq 工具解析
-    ##   - YAML: 使用 yq 工具解析
-    if [[ "${G_CONF}" =~ \.json$ ]]; then
-        parse_cmd="jq"
-    elif [[ "${G_CONF}" =~ \.(yaml|yml)$ ]]; then
-        parse_cmd="yq"
-    else
+    ## 检查配置文件格式（仅支持 JSON）
+    if [[ ! "${G_CONF}" =~ \.json$ ]]; then
         _msg error "Unsupported configuration file format: ${G_CONF}"
-        _msg error "Supported formats: .json, .yaml, .yml"
+        _msg error "Supported format: .json only"
         return 1
     fi
+    parse_cmd="jq"
     ## 检测配置文件格式（项目专用配置 vs 全局配置）
     ## 项目专用配置格式: { "project": "...", "branches": [...] } 或 { "project": "...", "branchs": [...] } (向后兼容)
     ## 全局配置格式: { "projects": [{ "project": "...", "branches": [...] }] } 或 { "projects": [{ "project": "...", "branchs": [...] }] } (向后兼容)
-    local config_query branch_key
+    local branch_key
     ## 检测是否为项目专用配置格式（包含 project 和 branches/branchs 字段）
-    if $parse_cmd -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" 2>/dev/null | grep -q "true"; then
+    if jq -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" >/dev/null 2>&1; then
         ## 项目专用配置格式（单个项目对象）
         ## 优先使用 branches，如果不存在则使用 branchs（向后兼容）
-        if $parse_cmd -e 'has("branches")' "$G_CONF" 2>/dev/null | grep -q "true"; then
+        if jq -e 'has("branches")' "$G_CONF" >/dev/null 2>&1; then
             branch_key="branches"
         else
             branch_key="branchs"
         fi
-        config_query=".${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]"
     else
         ## 全局配置格式（projects 数组）
         ## 优先使用 branches，如果不存在则使用 branchs（向后兼容）
-        if $parse_cmd -e '.projects[0] | has("branches")' "$G_CONF" 2>/dev/null | grep -q "true"; then
+        if jq -e '.projects[0] | has("branches")' "$G_CONF" >/dev/null 2>&1; then
             branch_key="branches"
         else
             branch_key="branchs"
         fi
-        config_query=".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]"
     fi
 
     ## 验证配置是否存在
-    if ! $parse_cmd -e "${config_query}" "$G_CONF" 2>/dev/null | grep -q "."; then
+    local config_query
+    if jq -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" >/dev/null 2>&1; then
+        config_query=".${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]"
+    else
+        config_query=".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]"
+    fi
+    if ! jq -e "${config_query}" "$G_CONF" 2>/dev/null | grep -q "."; then
         _msg warn "No host configuration found for project '${G_REPO_GROUP_PATH}' branch '${G_NAMESPACE}' in $G_CONF"
     fi
 
     while read -r line; do
-        if [[ "$parse_cmd" == "yq" ]]; then
-            ssh_host=$(echo "$line" | yq -r '.ssh_host // ""')
-            ssh_port=$(echo "$line" | yq -r '.ssh_port // "22"')
-            rsync_src_from_conf=$(echo "$line" | yq -r '.rsync_src // ""')
-            rsync_dest=$(echo "$line" | yq -r '.rsync_dest // ""')
-        else
-            ssh_host=$(echo "$line" | jq -r '.ssh_host // empty')
-            ssh_port=$(echo "$line" | jq -r '.ssh_port // "22"')
-            rsync_src_from_conf=$(echo "$line" | jq -r '.rsync_src // empty')
-            rsync_dest=$(echo "$line" | jq -r '.rsync_dest // empty')
-        fi
+        ssh_host=$(echo "$line" | jq -r '.ssh_host // empty')
+        ssh_port=$(echo "$line" | jq -r '.ssh_port // "22"')
+        rsync_src_from_conf=$(echo "$line" | jq -r '.rsync_src // empty')
+        rsync_dest=$(echo "$line" | jq -r '.rsync_dest // empty')
 
         [[ -z "$ssh_host" ]] && {
             _msg error "ssh_host is required but not found in config"
@@ -329,46 +319,24 @@ deploy_via_rsync_ssh() {
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $G_REPO_NAME"
         fi
     done < <(
-        ## 根据配置文件格式选择相应的查询语句
         ## 检测分支字段名称（branches 或 branchs）
         local branch_key
-        if [[ "$parse_cmd" == "yq" ]]; then
-            if $parse_cmd -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" 2>/dev/null | grep -q "true"; then
-                ## 项目专用配置格式
-                if $parse_cmd -e 'has("branches")' "$G_CONF" 2>/dev/null | grep -q "true"; then
-                    branch_key="branches"
-                else
-                    branch_key="branchs"
-                fi
-                yq -o=json -I=0 ".${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
+        if jq -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" >/dev/null 2>&1; then
+            ## 项目专用配置格式
+            if jq -e 'has("branches")' "$G_CONF" >/dev/null 2>&1; then
+                branch_key="branches"
             else
-                ## 全局配置格式
-                if $parse_cmd -e '.projects[0] | has("branches")' "$G_CONF" 2>/dev/null | grep -q "true"; then
-                    branch_key="branches"
-                else
-                    branch_key="branchs"
-                fi
-                yq -o=json -I=0 ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
+                branch_key="branchs"
             fi
+            jq -c ".${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
         else
-            ## jq 命令
-            if jq -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" >/dev/null 2>&1; then
-                ## 项目专用配置格式
-                if jq -e 'has("branches")' "$G_CONF" >/dev/null 2>&1; then
-                    branch_key="branches"
-                else
-                    branch_key="branchs"
-                fi
-                jq -c ".${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
+            ## 全局配置格式
+            if jq -e '.projects[0] | has("branches")' "$G_CONF" >/dev/null 2>&1; then
+                branch_key="branches"
             else
-                ## 全局配置格式
-                if jq -e '.projects[0] | has("branches")' "$G_CONF" >/dev/null 2>&1; then
-                    branch_key="branches"
-                else
-                    branch_key="branchs"
-                fi
-                jq -c ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
+                branch_key="branchs"
             fi
+            jq -c ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
         fi
     )
 }

@@ -19,7 +19,7 @@
    - 示例: `data/projects/root.json`
 
 3. **全局配置** (最低优先级，向后兼容)
-   - 路径: `data/deploy.json` 或 `data/deploy.yaml`
+   - 路径: `data/deploy.json`
    - 格式: 包含所有项目的数组
    - 示例: `data/deploy.json`
 

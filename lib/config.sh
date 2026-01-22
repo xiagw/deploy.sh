@@ -38,7 +38,7 @@ is_demo_mode() {
 #   查找优先级（从高到低）:
 #     1. 项目专用配置: data/projects/namespace/project-name.json
 #     2. 命名空间配置: data/projects/namespace.json
-#     3. 全局配置: data/deploy.json (或 data/deploy.yaml)
+#     3. 全局配置: data/deploy.json
 #   优势:
 #     - 支持成千上万项目，每个项目独立配置文件
 #     - 避免单文件过大导致的性能问题
@@ -48,16 +48,13 @@ is_demo_mode() {
 find_project_config() {
     local project_path="${1:-}"
     local namespace project_name
-    local project_conf namespace_conf global_json_conf global_yaml_conf
+    local project_conf namespace_conf global_json_conf
 
     ## 如果未提供项目路径，使用全局配置
     if [[ -z "${project_path}" ]]; then
         global_json_conf="${G_DATA}/deploy.json"
-        global_yaml_conf="${G_DATA}/deploy.yaml"
         if [[ -f "${global_json_conf}" ]]; then
             G_CONF="${global_json_conf}"
-        elif [[ -f "${global_yaml_conf}" ]]; then
-            G_CONF="${global_yaml_conf}"
         fi
         return
     fi
@@ -86,13 +83,10 @@ find_project_config() {
     fi
 
     ## 优先级 3: 全局配置文件（向后兼容）
-    ## 路径格式: data/deploy.json 或 data/deploy.yaml
+    ## 路径格式: data/deploy.json
     global_json_conf="${G_DATA}/deploy.json"
-    global_yaml_conf="${G_DATA}/deploy.yaml"
     if [[ -f "${global_json_conf}" ]]; then
         G_CONF="${global_json_conf}"
-    elif [[ -f "${global_yaml_conf}" ]]; then
-        G_CONF="${global_yaml_conf}"
     else
         ## 如果全局配置也不存在，创建默认的 JSON 配置文件
         G_CONF="${global_json_conf}"
@@ -102,37 +96,32 @@ find_project_config() {
 
 ################################################################################
 # 函数: config_deploy_file
-# 描述: 初始化部署配置文件，优先使用JSON格式，YAML作为备选
+# 描述: 初始化部署配置文件（JSON格式）
 # 参数: 无
 # 返回: 无（设置全局变量 G_CONF）
 # 全局变量:
-#   - G_CONF: 部署配置文件路径（JSON或YAML格式）
+#   - G_CONF: 部署配置文件路径（JSON格式）
 #   - G_ENV: 环境变量配置文件路径
 #   - G_DATA: 数据目录路径
 #   - G_PATH: 脚本根目录路径
 # 说明: 
-#   - 优先使用 JSON 格式配置文件（deploy.json）
-#   - 如果 JSON 文件不存在，则使用 YAML 格式（deploy.yaml）
-#   - 如果都不存在，则从示例文件复制创建
+#   - 使用 JSON 格式配置文件（deploy.json）
+#   - 如果文件不存在，则从模板文件复制创建
 #   - 注意: 此函数在项目路径确定之前调用，只初始化全局配置
 ################################################################################
 config_deploy_file() {
     ## 初始化环境变量配置文件
     [[ ! -f "${G_ENV}" ]] && cp -v "${G_PATH}/conf/templates/deploy.env" "${G_ENV}"
 
-    ## 初始化全局部署配置文件（优先使用JSON格式）
+    ## 初始化全局部署配置文件（JSON格式）
     ## 注意: 项目专用配置会在 config_deploy_vars 之后通过 find_project_config 查找
     local json_conf="${G_DATA}/deploy.json"
-    local yaml_conf="${G_DATA}/deploy.yaml"
 
     if [[ -f "${json_conf}" ]]; then
-        ## 如果 JSON 文件已存在，使用它（作为默认值）
+        ## 如果 JSON 文件已存在，使用它
         G_CONF="${json_conf}"
-    elif [[ -f "${yaml_conf}" ]]; then
-        ## 如果 YAML 文件已存在，使用它
-        G_CONF="${yaml_conf}"
     else
-        ## 如果都不存在，优先创建 JSON 格式的全局配置文件
+        ## 如果不存在，从模板文件创建 JSON 格式的全局配置文件
         G_CONF="${json_conf}"
         cp -v "${G_PATH}/conf/templates/deploy.json" "${G_CONF}"
     fi
