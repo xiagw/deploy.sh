@@ -256,15 +256,23 @@ deploy_via_rsync_ssh() {
     fi
 
     while read -r line; do
-        ssh_host=$(echo "$line" | jq -r '.ssh_host // empty')
-        ssh_port=$(echo "$line" | jq -r '.ssh_port // "22"')
+        ssh_user=$(echo "$line" | jq -r '.user // empty')
+        ssh_host_ip=$(echo "$line" | jq -r '.host // empty')
+        ssh_port=$(echo "$line" | jq -r '.port // "22"')
         rsync_src_from_conf=$(echo "$line" | jq -r '.rsync_src // empty')
         rsync_dest=$(echo "$line" | jq -r '.rsync_dest // empty')
 
-        [[ -z "$ssh_host" ]] && {
-            _msg error "ssh_host is required but not found in config"
+        [[ -z "$ssh_host_ip" ]] && {
+            _msg error "host is required but not found in config"
             continue
         }
+        
+        # 构建 ssh_host 变量（user@host 格式）供后续代码使用
+        if [[ -n "$ssh_user" ]]; then
+            ssh_host="${ssh_user}@${ssh_host_ip}"
+        else
+            ssh_host="$ssh_host_ip"
+        fi
 
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 

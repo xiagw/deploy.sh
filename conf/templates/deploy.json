@@ -8,8 +8,9 @@
             "hosts": "主机配置数组，支持多个目标主机"
         },
         "host_format": {
-            "ssh_host": "SSH主机地址，格式：user@host",
-            "ssh_port": "SSH端口，默认22",
+            "user": "SSH用户名",
+            "host": "SSH主机地址",
+            "port": "SSH端口，默认22",
             "rsync_src": "rsync源目录，相对于项目根目录",
             "rsync_dest": "rsync目标目录，绝对路径",
             "db_host": "数据库主机地址",
@@ -32,8 +33,9 @@
                     "description": "开发环境配置",
                     "hosts": [
                         {
-                            "ssh_host": "dev1@192.168.100.102",
-                            "ssh_port": "22",
+                            "user": "dev1",
+                            "host": "192.168.100.102",
+                            "port": "22",
                             "rsync_src": "dist1",
                             "rsync_dest": "/www/develop/dest1",
                             "db_host": "m01.example.com",
@@ -42,8 +44,9 @@
                             "helm_dir": "/runner/data/helm/owner/repo1"
                         },
                         {
-                            "ssh_host": "dev2@192.168.100.103",
-                            "ssh_port": "222",
+                            "user": "dev2",
+                            "host": "192.168.100.103",
+                            "port": "222",
                             "rsync_src": "dist2",
                             "rsync_dest": "/www/develop/dest2",
                             "db_host": "m02.example.com",
@@ -58,8 +61,9 @@
                     "description": "生产环境配置",
                     "hosts": [
                         {
-                            "ssh_host": "prod@192.168.100.104",
-                            "ssh_port": "2222",
+                            "user": "prod",
+                            "host": "192.168.100.104",
+                            "port": "2222",
                             "rsync_src": "/www/main/src",
                             "rsync_dest": "/www/main/dest",
                             "db_host": "mm01.example.com",
@@ -68,8 +72,9 @@
                             "helm_dir": "/runner/data/helm/owner/repo11"
                         },
                         {
-                            "ssh_host": "prod2@192.168.100.105",
-                            "ssh_port": "2222",
+                            "user": "prod2",
+                            "host": "192.168.100.105",
+                            "port": "2222",
                             "rsync_src": "/www/main/src",
                             "rsync_dest": "/www/main/dest",
                             "db_host": "mm01.example.com",
@@ -90,8 +95,9 @@
                     "description": "开发环境配置",
                     "hosts": [
                         {
-                            "ssh_host": "dev@192.168.100.102",
-                            "ssh_port": "22",
+                            "user": "dev",
+                            "host": "192.168.100.102",
+                            "port": "22",
                             "rsync_src": "/www/develop/src",
                             "rsync_dest": "/www/develop/dest",
                             "db_host": "",
@@ -100,8 +106,9 @@
                             "helm_dir": ""
                         },
                         {
-                            "ssh_host": "dev@192.168.100.103",
-                            "ssh_port": "22",
+                            "user": "dev",
+                            "host": "192.168.100.103",
+                            "port": "22",
                             "rsync_src": "/www/develop/src",
                             "rsync_dest": "/www/develop/dest",
                             "db_host": "",
@@ -116,8 +123,9 @@
                     "description": "生产环境配置",
                     "hosts": [
                         {
-                            "ssh_host": "prod@192.168.100.104",
-                            "ssh_port": "2222",
+                            "user": "prod",
+                            "host": "192.168.100.104",
+                            "port": "2222",
                             "rsync_src": "/www/main/src",
                             "rsync_dest": "/www/main/dest",
                             "db_host": "",
@@ -126,8 +134,9 @@
                             "helm_dir": ""
                         },
                         {
-                            "ssh_host": "prod@192.168.100.105",
-                            "ssh_port": "2222",
+                            "user": "prod",
+                            "host": "192.168.100.105",
+                            "port": "2222",
                             "rsync_src": "/www/main/src",
                             "rsync_dest": "/www/main/dest",
                             "db_host": "",

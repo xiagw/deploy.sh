@@ -30,15 +30,14 @@ is_demo_mode() {
 
 ################################################################################
 # 函数: find_project_config
-# 描述: 查找项目配置文件，支持多级查找策略
+# 描述: 查找项目配置文件，支持两级查找策略
 # 参数:
 #   $1 - project_path: 项目路径，格式为 "namespace/project_name"
 # 返回: 配置文件路径（通过全局变量 G_CONF 返回）
 # 说明:
 #   查找优先级（从高到低）:
 #     1. 项目专用配置: data/projects/namespace/project-name.json
-#     2. 命名空间配置: data/projects/namespace.json
-#     3. 全局配置: data/deploy.json
+#     2. 全局配置: data/deploy.json
 #   优势:
 #     - 支持成千上万项目，每个项目独立配置文件
 #     - 避免单文件过大导致的性能问题
@@ -48,7 +47,7 @@ is_demo_mode() {
 find_project_config() {
     local project_path="${1:-}"
     local namespace project_name
-    local project_conf namespace_conf global_json_conf
+    local project_conf global_json_conf
 
     ## 如果未提供项目路径，使用全局配置
     if [[ -z "${project_path}" ]]; then
@@ -74,15 +73,7 @@ find_project_config() {
         return
     fi
 
-    ## 优先级 2: 命名空间配置文件
-    ## 路径格式: data/projects/namespace.json
-    namespace_conf="${G_DATA}/projects/${namespace}.json"
-    if [[ -f "${namespace_conf}" ]]; then
-        G_CONF="${namespace_conf}"
-        return
-    fi
-
-    ## 优先级 3: 全局配置文件（向后兼容）
+    ## 优先级 2: 全局配置文件
     ## 路径格式: data/deploy.json
     global_json_conf="${G_DATA}/deploy.json"
     if [[ -f "${global_json_conf}" ]]; then

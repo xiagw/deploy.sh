@@ -10,7 +10,7 @@
             "更好的权限控制",
             "提高解析性能"
         ],
-        "fallback": "如果此文件不存在，会依次查找: namespace.json -> deploy.json"
+        "fallback": "如果此文件不存在，会查找全局配置: deploy.json"
     },
     "branches": [
         {
@@ -18,8 +18,9 @@
             "description": "开发环境配置",
             "hosts": [
                 {
-                    "ssh_host": "dev@192.168.100.102",
-                    "ssh_port": "22",
+                    "user": "dev",
+                    "host": "192.168.100.102",
+                    "port": "22",
                     "rsync_src": "dist",
                     "rsync_dest": "/www/develop/example",
                     "db_host": "m01.example.com",
@@ -34,8 +35,9 @@
             "description": "生产环境配置",
             "hosts": [
                 {
-                    "ssh_host": "prod@192.168.100.104",
-                    "ssh_port": "2222",
+                    "user": "prod",
+                    "host": "192.168.100.104",
+                    "port": "2222",
                     "rsync_src": "dist",
                     "rsync_dest": "/www/main/example",
                     "db_host": "mm01.example.com",
