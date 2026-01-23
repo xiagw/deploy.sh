@@ -77,11 +77,15 @@ find_project_config() {
     fi
 
     ## 如果项目专用配置文件不存在，自动创建默认配置
+    if ! command -v jq >/dev/null 2>&1; then
+        _install_packages "$IS_CHINA" jq
+    fi
+
     local template_file="${G_PATH}/conf/templates/project-config.json"
     if [[ -f "${template_file}" ]]; then
         ## 从模板创建配置文件，并替换项目路径
         jq --arg project_path "${project_path}" '.project = $project_path' \
-            "${template_file}" > "${project_conf}"
+            "${template_file}" >"${project_conf}"
 
         _msg info "Created default project config: ${project_conf}"
         _msg warning "Note: This is a template configuration. Modify it if you need rsync/ftp deployment."
