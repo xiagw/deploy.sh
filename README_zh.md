@@ -78,9 +78,9 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. 准备 Gitlab 服务器和 Gitlab-runner 服务器
 1. [安装 Gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), 按照文档注册 Gitlab-runner 到 Gitlab 服务器，并启动 Gitlab-runner
 1. cd $HOME/runner
-1. cp conf/templates/deploy.json data/deploy.json      ## ！！！修改为你的自定义配置！！！
 1. cp conf/templates/deploy.env data/deploy.env        ## ！！！修改为你的自定义配置！！！
 1. 参考本项目的配置文件 conf/templates/gitlab-ci.yml， 设置你的应用 git 仓库当中的文件 \<your_project.git\>/.gitlab-ci.yml
+1. **注意**: 项目配置文件会在首次部署时自动创建，位于 `data/projects/namespace/project-name.json`，必须修改后才能继续部署
 
 ### 可选方式 [4], 配合 Jenkins 运行
 1. Create job,
@@ -108,13 +108,17 @@ ssh 登录进入 Gitlab-runner 服务器，并执行以下命令用来安装 dep
 git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
 ```
 
-### Step 5: 更新配置文件 data/deploy.json， data/deploy.env
-参考 conf/templates/deploy.json, conf/templates/deploy.env, 修改为你的自定义配置
+### Step 5: 更新配置文件 data/deploy.env
+参考 conf/templates/deploy.env, 修改为你的自定义配置
 ```
 cd $HOME/runner
-cp conf/templates/deploy.json data/deploy.json      ## 修改为你的自定义配置
 cp conf/templates/deploy.env data/deploy.env        ## 修改为你的自定义配置
 ```
+
+**注意**: 项目配置文件会在首次部署时自动创建：
+- 配置文件位置: `data/projects/namespace/project-name.json`
+- 首次部署时会从模板自动创建，但**必须修改配置中的 hosts、user、port、rsync_dest 等字段**后才能继续部署
+- 参考模板: `conf/templates/project-config.json`
 
 ### Step 6: 创建 Gitlab git 仓库
 登录进入 Gitlab 服务器，并创建一个 git 仓库 `project-A` (例如 root/project-A)

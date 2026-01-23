@@ -30,14 +30,14 @@ is_demo_mode() {
 
 ################################################################################
 # 函数: find_project_config
-# 描述: 查找项目配置文件，支持两级查找策略
+# 描述: 查找项目配置文件，仅使用项目专用配置
 # 参数:
 #   $1 - project_path: 项目路径，格式为 "namespace/project_name"
 # 返回: 配置文件路径（通过全局变量 G_CONF 返回）
 # 说明:
-#   查找优先级（从高到低）:
-#     1. 项目专用配置: data/projects/namespace/project-name.json
-#     2. 全局配置: data/deploy.json
+#   - 仅使用项目专用配置: data/projects/namespace/project-name.json
+#   - 如果配置文件不存在且模板存在，自动从模板创建
+#   - 自动创建后必须修改配置才能继续部署
 #   优势:
 #     - 支持成千上万项目，每个项目独立配置文件
 #     - 避免单文件过大导致的性能问题
@@ -47,15 +47,12 @@ is_demo_mode() {
 find_project_config() {
     local project_path="${1:-}"
     local namespace project_name
-    local project_conf global_json_conf
+    local project_conf
 
-    ## 如果未提供项目路径，使用全局配置
+    ## 如果未提供项目路径，报错退出
     if [[ -z "${project_path}" ]]; then
-        global_json_conf="${G_DATA}/deploy.json"
-        if [[ -f "${global_json_conf}" ]]; then
-            G_CONF="${global_json_conf}"
-        fi
-        return
+        _msg error "Project path is required but not provided"
+        return 1
     fi
 
     ## 解析项目路径，提取命名空间和项目名
@@ -65,7 +62,7 @@ find_project_config() {
     ## 创建项目配置目录
     mkdir -p "${G_DATA}/projects/${namespace}"
 
-    ## 优先级 1: 项目专用配置文件
+    ## 项目专用配置文件
     ## 路径格式: data/projects/namespace/project-name.json
     project_conf="${G_DATA}/projects/${namespace}/${project_name}.json"
     if [[ -f "${project_conf}" ]]; then
@@ -77,63 +74,49 @@ find_project_config() {
     local template_file="${G_PATH}/conf/templates/project-config.json"
     if [[ -f "${template_file}" ]]; then
         ## 从模板创建配置文件，并替换项目路径
-        if command -v jq >/dev/null 2>&1; then
-            jq --arg project_path "${project_path}" '.project = $project_path' \
-                "${template_file}" > "${project_conf}"
-        else
-            ## 如果没有 jq，使用 sed 替换
-            sed "s|\"project\": \"root/example\"|\"project\": \"${project_path}\"|g" \
-                "${template_file}" > "${project_conf}"
-        fi
-        _msg info "Created default project config: ${project_conf}"
-        _msg warning "This is a default template configuration. Please review and modify it according to your actual needs."
-        G_CONF="${project_conf}"
-        return
-    fi
+        jq --arg project_path "${project_path}" '.project = $project_path' \
+            "${template_file}" > "${project_conf}"
 
-    ## 优先级 2: 全局配置文件
-    ## 路径格式: data/deploy.json
-    global_json_conf="${G_DATA}/deploy.json"
-    if [[ -f "${global_json_conf}" ]]; then
-        G_CONF="${global_json_conf}"
+        _msg info "Created default project config: ${project_conf}"
+        _msg warning "================================================================"
+        _msg warning "WARNING: This is a default template configuration with"
+        _msg warning "example hosts and paths. You MUST modify it before using"
+        _msg warning "rsync+ssh deployment (k8s deployment can proceed)."
+        _msg warning "================================================================"
+        _msg warning "Please edit the configuration file: ${project_conf}"
+        _msg warning "Update the following fields according to your actual needs:"
+        _msg warning "  - hosts[].host: Server IP addresses"
+        _msg warning "  - hosts[].user: SSH username"
+        _msg warning "  - hosts[].port: SSH port"
+        _msg warning "  - hosts[].rsync_dest: Deployment destination path"
+        _msg warning "  - hosts[].db_host: Database host"
+        _msg warning "  - hosts[].db_user: Database username"
+        _msg warning "  - hosts[].db_name: Database name"
     else
-        ## 如果全局配置也不存在，创建默认的 JSON 配置文件
-        G_CONF="${global_json_conf}"
-        cp -v "${G_PATH}/conf/templates/deploy.json" "${G_CONF}"
+        _msg error "Project config not found: ${project_conf}"
+        _msg error "Template file not found: ${template_file}"
+        _msg error "Please create the project configuration file manually."
+        return 1
     fi
 }
 
 ################################################################################
 # 函数: config_deploy_file
-# 描述: 初始化部署配置文件（JSON格式）
+# 描述: 初始化部署环境配置文件
 # 参数: 无
-# 返回: 无（设置全局变量 G_CONF）
+# 返回: 无
 # 全局变量:
-#   - G_CONF: 部署配置文件路径（JSON格式）
 #   - G_ENV: 环境变量配置文件路径
 #   - G_DATA: 数据目录路径
 #   - G_PATH: 脚本根目录路径
 # 说明:
-#   - 使用 JSON 格式配置文件（deploy.json）
-#   - 如果文件不存在，则从模板文件复制创建
-#   - 注意: 此函数在项目路径确定之前调用，只初始化全局配置
+#   - 初始化环境变量配置文件（deploy.env）
+#   - 注意: 此函数在项目路径确定之前调用
+#   - 项目专用配置会在 config_deploy_vars 之后通过 find_project_config 查找并设置 G_CONF
 ################################################################################
 config_deploy_file() {
     ## 初始化环境变量配置文件
     [[ ! -f "${G_ENV}" ]] && cp -v "${G_PATH}/conf/templates/deploy.env" "${G_ENV}"
-
-    ## 初始化全局部署配置文件（JSON格式）
-    ## 注意: 项目专用配置会在 config_deploy_vars 之后通过 find_project_config 查找
-    local json_conf="${G_DATA}/deploy.json"
-
-    if [[ -f "${json_conf}" ]]; then
-        ## 如果 JSON 文件已存在，使用它
-        G_CONF="${json_conf}"
-    else
-        ## 如果不存在，从模板文件创建 JSON 格式的全局配置文件
-        G_CONF="${json_conf}"
-        cp -v "${G_PATH}/conf/templates/deploy.json" "${G_CONF}"
-    fi
 
     ## ========================================================================
     ## PATH 环境变量配置

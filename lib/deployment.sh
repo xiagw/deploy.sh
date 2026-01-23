@@ -208,7 +208,7 @@ EOF
 # Deploy via Rsync+SSH
 # @param $1 lang The programming language of the project
 deploy_via_rsync_ssh() {
-    local lang="${1:?'lang parameter is required'}" parse_cmd
+    local lang="${1:?'lang parameter is required'}"
     _msg step "[deploy] Deploy files with Rsync+SSH"
     ## rsync exclude configuration
     rsync_exclude="${G_REPO_DIR}/rsync.exclude"
@@ -220,37 +220,36 @@ deploy_via_rsync_ssh() {
         _msg error "Supported format: .json only"
         return 1
     fi
-    parse_cmd="jq"
-    ## 检测配置文件格式（项目专用配置 vs 全局配置）
-    ## 项目专用配置格式: { "project": "...", "branches": [...] } 或 { "project": "...", "branchs": [...] } (向后兼容)
-    ## 全局配置格式: { "projects": [{ "project": "...", "branches": [...] }] } 或 { "projects": [{ "project": "...", "branchs": [...] }] } (向后兼容)
-    local branch_key
-    ## 检测是否为项目专用配置格式（包含 project 和 branches/branchs 字段）
-    if jq -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" >/dev/null 2>&1; then
-        ## 项目专用配置格式（单个项目对象）
-        ## 优先使用 branches，如果不存在则使用 branchs（向后兼容）
-        if jq -e 'has("branches")' "$G_CONF" >/dev/null 2>&1; then
-            branch_key="branches"
-        else
-            branch_key="branchs"
-        fi
-    else
-        ## 全局配置格式（projects 数组）
-        ## 优先使用 branches，如果不存在则使用 branchs（向后兼容）
-        if jq -e '.projects[0] | has("branches")' "$G_CONF" >/dev/null 2>&1; then
-            branch_key="branches"
-        else
-            branch_key="branchs"
-        fi
+    ## 验证配置文件格式（仅支持项目专用配置格式）
+    ## 项目专用配置格式: { "project": "...", "branches": [...] }
+    if ! jq -e 'has("project") and has("branches")' "$G_CONF" >/dev/null 2>&1; then
+        _msg error "Invalid configuration format. Expected project-specific format with 'project' and 'branches' fields."
+        _msg error "Configuration file: $G_CONF"
+        return 1
+    fi
+
+    ## 检查是否为模板配置（示例配置）
+    ## 如果配置中包含示例 IP 地址或示例域名，说明是未修改的模板配置
+    if jq -e '.branches[].hosts[] | select(.host == "192.168.100.102" or .host == "192.168.100.104" or .host | contains("example.com"))' "$G_CONF" >/dev/null 2>&1; then
+        _msg error "================================================================"
+        _msg error "ERROR: Configuration file contains example/template values!"
+        _msg error "================================================================"
+        _msg error "The configuration file appears to be unmodified template:"
+        _msg error "  Configuration file: $G_CONF"
+        _msg error ""
+        _msg error "Please edit the configuration file and update:"
+        _msg error "  - hosts[].host: Replace example IPs (192.168.100.102/104) with real server IPs"
+        _msg error "  - hosts[].user: Replace example usernames with real SSH usernames"
+        _msg error "  - hosts[].rsync_dest: Replace example paths with real deployment paths"
+        _msg error "  - hosts[].db_host: Replace example database hosts with real ones"
+        _msg error ""
+        _msg error "Rsync+SSH deployment cannot proceed with template configuration."
+        _msg error "After editing, run the deployment command again."
+        return 1
     fi
 
     ## 验证配置是否存在
-    local config_query
-    if jq -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" >/dev/null 2>&1; then
-        config_query=".${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]"
-    else
-        config_query=".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]"
-    fi
+    local config_query=".branches[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[]"
     if ! jq -e "${config_query}" "$G_CONF" 2>/dev/null | grep -q "."; then
         _msg warn "No host configuration found for project '${G_REPO_GROUP_PATH}' branch '${G_NAMESPACE}' in $G_CONF"
     fi
@@ -266,7 +265,7 @@ deploy_via_rsync_ssh() {
             _msg error "host is required but not found in config"
             continue
         }
-        
+
         # 构建 ssh_host 变量（user@host 格式）供后续代码使用
         if [[ -n "$ssh_user" ]]; then
             ssh_host="${ssh_user}@${ssh_host_ip}"
@@ -327,25 +326,8 @@ deploy_via_rsync_ssh() {
             $ssh_opt -n "$ssh_host" "cd docker/laradock && docker compose up -d $G_REPO_NAME"
         fi
     done < <(
-        ## 检测分支字段名称（branches 或 branchs）
-        local branch_key
-        if jq -e 'has("project") and (has("branches") or has("branchs"))' "$G_CONF" >/dev/null 2>&1; then
-            ## 项目专用配置格式
-            if jq -e 'has("branches")' "$G_CONF" >/dev/null 2>&1; then
-                branch_key="branches"
-            else
-                branch_key="branchs"
-            fi
-            jq -c ".${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
-        else
-            ## 全局配置格式
-            if jq -e '.projects[0] | has("branches")' "$G_CONF" >/dev/null 2>&1; then
-                branch_key="branches"
-            else
-                branch_key="branchs"
-            fi
-            jq -c ".projects[] | select(.project == \"${G_REPO_GROUP_PATH}\") | .${branch_key}[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
-        fi
+        ## 读取项目专用配置格式中的 hosts
+        jq -c ".branches[] | select(.branch == \"${G_NAMESPACE}\") | .hosts[] | select(. != null)" "$G_CONF"
     )
 }
 
