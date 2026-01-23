@@ -276,7 +276,7 @@ polardb_account_list() {
         echo -e "账号名\t账号类型\t状态\t描述\t数据库\t权限\t权限详情"
         echo "$result" | jq -r '.Accounts[] |
             . as $account |
-            (.DatabasePrivileges.DatabasePrivilege // []) |
+            (.DatabasePrivileges // []) |
             if length > 0 then
                 .[] | [
                     $account.AccountName,
@@ -285,7 +285,7 @@ polardb_account_list() {
                     $account.AccountDescription,
                     .DBName,
                     .AccountPrivilege,
-                    .AccountPrivilegeDetail
+                    (.AccountPrivilegeDetail // "")
                 ] | @tsv
             else
                 [
@@ -307,7 +307,7 @@ polardb_account_list() {
             echo "----------------    --------    --------  --------------------  ----------------    --------    --------------------"
             echo "$result" | jq -r '.Accounts[] |
                 . as $account |
-                (.DatabasePrivileges.DatabasePrivilege // []) |
+                (.DatabasePrivileges // []) |
                 if length > 0 then
                     .[] | [
                         $account.AccountName,
@@ -316,7 +316,7 @@ polardb_account_list() {
                         $account.AccountDescription,
                         .DBName,
                         .AccountPrivilege,
-                        (.AccountPrivilegeDetail | split(",")[0:3] | join(",") + "...")
+                        (.AccountPrivilegeDetail // "" | if . != "" then (split(",")[0:3] | join(",") + "...") else "-" end)
                     ] | @tsv
                 else
                     [
