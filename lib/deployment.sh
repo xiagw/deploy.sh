@@ -384,28 +384,118 @@ deploy_via_sftp() {
     # TODO: Implement SFTP deployment
 }
 
-# Determine the deployment method based on project files
-# @param $1 repo_dir Repository directory to check
-# Sets deployment related flags based on found files
+# Determine the deployment method based on project files and environment
+# Priority order:
+#   1. Helm charts (if exist and k8s available) → deploy_k8s
+#   2. Dockerfile (if exist and k8s available) → deploy_k8s
+#   3. docker-compose.yml → deploy_docker
+#   4. Project config with hosts → deploy_rsync_ssh
+#   5. Default → deploy_rsync_ssh (with warning)
 # Returns:
-#   deploy_method: The determined deployment method (rsync_ssh/docker-compose/helm)
+#   deploy_method: The determined deployment method
 determine_deployment_method() {
-    local file deploy_method=deploy_rsync_ssh
+    local file
+    local release_name has_dockerfile=false has_docker_compose=false has_project_config=false
 
-    for file in Dockerfile{,.*} docker-compose.{yml,yaml} deploy.method.*; do
-        [[ -f "${G_REPO_DIR}/${file}" ]] || continue
+    # Get release name for Helm charts check
+    release_name="$(format_release_name 2>/dev/null || echo "")"
 
-        case $file in
-        docker-compose.yml)
-            deploy_method=deploy_docker
-            break
+    _msg step "[detect] Determining deployment method" >&2
+
+    ## 检查配置文件中的部署方式覆盖
+    if [[ -n "${PROJECT_DEPLOY_METHOD:-}" && "${PROJECT_DEPLOY_METHOD}" != "auto" ]]; then
+        case "${PROJECT_DEPLOY_METHOD}" in
+        k8s)
+            if check_k8s_available; then
+                _msg info "Using configured deployment method: deploy_k8s" >&2
+                echo "deploy_k8s"
+                return 0
+            else
+                _msg warn "Configured method 'k8s' but k8s is not available, falling back to auto detection" >&2
+            fi
             ;;
-        Dockerfile | Dockerfile*)
-            deploy_method=deploy_k8s
+        docker)
+            _msg info "Using configured deployment method: deploy_docker" >&2
+            echo "deploy_docker"
+            return 0
+            ;;
+        rsync)
+            _msg info "Using configured deployment method: deploy_rsync_ssh" >&2
+            echo "deploy_rsync_ssh"
+            return 0
+            ;;
+        ftp)
+            _msg info "Using configured deployment method: deploy_ftp" >&2
+            echo "deploy_ftp"
+            return 0
             ;;
         esac
+    fi
+
+    # Step 1: Check for Helm charts (highest priority for k8s)
+    if check_helm_charts_exist "${release_name}"; then
+        if check_k8s_available; then
+            _msg info "Found Helm charts and k8s is available → deploy_k8s" >&2
+            echo "deploy_k8s"
+            return 0
+        else
+            _msg warn "Found Helm charts but k8s is not available, will try other methods" >&2
+        fi
+    fi
+
+    # Step 2: Check for Dockerfile
+    for file in Dockerfile{,.*}; do
+        if [[ -f "${G_REPO_DIR}/${file}" ]]; then
+            has_dockerfile=true
+            break
+        fi
     done
-    echo "$deploy_method"
+
+    if [[ "$has_dockerfile" == true ]]; then
+        if check_k8s_available; then
+            _msg info "Found Dockerfile and k8s is available → deploy_k8s" >&2
+            echo "deploy_k8s"
+            return 0
+        else
+            _msg warn "Found Dockerfile but k8s is not available, will try docker-compose or rsync" >&2
+        fi
+    fi
+
+    # Step 3: Check for docker-compose.yml
+    for file in docker-compose.{yml,yaml}; do
+        if [[ -f "${G_REPO_DIR}/${file}" ]]; then
+            has_docker_compose=true
+            break
+        fi
+    done
+
+    if [[ "$has_docker_compose" == true ]]; then
+        _msg info "Found docker-compose.yml → deploy_docker" >&2
+        echo "deploy_docker"
+        return 0
+    fi
+
+    # Step 4: Check for project config with valid hosts
+    if [[ -n "${G_CONF:-}" && -f "${G_CONF}" ]]; then
+        # Check if config has valid hosts for current namespace
+        if jq -e ".branches[] | select(.branch == \"${G_NAMESPACE:-}\") | .hosts[] | select(.host != null and .host != \"\")" "${G_CONF}" &>/dev/null; then
+            has_project_config=true
+        fi
+    fi
+
+    if [[ "$has_project_config" == true ]]; then
+        _msg info "Found project config with hosts → deploy_rsync_ssh" >&2
+        echo "deploy_rsync_ssh"
+        return 0
+    fi
+
+    # Step 5: Default fallback
+    _msg warn "No deployment method detected, defaulting to deploy_rsync_ssh" >&2
+    _msg warn "Consider:" >&2
+    _msg warn "  - Adding Dockerfile for k8s deployment" >&2
+    _msg warn "  - Adding docker-compose.yml for docker deployment" >&2
+    _msg warn "  - Configuring hosts in project config for rsync deployment" >&2
+    echo "deploy_rsync_ssh"
     return 0
 }
 

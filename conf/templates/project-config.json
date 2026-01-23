@@ -12,6 +12,16 @@
         ],
         "note": "此配置文件是必需的，如果不存在会自动从模板创建，但必须修改后才能继续部署"
     },
+    "build": {
+        "method": "auto",
+        "prefer_docker": true,
+        "description": "构建方式配置: auto=自动检测, docker=强制Docker, system=强制系统命令"
+    },
+    "deploy": {
+        "method": "auto",
+        "prefer_k8s": true,
+        "description": "部署方式配置: auto=自动检测, k8s=强制k8s, docker=强制docker-compose, rsync=强制rsync+ssh"
+    },
     "branches": [
         {
             "branch": "develop",

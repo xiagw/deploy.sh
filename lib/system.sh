@@ -448,3 +448,74 @@ system_install_tools() {
 
     return "$install_result"
 }
+
+################################################################################
+# 函数: check_docker_available
+# 描述: 检查 Docker 是否可用
+# 返回: 0=Docker可用, 1=Docker不可用
+################################################################################
+check_docker_available() {
+    if ! command -v docker &>/dev/null; then
+        return 1
+    fi
+    # 检查 Docker daemon 是否运行
+    if ! docker info &>/dev/null; then
+        return 1
+    fi
+    return 0
+}
+
+################################################################################
+# 函数: check_k8s_available
+# 描述: 检查 Kubernetes 环境是否可用（kubectl 和 helm）
+# 返回: 0=k8s可用, 1=k8s不可用
+################################################################################
+check_k8s_available() {
+    # 检查 kubectl 是否可用
+    if ! command -v kubectl &>/dev/null; then
+        return 1
+    fi
+    # 检查 kubectl 是否能连接到集群
+    if ! kubectl cluster-info &>/dev/null; then
+        return 1
+    fi
+    # 检查 helm 是否可用（可选，但推荐）
+    if ! command -v helm &>/dev/null; then
+        _msg warn "Helm is not installed, but kubectl is available"
+        return 0  # kubectl 可用即可
+    fi
+    return 0
+}
+
+################################################################################
+# 函数: check_helm_charts_exist
+# 描述: 检查 Helm charts 目录是否存在
+# 参数:
+#   $1 - release_name: Release 名称（可选）
+# 返回: 0=存在, 1=不存在
+# 说明: 检查多个可能的 Helm charts 目录位置
+################################################################################
+check_helm_charts_exist() {
+    local release_name="${1:-}"
+    local helm_dirs
+
+    # 如果没有提供 release_name，尝试从环境变量获取
+    [[ -z "$release_name" && -n "${G_REPO_NAME:-}" ]] && release_name="$(format_release_name 2>/dev/null || echo "${G_REPO_NAME}")"
+
+    # 定义可能的 Helm charts 目录
+    helm_dirs=(
+        "${G_REPO_DIR}/helm/${release_name}"
+        "${G_REPO_DIR}/docs/helm/${release_name}"
+        "${G_REPO_DIR}/doc/helm/${release_name}"
+        "${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG:-}/${G_NAMESPACE:-}/${release_name}"
+        "${G_DATA}/helm/${G_REPO_GROUP_PATH_SLUG:-}/${release_name}"
+        "${G_DATA}/helm/${release_name}"
+    )
+
+    # 检查是否有目录存在
+    for dir in "${helm_dirs[@]}"; do
+        [[ -n "$dir" && -d "$dir" ]] && return 0
+    done
+
+    return 1
+}
