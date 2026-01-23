@@ -1,21 +1,9 @@
-[jz]
-jz-gw
-jz-git
-jz-runner
 
 [quantum]
 node11 ansible_ssh_user='root'
 node12 ansible_ssh_user='root'
 node13 ansible_ssh_user='root'
 
-[ld]
-lidan01
-
-[fly]
-node82
-node83
-node150
-node151
 
 [other]
 zd-gw
@@ -25,9 +13,6 @@ qiu-build18
 ceccgw
 ceccnode11
 
-lingniao1
-lingniao2
-lingniao3
 
 [xray_server]
 hk-aly1

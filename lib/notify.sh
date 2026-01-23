@@ -31,7 +31,7 @@ notify_element() {
 
     [ -z "$script_path" ] || [ -z "$server" ] || [ -z "$userid" ] || [ -z "$password" ] || [ -z "$roomid" ] && return 1
 
-    echo "$message" | python3 "$script_path/utils/element.py" "$server" "$userid" "$password" "$roomid"
+    echo "$message" | python3 "$script_path/element.py" "$server" "$userid" "$password" "$roomid"
 }
 
 # Send notification via Email
