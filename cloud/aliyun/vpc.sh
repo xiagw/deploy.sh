@@ -97,11 +97,11 @@ vpc_list_all() {
 # 使用新框架的 VPC 列表函数
 vpc_list() {
     local format=${1:-human}
-    
+
     local table_header="VpcId\tVpcName\tStatus\tCidrBlock\tCreationTime"
     local jq_filter=".Vpcs.Vpc[] | [.VpcId, .VpcName, .Status, .CidrBlock, .CreationTime] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-18s  %-6s  %-14s  %s\n", $1, $2, $3, $4, $5}'
-    
+
     generic_list \
         "vpc" \
         "DescribeVpcs" \
@@ -116,12 +116,78 @@ vpc_list() {
 
 # 使用新框架的创建函数
 vpc_create() {
-    local name=${1:-"vpc-$(date +%Y%m%d-%H%M%S)"}
-    local cidr=${2:-"192.168.0.0/16"}
-    local enable_ipv6=${3:-true}
+    local name=$1 cidr=$2 enable_ipv6=$3
 
-    if [ "$1" = "" ]; then
-        echo "未提供 VPC 名称，自动生成: $name"
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$name" ] || [ -z "$cidr" ] || [ -z "$enable_ipv6" ]; then
+        echo "使用 fzf 交互式模式创建 VPC"
+
+        # 输入名称
+        if [ -z "$name" ]; then
+            read -r -p "请输入 VPC 名称 (留空自动生成): " name
+            if [ -z "$name" ]; then
+                name="vpc-$(date +%Y%m%d-%H%M%S)"
+                echo "自动生成 VPC 名称: $name"
+            fi
+        fi
+
+        # 选择网段
+        if [ -z "$cidr" ]; then
+            echo "正在检查可用的 VPC 网段..."
+            local existing_vpcs
+            existing_vpcs=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null | jq -r '.Vpcs.Vpc[] | .CidrBlock' 2>/dev/null)
+
+            # 构建推荐网段列表，避免与现有VPC冲突
+            local cidr_list="10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16
+10.1.0.0/16
+172.20.0.0/16
+192.169.0.0/16
+10.100.0.0/16
+172.21.0.0/16
+192.170.0.0/16"
+
+            if [ -n "$existing_vpcs" ] && [ "$existing_vpcs" != "null" ]; then
+                echo "检测到现有VPC网段，请选择不冲突的网段："
+                echo "$existing_vpcs" | sed 's/^/  已使用: /'
+            fi
+
+            if type select_with_fzf >/dev/null 2>&1; then
+                cidr=$(select_with_fzf "选择 VPC 网段" "$cidr_list")
+            else
+                cidr="192.168.0.0/16"
+                echo "使用默认网段: $cidr"
+            fi
+        fi
+
+        # 选择是否启用 IPv6
+        if [ -z "$enable_ipv6" ]; then
+            # 检查当前区域是否支持IPv6
+            local ipv6_support
+            ipv6_support=$(call_aliyun_api vpc DescribeRegions --RegionId "$region" 2>/dev/null | jq -r '.Regions.Region[] | select(.RegionId == "'$region'") | .Ipv6Enabled' 2>/dev/null)
+
+            local ipv6_list="true
+false"
+            if [ "$ipv6_support" = "true" ]; then
+                echo "当前区域支持IPv6。"
+            else
+                echo "当前区域可能不支持IPv6，仍可选择但可能失败。"
+            fi
+
+            if type select_with_fzf >/dev/null 2>&1; then
+                enable_ipv6=$(select_with_fzf "是否启用 IPv6" "$ipv6_list")
+            else
+                enable_ipv6="true"
+                echo "默认启用 IPv6"
+            fi
+        fi
+    else
+        # 如果提供了名称为空，则自动生成
+        if [ -z "$name" ]; then
+            name="vpc-$(date +%Y%m%d-%H%M%S)"
+            echo "未提供 VPC 名称，自动生成: $name"
+        fi
     fi
 
     echo "创建 VPC："
@@ -131,7 +197,7 @@ vpc_create() {
         --VpcName "$name" \
         --CidrBlock "$cidr" \
         --EnableIpv6 "$enable_ipv6")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "vpc" "create" "$result"
@@ -146,6 +212,41 @@ vpc_create() {
 vpc_update() {
     local vpc_id=$1 new_name=$2
 
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$vpc_id" ] || [ -z "$new_name" ]; then
+        echo "使用 fzf 交互式模式更新 VPC"
+
+        # 选择 VPC ID
+        if [ -z "$vpc_id" ]; then
+            local vpc_list
+            vpc_list=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null | jq -r '.Vpcs.Vpc[] | "\(.VpcId) (\(.VpcName // .VpcId)) [\(.CidrBlock)]"')
+
+            if [ -z "$vpc_list" ]; then
+                echo "错误：没有找到 VPC。" >&2
+                return 1
+            elif [ "$(echo "$vpc_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                vpc_id=$(echo "$vpc_list" | awk '{print $1}')
+                echo "自动选择唯一的 VPC: $vpc_id"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    vpc_id=$(select_with_fzf "选择 VPC" "$vpc_list" | awk '{print $1}')
+                else
+                    echo "错误：需要选择 VPC，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        # 输入新名称
+        if [ -z "$new_name" ]; then
+            read -r -p "请输入新的 VPC 名称: " new_name
+            if [ -z "$new_name" ]; then
+                echo "错误：新名称不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if ! validate_required_params "$vpc_id" "$new_name" "错误：VPC ID 和新名称不能为空。"; then
         return 1
     fi
@@ -155,7 +256,7 @@ vpc_update() {
     result=$(call_aliyun_api vpc ModifyVpcAttribute \
         --VpcId "$vpc_id" \
         --VpcName "$new_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "vpc" "update" "$result"
@@ -169,6 +270,29 @@ vpc_update() {
 # 使用新框架的删除函数
 vpc_delete() {
     local vpc_id=$1
+
+    # 如果没有提供 VPC ID，则使用 fzf 交互式选择
+    if [ -z "$vpc_id" ]; then
+        echo "使用 fzf 交互式模式删除 VPC"
+
+        local vpc_list
+        vpc_list=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null | jq -r '.Vpcs.Vpc[] | "\(.VpcId) (\(.VpcName // .VpcId)) [\(.CidrBlock)]"')
+
+        if [ -z "$vpc_list" ]; then
+            echo "错误：没有找到 VPC。" >&2
+            return 1
+        elif [ "$(echo "$vpc_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            vpc_id=$(echo "$vpc_list" | awk '{print $1}')
+            echo "自动选择唯一的 VPC: $vpc_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                vpc_id=$(select_with_fzf "选择要删除的 VPC" "$vpc_list" | awk '{print $1}')
+            else
+                echo "错误：需要选择 VPC，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
 
     if [ -z "$vpc_id" ]; then
         echo "错误：VPC ID 不能为空。" >&2
@@ -192,7 +316,7 @@ vpc_delete() {
     echo "  名称: $vpc_name"
     echo "  网段: $cidr_block"
     echo "  地域: $region"
-    
+
     if ! confirm_action "删除 VPC：$vpc_id"; then
         return 1
     fi
@@ -200,7 +324,7 @@ vpc_delete() {
     echo "删除 VPC："
     local result
     result=$(call_aliyun_api vpc DeleteVpc --VpcId "$vpc_id" --RegionId "$region")
-    
+
     if [ $? -eq 0 ]; then
         echo "VPC 删除成功。"
         log_delete_operation "${profile:-}" "$region" "vpc" "$vpc_id" "VPC" "成功"
@@ -252,19 +376,19 @@ vpc_vswitch_list() {
     fi
 
     local format=${2:-human}
-    
+
     local table_header="VSwitchId\tVSwitchName\tStatus\tZoneId\tCidrBlock\tCreationTime"
     local jq_filter=".VSwitches.VSwitch[] | [.VSwitchId, .VSwitchName, .Status, .ZoneId, .CidrBlock, .CreationTime] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s %-18s %-6s %-14s %-14s %s\n", $1, $2, $3, $4, $5, $6}'
-    
+
     local result
     result=$(call_aliyun_api vpc DescribeVSwitches --VpcId "$vpc_id" --RegionId "$region")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取交换机列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -322,7 +446,7 @@ select_zone() {
     else
         selected_zone=$(echo "$zones" | head -1)
     fi
-    
+
     if [ -z "$selected_zone" ]; then
         echo "错误：未选择可用区。" >&2
         return 1
@@ -382,7 +506,7 @@ vpc_vswitch_create() {
         --ZoneId "$zone" \
         --VSwitchName "$name" \
         --CidrBlock "$cidr")
-    
+
     if [ $? -eq 0 ]; then
         echo "交换机创建成功："
         echo "$result" | jq '.'
@@ -408,7 +532,7 @@ vpc_vswitch_update() {
         --RegionId "$region" \
         --VSwitchId "$vswitch_id" \
         --VSwitchName "$new_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "交换机更新成功："
         echo "$result" | jq '.'
@@ -436,7 +560,7 @@ vpc_vswitch_delete() {
     echo "删除交换机："
     local result
     result=$(call_aliyun_api vpc DeleteVSwitch --VSwitchId "$vswitch_id" --RegionId "$region")
-    
+
     if [ $? -eq 0 ]; then
         echo "交换机删除成功。"
         log_delete_operation "${profile:-}" "$region" "vpc" "$vswitch_id" "交换机" "成功"
@@ -459,19 +583,19 @@ vpc_sg_list() {
     fi
 
     local format=${2:-human}
-    
+
     local table_header="SecurityGroupId\tSecurityGroupName\tDescription\tCreationTime"
     local jq_filter=".SecurityGroups.SecurityGroup[] | [.SecurityGroupId, .SecurityGroupName, .Description, .CreationTime] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s %-18s %-28s %s\n", $1, substr($2, 1, 14), $3, $4}'
-    
+
     local result
     result=$(call_aliyun_api ecs DescribeSecurityGroups --VpcId "$vpc_id" --RegionId "$region")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取安全组列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -505,7 +629,7 @@ vpc_sg_create() {
         --VpcId "$vpc_id" \
         --SecurityGroupName "$name" \
         --Description "$description")
-    
+
     if [ $? -eq 0 ]; then
         echo "安全组创建成功："
         echo "$result" | jq '.'
@@ -532,7 +656,7 @@ vpc_sg_update() {
         --SecurityGroupId "$sg_id" \
         --SecurityGroupName "$new_name" \
         --Description "$new_description")
-    
+
     if [ $? -eq 0 ]; then
         echo "安全组更新成功："
         echo "$result" | jq '.'
@@ -560,7 +684,7 @@ vpc_sg_delete() {
     echo "删除安全组："
     local result
     result=$(call_aliyun_api ecs DeleteSecurityGroup --SecurityGroupId "$sg_id" --RegionId "$region")
-    
+
     if [ $? -eq 0 ]; then
         echo "安全组删除成功。"
         log_delete_operation "${profile:-}" "$region" "vpc" "$sg_id" "安全组" "成功"
@@ -586,17 +710,17 @@ vpc_sg_rule_list() {
     echo "列出安全组规则："
     echo "规则ID             方向    协议    端口范围    源/目标IP        优先级  创建时间"
     echo "----------------   ------  ------  ----------  ---------------  ------  -------------------------"
-    
+
     local result
     result=$(call_aliyun_api ecs DescribeSecurityGroupAttribute \
         --SecurityGroupId "$sg_id" \
         --RegionId "$region")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取安全组规则列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     if [[ $(echo "$result" | jq '.Permissions.Permission | length') -eq 0 ]]; then
         echo "没有找到安全组规则。"
     else
@@ -608,7 +732,7 @@ vpc_sg_rule_list() {
             printf "%-18s %-7s %-7s %-11s %-16s %-7s %s\n", $1, direction, protocol, $4, $5, $6, $7
         }'
     fi
-    
+
     log_result "${profile:-}" "$region" "vpc" "sg-rule-list" "$result"
 }
 
@@ -632,7 +756,7 @@ vpc_sg_rule_add() {
         --Policy accept \
         --Priority 1 \
         --Description "${description:-}")
-    
+
     if [ $? -eq 0 ]; then
         echo "安全组规则添加成功："
         echo "$result" | jq '.'
@@ -663,7 +787,7 @@ vpc_sg_rule_update() {
         --NicType intranet \
         --Policy accept \
         --Priority 1)
-    
+
     if [ $? -eq 0 ]; then
         echo "安全组规则更新成功："
         echo "$result" | jq '.'
@@ -687,7 +811,7 @@ vpc_sg_rule_delete() {
     echo "规则ID: $rule_id"
     echo "安全组ID: $sg_id"
     echo "方向: $direction"
-    
+
     if ! confirm_action "删除安全组规则：$rule_id"; then
         return 1
     fi
@@ -705,7 +829,7 @@ vpc_sg_rule_delete() {
             --SecurityGroupId "$sg_id" \
             --SecurityGroupRuleId.1 "$rule_id")
     fi
-    
+
     if [ $? -eq 0 ]; then
         echo "安全组规则删除成功。"
         log_delete_operation "${profile:-}" "$region" "vpc" "$rule_id" "安全组规则" "成功"
@@ -731,12 +855,12 @@ vpc_ipv6gw_list() {
     echo "列出 IPv6 网关："
     local result
     result=$(call_aliyun_api vpc DescribeIpv6Gateways --VpcId "$vpc_id" --RegionId "$region")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 IPv6 网关列表。" >&2
         return 1
     fi
-    
+
     if [[ $(echo "$result" | jq '.Ipv6Gateways.Ipv6Gateway | length') -eq 0 ]]; then
         echo "没有找到 IPv6 网关。"
     else
@@ -744,7 +868,7 @@ vpc_ipv6gw_list() {
         echo "$result" | jq -r '.Ipv6Gateways.Ipv6Gateway[] | [.Ipv6GatewayId, .Name, .Status, .Spec, .BusinessStatus, .CreationTime] | @tsv' |
             awk 'BEGIN {FS="\t"; OFS="\t"} {printf "%-20s %-20s %-10s %-10s %-15s %s\n", $1, $2, $3, $4, $5, $6}'
     fi
-    
+
     log_result "${profile:-}" "$region" "vpc" "ipv6gw-list" "$result"
 }
 
@@ -763,7 +887,7 @@ vpc_ipv6gw_create() {
         --Name "$name" \
         --Spec "$spec" \
         --RegionId "$region")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "vpc" "ipv6gw-create" "$result"
@@ -788,14 +912,14 @@ vpc_ipv6gw_update() {
         "--Name" "$name"
         "--RegionId" "$region"
     )
-    
+
     if [ -n "$spec" ]; then
         api_args+=("--Spec" "$spec")
     fi
-    
+
     local result
     result=$(call_aliyun_api vpc ModifyIpv6GatewayAttribute "${api_args[@]}")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "vpc" "ipv6gw-update" "$result"
@@ -822,7 +946,7 @@ vpc_ipv6gw_delete() {
     echo "删除 IPv6 网关："
     local result
     result=$(call_aliyun_api vpc DeleteIpv6Gateway --Ipv6GatewayId "$ipv6gw_id" --RegionId "$region")
-    
+
     if [ $? -eq 0 ]; then
         echo "IPv6 网关删除成功。"
         log_delete_operation "${profile:-}" "$region" "vpc" "$ipv6gw_id" "IPv6网关" "成功"

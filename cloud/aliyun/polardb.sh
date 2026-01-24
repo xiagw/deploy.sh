@@ -100,6 +100,126 @@ polardb_list() {
 
 polardb_create() {
     local name=$1 db_type=$2 db_version=$3 db_node_class=$4
+
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$name" ] || [ -z "$db_type" ] || [ -z "$db_version" ] || [ -z "$db_node_class" ]; then
+        echo "使用 fzf 交互式模式创建 PolarDB 集群"
+
+        # 输入名称
+        if [ -z "$name" ]; then
+            read -r -p "请输入 PolarDB 集群名称: " name
+            if [ -z "$name" ]; then
+                echo "错误：集群名称不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择数据库类型
+        if [ -z "$db_type" ]; then
+            echo "正在获取可用的 PolarDB 数据库类型..."
+            local db_type_list="MySQL
+PostgreSQL"
+            if type select_with_fzf >/dev/null 2>&1; then
+                db_type=$(select_with_fzf "选择 PolarDB 数据库类型" "$db_type_list")
+            else
+                echo "错误：需要选择数据库类型，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择版本
+        if [ -z "$db_version" ]; then
+            echo "正在获取 $db_type 的可用 PolarDB 版本..."
+            local version_list
+            case "$db_type" in
+            MySQL)
+                version_list="8.0
+8.0.1
+8.0.2
+5.7
+5.6"
+                ;;
+            PostgreSQL)
+                version_list="15.0
+14.0
+13.0
+11.0"
+                ;;
+            *)
+                echo "错误：不支持的数据库类型：$db_type" >&2
+                return 1
+                ;;
+            esac
+            if type select_with_fzf >/dev/null 2>&1; then
+                db_version=$(select_with_fzf "选择 PolarDB 版本" "$version_list")
+            else
+                echo "错误：需要选择数据库版本，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择节点规格
+        if [ -z "$db_node_class" ]; then
+            echo "正在获取 $db_type $db_version 的可用 PolarDB 节点规格..."
+            local class_result
+            class_result=$(call_aliyun_api polardb DescribeDBNodeClasses \
+                --RegionId "$region" \
+                --DBType "$db_type" \
+                --DBVersion "$db_version" \
+                --PayType "Postpaid" 2>/dev/null)
+
+            local class_list
+            if [ $? -eq 0 ] && [ -n "$class_result" ]; then
+                class_list=$(echo "$class_result" | jq -r '.Items[] | select(.ZoneId != null) | .SupportedDBNodeClasses[] | "\(.DBNodeClass)"' | sort -u)
+
+                if [ -z "$class_list" ]; then
+                    echo "警告：无法从 API 获取节点规格，使用备用列表。" >&2
+                    case "$db_type" in
+                    MySQL)
+                        class_list="polar.mysql.x8.small
+polar.mysql.x8.medium
+polar.mysql.x8.large
+polar.mysql.c1.medium
+polar.mysql.c2.large"
+                        ;;
+                    PostgreSQL)
+                        class_list="polar.pg.x8.small
+polar.pg.x8.medium
+polar.pg.x8.large
+polar.pg.c1.medium
+polar.pg.c2.large"
+                        ;;
+                    esac
+                fi
+            else
+                echo "警告：调用 DescribeDBNodeClasses API 失败，使用备用列表。" >&2
+                case "$db_type" in
+                MySQL)
+                    class_list="polar.mysql.x8.small
+polar.mysql.x8.medium
+polar.mysql.x8.large
+polar.mysql.c1.medium
+polar.mysql.c2.large"
+                    ;;
+                PostgreSQL)
+                    class_list="polar.pg.x8.small
+polar.pg.x8.medium
+polar.pg.x8.large
+polar.pg.c1.medium
+polar.pg.c2.large"
+                    ;;
+                esac
+            fi
+
+            if type select_with_fzf >/dev/null 2>&1; then
+                db_node_class=$(select_with_fzf "选择 PolarDB 节点规格" "$class_list")
+            else
+                echo "错误：需要选择节点规格，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     echo "创建 PolarDB 集群："
     local result
     result=$(aliyun --profile "${profile:-}" polardb CreateDBCluster \
@@ -116,6 +236,42 @@ polardb_create() {
 
 polardb_update() {
     local cluster_id=$1 new_name=$2
+
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$cluster_id" ] || [ -z "$new_name" ]; then
+        echo "使用 fzf 交互式模式更新 PolarDB 集群"
+
+        # 选择集群ID
+        if [ -z "$cluster_id" ]; then
+            local cluster_list
+            cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.DBClusters[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+
+            if [ -z "$cluster_list" ]; then
+                echo "错误：没有找到 PolarDB 集群。" >&2
+                return 1
+            elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                cluster_id=$(echo "$cluster_list" | awk '{print $1}')
+                echo "自动选择唯一的 PolarDB 集群: $cluster_id"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    cluster_id=$(select_with_fzf "选择 PolarDB 集群" "$cluster_list" | awk '{print $1}')
+                else
+                    echo "错误：需要选择 PolarDB 集群，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        # 输入新名称
+        if [ -z "$new_name" ]; then
+            read -r -p "请输入新的集群名称: " new_name
+            if [ -z "$new_name" ]; then
+                echo "错误：新名称不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     echo "更新 PolarDB 集群："
     local result
     result=$(aliyun --profile "${profile:-}" polardb ModifyDBClusterDescription \
@@ -127,6 +283,30 @@ polardb_update() {
 
 polardb_delete() {
     local cluster_id=$1
+
+    # 如果没有提供集群ID，则使用 fzf 交互式选择
+    if [ -z "$cluster_id" ]; then
+        echo "使用 fzf 交互式模式删除 PolarDB 集群"
+
+        local cluster_list
+        cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.DBClusters[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+
+        if [ -z "$cluster_list" ]; then
+            echo "错误：没有找到 PolarDB 集群。" >&2
+            return 1
+        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
+            echo "自动选择唯一的 PolarDB 集群: $cluster_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                cluster_id=$(select_with_fzf "选择要删除的 PolarDB 集群" "$cluster_list" | awk '{print $1}')
+            else
+                echo "错误：需要选择 PolarDB 集群，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     echo "警告：您即将删除 PolarDB 集群：$cluster_id"
     read -r -p "请输入 'YES' 以确认删除操作: " confirm
 

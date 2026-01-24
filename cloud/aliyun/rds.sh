@@ -63,7 +63,7 @@ handle_rds_commands() {
 # 使用新框架的列表函数
 rds_list() {
     local format=${1:-human}
-    
+
     local table_header="DBInstanceId\tDBInstanceDescription\tDBInstanceStatus\tEngine\tEngineVersion\tDBInstanceClass\tRegionId\tCreateTime"
     local jq_filter=".Items.DBInstance[] | [.DBInstanceId, .DBInstanceDescription, .DBInstanceStatus, .Engine, .EngineVersion, .DBInstanceClass, .RegionId, .CreateTime] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"}
@@ -74,7 +74,7 @@ rds_list() {
         else status = "未知";
         printf "%-16s  %-18s  %-6s  %-6s  %-5s  %-17s  %-12s  %s\n", $1, $2, status, $4, $5, $6, $7, $8
     }'
-    
+
     generic_list \
         "rds" \
         "DescribeDBInstances" \
@@ -90,6 +90,200 @@ rds_list() {
 # 使用新框架的创建函数
 rds_create() {
     local name=$1 engine=$2 version=$3 class=$4
+
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$name" ] || [ -z "$engine" ] || [ -z "$version" ] || [ -z "$class" ]; then
+        echo "使用 fzf 交互式模式创建 RDS 实例"
+
+        # 输入名称
+        if [ -z "$name" ]; then
+            read -r -p "请输入 RDS 实例名称: " name
+            if [ -z "$name" ]; then
+                echo "错误：实例名称不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择引擎
+        if [ -z "$engine" ]; then
+            echo "正在获取可用的数据库引擎..."
+            local engine_result
+            engine_result=$(call_aliyun_api rds DescribeRegions --RegionId "$region" 2>/dev/null)
+
+            if [ $? -eq 0 ] && [ -n "$engine_result" ]; then
+                # 获取支持的数据库引擎
+                local engine_list="MySQL
+PostgreSQL
+SQLServer
+MariaDB"
+                echo "使用可用引擎列表。"
+            else
+                echo "警告：无法获取可用引擎，使用默认列表。" >&2
+                local engine_list="MySQL
+PostgreSQL
+SQLServer"
+            fi
+
+            if type select_with_fzf >/dev/null 2>&1; then
+                engine=$(select_with_fzf "选择数据库引擎" "$engine_list")
+            else
+                echo "错误：需要选择数据库引擎，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择版本
+        if [ -z "$version" ]; then
+            echo "正在获取 $engine 引擎的可用版本..."
+            local version_result
+            version_result=$(call_aliyun_api rds DescribeRegions --RegionId "$region" 2>/dev/null)
+
+            local version_list
+            case "$engine" in
+            MySQL)
+                if [ $? -eq 0 ] && [ -n "$version_result" ]; then
+                    version_list="8.0
+5.7
+5.6"
+                else
+                    version_list="8.0
+5.7
+5.6"
+                fi
+                ;;
+            PostgreSQL)
+                if [ $? -eq 0 ] && [ -n "$version_result" ]; then
+                    version_list="16.0
+15.0
+14.0
+13.0"
+                else
+                    version_list="14.0
+13.0
+12.0"
+                fi
+                ;;
+            SQLServer)
+                if [ $? -eq 0 ] && [ -n "$version_result" ]; then
+                    version_list="2022
+2019
+2017
+2016"
+                else
+                    version_list="2019
+2017
+2016"
+                fi
+                ;;
+            MariaDB)
+                if [ $? -eq 0 ] && [ -n "$version_result" ]; then
+                    version_list="10.11
+10.6
+10.5
+10.4"
+                else
+                    version_list="10.5
+10.4
+10.3"
+                fi
+                ;;
+            *)
+                echo "错误：不支持的数据库引擎：$engine" >&2
+                return 1
+                ;;
+            esac
+            if type select_with_fzf >/dev/null 2>&1; then
+                version=$(select_with_fzf "选择数据库版本" "$version_list")
+            else
+                echo "错误：需要选择数据库版本，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择规格
+        if [ -z "$class" ]; then
+            echo "正在获取 $engine $version 的可用实例规格..."
+            local class_result
+            class_result=$(call_aliyun_api rds DescribeAvailableClasses \
+                --RegionId "$region" \
+                --Engine "$engine" \
+                --EngineVersion "$version" \
+                --InstanceChargeType "PostPaid" \
+                --ZoneId "$(call_aliyun_api rds DescribeZones --RegionId "$region" 2>/dev/null | jq -r '.Zones.Zone[0].ZoneId')" 2>/dev/null)
+
+            local class_list
+            if [ $? -eq 0 ] && [ -n "$class_result" ]; then
+                class_list=$(echo "$class_result" | jq -r '.Items.DBInstanceClass[].DBInstanceClass' | sort -u)
+
+                if [ -z "$class_list" ]; then
+                    echo "警告：无法从 API 获取实例规格，使用备用列表。" >&2
+                    case "$engine" in
+                    MySQL | PostgreSQL)
+                        class_list="rds.mysql.c1.small
+rds.mysql.c1.medium
+rds.mysql.c2.large
+rds.mysql.c3.xlarge
+rds.mysql.c4.2xlarge
+rds.pg.c1.small
+rds.pg.c1.medium
+rds.pg.c2.large
+rds.pg.c3.xlarge
+rds.pg.c4.2xlarge"
+                        ;;
+                    SQLServer)
+                        class_list="rds.mssql.c1.small
+rds.mssql.c1.medium
+rds.mssql.c2.large
+rds.mssql.c3.xlarge
+rds.mssql.c4.2xlarge"
+                        ;;
+                    MariaDB)
+                        class_list="rds.maria.c1.small
+rds.maria.c1.medium
+rds.maria.c2.large
+rds.maria.c3.xlarge"
+                        ;;
+                    esac
+                fi
+            else
+                echo "警告：调用 DescribeAvailableClasses API 失败，使用备用列表。" >&2
+                case "$engine" in
+                MySQL | PostgreSQL)
+                    class_list="rds.mysql.c1.small
+rds.mysql.c1.medium
+rds.mysql.c2.large
+rds.mysql.c3.xlarge
+rds.mysql.c4.2xlarge
+rds.pg.c1.small
+rds.pg.c1.medium
+rds.pg.c2.large
+rds.pg.c3.xlarge
+rds.pg.c4.2xlarge"
+                    ;;
+                SQLServer)
+                    class_list="rds.mssql.c1.small
+rds.mssql.c1.medium
+rds.mssql.c2.large
+rds.mssql.c3.xlarge
+rds.mssql.c4.2xlarge"
+                    ;;
+                MariaDB)
+                    class_list="rds.maria.c1.small
+rds.maria.c1.medium
+rds.maria.c2.large
+rds.maria.c3.xlarge"
+                    ;;
+                esac
+            fi
+
+            if type select_with_fzf >/dev/null 2>&1; then
+                class=$(select_with_fzf "选择实例规格" "$class_list")
+            else
+                echo "错误：需要选择实例规格，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
 
     if ! validate_required_params "$name" "$engine" "$version" "$class" "错误：名称、引擎、版本和规格不能为空。"; then
         return 1
@@ -107,7 +301,7 @@ rds_create() {
         --SecurityIPList "0.0.0.0/0" \
         --PayType Postpaid \
         --DBInstanceDescription "$name")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "rds" "create" "$result"
@@ -122,6 +316,41 @@ rds_create() {
 rds_update() {
     local instance_id=$1 new_name=$2
 
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$instance_id" ] || [ -z "$new_name" ]; then
+        echo "使用 fzf 交互式模式更新 RDS 实例"
+
+        # 选择实例ID
+        if [ -z "$instance_id" ]; then
+            local instance_list
+            instance_list=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+            if [ -z "$instance_list" ]; then
+                echo "错误：没有找到 RDS 实例。" >&2
+                return 1
+            elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                instance_id=$(echo "$instance_list" | awk '{print $1}')
+                echo "自动选择唯一的 RDS 实例: $instance_id"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    instance_id=$(select_with_fzf "选择 RDS 实例" "$instance_list" | awk '{print $1}')
+                else
+                    echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        # 输入新名称
+        if [ -z "$new_name" ]; then
+            read -r -p "请输入新的实例名称: " new_name
+            if [ -z "$new_name" ]; then
+                echo "错误：新名称不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if ! validate_required_params "$instance_id" "$new_name" "错误：实例ID和新名称不能为空。"; then
         return 1
     fi
@@ -131,7 +360,7 @@ rds_update() {
     result=$(call_aliyun_api rds ModifyDBInstanceDescription \
         --DBInstanceId "$instance_id" \
         --DBInstanceDescription "$new_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "rds" "update" "$result"
@@ -146,6 +375,29 @@ rds_update() {
 rds_delete() {
     local instance_id=$1
 
+    # 如果没有提供实例ID，则使用 fzf 交互式选择
+    if [ -z "$instance_id" ]; then
+        echo "使用 fzf 交互式模式删除 RDS 实例"
+
+        local instance_list
+        instance_list=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 RDS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要删除的 RDS 实例" "$instance_list" | awk '{print $1}')
+            else
+                echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if [ -z "$instance_id" ]; then
         echo "错误：实例ID不能为空。" >&2
         return 1
@@ -158,7 +410,7 @@ rds_delete() {
     echo "删除 RDS 实例："
     local result
     result=$(call_aliyun_api rds DeleteDBInstance --DBInstanceId "$instance_id")
-    
+
     if [ $? -eq 0 ]; then
         echo "RDS 实例删除成功。"
         log_delete_operation "${profile:-}" "$region" "rds" "$instance_id" "RDS实例" "成功"
@@ -235,7 +487,7 @@ rds_account_create() {
         --AccountPassword "$password" \
         --AccountDescription "$description" \
         --AccountType Normal)
-    
+
     if [ $? -eq 0 ]; then
         echo "账号创建成功："
         echo "$result" | jq '.'
@@ -274,7 +526,7 @@ rds_account_delete() {
     result=$(call_aliyun_api rds DeleteAccount \
         --DBInstanceId "$instance_id" \
         --AccountName "$account_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "账号删除成功。"
         log_delete_operation "${profile:-}" "$region" "rds" "$account_name" "RDS账号" "成功"
@@ -324,15 +576,15 @@ rds_account_list() {
             ] | @tsv
         end"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-10s  %-8s  %-20s  %-16s  %-10s  %s\n", $1, $2, $3, substr($4, 1, 18), $5, $6, $7}'
-    
+
     local result
     result=$(call_aliyun_api rds DescribeAccounts --DBInstanceId "$instance_id")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取账号列表。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -358,15 +610,15 @@ rds_db_list() {
     local table_header="DBName\tCharacterSetName\tDBStatus\tDBDescription"
     local jq_filter=".Databases.Database[] | [.DBName, .CharacterSetName, .DBStatus, .DBDescription] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-15s  %-8s  %s\n", $1, $2, $3, substr($4, 1, 20)}'
-    
+
     local result
     result=$(call_aliyun_api rds DescribeDatabases --DBInstanceId "$instance_id")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取数据库列表。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -400,7 +652,7 @@ rds_db_create() {
         --DBName "$db_name" \
         --CharacterSetName "$charset" \
         --DBDescription "Created by CLI")
-    
+
     if [ $? -eq 0 ]; then
         echo "数据库创建成功："
         echo "$result" | jq '.'
@@ -430,7 +682,7 @@ rds_db_delete() {
     result=$(call_aliyun_api rds DeleteDatabase \
         --DBInstanceId "$instance_id" \
         --DBName "$db_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "数据库删除成功。"
         log_delete_operation "${profile:-}" "$region" "rds" "$db_name" "数据库" "成功"
@@ -467,7 +719,7 @@ rds_account_grant() {
         --AccountName "$account_name" \
         --DBName "$db_name" \
         --AccountPrivilege "$privilege")
-    
+
     if [ $? -eq 0 ]; then
         echo "权限设置成功。"
         echo "账号 $account_name 已被授予 $privilege 权限，可访问数据库 $db_name"
