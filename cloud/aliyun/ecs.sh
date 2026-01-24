@@ -68,7 +68,7 @@ handle_ecs_commands() {
 ecs_list() {
     local format=${1:-human}
     local result eip_result
-    
+
     result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
@@ -77,7 +77,7 @@ ecs_list() {
 
     # 获取 EIP 列表（用于合并显示）
     eip_result=$(call_aliyun_api vpc DescribeEipAddresses --RegionId "${region:-}" 2>/dev/null)
-    
+
     case "$format" in
     json)
         # 直接输出原始结果
@@ -183,7 +183,7 @@ ecs_create() {
         vswitch_list_raw=$(call_aliyun_api vpc DescribeVSwitches --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null)
         local vswitch_list_ret=$?
     fi
-    
+
     if [ $vswitch_list_ret -ne 0 ] || [ -z "$vswitch_list_raw" ]; then
         echo "错误：在选定的 VPC 中没有找到交换机，请先创建交换机。" >&2
         return 1
@@ -222,12 +222,12 @@ ecs_create() {
         security_group_list_raw=$(call_aliyun_api ecs DescribeSecurityGroups --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null)
         local security_group_list_ret=$?
     fi
-    
+
     if [ $security_group_list_ret -ne 0 ] || [ -z "$security_group_list_raw" ]; then
         echo "错误：无法获取安全组列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     security_group_list=$(echo "$security_group_list_raw" | jq -r '.SecurityGroups.SecurityGroup[]? | select(.SecurityGroupId != null and .SecurityGroupName != null) | "\(.SecurityGroupId) (\(.SecurityGroupName))"')
 
     if [ -z "$security_group_list" ]; then
@@ -252,7 +252,7 @@ ecs_create() {
         instance_types_json=$(call_aliyun_api ecs DescribeInstanceTypes --RegionId "$region")
         instance_type_list=$(echo "$instance_types_json" |
             jq -r '.InstanceTypes.InstanceType[] | "\(.InstanceTypeId) \(.CpuCoreCount)核 \(.MemorySize)GB [\(.ProcessorArchitecture)]"')
-        
+
         if type select_with_fzf >/dev/null 2>&1; then
             local selected_instance_type
             selected_instance_type=$(select_with_fzf "选择实例类型" "$instance_type_list")
@@ -285,17 +285,32 @@ ecs_create() {
     local system_disk_category
     local disk_category_list disk_categories_with_info
     disk_categories_with_info=$(get_supported_disk_categories "$zone_id")
-    disk_category_list=$(echo "$disk_categories_with_info" | while read -r line; do
-        echo "$line" | cut -d' ' -f1
-    done)
-    
-    if type select_with_fzf >/dev/null 2>&1; then
-        system_disk_category=$(select_with_fzf "选择系统盘类型" "$disk_category_list")
+
+    # 检查API调用是否成功
+    if [ $? -eq 0 ] && [ -n "$disk_categories_with_info" ]; then
+        disk_category_list=$(echo "$disk_categories_with_info" | while read -r line; do
+            echo "$line" | cut -d' ' -f1
+        done)
+        if type select_with_fzf >/dev/null 2>&1; then
+            system_disk_category=$(select_with_fzf "选择系统盘类型" "$disk_category_list")
+        else
+            system_disk_category=$(echo "$disk_category_list" | head -1)
+            echo "使用默认系统盘类型: $system_disk_category"
+        fi
     else
-        system_disk_category=$(echo "$disk_category_list" | head -1)
-        echo "使用默认系统盘类型: $system_disk_category"
+        echo "警告：无法从 API 获取磁盘类型，使用默认列表。" >&2
+        disk_category_list="cloud_essd
+cloud_efficiency
+cloud_ssd
+cloud_essd_pl0
+cloud"
+        if type select_with_fzf >/dev/null 2>&1; then
+            system_disk_category=$(select_with_fzf "选择系统盘类型" "$disk_category_list")
+        else
+            system_disk_category="cloud_essd"
+            echo "使用默认系统盘类型: $system_disk_category"
+        fi
     fi
-    echo "选择系统盘类型: $system_disk_category"
 
     # 选择镜像
     local image_family image_id create_command_image_param
@@ -310,7 +325,7 @@ ecs_create() {
             --OSType linux \
             --ImageOwnerAlias system \
             --Status Available | jq -r '.Images.Image[] | "\(.ImageId) [\(.OSName)]"')
-        
+
         if type select_with_fzf >/dev/null 2>&1; then
             image_id=$(select_with_fzf "选择 ARM 架构镜像" "$image_list" | awk '{print $1}')
         else
@@ -327,23 +342,32 @@ ecs_create() {
     # 选择 SSH 密钥对
     local key_pair_name
     local key_pair_list
-    key_pair_list=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" | jq -r '.KeyPairs.KeyPair[] | .KeyPairName')
-    local key_count
-    key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]')
+    local key_result
+    key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
 
-    if [ "$key_count" -eq 0 ]; then
-        echo "错误：没有找到 SSH 密钥对，请先创建 SSH 密钥对。" >&2
-        return 1
-    elif [ "$key_count" -eq 1 ]; then
-        key_pair_name=$key_pair_list
-        echo "自动选择唯一的 SSH 密钥对: $key_pair_name"
-    else
-        if type select_with_fzf >/dev/null 2>&1; then
-            key_pair_name=$(select_with_fzf "选择 SSH 密钥对" "$key_pair_list")
+    if [ $? -eq 0 ] && [ -n "$key_result" ]; then
+        key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[] | .KeyPairName' 2>/dev/null)
+        local key_count
+        key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]' 2>/dev/null || echo "0")
+
+        if [ "$key_count" -eq 0 ] || [ "$key_count" = "0" ]; then
+            echo "错误：没有找到 SSH 密钥对，请先创建 SSH 密钥对。" >&2
+            return 1
+        elif [ "$key_count" -eq 1 ]; then
+            key_pair_name=$key_pair_list
+            echo "自动选择唯一的 SSH 密钥对: $key_pair_name"
         else
-            key_pair_name=$(echo "$key_pair_list" | head -1)
+            if type select_with_fzf >/dev/null 2>&1; then
+                key_pair_name=$(select_with_fzf "选择 SSH 密钥对" "$key_pair_list")
+            else
+                echo "错误：需要选择 SSH 密钥对，但未找到交互式选择工具。" >&2
+                return 1
+            fi
         fi
-        echo "手动选择 SSH 密钥对: $key_pair_name"
+    else
+        echo "错误：无法获取 SSH 密钥对列表。" >&2
+        echo "$key_result" >&2
+        return 1
     fi
 
     # 设置默认公网带宽
@@ -382,7 +406,7 @@ ecs_create() {
     echo "正在创建 ECS 实例..."
     local result
     result=$(call_aliyun_api ecs RunInstances "${api_args[@]}")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         echo "ECS 实例创建并启动成功。"
@@ -428,7 +452,7 @@ ecs_update() {
         --RegionId "$region" \
         --InstanceId "$instance_id" \
         --InstanceName "$new_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ecs" "update" "$result"
@@ -458,7 +482,7 @@ ecs_delete() {
         --RegionId "$region" \
         --InstanceId "$instance_id" \
         --Force true)
-    
+
     if [ $? -eq 0 ]; then
         echo "ECS 实例删除成功。"
         log_delete_operation "${profile:-}" "$region" "ecs" "$instance_id" "ECS实例" "成功"
@@ -475,19 +499,19 @@ ecs_delete() {
 # SSH 密钥对列表（使用框架函数）
 ecs_key_list() {
     local format=${1:-human}
-    
+
     local table_header="KeyPairName\tKeyPairFingerPrint\tCreationTime"
     local jq_filter=".KeyPairs.KeyPair[] | [.KeyPairName, .KeyPairFingerPrint, .CreationTime] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-36s  %s\n", $1, $2, $3}'
-    
+
     local result
     result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 SSH 密钥对列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -514,7 +538,7 @@ ecs_key_create() {
     result=$(call_aliyun_api ecs CreateKeyPair \
         --RegionId "$region" \
         --KeyPairName "$key_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对创建成功："
         echo "$result" | jq '.'
@@ -559,7 +583,7 @@ ecs_key_import() {
         --RegionId "$region" \
         --KeyPairName "$key_name" \
         --PublicKeyBody "$public_key")
-    
+
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对导入成功："
         echo "$result" | jq '.'
@@ -589,7 +613,7 @@ ecs_key_delete() {
     result=$(call_aliyun_api ecs DeleteKeyPairs \
         --RegionId "$region" \
         --KeyPairNames "['$key_name']")
-    
+
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对删除成功。"
         log_delete_operation "${profile:-}" "$region" "ecs" "$key_name" "SSH密钥对" "成功"
@@ -618,7 +642,7 @@ ecs_key_attach() {
         --RegionId "$region" \
         --InstanceIds "['$instance_id']" \
         --KeyPairName "$key_pair_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对绑定成功。"
         echo "$result" | jq '.'
@@ -645,7 +669,7 @@ ecs_key_detach() {
         --RegionId "$region" \
         --InstanceIds "['$instance_id']" \
         --KeyPairName "$key_pair_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对解绑成功。"
         echo "$result" | jq '.'
@@ -661,7 +685,7 @@ ecs_key_detach() {
 get_supported_disk_categories() {
     local zone_id=$1
     local result
-    
+
     echo "正在获取支持的磁盘类型..."
     result=$(call_aliyun_api ecs DescribeAvailableResource \
         --RegionId "$region" \
@@ -722,7 +746,7 @@ ecs_start() {
     result=$(call_aliyun_api ecs StartInstance \
         --RegionId "$region" \
         --InstanceId "$instance_id")
-    
+
     if [ $? -eq 0 ]; then
         echo "ECS 实例启动命令已发送。"
         echo "$result" | jq '.'
@@ -765,7 +789,7 @@ ecs_stop() {
         --InstanceId "$instance_id" \
         --StoppedMode StopCharging \
         --ForceStop false)
-    
+
     if [ $? -eq 0 ]; then
         echo "ECS 实例停止命令已发送。"
         echo "$result" | jq '.'
