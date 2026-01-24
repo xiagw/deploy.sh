@@ -84,17 +84,17 @@ dns_list() {
     local table_header="RecordId\tRR\tType\tValue\tStatus"
     local jq_filter=".DomainRecords.Record[] | [.RecordId, .RR, .Type, .Value, .Status] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-10s  %-6s  %-22s  %s\n", $1, $2, $3, $4, $5}'
-    
+
     local result
     result=$(call_aliyun_api alidns DescribeDomainRecords \
         --DomainName "$domain" \
         --PageSize 100)
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 DNS 记录列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -110,6 +110,84 @@ dns_list() {
 # 使用新框架的创建函数
 dns_create() {
     local domain=$1 rr=$2 type=$3 value=$4
+
+    # 如果没有提供参数，则使用交互式输入
+    if [ -z "$domain" ] || [ -z "$rr" ] || [ -z "$type" ] || [ -z "$value" ]; then
+        echo "使用交互式模式创建 DNS 记录"
+
+        # 输入域名 - 必须用户明确输入
+        if [ -z "$domain" ]; then
+            read -r -p "请输入域名: " domain
+            if [ -z "$domain" ]; then
+                echo "错误：域名不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 输入主机记录 - 必须用户明确输入
+        if [ -z "$rr" ]; then
+            read -r -p "请输入主机记录 (如: www, @, api): " rr
+            if [ -z "$rr" ]; then
+                echo "错误：主机记录不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择记录类型 - 可以从预定义列表选择
+        if [ -z "$type" ]; then
+            local type_list="A
+AAAA
+CNAME
+MX
+TXT
+NS
+SRV
+CAA"
+            if type select_with_fzf >/dev/null 2>&1; then
+                type=$(select_with_fzf "选择 DNS 记录类型" "$type_list")
+            else
+                read -r -p "请输入记录类型 (A/AAAA/CNAME/MX/TXT/NS/SRV/CAA): " type
+                if [ -z "$type" ]; then
+                    echo "错误：记录类型不能为空。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        # 输入记录值 - 必须用户明确输入
+        if [ -z "$value" ]; then
+            case "$type" in
+            A | AAAA)
+                read -r -p "请输入IP地址: " value
+                ;;
+            CNAME)
+                read -r -p "请输入目标域名: " value
+                ;;
+            MX)
+                read -r -p "请输入邮件服务器域名: " value
+                ;;
+            TXT)
+                read -r -p "请输入文本内容: " value
+                ;;
+            NS)
+                read -r -p "请输入名称服务器域名: " value
+                ;;
+            SRV)
+                read -r -p "请输入服务记录值: " value
+                ;;
+            CAA)
+                read -r -p "请输入CAA记录值: " value
+                ;;
+            *)
+                read -r -p "请输入记录值: " value
+                ;;
+            esac
+            if [ -z "$value" ]; then
+                echo "错误：记录值不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
 
     if ! validate_required_params "$domain" "$rr" "$type" "$value" "错误：域名、主机记录、类型和值不能为空。"; then
         echo "用法：dns create <域名> <主机记录> <类型> <值>" >&2
@@ -196,19 +274,19 @@ dns_delete() {
 # 使用新框架的域名列表函数
 dns_domain_list() {
     local format=${1:-human}
-    
+
     local table_header="DomainId\tDomainName\tInstanceId\tVersionCode"
     local jq_filter=".Domains.Domain[] | [.DomainId, .DomainName, .InstanceId, .VersionCode] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-20s  %-16s  %s\n", $1, $2, $3, $4}'
-    
+
     local result
     result=$(call_aliyun_api alidns DescribeDomains)
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取域名列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \

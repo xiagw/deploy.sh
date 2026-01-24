@@ -54,19 +54,19 @@ handle_cdn_commands() {
 # 使用新框架的列表函数
 cdn_list() {
     local format=${1:-human}
-    
+
     local table_header="DomainName\tCname\tDomainStatus\tGmtCreated"
     local jq_filter=".Domains.PageData[] | [.DomainName, .Cname, .DomainStatus, .GmtCreated] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-38s  %-6s  %s\n", $1, $2, $3, $4}'
-    
+
     local result
     result=$(call_aliyun_api cdn DescribeUserDomains)
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 CDN 域名列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -82,12 +82,52 @@ cdn_list() {
 # 使用新框架的创建函数
 cdn_create() {
     local domain_name=$1 sources=$2 source_type=$3
-    
+
+    # 如果没有提供参数，则使用交互式输入
+    if [ -z "$domain_name" ] || [ -z "$sources" ] || [ -z "$source_type" ]; then
+        echo "使用交互式模式添加 CDN 加速域名"
+
+        # 输入域名
+        if [ -z "$domain_name" ]; then
+            read -r -p "请输入域名: " domain_name
+            if [ -z "$domain_name" ]; then
+                echo "错误：域名不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 输入源站地址
+        if [ -z "$sources" ]; then
+            read -r -p "请输入源站地址 (如: example.oss-cn-hangzhou.aliyuncs.com): " sources
+            if [ -z "$sources" ]; then
+                echo "错误：源站地址不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择源站类型
+        if [ -z "$source_type" ]; then
+            local source_type_list="oss
+ip
+domain
+oss_private"
+            if type select_with_fzf >/dev/null 2>&1; then
+                source_type=$(select_with_fzf "选择源站类型" "$source_type_list")
+            else
+                read -r -p "请输入源站类型 (oss/ip/domain/oss_private): " source_type
+                if [ -z "$source_type" ]; then
+                    echo "错误：源站类型不能为空。" >&2
+                    return 1
+                fi
+            fi
+        fi
+    fi
+
     if ! validate_required_params "$domain_name" "$sources" "$source_type" "错误：域名、源站和源站类型不能为空。"; then
         echo "用法：cdn create <域名> <源站> <源站类型>" >&2
         return 1
     fi
-    
+
     echo "添加 CDN 加速域名："
     local result
     result=$(call_aliyun_api cdn AddCdnDomain \
@@ -95,7 +135,7 @@ cdn_create() {
         --Sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]" \
         --CdnType web \
         --Scope domestic)
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "cdn" "create" "$result"
@@ -109,20 +149,41 @@ cdn_create() {
 # 使用新框架的删除函数
 cdn_delete() {
     local domain_name=$1
-    
+
+    # 如果没有提供域名，则使用交互式输入
     if [ -z "$domain_name" ]; then
-        echo "错误：域名不能为空。" >&2
-        return 1
+        echo "使用交互式模式删除 CDN 加速域名"
+
+        local domain_list
+        domain_list=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null | jq -r '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"')
+
+        if [ -z "$domain_list" ]; then
+            echo "错误：没有找到 CDN 域名。" >&2
+            return 1
+        elif [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            domain_name=$(echo "$domain_list" | awk '{print $1}')
+            echo "自动选择唯一的 CDN 域名: $domain_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                domain_name=$(select_with_fzf "选择要删除的 CDN 域名" "$domain_list" | awk '{print $1}')
+            else
+                read -r -p "请输入域名: " domain_name
+                if [ -z "$domain_name" ]; then
+                    echo "错误：域名不能为空。" >&2
+                    return 1
+                fi
+            fi
+        fi
     fi
-    
+
     if ! confirm_action "删除 CDN 加速域名：$domain_name"; then
         return 1
     fi
-    
+
     echo "删除 CDN 加速域名："
     local result
     result=$(call_aliyun_api cdn DeleteCdnDomain --DomainName "$domain_name")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_delete_operation "${profile:-}" "$region" "cdn" "$domain_name" "CDN域名" "成功"
@@ -132,25 +193,25 @@ cdn_delete() {
         log_delete_operation "${profile:-}" "$region" "cdn" "$domain_name" "CDN域名" "失败"
         return 1
     fi
-    
+
     log_result "${profile:-}" "$region" "cdn" "delete" "$result"
 }
 
 # 使用新框架的更新函数
 cdn_update() {
     local domain_name=$1 sources=$2 source_type=$3
-    
+
     if ! validate_required_params "$domain_name" "$sources" "$source_type" "错误：域名、源站和源站类型不能为空。"; then
         echo "用法：cdn update <域名> <源站> <源站类型>" >&2
         return 1
     fi
-    
+
     echo "修改 CDN 域名配置："
     local result
     result=$(call_aliyun_api cdn ModifyCdnDomain \
         --DomainName "$domain_name" \
         --Sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]")
-    
+
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "cdn" "update" "$result"
@@ -326,7 +387,7 @@ cdn_pay() {
         echo "错误：无法查询账户余额。" >&2
         return 1
     fi
-    
+
     available_balance="$(
         echo "$balance_result" | jq -r '.Data.AvailableAmount // "0"' |
             awk '{gsub(/,/,""); print int($0)}'
