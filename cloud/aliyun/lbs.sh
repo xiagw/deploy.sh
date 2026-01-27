@@ -124,18 +124,27 @@ clb_list() {
 nlb_list() {
     local format=${1:-human}
 
-    local table_header="LoadBalancerId\tLoadBalancerName\tLoadBalancerStatus\tZoneId\tPublicIP\tPrivateIP\tVpcId\tCreateTime"
-    local jq_filter=".LoadBalancers[] | .ZoneMappings[] as \$zone | [
+    local table_header="LoadBalancerId\tLoadBalancerName\tLoadBalancerStatus\tZoneIds\tPublicIP\tPrivateIP\tVpcId\tCreateTime"
+    local jq_filter=".LoadBalancers[] | {
+        LoadBalancerId: .LoadBalancerId,
+        LoadBalancerName: .LoadBalancerName,
+        LoadBalancerStatus: .LoadBalancerStatus,
+        ZoneIds: ([.ZoneMappings[].ZoneId] | join(\",\")),
+        PublicIPs: ([.ZoneMappings[].LoadBalancerAddresses[0].PublicIPv4Address] | map(select(. != null)) | join(\",\")),
+        PrivateIPs: ([.ZoneMappings[].LoadBalancerAddresses[0].PrivateIPv4Address] | map(select(. != null)) | join(\",\")),
+        VpcId: .VpcId,
+        CreateTime: .CreateTime
+    } | [
         .LoadBalancerId,
         .LoadBalancerName,
         .LoadBalancerStatus,
-        \$zone.ZoneId,
-        (\$zone.LoadBalancerAddresses[0].PublicIPv4Address // \"-\"),
-        (\$zone.LoadBalancerAddresses[0].PrivateIPv4Address // \"-\"),
+        .ZoneIds,
+        (.PublicIPs // \"-\"),
+        (.PrivateIPs // \"-\"),
         .VpcId,
         .CreateTime
     ] | @tsv"
-    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-20s  %-10s  %-10s  %-15s  %-15s  %-18s  %s\n", $1, $2, $3, $4, $5, $6, $7, $8}'
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-20s  %-10s  %-30s  %-15s  %-15s  %-18s  %s\n", $1, $2, $3, $4, $5, $6, $7, $8}'
 
     local result
     result=$(call_aliyun_api nlb ListLoadBalancers --RegionId "$region")
