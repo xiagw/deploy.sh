@@ -323,24 +323,24 @@ config_build_env() {
 
         ## 根据Java版本设置Maven和JDK版本
         ## 支持的Java版本: 7, 8, 11, 17, 21, 23
-        case "${lang:-}" in
-        java:1.7:* | java:7:*)
+        case "${lang}" in
+        java:1.7 | java:1.7:* | java:7:*)
             MVN_VERSION="3.6-jdk-7"
             JDK_VERSION="7"
             ;;
-        java:11:*)
+        java:11 | java:11:*)
             MVN_VERSION="3.9-amazoncorretto-11"
             JDK_VERSION="11-base"
             ;;
-        java:17:*)
+        java:17 | java:17:*)
             MVN_VERSION="3.9-amazoncorretto-17"
             JDK_VERSION="17-base"
             ;;
-        java:21:*)
+        java:21 | java:21:*)
             MVN_VERSION="3.9-amazoncorretto-21"
             JDK_VERSION="21-base"
             ;;
-        java:23:*)
+        java:23 | java:23:*)
             MVN_VERSION="3.9-amazoncorretto-23"
             JDK_VERSION="23-base"
             ;;
