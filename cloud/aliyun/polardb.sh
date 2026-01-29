@@ -3,12 +3,18 @@
 
 # PolarDB (云数据库 PolarDB) 相关函数
 
+# 加载基础框架
+# shellcheck source=/dev/null
+[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+
 show_polardb_help() {
     echo "PolarDB (云数据库 PolarDB) 操作："
     echo "  list                                    - 列出 PolarDB 集群"
     echo "  create <名称> <引擎> <版本> <规格> [地域] - 创建 PolarDB 集群"
     echo "  update <集群ID> <新名称> [地域]          - 更新 PolarDB 集群"
     echo "  delete <集群ID> [地域]                   - 删除 PolarDB 集群"
+    echo "  whitelist-set <集群ID> <白名单组> <白名单IP> - 设置白名单"
+    echo "  whitelist-get <集群ID>                   - 获取白名单"
     echo "  account-create <集群ID> <账号> <密码> [描述] - 创建数据库账号"
     echo "  account-delete <集群ID> <账号>           - 删除数据库账号"
     echo "  account-list <集群ID>                    - 列出数据库账号"
@@ -22,6 +28,8 @@ show_polardb_help() {
     echo "  $0 polardb create my-polardb MySQL 8.0 polar.mysql.x4.large"
     echo "  $0 polardb update pc-xxxxxxxxxxxxx new-name"
     echo "  $0 polardb delete pc-xxxxxxxxxxxxx"
+    echo "  $0 polardb whitelist-set pc-xxxxxxxxxxxxx default 192.168.1.1,10.0.0.0/8"
+    echo "  $0 polardb whitelist-get pc-xxxxxxxxxxxxx"
     echo "  $0 polardb account-create pc-xxxxxxxxxxxxx myuser mypassword '测试账号'"
     echo "  $0 polardb account-delete pc-xxxxxxxxxxxxx myuser"
     echo "  $0 polardb account-list pc-xxxxxxxxxxxxx"
@@ -40,6 +48,8 @@ handle_polardb_commands() {
     create) polardb_create "$@" ;;
     update) polardb_update "$@" ;;
     delete) polardb_delete "$@" ;;
+    whitelist-set) polardb_whitelist_set "$@" ;;
+    whitelist-get) polardb_whitelist_get "$@" ;;
     account-create) polardb_account_create "$@" ;;
     account-delete) polardb_account_delete "$@" ;;
     account-list) polardb_account_list "$@" ;;
@@ -491,4 +501,83 @@ polardb_account_grant() {
     fi
 
     log_result "${profile:-}" "$region" "polardb" "account-grant" "$result"
+}
+
+# 设置白名单函数
+polardb_whitelist_set() {
+    local cluster_id=$1
+    local whitelist_group=$2
+    local whitelist_ips=$3
+
+    if [ -z "$cluster_id" ] || [ -z "$whitelist_ips" ]; then
+        echo "错误：集群ID和白名单IP不能为空。" >&2
+        echo "用法：polardb whitelist-set <集群ID> <白名单组> <白名单IP>" >&2
+        return 1
+    fi
+
+    echo "设置 PolarDB 白名单："
+    echo "集群ID: $cluster_id"
+    echo "白名单组: ${whitelist_group:-default}"
+    echo "白名单IP: $whitelist_ips"
+
+    local result
+    result=$(call_aliyun_api polardb ModifyDBClusterAccessWhitelist \
+        --DBClusterId "$cluster_id" \
+        --DBClusterIPArrayName "${whitelist_group:-default}" \
+        --SecurityIps "$whitelist_ips" \
+        --ModifyMode "Cover")
+
+    ret=$?
+    if [ $ret -eq 0 ]; then
+        echo "白名单设置成功。"
+        echo "$result" | jq '.'
+    else
+        echo "错误：白名单设置失败。"
+        echo "$result"
+        return 1
+    fi
+
+    log_result "${profile:-}" "$region" "polardb" "whitelist-set" "$result"
+}
+
+# 获取白名单函数
+polardb_whitelist_get() {
+    local cluster_id=$1
+    local format=${2:-human}
+
+    if [ -z "$cluster_id" ]; then
+        echo "错误：集群ID不能为空。" >&2
+        echo "用法：polardb whitelist-get <集群ID> [format]" >&2
+        return 1
+    fi
+
+    echo "获取 PolarDB 白名单："
+    local result
+    result=$(call_aliyun_api polardb DescribeDBClusterAccessWhitelist --DBClusterId "$cluster_id")
+
+    case "$format" in
+    json)
+        # 直接输出原始结果
+        echo "$result"
+        ;;
+    tsv)
+        # TSV 格式
+        echo -e "白名单组名\t白名单组属性\t白名单IP列表"
+        echo "$result" | jq -r '.Items.DBClusterIPArray[] | [.DBClusterIPArrayName, .DBClusterIPArrayAttribute, .SecurityIps] | @tsv'
+        ;;
+    human | *)
+        if [[ $(echo "$result" | jq '.Items.DBClusterIPArray | length') -eq 0 ]]; then
+            echo "没有找到白名单。"
+        else
+            echo "白名单组名          白名单组属性      白名单IP列表"
+            echo "----------------    --------------    ----------------------------------------------------"
+            echo "$result" | jq -r '.Items.DBClusterIPArray[] | [.DBClusterIPArrayName, .DBClusterIPArrayAttribute, .SecurityIps] | @tsv' |
+                awk 'BEGIN {FS="\t"; OFS="\t"}
+                {
+                    printf "%-18s  %-16s  %s\n", $1, $2, substr($3, 1, 60)
+                }'
+        fi
+        ;;
+    esac
+    log_result "${profile:-}" "$region" "polardb" "whitelist-get" "$result" "$format"
 }
