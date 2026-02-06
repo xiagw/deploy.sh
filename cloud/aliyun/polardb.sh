@@ -5,48 +5,64 @@
 
 show_polardb_help() {
     echo "PolarDB (云数据库 PolarDB) 操作："
-    echo "  list                                    - 列出 PolarDB 集群"
-    echo "  create <名称> <引擎> <版本> <规格> [地域] - 创建 PolarDB 集群"
-    echo "  update <集群ID> <新名称> [地域]          - 更新 PolarDB 集群"
-    echo "  delete <集群ID> [地域]                   - 删除 PolarDB 集群"
-    echo "  account-create <集群ID> <账号> <密码> [描述] - 创建数据库账号"
-    echo "  account-delete <集群ID> <账号>           - 删除数据库账号"
-    echo "  account-list <集群ID>                    - 列出数据库账号"
-    echo "  account-grant <集群ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
-    echo "  db-list <集群ID>                         - 列出数据库"
-    echo "  db-create <集群ID> <数据库名> [字符集]    - 创建数据库"
-    echo "  db-delete <集群ID> <数据库名>            - 删除数据库"
+    echo "  get                                    - 列出 PolarDB 集群"
+    echo "  add <名称> <引擎> <版本> <规格> [地域]  - 创建 PolarDB 集群"
+    echo "  set [<集群ID>] [<新名称>] [地域]       - 更新 PolarDB 集群（集群ID和新名称都是可选的，可使用fzf选择）"
+    echo "  del [<集群ID>] [地域]                  - 删除 PolarDB 集群（集群ID可选，可使用fzf选择）"
+    echo "  account-add <集群ID> <账号> <密码> [描述] - 创建数据库账号"
+    echo "  account-del <集群ID> <账号>            - 删除数据库账号"
+    echo "  account-get <集群ID>                   - 列出数据库账号"
+    echo "  account-set <集群ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
+    echo "  db-get <集群ID>                        - 列出数据库"
+    echo "  db-add <集群ID> <数据库名> [字符集]    - 创建数据库"
+    echo "  db-del <集群ID> <数据库名>             - 删除数据库"
+    echo "  ip-get <集群ID>                        - 列出集群IP白名单"
+    echo "  ip-set <集群ID> <IP列表>               - 设置集群IP白名单（覆盖模式）"
+    echo "  ip-append <集群ID> <IP列表>            - 追加IP到白名单"
+    echo "  ip-clear <集群ID>                      - 清空集群IP白名单"
     echo
+
     echo "示例："
-    echo "  $0 polardb list"
-    echo "  $0 polardb create my-polardb MySQL 8.0 polar.mysql.x4.large"
-    echo "  $0 polardb update pc-xxxxxxxxxxxxx new-name"
-    echo "  $0 polardb delete pc-xxxxxxxxxxxxx"
-    echo "  $0 polardb account-create pc-xxxxxxxxxxxxx myuser mypassword '测试账号'"
-    echo "  $0 polardb account-delete pc-xxxxxxxxxxxxx myuser"
-    echo "  $0 polardb account-list pc-xxxxxxxxxxxxx"
-    echo "  $0 polardb account-grant pc-xxxxxxxxxxxxx myuser mydb ReadWrite"
-    echo "  $0 polardb db-list pc-xxxxxxxxxxxxx"
-    echo "  $0 polardb db-create pc-xxxxxxxxxxxxx mydb utf8mb4"
-    echo "  $0 polardb db-delete pc-xxxxxxxxxxxxx mydb"
+    echo "  $0 polardb get"
+    echo "  $0 polardb add my-polardb MySQL 8.0 polar.mysql.x4.large"
+    echo "  $0 polardb set pc-xxxxxxxxxxxxx new-name"
+    echo "  $0 polardb del pc-xxxxxxxxxxxxx"
+    echo "  $0 polardb account-add pc-xxxxxxxxxxxxx myuser mypassword '测试账号'"
+    echo "  $0 polardb account-del pc-xxxxxxxxxxxxx myuser"
+    echo "  $0 polardb account-get pc-xxxxxxxxxxxxx"
+    echo "  $0 polardb account-set pc-xxxxxxxxxxxxx myuser mydb ReadWrite"
+    echo "  $0 polardb db-get pc-xxxxxxxxxxxxx"
+    echo "  $0 polardb db-add pc-xxxxxxxxxxxxx mydb utf8mb4"
+    echo "  $0 polardb db-del pc-xxxxxxxxxxxxx mydb"
+    echo "  $0 polardb ip-get pc-xxxxxxxxxxxxx"
+    echo "  $0 polardb ip-set pc-xxxxxxxxxxxxx '192.168.1.1,10.0.0.0/8'"
+    echo "  $0 polardb ip-append pc-xxxxxxxxxxxxx '192.168.2.1'"
+    echo "  $0 polardb ip-clear pc-xxxxxxxxxxxxx"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_polardb_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) polardb_list "$@" ;;
-    create) polardb_create "$@" ;;
-    update) polardb_update "$@" ;;
-    delete) polardb_delete "$@" ;;
-    account-create) polardb_account_create "$@" ;;
-    account-delete) polardb_account_delete "$@" ;;
-    account-list) polardb_account_list "$@" ;;
-    db-list) polardb_db_list "$@" ;;
-    db-create) polardb_db_create "$@" ;;
-    db-delete) polardb_db_delete "$@" ;;
-    account-grant) polardb_account_grant "$@" ;;
+    get) polardb_list "$@" ;;
+    add) polardb_create "$@" ;;
+    set) polardb_update "$@" ;;
+    del) polardb_delete "$@" ;;
+    account-add) polardb_account_create "$@" ;;
+    account-del) polardb_account_delete "$@" ;;
+    account-get) polardb_account_list "$@" ;;
+    db-get) polardb_db_list "$@" ;;
+    db-add) polardb_db_create "$@" ;;
+    db-del) polardb_db_delete "$@" ;;
+    account-set) polardb_account_grant "$@" ;;
+    ip-get) polardb_ip_get "$@" ;;
+    ip-set) polardb_ip_set "$@" ;;
+    ip-append) polardb_ip_append "$@" ;;
+    ip-clear) polardb_ip_clear "$@" ;;
+    help) show_polardb_help ;;
     *)
         echo "错误：未知的 PolarDB 操作：$operation" >&2
         show_polardb_help
@@ -331,7 +347,7 @@ polardb_account_create() {
 
     if [ -z "$cluster_id" ] || [ -z "$account_name" ] || [ -z "$password" ]; then
         echo "错误：集群ID、账号名和密码不能为空。" >&2
-        echo "用法：polardb account-create <集群ID> <账号> <密码> [描述]" >&2
+        echo "用法：polardb account-add <集群ID> <账号> <密码> [描述]" >&2
         return 1
     fi
 
@@ -400,7 +416,7 @@ polardb_account_delete() {
 
     if [ -z "$cluster_id" ] || [ -z "$account_name" ]; then
         echo "错误：集群ID和账号名不能为空。" >&2
-        echo "用法：polardb account-delete <集群ID> <账号>" >&2
+        echo "用法：polardb account-del <集群ID> <账号>" >&2
         return 1
     fi
 
@@ -438,7 +454,7 @@ polardb_account_list() {
 
     if [ -z "$cluster_id" ]; then
         echo "错误：集群ID不能为空。" >&2
-        echo "用法：polardb account-list <集群ID> [format]" >&2
+        echo "用法：polardb account-get <集群ID> [format]" >&2
         return 1
     fi
 
@@ -527,7 +543,7 @@ polardb_db_list() {
 
     if [ -z "$cluster_id" ]; then
         echo "错误：集群ID不能为空。" >&2
-        echo "用法：polardb db-list <集群ID> [format]" >&2
+        echo "用法：polardb db-get <集群ID> [format]" >&2
         return 1
     fi
 
@@ -570,7 +586,7 @@ polardb_db_create() {
 
     if [ -z "$cluster_id" ] || [ -z "$db_name" ]; then
         echo "错误：集群ID和数据库名不能为空。" >&2
-        echo "用法：polardb db-create <集群ID> <数据库名> [字符集]" >&2
+        echo "用法：polardb db-add <集群ID> <数据库名> [字符集]" >&2
         return 1
     fi
 
@@ -603,7 +619,7 @@ polardb_db_delete() {
 
     if [ -z "$cluster_id" ] || [ -z "$db_name" ]; then
         echo "错误：集群ID和数据库名不能为空。" >&2
-        echo "用法：polardb db-delete <集群ID> <数据库名>" >&2
+        echo "用法：polardb db-del <集群ID> <数据库名>" >&2
         return 1
     fi
 
@@ -641,9 +657,89 @@ polardb_account_grant() {
     local db_name=$3
     local privilege=${4:-ReadWrite}
 
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$cluster_id" ] || [ -z "$account_name" ] || [ -z "$db_name" ]; then
+        echo "使用 fzf 交互式模式设置账号权限"
+
+        # 选择集群ID
+        if [ -z "$cluster_id" ]; then
+            local cluster_list
+            cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.Items.DBCluster[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+
+            if [ -z "$cluster_list" ]; then
+                echo "错误：没有找到 PolarDB 集群。" >&2
+                return 1
+            elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                cluster_id=$(echo "$cluster_list" | awk '{print $1}')
+                echo "自动选择唯一的 PolarDB 集群: $cluster_id"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    cluster_id=$(select_with_fzf "选择 PolarDB 集群" "$cluster_list" | awk '{print $1}')
+                    if [ -z "$cluster_id" ]; then
+                        echo "错误：未选择集群。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择 PolarDB 集群，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        # 选择账号名
+        if [ -z "$account_name" ]; then
+            local account_list
+            account_list=$(aliyun --profile "${profile:-}" polardb DescribeAccounts --DBClusterId "$cluster_id" 2>/dev/null | jq -r '.Accounts.Account[] | "\(.AccountName) [\(.AccountType)] [\(.AccountStatus)]"')
+
+            if [ -z "$account_list" ]; then
+                echo "错误：在指定集群中没有找到数据库账号。" >&2
+                return 1
+            elif [ "$(echo "$account_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                account_name=$(echo "$account_list" | awk '{print $1}')
+                echo "自动选择唯一的账号: $account_name"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    account_name=$(select_with_fzf "选择数据库账号" "$account_list" | awk '{print $1}')
+                    if [ -z "$account_name" ]; then
+                        echo "错误：未选择账号。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择数据库账号，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        # 选择数据库名
+        if [ -z "$db_name" ]; then
+            local db_list
+            db_list=$(aliyun --profile "${profile:-}" polardb DescribeDatabases --DBClusterId "$cluster_id" 2>/dev/null | jq -r '.Databases.Database[] | "\(.DBName) [\(.CharacterSetName)] [\(.DBStatus)]"')
+
+            if [ -z "$db_list" ]; then
+                echo "错误：在指定集群中没有找到数据库。" >&2
+                return 1
+            elif [ "$(echo "$db_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                db_name=$(echo "$db_list" | awk '{print $1}')
+                echo "自动选择唯一的数据库: $db_name"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    db_name=$(select_with_fzf "选择数据库" "$db_list" | awk '{print $1}')
+                    if [ -z "$db_name" ]; then
+                        echo "错误：未选择数据库。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择数据库，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+    fi
+
     if [ -z "$cluster_id" ] || [ -z "$account_name" ] || [ -z "$db_name" ]; then
         echo "错误：集群ID、账号名和数据库名不能为空。" >&2
-        echo "用法：polardb account-grant <集群ID> <账号> <数据库名> [权限]" >&2
+        echo "用法：polardb account-set <集群ID> <账号> <数据库名> [权限]" >&2
         return 1
     fi
 
@@ -670,5 +766,362 @@ polardb_account_grant() {
         return 1
     fi
 
-    log_result "${profile:-}" "$region" "polardb" "account-grant" "$result"
+    log_result "${profile:-}" "$region" "polardb" "account-set" "$result"
+}
+
+# 列出IP白名单
+polardb_ip_get() {
+    local cluster_id=$1
+
+    # 如果没有提供集群ID，则使用 fzf 交互式选择
+    if [ -z "$cluster_id" ]; then
+        echo "使用 fzf 交互式模式获取IP白名单"
+
+        local cluster_list
+        cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.Items.DBCluster[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+
+        if [ -z "$cluster_list" ]; then
+            echo "错误：没有找到 PolarDB 集群。" >&2
+            return 1
+        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
+            echo "自动选择唯一的 PolarDB 集群: $cluster_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                cluster_id=$(select_with_fzf "选择 PolarDB 集群" "$cluster_list" | awk '{print $1}')
+                if [ -z "$cluster_id" ]; then
+                    echo "错误：未选择集群。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 PolarDB 集群，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    echo "获取集群 $cluster_id 的IP白名单："
+
+    local result
+    result=$(aliyun --profile "${profile:-}" polardb DescribeDBClusterAccessWhitelist --DBClusterId "$cluster_id")
+
+    if [ $? -ne 0 ]; then
+        echo "错误：无法获取IP白名单信息。" >&2
+        echo "$result"
+        return 1
+    fi
+
+    # 输出人类可读格式
+    echo "IP白名单组名称     IP列表"
+    echo "----------------  ----------------------------------------"
+    echo "$result" | jq -r '.Items.DBClusterIPArray[]? | select(. != null) | "\(.DBClusterIPArrayName // "N/A")  \(.SecurityIps // "N/A")"' |
+        awk 'BEGIN {FS="  "; OFS="  "}
+        {
+            printf "%-16s  %s\n", $1, $2
+        }'
+
+    log_result "${profile:-}" "$region" "polardb" "ip-get" "$result"
+}
+
+# 设置IP白名单（覆盖模式）
+polardb_ip_set() {
+    local cluster_id=$1
+    local ips=$2
+    local ip_array_name=$3  # 新增：指定IP白名单组名称
+
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$cluster_id" ] || [ -z "$ips" ]; then
+        echo "使用 fzf 交互式模式设置IP白名单（覆盖模式）"
+
+        # 选择集群ID
+        if [ -z "$cluster_id" ]; then
+            local cluster_list
+            cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.Items.DBCluster[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+
+            if [ -z "$cluster_list" ]; then
+                echo "错误：没有找到 PolarDB 集群。" >&2
+                return 1
+            elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                cluster_id=$(echo "$cluster_list" | awk '{print $1}')
+                echo "自动选择唯一的 PolarDB 集群: $cluster_id"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    cluster_id=$(select_with_fzf "选择 PolarDB 集群" "$cluster_list" | awk '{print $1}')
+                    if [ -z "$cluster_id" ]; then
+                        echo "错误：未选择集群。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择 PolarDB 集群，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        # 显示当前IP白名单并让用户选择或输入新IP
+        local current_whitelist
+        current_whitelist=$(aliyun --profile "${profile:-}" polardb DescribeDBClusterAccessWhitelist --DBClusterId "$cluster_id" 2>/dev/null)
+
+        if [ $? -eq 0 ] && [ -n "$current_whitelist" ]; then
+            echo "当前集群的IP白名单："
+            echo "$current_whitelist" | jq -r '.Items.DBClusterIPArray[]? | select(. != null) | "\(.DBClusterIPArrayName // "N/A")  \(.SecurityIps // "N/A")"' |
+                awk 'BEGIN {FS="  "; OFS="  "}
+                {
+                    printf "%-16s  %s\n", $1, $2
+                }'
+            echo ""
+        fi
+
+        # 询问是否要修改现有IP白名单组或创建新组
+        echo "请选择操作方式："
+        local choice
+        if type select_with_fzf >/dev/null 2>&1; then
+            choice=$(select_with_fzf "选择操作方式" "输入新的IP列表覆盖全部
+从现有白名单组中选择并修改
+创建新的白名单组")
+        else
+            echo "1. 输入新的IP列表覆盖全部"
+            echo "2. 从现有白名单组中选择并修改"
+            echo "3. 创建新的白名单组"
+            read -r -p "请选择 (1-3): " choice_num
+            case "$choice_num" in
+                1) choice="输入新的IP列表覆盖全部" ;;
+                2) choice="从现有白名单组中选择并修改" ;;
+                3) choice="创建新的白名单组" ;;
+                *)
+                    echo "错误：无效的选择。" >&2
+                    return 1
+                    ;;
+            esac
+        fi
+
+        case "$choice" in
+            *"输入新的IP列表覆盖全部"*)
+                read -r -p "请输入IP列表（多个IP用逗号分隔）: " ips
+                if [ -z "$ips" ]; then
+                    echo "错误：IP列表不能为空。" >&2
+                    return 1
+                fi
+                ;;
+            *"从现有白名单组中选择并修改"*)
+                # 获取现有白名单组
+                local ip_array_list
+                ip_array_list=$(echo "$current_whitelist" | jq -r '.Items.DBClusterIPArray[].DBClusterIPArrayName' 2>/dev/null)
+
+                if [ -n "$ip_array_list" ] && [ "$ip_array_list" != "" ]; then
+                    if type select_with_fzf >/dev/null 2>&1; then
+                        ip_array_name=$(select_with_fzf "选择要修改的IP白名单组" "$ip_array_list")
+                        if [ -z "$ip_array_name" ]; then
+                            echo "错误：未选择IP白名单组。" >&2
+                            return 1
+                        fi
+                    else
+                        echo "$ip_array_list" | nl
+                        read -r -p "请选择要修改的白名单组编号: " array_num
+                        ip_array_name=$(echo "$ip_array_list" | sed -n "${array_num}p")
+                    fi
+
+                    # 获取当前白名单组的IP列表
+                    local current_ips
+                    current_ips=$(echo "$current_whitelist" | jq -r ".Items.DBClusterIPArray[] | select(.DBClusterIPArrayName == \"$ip_array_name\") | .SecurityIps" 2>/dev/null)
+
+                    echo "当前 '$ip_array_name' 白名单组的IP列表：$current_ips"
+                    read -r -p "请输入新的IP列表（多个IP用逗号分隔）: " ips
+                    if [ -z "$ips" ]; then
+                        echo "错误：IP列表不能为空。" >&2
+                        return 1
+                    fi
+                else
+                    echo "没有找到现有白名单组，将创建新的IP列表。"
+                    read -r -p "请输入IP列表（多个IP用逗号分隔）: " ips
+                    if [ -z "$ips" ]; then
+                        echo "错误：IP列表不能为空。" >&2
+                        return 1
+                    fi
+                fi
+                ;;
+            *"创建新的白名单组"*)
+                read -r -p "请输入新的IP白名单组名称: " ip_array_name
+                if [ -z "$ip_array_name" ]; then
+                    echo "错误：IP白名单组名称不能为空。" >&2
+                    return 1
+                fi
+                read -r -p "请输入IP列表（多个IP用逗号分隔）: " ips
+                if [ -z "$ips" ]; then
+                    echo "错误：IP列表不能为空。" >&2
+                    return 1
+                fi
+                ;;
+        esac
+    fi
+
+    if [ -z "$cluster_id" ] || [ -z "$ips" ]; then
+        echo "错误：集群ID和IP列表不能为空。" >&2
+        echo "用法：polardb ip-set <集群ID> <IP列表> [IP白名单组名]" >&2
+        return 1
+    fi
+
+    echo "正在设置集群 $cluster_id 的IP白名单（覆盖模式）："
+    echo "IP列表: $ips"
+    if [ -n "$ip_array_name" ]; then
+        echo "IP白名单组: $ip_array_name"
+    fi
+
+    local result
+    local params=(--DBClusterId "$cluster_id" --SecurityIps "$ips" --ModifyMode "Cover")
+
+    # 如果指定了IP白名单组名，需要添加相应参数
+    if [ -n "$ip_array_name" ]; then
+        params+=(--DBClusterIPArrayName "$ip_array_name")
+    fi
+
+    result=$(aliyun --profile "${profile:-}" polardb ModifyDBClusterAccessWhitelist "${params[@]}")
+
+    if [ $? -ne 0 ]; then
+        echo "错误：设置IP白名单失败。" >&2
+        echo "$result"
+        return 1
+    fi
+
+    echo "IP白名单设置成功。"
+    echo "$result" | jq '.'
+
+    log_result "${profile:-}" "$region" "polardb" "ip-set" "$result"
+}
+
+# 追加IP到白名单
+polardb_ip_append() {
+    local cluster_id=$1
+    local ips=$2
+
+    # 如果没有提供参数，则使用 fzf 交互式选择
+    if [ -z "$cluster_id" ] || [ -z "$ips" ]; then
+        echo "使用 fzf 交互式模式追加IP到白名单"
+
+        # 选择集群ID
+        if [ -z "$cluster_id" ]; then
+            local cluster_list
+            cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.Items.DBCluster[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+
+            if [ -z "$cluster_list" ]; then
+                echo "错误：没有找到 PolarDB 集群。" >&2
+                return 1
+            elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                cluster_id=$(echo "$cluster_list" | awk '{print $1}')
+                echo "自动选择唯一的 PolarDB 集群: $cluster_id"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    cluster_id=$(select_with_fzf "选择 PolarDB 集群" "$cluster_list" | awk '{print $1}')
+                    if [ -z "$cluster_id" ]; then
+                        echo "错误：未选择集群。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择 PolarDB 集群，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        # 输入IP列表
+        if [ -z "$ips" ]; then
+            read -r -p "请输入要追加的IP列表（多个IP用逗号分隔）: " ips
+            if [ -z "$ips" ]; then
+                echo "错误：IP列表不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    if [ -z "$cluster_id" ] || [ -z "$ips" ]; then
+        echo "错误：集群ID和IP列表不能为空。" >&2
+        echo "用法：polardb ip-append <集群ID> <IP列表>" >&2
+        return 1
+    fi
+
+    echo "正在追加IP到集群 $cluster_id 的白名单："
+    echo "IP列表: $ips"
+
+    local result
+    result=$(aliyun --profile "${profile:-}" polardb ModifyDBClusterAccessWhitelist \
+        --DBClusterId "$cluster_id" \
+        --SecurityIps "$ips" \
+        --ModifyMode "Append")
+
+    if [ $? -ne 0 ]; then
+        echo "错误：追加IP白名单失败。" >&2
+        echo "$result"
+        return 1
+    fi
+
+    echo "IP白名单追加成功。"
+    echo "$result" | jq '.'
+
+    log_result "${profile:-}" "$region" "polardb" "ip-append" "$result"
+}
+
+# 清空IP白名单
+polardb_ip_clear() {
+    local cluster_id=$1
+
+    # 如果没有提供集群ID，则使用 fzf 交互式选择
+    if [ -z "$cluster_id" ]; then
+        echo "使用 fzf 交互式模式清空白名单"
+
+        local cluster_list
+        cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.Items.DBCluster[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+
+        if [ -z "$cluster_list" ]; then
+            echo "错误：没有找到 PolarDB 集群。" >&2
+            return 1
+        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
+            echo "自动选择唯一的 PolarDB 集群: $cluster_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                cluster_id=$(select_with_fzf "选择要清空白名单的 PolarDB 集群" "$cluster_list" | awk '{print $1}')
+                if [ -z "$cluster_id" ]; then
+                    echo "错误：未选择集群。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 PolarDB 集群，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    if [ -z "$cluster_id" ]; then
+        echo "错误：集群ID不能为空。" >&2
+        echo "用法：polardb ip-clear <集群ID>" >&2
+        return 1
+    fi
+
+    echo "警告：您即将清空集群 $cluster_id 的IP白名单，这将阻止所有外部访问。"
+    read -r -p "请输入 'YES' 以确认清空操作: " confirm
+
+    if [ "$confirm" != "YES" ]; then
+        echo "操作已取消。"
+        return 1
+    fi
+
+    echo "正在清空集群 $cluster_id 的IP白名单："
+
+    local result
+    # 将IP白名单设置为本地localhost以保留基本访问能力
+    result=$(aliyun --profile "${profile:-}" polardb ModifyDBClusterAccessWhitelist \
+        --DBClusterId "$cluster_id" \
+        --SecurityIps "127.0.0.1" \
+        --ModifyMode "Cover")
+
+    if [ $? -ne 0 ]; then
+        echo "错误：清空IP白名单失败。" >&2
+        echo "$result"
+        return 1
+    fi
+
+    echo "IP白名单已清空（保留127.0.0.1以维持基本访问）。"
+    echo "$result" | jq '.'
+
+    log_result "${profile:-}" "$region" "polardb" "ip-clear" "$result"
 }

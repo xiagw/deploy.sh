@@ -108,7 +108,7 @@ main() {
 
     # 根据服务类型加载对应模块 (待完成)
     case "$service" in
-    list-all) list_all_services ;;
+    get-all) list_all_services ;;
     config) handle_config_commands "${args[@]}" ;;
     balance) handle_balance_commands "${args[@]}" ;;
     cost) handle_cost_commands "${args[@]}" ;;
@@ -128,6 +128,7 @@ main() {
     ram) handle_ram_commands "${args[@]}" ;;
     nas) handle_nas_commands "${args[@]}" ;;
     ack) handle_ack_commands "${args[@]}" ;;
+    dts) handle_dts_commands "${args[@]}" ;;
     *) echo "错误：未知的服务：$service" >&2 && show_help && exit 1 ;;
     esac
 }

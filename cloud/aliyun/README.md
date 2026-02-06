@@ -125,7 +125,7 @@
 4. 查看所有资源：
 ```bash
 # 列出所有服务的资源
-./main.sh list-all
+./main.sh get-all
 ```
 
 ## 输出格式

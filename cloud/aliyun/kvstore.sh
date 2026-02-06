@@ -9,28 +9,30 @@
 
 show_kvstore_help() {
     echo "KVStore (Redis) 操作："
-    echo "  list [format]                    - 列出 KVStore 实例"
-    echo "  create <名称> <实例类型> <容量>   - 创建 KVStore 实例"
-    echo "  update <实例ID> <新名称>          - 更新 KVStore 实例"
-    echo "  delete <实例ID>                  - 删除 KVStore 实例"
+    echo "  get [format]                           - 列出 KVStore 实例"
+    echo "  add <名称> <实例类型> <容量>          - 创建 KVStore 实例"
+    echo "  set [<实例ID>] [<新名称>]              - 更新 KVStore 实例（实例ID和新名称都是可选的，可使用fzf选择）"
+    echo "  del [<实例ID>]                         - 删除 KVStore 实例（实例ID可选，可使用fzf选择）"
     echo
     echo "示例："
-    echo "  $0 kvstore list"
-    echo "  $0 kvstore list json"
-    echo "  $0 kvstore create my-redis Redis.Master.Small.Default 1024"
-    echo "  $0 kvstore update r-bp1zxszhcgatnx**** new-name"
-    echo "  $0 kvstore delete r-bp1zxszhcgatnx****"
+    echo "  $0 kvstore get"
+    echo "  $0 kvstore get json"
+    echo "  $0 kvstore add my-redis Redis.Master.Small.Default 1024"
+    echo "  $0 kvstore set r-bp1zxszhcgatnx**** new-name"
+    echo "  $0 kvstore del r-bp1zxszhcgatnx****"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_kvstore_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) kvstore_list "$@" ;;
-    create) kvstore_create "$@" ;;
-    update) kvstore_update "$@" ;;
-    delete) kvstore_delete "$@" ;;
+    get) kvstore_list "$@" ;;
+    add) kvstore_create "$@" ;;
+    set) kvstore_update "$@" ;;
+    del) kvstore_delete "$@" ;;
     help) show_kvstore_help ;;
     *)
         echo "错误：未知的 KVStore 操作：$operation" >&2
@@ -233,7 +235,7 @@ kvstore_update() {
     fi
 
     if ! validate_required_params "$instance_id" "$new_name" "错误：实例ID和新名称不能为空。"; then
-        echo "用法：kvstore update <实例ID> <新名称>" >&2
+        echo "用法：kvstore set <实例ID> <新名称>" >&2
         return 1
     fi
 

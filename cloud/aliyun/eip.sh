@@ -9,28 +9,30 @@
 
 show_eip_help() {
     echo "EIP (弹性公网IP) 操作："
-    echo "  list [format]                    - 列出 EIP"
-    echo "  create <带宽>                    - 创建 EIP"
-    echo "  update <EIP-ID> <新带宽>         - 更新 EIP 带宽"
-    echo "  delete <EIP-ID>                  - 删除 EIP"
+    echo "  get [format]                           - 列出 EIP"
+    echo "  add <带宽>                            - 创建 EIP"
+    echo "  set <EIP-ID> <新带宽>                 - 更新 EIP 带宽"
+    echo "  del [<EIP-ID>]                        - 删除 EIP（EIP-ID可选，可使用fzf选择）"
     echo
     echo "示例："
-    echo "  $0 eip list"
-    echo "  $0 eip list json"
-    echo "  $0 eip create 5"
-    echo "  $0 eip update eip-bp1v8dxgd9wqjb2g**** 10"
-    echo "  $0 eip delete eip-bp1v8dxgd9wqjb2g****"
+    echo "  $0 eip get"
+    echo "  $0 eip get json"
+    echo "  $0 eip add 5"
+    echo "  $0 eip set eip-bp1v8dxgd9wqjb2g**** 10"
+    echo "  $0 eip del eip-bp1v8dxgd9wqjb2g****"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_eip_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) eip_list "$@" ;;
-    create) eip_create "$@" ;;
-    update) eip_update "$@" ;;
-    delete) eip_delete "$@" ;;
+    get) eip_list "$@" ;;
+    add) eip_create "$@" ;;
+    set) eip_update "$@" ;;
+    del) eip_delete "$@" ;;
     help) show_eip_help ;;
     *)
         echo "错误：未知的 EIP 操作：$operation" >&2
@@ -208,7 +210,7 @@ eip_update() {
 
     if [ -z "$eip_id" ] || [ -z "$new_bandwidth" ]; then
         echo "错误：EIP ID 和新带宽不能为空。" >&2
-        echo "用法：eip update <EIP-ID> <新带宽>" >&2
+        echo "用法：eip set <EIP-ID> <新带宽>" >&2
         return 1
     fi
 

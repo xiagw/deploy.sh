@@ -9,48 +9,50 @@
 
 show_ecs_help() {
     echo "ECS (弹性计算服务) 操作："
-    echo "  list   [format]                         - 列出 ECS 实例"
-    echo "  create [名称]                           - 创建 ECS 实例（名称可选，如未提供将自动生成）"
-    echo "  update <实例ID> <新名称>                 - 更新 ECS 实例"
-    echo "  delete <实例ID>                          - 删除 ECS 实例"
-    echo "  key-list                                - 列出 SSH 密钥对"
-    echo "  key-create <密钥对名称>                  - 创建 SSH 密钥对"
-    echo "  key-import <密钥对名称> [<公钥内容> | github:<用户名>] - 导入 SSH 密钥对"
-    echo "  key-delete <密钥对名称>                  - 删除 SSH 密钥对"
-    echo "  start  <实例ID>                          - 启动 ECS 实例"
-    echo "  stop   <实例ID>                          - 停止 ECS 实例（节省停机模式）"
-    echo "  key-attach <实例ID> <密钥对名称>          - 绑定 SSH 密钥对到实例"
-    echo "  key-detach <实例ID> <密钥对名称>          - 解绑实例的 SSH 密钥对"
+    echo "  get                                      - 获取 ECS 实例"
+    echo "  add [名称]                               - 添加 ECS 实例（名称可选，如未提供将自动生成）"
+    echo "  set [<实例ID>] [<新名称>]                - 设置 ECS 实例（实例ID和新名称都是可选的，可使用fzf选择）"
+    echo "  del [<实例ID>]                           - 删除 ECS 实例（实例ID可选，可使用fzf选择）"
+    echo "  key-get                                  - 列出 SSH 密钥对"
+    echo "  key-add <密钥对名称>                     - 添加 SSH 密钥对"
+    echo "  key-set [<密钥对名称>] [<公钥内容> | github:<用户名>] - 导入 SSH 密钥对（参数可选，可使用fzf选择）"
+    echo "  key-del [<密钥对名称>]                   - 删除 SSH 密钥对（密钥对名称可选，可使用fzf选择）"
+    echo "  start [<实例ID>]                         - 启动 ECS 实例（实例ID可选，可使用fzf选择）"
+    echo "  stop [<实例ID>]                          - 停止 ECS 实例（实例ID可选，可使用fzf选择）"
+    echo "  key-attach [<实例ID>] [<密钥对名称>]     - 绑定 SSH 密钥对到实例（参数可选，可使用fzf选择）"
+    echo "  key-detach [<实例ID>] [<密钥对名称>]     - 解绑实例的 SSH 密钥对（参数可选，可使用fzf选择）"
     echo
     echo "示例："
-    echo "  $0 ecs list"
-    echo "  $0 ecs create my-instance"
-    echo "  $0 ecs update i-bp67acfmxazb4ph**** new-name"
-    echo "  $0 ecs delete i-bp67acfmxazb4ph****"
-    echo "  $0 ecs key-list"
-    echo "  $0 ecs key-create my-key"
-    echo "  $0 ecs key-import my-key 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD...'"
-    echo "  $0 ecs key-import my-key github:username"
-    echo "  $0 ecs key-delete my-key"
+    echo "  $0 ecs get"
+    echo "  $0 ecs add my-instance"
+    echo "  $0 ecs set i-bp67acfmxazb4ph**** new-name"
+    echo "  $0 ecs del i-bp67acfmxazb4ph****"
     echo "  $0 ecs start i-bp67acfmxazb4ph****"
     echo "  $0 ecs stop i-bp67acfmxazb4ph****"
+    echo "  $0 ecs key-get"
+    echo "  $0 ecs key-add my-key"
+    echo "  $0 ecs key-set my-key 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD...'"
+    echo "  $0 ecs key-set my-key github:username"
+    echo "  $0 ecs key-del my-key"
     echo "  $0 ecs key-attach i-bp67acfmxazb4ph**** my-key"
     echo "  $0 ecs key-detach i-bp67acfmxazb4ph**** my-key"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_ecs_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) ecs_list "$@" ;;
-    create) ecs_create "$@" ;;
-    update) ecs_update "$@" ;;
-    delete) ecs_delete "$@" ;;
-    key-list) ecs_key_list "$@" ;;
-    key-create) ecs_key_create "$@" ;;
-    key-import) ecs_key_import "$@" ;;
-    key-delete) ecs_key_delete "$@" ;;
+    get) ecs_list "$@" ;;
+    add) ecs_create "$@" ;;
+    set) ecs_update "$@" ;;
+    del) ecs_delete "$@" ;;
+    key-get) ecs_key_list "$@" ;;
+    key-add) ecs_key_create "$@" ;;
+    key-set) ecs_key_import "$@" ;;
+    key-del) ecs_key_delete "$@" ;;
     start) ecs_start "$@" ;;
     stop) ecs_stop "$@" ;;
     key-attach) ecs_key_attach "$@" ;;
@@ -437,13 +439,57 @@ cloud"
     fi
 }
 
-# 使用新框架的更新函数
+# 使用新框架的更新函数（支持 fzf 选择实例）
 ecs_update() {
     local instance_id=$1
     local new_name=$2
 
-    if ! validate_required_params "$instance_id" "$new_name" "错误：实例 ID 和新名称不能为空。"; then
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到任何 ECS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择 ECS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查实例 ID 是否为空
+    if [ -z "$instance_id" ]; then
+        echo "错误：实例 ID 不能为空。" >&2
         return 1
+    fi
+
+    # 如果没有提供新名称，提示输入
+    if [ -z "$new_name" ]; then
+        echo -n "请输入新的实例名称: "
+        read -r new_name
+        if [ -z "$new_name" ]; then
+            echo "错误：新名称不能为空。" >&2
+            return 1
+        fi
     fi
 
     echo "更新 ECS 实例："
@@ -455,7 +501,7 @@ ecs_update() {
 
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ecs" "update" "$result"
+        log_result "${profile:-}" "$region" "ecs" "set" "$result"
     else
         echo "错误：ECS 实例更新失败。"
         echo "$result"
@@ -463,10 +509,43 @@ ecs_update() {
     fi
 }
 
-# 使用新框架的删除函数
+# 使用新框架的删除函数（支持 fzf 选择实例）
 ecs_delete() {
     local instance_id=$1
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到任何 ECS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要删除的 ECS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查实例 ID 是否为空
     if [ -z "$instance_id" ]; then
         echo "错误：实例 ID 不能为空。" >&2
         return 1
@@ -493,7 +572,7 @@ ecs_delete() {
         return 1
     fi
 
-    log_result "${profile:-}" "$region" "ecs" "delete" "$result"
+    log_result "${profile:-}" "$region" "ecs" "del" "$result"
 }
 
 # SSH 密钥对列表（使用框架函数）
@@ -516,7 +595,7 @@ ecs_key_list() {
         "$result" \
         "$format" \
         "ecs" \
-        "key-list" \
+        "key-get" \
         "$table_header" \
         "$jq_filter" \
         "$status_mapper" \
@@ -544,7 +623,7 @@ ecs_key_create() {
         echo "$result" | jq '.'
         echo "请保存私钥内容，它只会显示一次！"
         echo "$result" | jq -r '.PrivateKeyBody'
-        log_result "${profile:-}" "$region" "ecs" "key-create" "$result"
+        log_result "${profile:-}" "$region" "ecs" "key-add" "$result"
     else
         echo "错误：SSH 密钥对创建失败。"
         echo "$result"
@@ -587,7 +666,7 @@ ecs_key_import() {
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对导入成功："
         echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ecs" "key-import" "$result"
+        log_result "${profile:-}" "$region" "ecs" "key-set" "$result"
     else
         echo "错误：SSH 密钥对导入失败。"
         echo "$result"
@@ -624,13 +703,81 @@ ecs_key_delete() {
         return 1
     fi
 
-    log_result "${profile:-}" "$region" "ecs" "key-delete" "$result"
+    log_result "${profile:-}" "$region" "ecs" "key-del" "$result"
 }
 
 # 绑定 SSH 密钥对到实例（使用框架函数）
 ecs_key_attach() {
     local instance_id=$1
     local key_pair_name=$2
+
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到任何 ECS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要绑定密钥对的 ECS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供密钥对名称，则使用 fzf 选择
+    if [ -z "$key_pair_name" ]; then
+        local key_pair_list
+        local key_result
+        key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
+
+        if [ $? -eq 0 ] && [ -n "$key_result" ]; then
+            key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[] | .KeyPairName' 2>/dev/null)
+            local key_count
+            key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]' 2>/dev/null || echo "0")
+
+            if [ "$key_count" -eq 0 ] || [ "$key_count" = "0" ]; then
+                echo "错误：没有找到 SSH 密钥对。" >&2
+                return 1
+            elif [ "$key_count" -eq 1 ]; then
+                key_pair_name=$key_pair_list
+                echo "自动选择唯一的 SSH 密钥对: $key_pair_name"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    key_pair_name=$(select_with_fzf "选择要绑定的 SSH 密钥对" "$key_pair_list")
+                    if [ -z "$key_pair_name" ]; then
+                        echo "错误：未选择密钥对。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择密钥对，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        else
+            echo "错误：无法获取 SSH 密钥对列表。" >&2
+            echo "$key_result" >&2
+            return 1
+        fi
+    fi
 
     if ! validate_required_params "$instance_id" "$key_pair_name" "错误：实例ID和密钥对名称都不能为空。"; then
         return 1
@@ -658,6 +805,74 @@ ecs_key_attach() {
 ecs_key_detach() {
     local instance_id=$1
     local key_pair_name=$2
+
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到任何 ECS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要解绑密钥对的 ECS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供密钥对名称，则使用 fzf 选择
+    if [ -z "$key_pair_name" ]; then
+        local key_pair_list
+        local key_result
+        key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
+
+        if [ $? -eq 0 ] && [ -n "$key_result" ]; then
+            key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[] | .KeyPairName' 2>/dev/null)
+            local key_count
+            key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]' 2>/dev/null || echo "0")
+
+            if [ "$key_count" -eq 0 ] || [ "$key_count" = "0" ]; then
+                echo "错误：没有找到 SSH 密钥对。" >&2
+                return 1
+            elif [ "$key_count" -eq 1 ]; then
+                key_pair_name=$key_pair_list
+                echo "自动选择唯一的 SSH 密钥对: $key_pair_name"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    key_pair_name=$(select_with_fzf "选择要解绑的 SSH 密钥对" "$key_pair_list")
+                    if [ -z "$key_pair_name" ]; then
+                        echo "错误：未选择密钥对。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择密钥对，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        else
+            echo "错误：无法获取 SSH 密钥对列表。" >&2
+            echo "$key_result" >&2
+            return 1
+        fi
+    fi
 
     if ! validate_required_params "$instance_id" "$key_pair_name" "错误：实例ID和密钥对名称都不能为空。"; then
         return 1
@@ -736,6 +951,39 @@ cloud_auto [20-2048GiB]"
 ecs_start() {
     local instance_id=$1
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到任何 ECS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要启动的 ECS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查实例 ID 是否为空
     if [ -z "$instance_id" ]; then
         echo "错误：实例 ID 不能为空。" >&2
         return 1
@@ -777,6 +1025,39 @@ ecs_start() {
 ecs_stop() {
     local instance_id=$1
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到任何 ECS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要停止的 ECS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查实例 ID 是否为空
     if [ -z "$instance_id" ]; then
         echo "错误：实例 ID 不能为空。" >&2
         return 1

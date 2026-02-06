@@ -9,38 +9,40 @@
 
 show_ram_help() {
     echo "RAM (Resource Access Management) 操作："
-    echo "  list                                    - 列出所有子账号"
-    echo "  create <用户名> <显示名>                  - 创建子账号"
-    echo "  update <用户名> <新显示名>                - 更新子账号"
-    echo "  delete <用户名>                          - 删除子账号"
-    echo "  create-key <用户名>                      - 为子账号创建 AccessKey"
-    echo "  grant-permission <用户名>                - 授予子账号权限"
-    echo "  list-permissions <用户名>                - 列出用户的权限"
+    echo "  get                                     - 列出所有子账号"
+    echo "  add [<用户名>] [<显示名>]                - 创建子账号（用户名和显示名都是可选的，可使用fzf选择）"
+    echo "  set [<用户名>] [<新显示名>]              - 更新子账号（用户名和新显示名都是可选的，可使用fzf选择）"
+    echo "  del [<用户名>]                          - 删除子账号（用户名可选，可使用fzf选择）"
+    echo "  key-add <用户名>                        - 为子账号创建 AccessKey"
+    echo "  perm-add <用户名>                       - 授予子账号权限"
+    echo "  perm-get <用户名>                       - 列出用户的权限"
     echo
     echo "示例："
-    echo "  $0 ram list"
-    echo "  $0 ram create                          # 自动生成 dev 开头的用户名"
-    echo "  $0 ram create test-user                # 自动生成显示名称"
-    echo "  $0 ram create test-user 'Test User'    # 指定用户名和显示名称"
-    echo "  $0 ram update test-user 'New password'"
-    echo "  $0 ram delete test-user"
-    echo "  $0 ram create-key test-user"
-    echo "  $0 ram grant-permission test-user"
-    echo "  $0 ram list-permissions test-user"
+    echo "  $0 ram get"
+    echo "  $0 ram add                           # 自动生成 dev 开头的用户名"
+    echo "  $0 ram add test-user                 # 自动生成显示名称"
+    echo "  $0 ram add test-user 'Test User'     # 指定用户名和显示名称"
+    echo "  $0 ram set test-user 'New Name'"
+    echo "  $0 ram del test-user"
+    echo "  $0 ram key-add test-user"
+    echo "  $0 ram perm-add test-user"
+    echo "  $0 ram perm-get test-user"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_ram_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) ram_list "$@" ;;
-    create) ram_create "$1" "$2" ;;
-    update) ram_update "$1" "$2" ;;
-    delete) ram_delete "$1" ;;
-    create-key) ram_create_key "$1" ;;
-    grant-permission) ram_grant_permission "$1" ;;
-    list-permissions) ram_list_permissions "$1" ;;
+    get) ram_list "$@" ;;
+    add) ram_create "$1" "$2" ;;
+    set) ram_update "$1" "$2" ;;
+    del) ram_delete "$1" ;;
+    key-add) ram_create_key "$1" ;;
+    perm-add) ram_grant_permission "$1" ;;
+    perm-get) ram_list_permissions "$1" ;;
     help) show_ram_help ;;
     *)
         echo "错误：未知的 RAM 操作：$operation" >&2
@@ -78,20 +80,35 @@ ram_list() {
         "列出所有子账号："
 }
 
-# 创建子账号（保持原有实现，但使用框架函数）
+# 创建子账号（保持原有实现，但使用框架函数，支持交互式输入）
 ram_create() {
     local username=$1
     local display_name=$2
 
-    # 如果没有提供用户名，自动生成
-    if [ -z "$username" ]; then
-        username="dev-$(date +%Y%m%d-%H%M%S)"
-        echo "未提供用户名，自动生成: $username"
-    fi
+    # 如果没有提供参数，则使用交互式输入
+    if [ -z "$username" ] || [ -z "$display_name" ]; then
+        echo "使用交互式模式创建 RAM 子账号"
 
-    # 如果没有提供显示名，使用用户名
-    if [ -z "$display_name" ]; then
-        display_name="$username"
+        # 输入用户名
+        if [ -z "$username" ]; then
+            read -r -p "请输入用户名 (回车生成 dev-开头的用户名): " username_input
+            if [ -z "$username_input" ]; then
+                username="dev-$(date +%Y%m%d-%H%M%S)"
+                echo "自动生成用户名: $username"
+            else
+                username="$username_input"
+            fi
+        fi
+
+        # 输入显示名
+        if [ -z "$display_name" ]; then
+            read -r -p "请输入显示名称 (回车使用用户名): " display_name_input
+            display_name=${display_name_input:-$username}
+            if [ -z "$display_name" ]; then
+                echo "错误：显示名称不能为空。" >&2
+                return 1
+            fi
+        fi
     fi
 
     # 生成随机密码
@@ -104,20 +121,15 @@ ram_create() {
     echo "密码: $password"
 
     local result
-    result=$(call_aliyun_api ram CreateUser \
-        --UserName "$username" \
-        --DisplayName "$display_name")
+    result=$(call_aliyun_api ram CreateUser         --UserName "$username"         --DisplayName "$display_name")
 
     if [ $? -eq 0 ]; then
         echo "子账号创建成功："
         echo "$result" | jq '.'
-        
+
         # 创建登录配置
-        call_aliyun_api ram CreateLoginProfile \
-            --UserName "$username" \
-            --Password "$password" \
-            --PasswordResetRequired false >/dev/null 2>&1
-        
+        call_aliyun_api ram CreateLoginProfile             --UserName "$username"             --Password "$password"             --PasswordResetRequired false >/dev/null 2>&1
+
         echo "登录密码: $password"
         log_result "${profile:-}" "$region" "ram" "create" "$result"
     else
@@ -132,14 +144,50 @@ ram_update() {
     local username=$1
     local new_display_name=$2
 
+    # 如果没有提供用户名，则使用 fzf 选择
     if [ -z "$username" ]; then
-        echo "错误：用户名不能为空。" >&2
-        echo "用法：ram update <用户名> <新显示名>" >&2
-        return 1
+        local user_list
+        local result
+        result=$(call_aliyun_api ram ListUsers 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        user_list=$(echo "$result" | jq -r '.Users.User[] | "\(.UserName) (\(.DisplayName)) [\(.CreateDate)]"')
+
+        if [ -z "$user_list" ]; then
+            echo "错误：没有找到子账号。" >&2
+            return 1
+        elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            username=$(echo "$user_list" | awk '{print $1}')
+            echo "自动选择唯一的子账号: $username"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                username=$(select_with_fzf "选择要更新的子账号" "$user_list" | awk '{print $1}')
+                if [ -z "$username" ]; then
+                    echo "错误：未选择子账号。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择子账号，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
     fi
 
+    # 如果没有提供新显示名，则提示输入
     if [ -z "$new_display_name" ]; then
-        echo "错误：新显示名不能为空。" >&2
+        read -r -p "请输入新的显示名称 [$username]: " new_display_name
+        new_display_name=${new_display_name:-$username}
+        if [ -z "$new_display_name" ]; then
+            echo "错误：新显示名不能为空。" >&2
+            return 1
+        fi
+    fi
+
+    if ! validate_required_params "$username" "$new_display_name" "错误：用户名和新显示名不能为空。"; then
+        echo "用法：ram set <用户名> <新显示名>" >&2
         return 1
     fi
 
@@ -164,6 +212,39 @@ ram_update() {
 ram_delete() {
     local username=$1
 
+    # 如果没有提供用户名，则使用 fzf 选择
+    if [ -z "$username" ]; then
+        local user_list
+        local result
+        result=$(call_aliyun_api ram ListUsers 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        user_list=$(echo "$result" | jq -r '.Users.User[] | "\(.UserName) (\(.DisplayName)) [\(.CreateDate)]"')
+
+        if [ -z "$user_list" ]; then
+            echo "错误：没有找到子账号。" >&2
+            return 1
+        elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            username=$(echo "$user_list" | awk '{print $1}')
+            echo "自动选择唯一的子账号: $username"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                username=$(select_with_fzf "选择要删除的子账号" "$user_list" | awk '{print $1}')
+                if [ -z "$username" ]; then
+                    echo "错误：未选择子账号。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择子账号，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查用户名是否为空
     if [ -z "$username" ]; then
         echo "错误：用户名不能为空。" >&2
         return 1
@@ -190,9 +271,41 @@ ram_delete() {
     log_result "${profile:-}" "$region" "ram" "delete" "$result"
 }
 
-# 创建 AccessKey（保持原有实现，但使用框架函数）
+# 创建 AccessKey（保持原有实现，但使用框架函数并添加 fzf 选择）
 ram_create_key() {
     local username=$1
+
+    # 如果没有提供用户名，则使用 fzf 选择
+    if [ -z "$username" ]; then
+        local user_list
+        local result
+        result=$(call_aliyun_api ram ListUsers 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        user_list=$(echo "$result" | jq -r '.Users.User[] | "\(.UserName) (\(.DisplayName)) [\(.CreateDate)]"')
+
+        if [ -z "$user_list" ]; then
+            echo "错误：没有找到子账号。" >&2
+            return 1
+        elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            username=$(echo "$user_list" | awk '{print $1}')
+            echo "自动选择唯一的子账号: $username"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                username=$(select_with_fzf "选择要为其创建 AccessKey 的子账号" "$user_list" | awk '{print $1}')
+                if [ -z "$username" ]; then
+                    echo "错误：未选择子账号。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择子账号，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
 
     if [ -z "$username" ]; then
         echo "错误：用户名不能为空。" >&2
@@ -215,9 +328,41 @@ ram_create_key() {
     fi
 }
 
-# 授予权限（保持原有实现，但使用框架函数）
+# 授予权限（保持原有实现，但使用框架函数并添加 fzf 选择）
 ram_grant_permission() {
     local username=$1
+
+    # 如果没有提供用户名，则使用 fzf 选择
+    if [ -z "$username" ]; then
+        local user_list
+        local result
+        result=$(call_aliyun_api ram ListUsers 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        user_list=$(echo "$result" | jq -r '.Users.User[] | "\(.UserName) (\(.DisplayName)) [\(.CreateDate)]"')
+
+        if [ -z "$user_list" ]; then
+            echo "错误：没有找到子账号。" >&2
+            return 1
+        elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            username=$(echo "$user_list" | awk '{print $1}')
+            echo "自动选择唯一的子账号: $username"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                username=$(select_with_fzf "选择要授予权限的子账号" "$user_list" | awk '{print $1}')
+                if [ -z "$username" ]; then
+                    echo "错误：未选择子账号。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择子账号，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
 
     if [ -z "$username" ]; then
         echo "错误：用户名不能为空。" >&2
@@ -226,7 +371,7 @@ ram_grant_permission() {
 
     echo "授予子账号权限："
     echo "用户名: $username"
-    
+
     # 授予 AliyunECSFullAccess 权限
     local result
     result=$(call_aliyun_api ram AttachPolicyToUser \
@@ -245,9 +390,41 @@ ram_grant_permission() {
     fi
 }
 
-# 列出权限（保持原有实现，但使用框架函数）
+# 列出权限（保持原有实现，但使用框架函数并添加 fzf 选择）
 ram_list_permissions() {
     local username=$1
+
+    # 如果没有提供用户名，则使用 fzf 选择
+    if [ -z "$username" ]; then
+        local user_list
+        local result
+        result=$(call_aliyun_api ram ListUsers 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        user_list=$(echo "$result" | jq -r '.Users.User[] | "\(.UserName) (\(.DisplayName)) [\(.CreateDate)]"')
+
+        if [ -z "$user_list" ]; then
+            echo "错误：没有找到子账号。" >&2
+            return 1
+        elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            username=$(echo "$user_list" | awk '{print $1}')
+            echo "自动选择唯一的子账号: $username"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                username=$(select_with_fzf "选择要查看权限的子账号" "$user_list" | awk '{print $1}')
+                if [ -z "$username" ]; then
+                    echo "错误：未选择子账号。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择子账号，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
 
     if [ -z "$username" ]; then
         echo "错误：用户名不能为空。" >&2
@@ -256,7 +433,7 @@ ram_list_permissions() {
 
     echo "列出用户权限："
     echo "用户名: $username"
-    
+
     local result
     result=$(call_aliyun_api ram ListPoliciesForUser --UserName "$username")
 
@@ -265,6 +442,70 @@ ram_list_permissions() {
         log_result "${profile:-}" "$region" "ram" "list-permissions" "$result"
     else
         echo "错误：无法获取用户权限列表。"
+        echo "$result"
+        return 1
+    fi
+}
+
+# 创建子账号（保持原有实现，但使用框架函数，支持交互式输入）
+ram_create_updated() {
+    local username=$1
+    local display_name=$2
+
+    # 如果没有提供参数，则使用交互式输入
+    if [ -z "$username" ] || [ -z "$display_name" ]; then
+        echo "使用交互式模式创建 RAM 子账号"
+
+        # 输入用户名
+        if [ -z "$username" ]; then
+            read -r -p "请输入用户名 (回车生成 dev-开头的用户名): " username_input
+            if [ -z "$username_input" ]; then
+                username="dev-$(date +%Y%m%d-%H%M%S)"
+                echo "自动生成用户名: $username"
+            else
+                username="$username_input"
+            fi
+        fi
+
+        # 输入显示名
+        if [ -z "$display_name" ]; then
+            read -r -p "请输入显示名称 (回车使用用户名): " display_name_input
+            display_name=${display_name_input:-$username}
+            if [ -z "$display_name" ]; then
+                echo "错误：显示名称不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 生成随机密码
+    local password
+    password="$(_get_random_password 2>/dev/null)@@"
+
+    echo "创建 RAM 子账号："
+    echo "用户名: $username"
+    echo "显示名: $display_name"
+    echo "密码: $password"
+
+    local result
+    result=$(call_aliyun_api ram CreateUser \
+        --UserName "$username" \
+        --DisplayName "$display_name")
+
+    if [ $? -eq 0 ]; then
+        echo "子账号创建成功："
+        echo "$result" | jq '.'
+
+        # 创建登录配置
+        call_aliyun_api ram CreateLoginProfile \
+            --UserName "$username" \
+            --Password "$password" \
+            --PasswordResetRequired false >/dev/null 2>&1
+
+        echo "登录密码: $password"
+        log_result "${profile:-}" "$region" "ram" "create" "$result"
+    else
+        echo "错误：子账号创建失败。"
         echo "$result"
         return 1
     fi

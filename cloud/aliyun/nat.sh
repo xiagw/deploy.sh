@@ -9,28 +9,30 @@
 
 show_nat_help() {
     echo "NAT网关操作："
-    echo "  list [format]                    - 列出NAT网关"
-    echo "  create <VPC-ID> <名称> <规格>     - 创建NAT网关"
-    echo "  update <NAT网关ID> <名称>         - 更新NAT网关"
-    echo "  delete <NAT网关ID>                - 删除NAT网关"
+    echo "  get [format]                       - 列出NAT网关"
+    echo "  add <VPC-ID> <名称> <规格>        - 创建NAT网关"
+    echo "  set [<NAT网关ID>] [<名称>]        - 更新NAT网关（NAT网关ID和名称都是可选的，可使用fzf选择）"
+    echo "  del [<NAT网关ID>]                 - 删除NAT网关（NAT网关ID可选，可使用fzf选择）"
     echo
     echo "示例："
-    echo "  $0 nat list"
-    echo "  $0 nat list json"
-    echo "  $0 nat create vpc-bp1qpo0kug3a20qqe**** my-nat Small"
-    echo "  $0 nat update ngw-bp1uewa15k4iy5770**** new-name"
-    echo "  $0 nat delete ngw-bp1uewa15k4iy5770****"
+    echo "  $0 nat get"
+    echo "  $0 nat get json"
+    echo "  $0 nat add vpc-bp1qpo0kug3a20qqe**** my-nat Small"
+    echo "  $0 nat set ngw-bp1uewa15k4iy5770**** new-name"
+    echo "  $0 nat del ngw-bp1uewa15k4iy5770****"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_nat_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) nat_list "$@" ;;
-    create) nat_create "$@" ;;
-    update) nat_update "$@" ;;
-    delete) nat_delete "$@" ;;
+    get) nat_list "$@" ;;
+    add) nat_create "$@" ;;
+    set) nat_update "$@" ;;
+    del) nat_delete "$@" ;;
     help) show_nat_help ;;
     *)
         echo "错误：未知的NAT网关操作：$operation" >&2
@@ -119,7 +121,7 @@ Large"
     fi
 
     if ! validate_required_params "$vpc_id" "$name" "$spec" "错误：VPC ID、名称和规格不能为空。"; then
-        echo "用法：nat create <VPC-ID> <名称> <规格>" >&2
+        echo "用法：nat add <VPC-ID> <名称> <规格>" >&2
         return 1
     fi
 
@@ -189,7 +191,7 @@ nat_update() {
     fi
 
     if ! validate_required_params "$nat_id" "$new_name" "错误：NAT网关ID和新名称不能为空。"; then
-        echo "用法：nat update <NAT网关ID> <新名称>" >&2
+        echo "用法：nat set <NAT网关ID> <新名称>" >&2
         return 1
     fi
 

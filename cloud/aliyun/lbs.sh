@@ -9,42 +9,44 @@
 
 show_lbs_help() {
     echo "负载均衡服务 (Load Balancer Services) 操作："
-    echo "  list [type] [format]                    - 列出负载均衡实例，type 可选 slb/nlb/alb"
-    echo "  create <type> <名称> [其他参数...]       - 创建负载均衡实例"
-    echo "  update <type> <实例ID> <新名称>          - 更新负载均衡实例"
-    echo "  delete <type> <实例ID>                  - 删除负载均衡实例"
+    echo "  get [type] [format]                     - 列出负载均衡实例，type 可选 slb/nlb/alb"
+    echo "  add <type> <名称> [其他参数...]         - 创建负载均衡实例"
+    echo "  set <type> [<实例ID>] [<新名称>]        - 更新负载均衡实例（实例ID和新名称都是可选的，可使用fzf选择）"
+    echo "  del <type> [<实例ID>]                   - 删除负载均衡实例（实例ID可选，可使用fzf选择）"
     echo
     echo "示例："
-    echo "  $0 lbs list"
-    echo "  $0 lbs list nlb"
-    echo "  $0 lbs list slb json"
-    echo "  $0 lbs create slb my-slb slb.s1.small PayOnDemand"
-    echo "  $0 lbs create nlb my-nlb vpc-xxx vsw-xxx"
-    echo "  $0 lbs update alb alb-bp1b6c719dfa08exfuca1 new-name"
-    echo "  $0 lbs delete slb lb-bp1b6c719dfa08exfuca1"
+    echo "  $0 lbs get"
+    echo "  $0 lbs get nlb"
+    echo "  $0 lbs get slb json"
+    echo "  $0 lbs add slb my-slb slb.s1.small PayOnDemand"
+    echo "  $0 lbs add nlb my-nlb vpc-xxx vsw-xxx"
+    echo "  $0 lbs set alb alb-bp1b6c719dfa08exfuca1 new-name"
+    echo "  $0 lbs del slb lb-bp1b6c719dfa08exfuca1"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_lbs_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list)
+    get)
         local lb_type=${1:-all}
         local format=${2:-human}
         lbs_list "$lb_type" "$format"
         ;;
-    create)
+    add)
         local lb_type=$1
         shift
         lbs_create "$lb_type" "$@"
         ;;
-    update)
+    set)
         local lb_type=$1
         shift
         lbs_update "$lb_type" "$@"
         ;;
-    delete)
+    del)
         local lb_type=$1
         shift
         lbs_delete "$lb_type" "$@"
@@ -495,6 +497,47 @@ lbs_update() {
 slb_update() {
     local lb_id=$1 new_name=$2
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$lb_id" ]; then
+        local lb_list
+        local result
+        result=$(call_aliyun_api slb DescribeLoadBalancers --RegionId "${region:-}" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 CLB 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        lb_list=$(echo "$result" | jq -r '.LoadBalancers.LoadBalancer[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
+
+        if [ -z "$lb_list" ]; then
+            echo "错误：没有找到 CLB 实例。" >&2
+            return 1
+        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            lb_id=$(echo "$lb_list" | awk '{print $1}')
+            echo "自动选择唯一的 CLB 实例: $lb_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                lb_id=$(select_with_fzf "选择要更新的 CLB 实例" "$lb_list" | awk '{print $1}')
+                if [ -z "$lb_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供新名称，则提示输入
+    if [ -z "$new_name" ]; then
+        read -r -p "请输入新的实例名称: " new_name
+        if [ -z "$new_name" ]; then
+            echo "错误：新名称不能为空。" >&2
+            return 1
+        fi
+    fi
+
     if ! validate_required_params "$lb_id" "$new_name" "错误：实例ID和新名称不能为空。"; then
         return 1
     fi
@@ -519,6 +562,47 @@ slb_update() {
 nlb_update() {
     local lb_id=$1 new_name=$2
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$lb_id" ]; then
+        local lb_list
+        local result
+        result=$(call_aliyun_api nlb ListLoadBalancers --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 NLB 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        lb_list=$(echo "$result" | jq -r '.LoadBalancers[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
+
+        if [ -z "$lb_list" ]; then
+            echo "错误：没有找到 NLB 实例。" >&2
+            return 1
+        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            lb_id=$(echo "$lb_list" | awk '{print $1}')
+            echo "自动选择唯一的 NLB 实例: $lb_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                lb_id=$(select_with_fzf "选择要更新的 NLB 实例" "$lb_list" | awk '{print $1}')
+                if [ -z "$lb_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供新名称，则提示输入
+    if [ -z "$new_name" ]; then
+        read -r -p "请输入新的实例名称: " new_name
+        if [ -z "$new_name" ]; then
+            echo "错误：新名称不能为空。" >&2
+            return 1
+        fi
+    fi
+
     if ! validate_required_params "$lb_id" "$new_name" "错误：实例ID和新名称不能为空。"; then
         return 1
     fi
@@ -542,6 +626,47 @@ nlb_update() {
 
 alb_update() {
     local lb_id=$1 new_name=$2
+
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$lb_id" ]; then
+        local lb_list
+        local result
+        result=$(call_aliyun_api alb ListLoadBalancers --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 ALB 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        lb_list=$(echo "$result" | jq -r '.LoadBalancers[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
+
+        if [ -z "$lb_list" ]; then
+            echo "错误：没有找到 ALB 实例。" >&2
+            return 1
+        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            lb_id=$(echo "$lb_list" | awk '{print $1}')
+            echo "自动选择唯一的 ALB 实例: $lb_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                lb_id=$(select_with_fzf "选择要更新的 ALB 实例" "$lb_list" | awk '{print $1}')
+                if [ -z "$lb_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供新名称，则提示输入
+    if [ -z "$new_name" ]; then
+        read -r -p "请输入新的实例名称: " new_name
+        if [ -z "$new_name" ]; then
+            echo "错误：新名称不能为空。" >&2
+            return 1
+        fi
+    fi
 
     if ! validate_required_params "$lb_id" "$new_name" "错误：实例ID和新名称不能为空。"; then
         return 1
@@ -589,6 +714,39 @@ lbs_delete() {
 slb_delete() {
     local lb_id=$1
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$lb_id" ]; then
+        local lb_list
+        local result
+        result=$(call_aliyun_api slb DescribeLoadBalancers --RegionId "${region:-}" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 CLB 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        lb_list=$(echo "$result" | jq -r '.LoadBalancers.LoadBalancer[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
+
+        if [ -z "$lb_list" ]; then
+            echo "错误：没有找到 CLB 实例。" >&2
+            return 1
+        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            lb_id=$(echo "$lb_list" | awk '{print $1}')
+            echo "自动选择唯一的 CLB 实例: $lb_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                lb_id=$(select_with_fzf "选择要删除的 CLB 实例" "$lb_list" | awk '{print $1}')
+                if [ -z "$lb_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查实例 ID 是否为空
     if [ -z "$lb_id" ]; then
         echo "错误：实例ID不能为空。" >&2
         return 1
@@ -620,6 +778,39 @@ slb_delete() {
 nlb_delete() {
     local lb_id=$1
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$lb_id" ]; then
+        local lb_list
+        local result
+        result=$(call_aliyun_api nlb ListLoadBalancers --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 NLB 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        lb_list=$(echo "$result" | jq -r '.LoadBalancers[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
+
+        if [ -z "$lb_list" ]; then
+            echo "错误：没有找到 NLB 实例。" >&2
+            return 1
+        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            lb_id=$(echo "$lb_list" | awk '{print $1}')
+            echo "自动选择唯一的 NLB 实例: $lb_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                lb_id=$(select_with_fzf "选择要删除的 NLB 实例" "$lb_list" | awk '{print $1}')
+                if [ -z "$lb_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查实例 ID 是否为空
     if [ -z "$lb_id" ]; then
         echo "错误：实例ID不能为空。" >&2
         return 1
@@ -651,6 +842,39 @@ nlb_delete() {
 alb_delete() {
     local lb_id=$1
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$lb_id" ]; then
+        local lb_list
+        local result
+        result=$(call_aliyun_api alb ListLoadBalancers --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 ALB 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        lb_list=$(echo "$result" | jq -r '.LoadBalancers[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
+
+        if [ -z "$lb_list" ]; then
+            echo "错误：没有找到 ALB 实例。" >&2
+            return 1
+        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            lb_id=$(echo "$lb_list" | awk '{print $1}')
+            echo "自动选择唯一的 ALB 实例: $lb_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                lb_id=$(select_with_fzf "选择要删除的 ALB 实例" "$lb_list" | awk '{print $1}')
+                if [ -z "$lb_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查实例 ID 是否为空
     if [ -z "$lb_id" ]; then
         echo "错误：实例ID不能为空。" >&2
         return 1

@@ -9,48 +9,52 @@
 
 show_rds_help() {
     echo "RDS (关系型数据库) 操作："
-    echo "  list                                    - 列出 RDS 实例"
-    echo "  create <名称> <引擎> <版本> <规格>      - 创建 RDS 实例"
-    echo "  update <实例ID> <新名称>                - 更新 RDS 实例"
-    echo "  delete <实例ID>                         - 删除 RDS 实例"
-    echo "  account-create <实例ID> <账号> <密码> [描述] - 创建数据库账号"
-    echo "  account-delete <实例ID> <账号>           - 删除数据库账号"
-    echo "  account-list <实例ID> [format]          - 列出数据库账号"
-    echo "  account-grant <实例ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
-    echo "  db-list <实例ID> [format]               - 列出数据库"
-    echo "  db-create <实例ID> <数据库名> [字符集]  - 创建数据库"
-    echo "  db-delete <实例ID> <数据库名>           - 删除数据库"
+    echo "  get [<域名>] [format]                    - 列出 RDS 实例（域名可选，支持fzf选择）"
+    echo "  add <名称> <引擎> <版本> <规格> [地域]  - 创建 RDS 实例"
+    echo "  set [<实例ID>] [<新名称>] [地域]        - 更新 RDS 实例（实例ID和新名称都是可选的，可使用fzf选择）"
+    echo "  del [<实例ID>] [地域]                   - 删除 RDS 实例（实例ID可选，可使用fzf选择）"
+    echo "  account-add <实例ID> <账号> <密码> [描述] - 创建数据库账号"
+    echo "  account-del <实例ID> <账号>             - 删除数据库账号"
+    echo "  account-get <实例ID> [format]           - 列出数据库账号"
+    echo "  account-set <实例ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
+    echo "  db-get <实例ID> [format]                - 列出数据库"
+    echo "  db-add <实例ID> <数据库名> [字符集]     - 创建数据库"
+    echo "  db-del <实例ID> <数据库名>              - 删除数据库"
     echo
     echo "示例："
-    echo "  $0 rds list"
-    echo "  $0 rds create my-rds MySQL 8.0 rds.mysql.t1.small"
-    echo "  $0 rds update rm-xxx new-name"
-    echo "  $0 rds delete rm-xxx"
-    echo "  $0 rds account-create rm-xxx myuser mypassword '测试账号'"
-    echo "  $0 rds account-delete rm-xxx myuser"
-    echo "  $0 rds account-list rm-xxx"
-    echo "  $0 rds account-grant rm-xxx myuser mydb ReadWrite"
-    echo "  $0 rds db-list rm-xxx"
-    echo "  $0 rds db-create rm-xxx mydb utf8mb4"
-    echo "  $0 rds db-delete rm-xxx mydb"
+    echo "  $0 rds get"
+    echo "  $0 rds get example.com"
+    echo "  $0 rds get example.com json"
+    echo "  $0 rds add my-rds MySQL 8.0 rds.mysql.x4.large"
+    echo "  $0 rds set rm-xxx new-name"
+    echo "  $0 rds del rm-xxx"
+    echo "  $0 rds account-add rm-xxx myuser mypassword '测试账号'"
+    echo "  $0 rds account-del rm-xxx myuser"
+    echo "  $0 rds account-get rm-xxx"
+    echo "  $0 rds account-set rm-xxx myuser mydb ReadWrite"
+    echo "  $0 rds db-get rm-xxx"
+    echo "  $0 rds db-add rm-xxx mydb utf8mb4"
+    echo "  $0 rds db-del rm-xxx mydb"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_rds_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) rds_list "$@" ;;
-    create) rds_create "$@" ;;
-    update) rds_update "$@" ;;
-    delete) rds_delete "$@" ;;
-    account-create) rds_account_create "$@" ;;
-    account-delete) rds_account_delete "$@" ;;
-    account-list) rds_account_list "$@" ;;
-    account-grant) rds_account_grant "$@" ;;
-    db-list) rds_db_list "$@" ;;
-    db-create) rds_db_create "$@" ;;
-    db-delete) rds_db_delete "$@" ;;
+    get) rds_list "$@" ;;
+    add) rds_create "$@" ;;
+    set) rds_update "$@" ;;
+    del) rds_delete "$@" ;;
+    account-add) rds_account_create "$@" ;;
+    account-del) rds_account_delete "$@" ;;
+    account-get) rds_account_list "$@" ;;
+    account-set) rds_account_grant "$@" ;;
+    db-get) rds_db_list "$@" ;;
+    db-add) rds_db_create "$@" ;;
+    db-del) rds_db_delete "$@" ;;
     help) show_rds_help ;;
     *)
         echo "错误：未知的 RDS 操作：$operation" >&2
@@ -286,6 +290,7 @@ rds.maria.c3.xlarge"
     fi
 
     if ! validate_required_params "$name" "$engine" "$version" "$class" "错误：名称、引擎、版本和规格不能为空。"; then
+        echo "用法：rds add <名称> <引擎> <版本> <规格> [地域]" >&2
         return 1
     fi
 
@@ -314,7 +319,8 @@ rds.maria.c3.xlarge"
 
 # 使用新框架的更新函数
 rds_update() {
-    local instance_id=$1 new_name=$2
+    local instance_id=$1
+    local new_name=$2
 
     # 如果没有提供参数，则使用 fzf 交互式选择
     if [ -z "$instance_id" ] || [ -z "$new_name" ]; then
@@ -323,7 +329,14 @@ rds_update() {
         # 选择实例ID
         if [ -z "$instance_id" ]; then
             local instance_list
-            instance_list=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+            local result
+            result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+            if [ $? -ne 0 ]; then
+                echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
+                return 1
+            fi
+
+            instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
 
             if [ -z "$instance_list" ]; then
                 echo "错误：没有找到 RDS 实例。" >&2
@@ -334,6 +347,10 @@ rds_update() {
             else
                 if type select_with_fzf >/dev/null 2>&1; then
                     instance_id=$(select_with_fzf "选择 RDS 实例" "$instance_list" | awk '{print $1}')
+                    if [ -z "$instance_id" ]; then
+                        echo "错误：未选择实例。" >&2
+                        return 1
+                    fi
                 else
                     echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
                     return 1
@@ -377,10 +394,15 @@ rds_delete() {
 
     # 如果没有提供实例ID，则使用 fzf 交互式选择
     if [ -z "$instance_id" ]; then
-        echo "使用 fzf 交互式模式删除 RDS 实例"
-
         local instance_list
-        instance_list=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+        local result
+        result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
 
         if [ -z "$instance_list" ]; then
             echo "错误：没有找到 RDS 实例。" >&2
@@ -391,6 +413,10 @@ rds_delete() {
         else
             if type select_with_fzf >/dev/null 2>&1; then
                 instance_id=$(select_with_fzf "选择要删除的 RDS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
             else
                 echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
                 return 1
@@ -431,16 +457,71 @@ rds_account_create() {
     local password=${3:-$(_get_random_password 2>/dev/null)}
     local description=${4:-"Created by CLI"}
 
-    if ! validate_required_params "$instance_id" "$account_name" "错误：实例ID和账号名不能为空。"; then
-        return 1
-    fi
-
-    if [ -z "$password" ]; then
-        password=$(_get_random_password 2>/dev/null)
-        if [ -z "$password" ]; then
-            echo "错误：无法生成密码，请手动指定密码。" >&2
+    # 如果没有提供实例ID，则使用 fzf 交互式选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
             return 1
         fi
+
+        instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 RDS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要创建账号的 RDS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供账号名，则交互式输入
+    if [ -z "$account_name" ]; then
+        read -r -p "请输入账号名称: " account_name
+        if [ -z "$account_name" ]; then
+            echo "错误：账号名不能为空。" >&2
+            return 1
+        fi
+    fi
+
+    # 如果没有提供密码，则生成或交互式输入
+    if [ -z "$password" ]; then
+        read -r -p "请输入密码 (回车生成随机密码): " password_input
+        if [ -z "$password_input" ]; then
+            password=$(_get_random_password 2>/dev/null)
+            if [ -z "$password" ]; then
+                echo "错误：无法生成密码，请手动指定密码。" >&2
+                return 1
+            fi
+            echo "生成的密码: $password"
+        else
+            password="$password_input"
+        fi
+    fi
+
+    # 如果没有提供描述，则交互式输入
+    if [ -z "$description" ]; then
+        read -r -p "请输入描述 (回车使用默认描述): " desc_input
+        description=${desc_input:-"Created by CLI"}
+    fi
+
+    if ! validate_required_params "$instance_id" "$account_name" "错误：实例ID和账号名不能为空。"; then
+        echo "用法：rds account-add <实例ID> <账号> [密码] [描述]" >&2
+        return 1
     fi
 
     # 验证密码复杂度
@@ -513,7 +594,72 @@ rds_account_delete() {
     local instance_id=$1
     local account_name=$2
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 RDS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择 RDS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供账号名，则使用 fzf 选择
+    if [ -z "$account_name" ]; then
+        local account_list
+        local result
+        result=$(call_aliyun_api rds DescribeAccounts --DBInstanceId "$instance_id" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取账号列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        account_list=$(echo "$result" | jq -r '.Accounts.DBInstanceAccount[] | "\(.AccountName) (\(.AccountDescription)) [\(.AccountStatus)]"')
+
+        if [ -z "$account_list" ]; then
+            echo "错误：没有找到 RDS 账号。" >&2
+            return 1
+        elif [ "$(echo "$account_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            account_name=$(echo "$account_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 账号: $account_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                account_name=$(select_with_fzf "选择要删除的 RDS 账号" "$account_list" | awk '{print $1}')
+                if [ -z "$account_name" ]; then
+                    echo "错误：未选择账号。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 账号，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if ! validate_required_params "$instance_id" "$account_name" "错误：实例ID和账号名不能为空。"; then
+        echo "用法：rds account-del <实例ID> <账号>" >&2
         return 1
     fi
 
@@ -544,6 +690,38 @@ rds_account_delete() {
 rds_account_list() {
     local instance_id=$1
     local format=${2:-human}
+
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 RDS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要查看账号的 RDS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
 
     if [ -z "$instance_id" ]; then
         echo "错误：实例ID不能为空。" >&2
@@ -602,6 +780,38 @@ rds_db_list() {
     local instance_id=$1
     local format=${2:-human}
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 RDS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要查看数据库的 RDS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if [ -z "$instance_id" ]; then
         echo "错误：实例ID不能为空。" >&2
         return 1
@@ -637,7 +847,63 @@ rds_db_create() {
     local db_name=$2
     local charset=${3:-utf8mb4}
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 RDS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要创建数据库的 RDS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供数据库名，则交互式输入
+    if [ -z "$db_name" ]; then
+        read -r -p "请输入数据库名: " db_name
+        if [ -z "$db_name" ]; then
+            echo "错误：数据库名不能为空。" >&2
+            return 1
+        fi
+    fi
+
+    # 如果没有提供字符集，则交互式选择
+    if [ -z "$charset" ]; then
+        local charset_list="utf8mb4
+utf8
+gbk
+latin1"
+        if type select_with_fzf >/dev/null 2>&1; then
+            charset=$(select_with_fzf "选择字符集" "$charset_list")
+        else
+            read -r -p "请输入字符集 (utf8mb4/utf8/gbk/latin1): " charset
+            charset=${charset:-utf8mb4}
+        fi
+    fi
+
     if ! validate_required_params "$instance_id" "$db_name" "错误：实例ID和数据库名不能为空。"; then
+        echo "用法：rds db-add <实例ID> <数据库名> [字符集]" >&2
         return 1
     fi
 
@@ -669,7 +935,72 @@ rds_db_delete() {
     local instance_id=$1
     local db_name=$2
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 RDS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择要删除数据库的 RDS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供数据库名，则使用 fzf 选择
+    if [ -z "$db_name" ]; then
+        local db_list
+        local db_result
+        db_result=$(call_aliyun_api rds DescribeDatabases --DBInstanceId "$instance_id" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取数据库列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        db_list=$(echo "$db_result" | jq -r '.Databases.Database[] | "\(.DBName) [\(.CharacterSetName)] [\(.DBStatus)]"')
+
+        if [ -z "$db_list" ]; then
+            echo "错误：在指定实例中没有找到数据库。" >&2
+            return 1
+        elif [ "$(echo "$db_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            db_name=$(echo "$db_list" | awk '{print $1}')
+            echo "自动选择唯一的数据库: $db_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                db_name=$(select_with_fzf "选择要删除的数据库" "$db_list" | awk '{print $1}')
+                if [ -z "$db_name" ]; then
+                    echo "错误：未选择数据库。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择数据库，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if ! validate_required_params "$instance_id" "$db_name" "错误：实例ID和数据库名不能为空。"; then
+        echo "用法：rds db-del <实例ID> <数据库名>" >&2
         return 1
     fi
 
@@ -703,7 +1034,121 @@ rds_account_grant() {
     local db_name=$3
     local privilege=${4:-ReadWrite}
 
+    # 如果没有提供实例ID，则使用 fzf 选择
+    if [ -z "$instance_id" ]; then
+        local instance_list
+        local result
+        result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 RDS 实例列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 RDS 实例。" >&2
+            return 1
+        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            instance_id=$(echo "$instance_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 实例: $instance_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                instance_id=$(select_with_fzf "选择 RDS 实例" "$instance_list" | awk '{print $1}')
+                if [ -z "$instance_id" ]; then
+                    echo "错误：未选择实例。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供账号名，则使用 fzf 选择
+    if [ -z "$account_name" ]; then
+        local account_list
+        local result
+        result=$(call_aliyun_api rds DescribeAccounts --DBInstanceId "$instance_id" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取账号列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        account_list=$(echo "$result" | jq -r '.Accounts.DBInstanceAccount[] | "\(.AccountName) (\(.AccountDescription)) [\(.AccountStatus)]"')
+
+        if [ -z "$account_list" ]; then
+            echo "错误：在指定实例中没有找到账号。" >&2
+            return 1
+        elif [ "$(echo "$account_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            account_name=$(echo "$account_list" | awk '{print $1}')
+            echo "自动选择唯一的 RDS 账号: $account_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                account_name=$(select_with_fzf "选择 RDS 账号" "$account_list" | awk '{print $1}')
+                if [ -z "$account_name" ]; then
+                    echo "错误：未选择账号。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择 RDS 账号，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供数据库名，则使用 fzf 选择
+    if [ -z "$db_name" ]; then
+        local db_list
+        local result
+        result=$(call_aliyun_api rds DescribeDatabases --DBInstanceId "$instance_id" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取数据库列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        db_list=$(echo "$result" | jq -r '.Databases.Database[] | "\(.DBName) [\(.CharacterSetName)] [\(.DBStatus)]"')
+
+        if [ -z "$db_list" ]; then
+            echo "错误：在指定实例中没有找到数据库。" >&2
+            return 1
+        elif [ "$(echo "$db_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            db_name=$(echo "$db_list" | awk '{print $1}')
+            echo "自动选择唯一的数据库: $db_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                db_name=$(select_with_fzf "选择数据库" "$db_list" | awk '{print $1}')
+                if [ -z "$db_name" ]; then
+                    echo "错误：未选择数据库。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择数据库，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供权限，则使用 fzf 选择
+    if [ -z "$privilege" ]; then
+        local privilege_list="ReadWrite
+ReadOnly
+DDL
+DML"
+        if type select_with_fzf >/dev/null 2>&1; then
+            privilege=$(select_with_fzf "选择权限级别" "$privilege_list")
+            if [ -z "$privilege" ]; then
+                privilege="ReadWrite"  # 默认权限
+            fi
+        else
+            read -r -p "请输入权限 (ReadWrite/ReadOnly/DDL/DML) [默认: ReadWrite]: " privilege_input
+            privilege=${privilege_input:-ReadWrite}
+        fi
+    fi
+
     if ! validate_required_params "$instance_id" "$account_name" "$db_name" "错误：实例ID、账号名和数据库名不能为空。"; then
+        echo "用法：rds account-set <实例ID> <账号> <数据库名> [权限]" >&2
         return 1
     fi
 
@@ -723,7 +1168,7 @@ rds_account_grant() {
     if [ $? -eq 0 ]; then
         echo "权限设置成功。"
         echo "账号 $account_name 已被授予 $privilege 权限，可访问数据库 $db_name"
-        log_result "${profile:-}" "$region" "rds" "account-grant" "$result"
+        log_result "${profile:-}" "$region" "rds" "account-set" "$result"
     else
         echo "错误：权限设置失败。"
         echo "$result"

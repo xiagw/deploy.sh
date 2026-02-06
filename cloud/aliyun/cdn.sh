@@ -9,36 +9,38 @@
 
 show_cdn_help() {
     echo "CDN (内容分发网络) 操作："
-    echo "  list [format]                           - 列出 CDN 域名"
-    echo "  create <域名> <源站> <源站类型>         - 添加 CDN 加速域名"
-    echo "  delete <域名>                           - 删除 CDN 加速域名"
-    echo "  update <域名> <源站> <源站类型>         - 修改 CDN 域名配置"
+    echo "  get [format]                            - 列出 CDN 域名"
+    echo "  add <域名> <源站> <源站类型>           - 添加 CDN 加速域名"
+    echo "  del [<域名>]                           - 删除 CDN 加速域名（域名可选，可使用fzf选择）"
+    echo "  set <域名> <源站> <源站类型>           - 修改 CDN 域名配置"
     echo "  refresh <类型> <路径>                   - 刷新 CDN 目录或文件"
     echo "  prefetch <路径>                         - 预热 CDN 文件"
     echo "  pay [show_message]                      - 购买 CDN 资源包（自动判断余量）"
     echo
     echo "示例："
-    echo "  $0 cdn list                                                  # 列出所有域名"
-    echo "  $0 cdn list json                                            # 以 JSON 格式列出域名"
-    echo "  $0 cdn create example.com example.oss-cn-hangzhou.aliyuncs.com oss  # 添加域名加速"
-    echo "  $0 cdn delete example.com                                   # 删除加速域名"
-    echo "  $0 cdn update example.com new-origin.com ip                 # 更新域名配置"
-    echo "  $0 cdn refresh directory https://example.com/dir           # 刷新目录"
-    echo "  $0 cdn refresh file https://example.com/path/to/file.jpg   # 刷新文件"
-    echo "  $0 cdn prefetch https://example.com/path/to/file.jpg       # 预热文件"
-    echo "  $0 cdn pay                                                  # 静默购买资源包"
-    echo "  $0 cdn pay true                                            # 显示购买信息"
+    echo "  $0 cdn get                                                  # 列出所有域名"
+    echo "  $0 cdn get json                                             # 以 JSON 格式列出域名"
+    echo "  $0 cdn add example.com example.oss-cn-hangzhou.aliyuncs.com oss  # 添加域名加速"
+    echo "  $0 cdn del example.com                                   # 删除加速域名"
+    echo "  $0 cdn set example.com new-origin.com ip                 # 更新域名配置"
+    echo "  $0 cdn refresh directory https://example.com/dir         # 刷新目录"
+    echo "  $0 cdn refresh file https://example.com/path/to/file.jpg # 刷新文件"
+    echo "  $0 cdn prefetch https://example.com/path/to/file.jpg     # 预热文件"
+    echo "  $0 cdn pay                                                 # 静默购买资源包"
+    echo "  $0 cdn pay true                                           # 显示购买信息"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_cdn_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) cdn_list "$@" ;;
-    create) cdn_create "$@" ;;
-    delete) cdn_delete "$@" ;;
-    update) cdn_update "$@" ;;
+    get) cdn_list "$@" ;;
+    add) cdn_create "$@" ;;
+    del) cdn_delete "$@" ;;
+    set) cdn_update "$@" ;;
     refresh) cdn_refresh "$@" ;;
     prefetch) cdn_prefetch "$@" ;;
     pay) cdn_pay "$@" ;;
@@ -150,12 +152,17 @@ oss_private"
 cdn_delete() {
     local domain_name=$1
 
-    # 如果没有提供域名，则使用交互式输入
+    # 如果没有提供域名，则使用 fzf 选择
     if [ -z "$domain_name" ]; then
-        echo "使用交互式模式删除 CDN 加速域名"
-
         local domain_list
-        domain_list=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null | jq -r '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"')
+        local result
+        result=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 CDN 域名列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        domain_list=$(echo "$result" | jq -r '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"')
 
         if [ -z "$domain_list" ]; then
             echo "错误：没有找到 CDN 域名。" >&2
@@ -166,14 +173,21 @@ cdn_delete() {
         else
             if type select_with_fzf >/dev/null 2>&1; then
                 domain_name=$(select_with_fzf "选择要删除的 CDN 域名" "$domain_list" | awk '{print $1}')
-            else
-                read -r -p "请输入域名: " domain_name
                 if [ -z "$domain_name" ]; then
-                    echo "错误：域名不能为空。" >&2
+                    echo "错误：未选择域名。" >&2
                     return 1
                 fi
+            else
+                echo "错误：需要选择域名，但未找到交互式选择工具。" >&2
+                return 1
             fi
         fi
+    fi
+
+    # 检查域名是否为空
+    if [ -z "$domain_name" ]; then
+        echo "错误：域名不能为空。" >&2
+        return 1
     fi
 
     if ! confirm_action "删除 CDN 加速域名：$domain_name"; then
@@ -201,8 +215,71 @@ cdn_delete() {
 cdn_update() {
     local domain_name=$1 sources=$2 source_type=$3
 
+    # 如果没有提供域名，则使用 fzf 选择
+    if [ -z "$domain_name" ]; then
+        local domain_list
+        local result
+        result=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 CDN 域名列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        domain_list=$(echo "$result" | jq -r '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"')
+
+        if [ -z "$domain_list" ]; then
+            echo "错误：没有找到 CDN 域名。" >&2
+            return 1
+        elif [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            domain_name=$(echo "$domain_list" | awk '{print $1}')
+            echo "自动选择唯一的 CDN 域名: $domain_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                domain_name=$(select_with_fzf "选择要更新的 CDN 域名" "$domain_list" | awk '{print $1}')
+                if [ -z "$domain_name" ]; then
+                    echo "错误：未选择域名。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择域名，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供源站地址或源站类型，则使用交互式输入
+    if [ -z "$sources" ] || [ -z "$source_type" ]; then
+        echo "使用交互式模式更新 CDN 域名配置"
+
+        # 输入源站地址
+        if [ -z "$sources" ]; then
+            read -r -p "请输入源站地址 (如: example.oss-cn-hangzhou.aliyuncs.com): " sources
+            if [ -z "$sources" ]; then
+                echo "错误：源站地址不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 选择源站类型
+        if [ -z "$source_type" ]; then
+            local source_type_list="oss
+ip
+domain
+oss_private"
+            if type select_with_fzf >/dev/null 2>&1; then
+                source_type=$(select_with_fzf "选择源站类型" "$source_type_list")
+            else
+                read -r -p "请输入源站类型 (oss/ip/domain/oss_private): " source_type
+                if [ -z "$source_type" ]; then
+                    echo "错误：源站类型不能为空。" >&2
+                    return 1
+                fi
+            fi
+        fi
+    fi
+
     if ! validate_required_params "$domain_name" "$sources" "$source_type" "错误：域名、源站和源站类型不能为空。"; then
-        echo "用法：cdn update <域名> <源站> <源站类型>" >&2
+        echo "用法：cdn set <域名> <源站> <源站类型>" >&2
         return 1
     fi
 
@@ -222,10 +299,38 @@ cdn_update() {
     fi
 }
 
-# 刷新功能（保持原有实现，但使用框架函数）
+# 刷新功能（保持原有实现，但使用框架函数并添加fzf选择）
 cdn_refresh() {
     local type=$1
     local path=$2
+
+    # 如果没有提供类型，则使用 fzf 选择
+    if [ -z "$type" ]; then
+        local type_list="file
+directory"
+        if type select_with_fzf >/dev/null 2>&1; then
+            type=$(select_with_fzf "选择刷新类型" "$type_list")
+            if [ -z "$type" ]; then
+                echo "错误：未选择刷新类型。" >&2
+                return 1
+            fi
+        else
+            read -r -p "请输入刷新类型 (file/directory): " type
+            if [ -z "$type" ]; then
+                echo "错误：刷新类型不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供路径，则使用交互式输入
+    if [ -z "$path" ]; then
+        read -r -p "请输入要刷新的路径: " path
+        if [ -z "$path" ]; then
+            echo "错误：刷新路径不能为空。" >&2
+            return 1
+        fi
+    fi
 
     if ! validate_required_params "$type" "$path" "错误：刷新操作需要指定类型（directory 或 file）和路径。"; then
         return 1
@@ -260,13 +365,17 @@ cdn_refresh() {
     fi
 }
 
-# 预热功能（保持原有实现，但使用框架函数）
+# 预热功能（保持原有实现，但使用框架函数并添加fzf选择）
 cdn_prefetch() {
     local path=$1
 
+    # 如果没有提供路径，则使用交互式输入
     if [ -z "$path" ]; then
-        echo "错误：预热操作需要指定路径。" >&2
-        return 1
+        read -r -p "请输入要预热的路径: " path
+        if [ -z "$path" ]; then
+            echo "错误：预热操作需要指定路径。" >&2
+            return 1
+        fi
     fi
 
     echo "预热 CDN 文件："
