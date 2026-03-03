@@ -21,8 +21,8 @@ grep '/swapfile' /etc/fstab || echo '/swapfile none swap defaults 0 0' | sudo te
 # /etc/apt/sources.list
 
 ## gitlab server change ssh port
-# sudo sed -i '/Port/s/22/23/' /etc/ssh/sshd_config
-# sudo sed -i '/^#Port/s/#//' /etc/ssh/sshd_config
+# sudo sed -i '/^#Port.*/s//Port 23/' /etc/ssh/sshd_config
+# sudo systemctl daemon-reload
 # sudo systemctl restart sshd
 
 ## fresh dns cache
