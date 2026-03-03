@@ -134,25 +134,24 @@ add_account_to_groups() {
 
 update_account_password() {
     local user="$1"
-    local domain="$2"
-    local password_rand="$3"
-    local user_id
+    local password_rand="$2"
+    local user_id send_msg
 
     user_id=$($cmd_gitlab user list --username "$user" | jq -r '.[].id')
+
     $cmd_gitlab user update --id "${user_id}" \
-        --username "$user" \
         --password "${password_rand}" \
-        --name "$user" \
-        --email "$user@${domain}" \
         --skip-reconfirmation 1
 
+    send_msg="${GITLAB_URL}  / username=$user / password=$password_rand"
     _msg log "$ME_LOG" "Update password for $user: $password_rand"
+    _notify_wecom "${GITLAB_WECOM_KEY:? ERR: empty wecom_key}" "$send_msg"
     return 0
 }
 
 add_account() {
     local user="$1"
-    local domain="$2"
+    local email_domain="$2"
     local password_rand send_msg
 
     [ -z "${user}" ] && return 1
@@ -166,11 +165,11 @@ add_account() {
     $cmd_gitlab user create --name "$user" \
         --username "$user" \
         --password "${password_rand}" \
-        --email "${user}@${domain}" \
+        --email "${user}@${email_domain}" \
         --skip-confirmation 1 \
         --can-create-group 0
 
-    send_msg="https://git.$domain  / username=$user / password=$password_rand"
+    send_msg="${GITLAB_URL}  / username=$user / password=$password_rand"
 
     _msg log "$ME_LOG" "$send_msg"
 
@@ -188,37 +187,28 @@ import_lib() {
     . "$file"
 }
 
-print_usage() {
-    echo "Usage: $0 <command> [options]"
-    echo
-    echo "Commands:"
-    echo "  runner     Manage gitlab runner"
-    echo "  user       Manage GitLab users"
-    echo "  project    Manage GitLab projects"
-    echo
-    echo "Runner Commands:"
-    echo "  runner install    Install and configure gitlab runner"
-    echo "  runner update     Update gitlab runner"
-    echo "  runner start      Start gitlab runner service"
-    echo "  runner stop       Stop gitlab runner service"
-    echo
-    echo "User Commands:"
-    echo "  user create       Create a new user"
-    echo "  user update       Update an existing user"
-    echo "  user list         List all users"
-    echo "  user delete       Delete a user"
-    echo
-    echo "Project Commands:"
-    echo "  project create     Create a new project"
-    echo "  project list       List all projects"
-    echo "  project delete     Delete a project"
-    echo "  project size       Check the size of a project"
-    echo
-    echo "Global Options:"
-    echo "  -d, --domain <domain>    Specify GitLab domain"
-    echo "  -a, --account <account>   Specify GitLab account"
-    echo "  -p, --profile <profile>    Select gitlab profile"
-    echo "  -h, --help                 Print this help message"
+select_profile() {
+    local profiles
+    profiles=$(grep '^\[' "$gitlab_python_config" | grep -v '^\[global\]' | tr -d '[]')
+    if [[ $(echo "$profiles" | wc -l) -gt 1 ]]; then
+        echo "$profiles" | fzf --prompt="Select GitLab profile: " --height=40%
+    else
+        echo "$profiles"
+    fi
+}
+
+select_action() {
+    local actions=(
+        "user add      Create a new user"
+        "user get      List all users"
+        "user set      Update user password"
+        "project get   List all projects"
+        "project size  Check large repositories"
+        "project del   Delete a project"
+        "project dp    Delete pipeline history"
+        "runner add    Install gitlab runner"
+    )
+    printf '%s\n' "${actions[@]}" | fzf --prompt="Select action: " --height=40% | awk '{print $1, $2}'
 }
 
 format_table() {
@@ -300,19 +290,6 @@ delete_project_pipeline_history() {
 
 # Execute the saved command
 execute_command() {
-    [ $# -eq 0 ] && print_usage && exit 1
-    while [ "$#" -gt 0 ]; do
-        case "$1" in
-        -d | --domain) GITLAB_DOMAIN=$2 && shift ;;
-        -a | --account) gitlab_account=$2 && shift ;;
-        -p | --profile) gitlab_profile=$2 && shift ;;
-        -h | --help) print_usage && exit 0 ;;
-        # user) action=$2 && shift ;;
-        *) args+=("$1") ;;
-        esac
-        shift
-    done
-
     gitlab_python_config="$HOME/.python-gitlab.cfg"
     if [[ ! -f "$gitlab_python_config" ]]; then
         gitlab_python_config="$HOME/.config/python-gitlab.cfg"
@@ -322,53 +299,79 @@ execute_command() {
         return 1
     }
 
-    cmd_gitlab="gitlab -o json"
-    if [ -n "$gitlab_profile" ]; then
-        cmd_gitlab="gitlab -o json --gitlab $gitlab_profile"
-    fi
+    # Select profile
+    gitlab_profile=$(select_profile)
+    [[ -z "$gitlab_profile" ]] && return 1
+
+    cmd_gitlab="gitlab -o json --gitlab $gitlab_profile"
+
+    # 从配置文件读取 GitLab URL
+    GITLAB_URL=$(grep -A10 "^\[$gitlab_profile\]" "$gitlab_python_config" | grep "^url" | head -1 | cut -d= -f2 | tr -d ' ')
+    [[ -z "$GITLAB_URL" ]] && { _msg error "Cannot read url from config"; return 1; }
 
     if [ -f "$ME_ENV" ]; then
         . "$ME_ENV" "$gitlab_profile"
     fi
 
-    case "${args[0]}" in
+    # Select action
+    local selection action_service action_cmd
+    selection=$(select_action)
+    [[ -z "$selection" ]] && return 1
+
+    action_service=$(echo "$selection" | awk '{print $1}')
+    action_cmd=$(echo "$selection" | awk '{print $2}')
+
+    case "$action_service" in
     runner)
         install_gitlab_runner
         ;;
     user)
-        case "${args[1]}" in
-        list)
+        case "$action_cmd" in
+        get)
             format_table "ID\tUsername\tName\tEmail\tState" \
-                '.[] | [.id, .username, .name, .email, .state] | @tsv' \
-                "${args[@]}"
+                '.[] | select(.state=="active") | [.id, .username, .name, .email, .state] | @tsv' \
+                user list
             ;;
-        create)
-            add_account "${gitlab_account:? require user name}" "${GITLAB_DOMAIN:? require domain}" "${args[@]}"
-            add_account_to_groups "${gitlab_account:? require user name}" "${args[@]}"
+        add)
+            # 从 GitLab URL 提取默认邮箱域名
+            local default_email_domain email_domain
+            default_email_domain=$(echo "$GITLAB_URL" | sed -E 's|^https?://||' | cut -d. -f2-)
+            read -rp "[?] Username: " gitlab_account
+            read -rp "[?] Email domain [$default_email_domain]: " email_domain
+            email_domain="${email_domain:-$default_email_domain}"
+            [[ -z "$gitlab_account" ]] && { _msg error "Username required"; return 1; }
+            add_account "$gitlab_account" "$email_domain"
+            add_account_to_groups "$gitlab_account"
             ;;
-        update)
+        set)
+            read -rp "[?] Username: " gitlab_account
+            [[ -z "$gitlab_account" ]] && { _msg error "Username required"; return 1; }
+            local password_rand
             password_rand=$(_get_random_password 2>/dev/null)
-            update_account_password "${gitlab_account:? require user name}" "${GITLAB_DOMAIN:? require domain}" "$password_rand"
+            update_account_password "$gitlab_account" "$password_rand"
             ;;
         esac
         ;;
     project)
-        case "${args[1]}" in
-        list)
+        case "$action_cmd" in
+        get)
             format_table "ID\tProject\tDescription\tURL\tVisibility" \
                 '.[] | [.id, .path_with_namespace, .description // "-", .web_url, .visibility] | @tsv' \
-                "${args[@]}" --no-get-all
+                project list --no-get-all
             ;;
-        size) check_large_repos "${args[2]:-50}" ;;
-        did | delete) delete_project_path "${args[2]}" ;;
-        dp) delete_project_pipeline_history "${args[2]}" ;;
-        *)
-            $cmd_gitlab "${args[@]}"
+        size)
+            read -rp "[?] Size threshold (MB) [50]: " size_threshold
+            check_large_repos "${size_threshold:-50}"
+            ;;
+        del)
+            read -rp "[?] Project path (e.g. group/project): " project_path
+            [[ -z "$project_path" ]] && { _msg error "Project path required"; return 1; }
+            delete_project_path "$project_path"
+            ;;
+        dp)
+            delete_project_pipeline_history
             ;;
         esac
-        ;;
-    *)
-        $cmd_gitlab "${args[@]}"
         ;;
     esac
 }
@@ -382,7 +385,7 @@ main() {
 
     import_lib
 
-    execute_command "$@"
+    execute_command
 }
 
-main "$@"
+main
