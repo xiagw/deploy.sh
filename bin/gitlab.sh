@@ -149,6 +149,15 @@ update_account_password() {
     return 0
 }
 
+block_account() {
+    local user="$1"
+    local user_id
+
+    user_id=$($cmd_gitlab user list --username "$user" | jq -r '.[].id')
+    $cmd_gitlab user block --id "${user_id}"
+    _msg log "$ME_LOG" "Blocked user: $user"
+}
+
 add_account() {
     local user="$1"
     local email_domain="$2"
@@ -202,6 +211,7 @@ select_action() {
         "user add      Create a new user"
         "user get      List all users"
         "user set      Update user password"
+        "user block    Block a user"
         "project get   List all projects"
         "project size  Check large repositories"
         "project del   Delete a project"
@@ -305,9 +315,13 @@ execute_command() {
 
     cmd_gitlab="gitlab -o json --gitlab $gitlab_profile"
 
-    # 从配置文件读取 GitLab URL
-    GITLAB_URL=$(grep -A10 "^\[$gitlab_profile\]" "$gitlab_python_config" | grep "^url" | head -1 | cut -d= -f2 | tr -d ' ')
+    # 从配置文件读取 GitLab URL 和 Token
+    local config_section
+    config_section=$(grep -A10 "^\[$gitlab_profile\]" "$gitlab_python_config")
+    GITLAB_URL=$(echo "$config_section" | grep "^url" | head -1 | cut -d= -f2 | tr -d ' ')
+    GITLAB_TOKEN=$(echo "$config_section" | grep "^private_token" | head -1 | cut -d= -f2 | tr -d ' ')
     [[ -z "$GITLAB_URL" ]] && { _msg error "Cannot read url from config"; return 1; }
+    [[ -z "$GITLAB_TOKEN" ]] && { _msg error "Cannot read private_token from config"; return 1; }
 
     if [ -f "$ME_ENV" ]; then
         . "$ME_ENV" "$gitlab_profile"
@@ -349,6 +363,11 @@ execute_command() {
             local password_rand
             password_rand=$(_get_random_password 2>/dev/null)
             update_account_password "$gitlab_account" "$password_rand"
+            ;;
+        block)
+            read -rp "[?] Username: " gitlab_account
+            [[ -z "$gitlab_account" ]] && { _msg error "Username required"; return 1; }
+            block_account "$gitlab_account"
             ;;
         esac
         ;;
