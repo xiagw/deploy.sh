@@ -66,12 +66,33 @@ handle_ecs_commands() {
     esac
 }
 
+# 分页获取全部 ECS 实例（DescribeInstances 默认每页最多 100 条）
+ecs_describe_all_instances() {
+    local page=1
+    local result merged total
+    result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}" --PageSize 100 --PageNumber "$page")
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+    merged=$result
+    total=$(echo "$result" | jq -r '.TotalCount // 0')
+    while [ "$total" -gt $((page * 100)) ]; do
+        page=$((page + 1))
+        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}" --PageSize 100 --PageNumber "$page")
+        if [ $? -ne 0 ]; then
+            return 1
+        fi
+        merged=$(echo "$merged" "$result" | jq -s '.[0].Instances.Instance = ((.[0].Instances.Instance // []) + (.[1].Instances.Instance // [])) | .[0]')
+    done
+    echo "$merged"
+}
+
 # ECS 列表（特殊处理：需要合并 EIP 信息）
 ecs_list() {
     local format=${1:-human}
     local result eip_result
 
-    result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+    result=$(ecs_describe_all_instances)
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
         return 1
@@ -448,7 +469,7 @@ ecs_update() {
     if [ -z "$instance_id" ]; then
         local instance_list
         local result
-        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        result=$(ecs_describe_all_instances)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
             return 1
@@ -517,7 +538,7 @@ ecs_delete() {
     if [ -z "$instance_id" ]; then
         local instance_list
         local result
-        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        result=$(ecs_describe_all_instances)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
             return 1
@@ -715,7 +736,7 @@ ecs_key_attach() {
     if [ -z "$instance_id" ]; then
         local instance_list
         local result
-        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        result=$(ecs_describe_all_instances)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
             return 1
@@ -810,7 +831,7 @@ ecs_key_detach() {
     if [ -z "$instance_id" ]; then
         local instance_list
         local result
-        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        result=$(ecs_describe_all_instances)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
             return 1
@@ -955,7 +976,7 @@ ecs_start() {
     if [ -z "$instance_id" ]; then
         local instance_list
         local result
-        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        result=$(ecs_describe_all_instances)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
             return 1
@@ -1029,7 +1050,7 @@ ecs_stop() {
     if [ -z "$instance_id" ]; then
         local instance_list
         local result
-        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}")
+        result=$(ecs_describe_all_instances)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
             return 1

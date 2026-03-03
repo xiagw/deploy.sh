@@ -271,11 +271,36 @@ confirm_action() {
     local message=$1
     echo "警告：$message"
     read -r -p "请输入 'YES' 以确认操作: " confirm
-    
+
     if [ "$confirm" != "YES" ]; then
         echo "操作已取消。"
         return 1
     fi
-    
+
     return 0
+}
+
+# 使用 fzf 选择选项（如果可用）
+select_with_fzf() {
+    local prompt=$1
+    local options=$2
+    local multiselect=${3:-false}
+
+    if ! command -v fzf >/dev/null 2>&1; then
+        echo "错误：fzf 未安装。" >&2
+        return 1
+    fi
+
+    if [ -z "$options" ]; then
+        echo "错误：没有可供选择的选项。" >&2
+        return 1
+    fi
+
+    local fzf_cmd="echo -e '$options' | fzf --height 40% --reverse --prompt='$prompt > '"
+
+    if [ "$multiselect" = true ]; then
+        fzf_cmd="$fzf_cmd --multi"
+    fi
+
+    eval "$fzf_cmd"
 }

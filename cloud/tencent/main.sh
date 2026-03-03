@@ -53,6 +53,9 @@ main() {
             ;;
         esac
     done
+    # 添加对cdn.sh和ssl.sh的支持
+    [[ -f "${SCRIPT_DIR}/cdn.sh" ]] && source "${SCRIPT_DIR}/cdn.sh"
+    [[ -f "${SCRIPT_DIR}/ssl.sh" ]] && source "${SCRIPT_DIR}/ssl.sh"
     # shellcheck source=/dev/null
     [ -f "${SCRIPT_DATA}/tencent.sh.env" ] && source "${SCRIPT_DATA}/tencent.sh.env"
 
@@ -111,11 +114,13 @@ main() {
     list-all) list_all_services ;;
     config) handle_config_commands "${args[@]}" ;;
     cvm) handle_cvm_commands "${args[@]}" ;;
-    vpc) handle_vpc_commands "${args[@]}" 2>/dev/null || echo "错误：VPC 服务模块尚未实现" >&2 ;;
-    cdb) handle_cdb_commands "${args[@]}" 2>/dev/null || echo "错误：CDB 服务模块尚未实现" >&2 ;;
-    cos) handle_cos_commands "${args[@]}" 2>/dev/null || echo "错误：COS 服务模块尚未实现" >&2 ;;
-    clb) handle_clb_commands "${args[@]}" 2>/dev/null || echo "错误：CLB 服务模块尚未实现" >&2 ;;
-    cam) handle_cam_commands "${args[@]}" 2>/dev/null || echo "错误：CAM 服务模块尚未实现" >&2 ;;
+    vpc) handle_vpc_commands "${args[@]}" ;;
+    cdb) handle_cdb_commands "${args[@]}" ;;
+    cos) handle_cos_commands "${args[@]}" ;;
+    clb) handle_clb_commands "${args[@]}" ;;
+    cam) handle_cam_commands "${args[@]}" ;;
+    cdn) handle_cdn_commands "${args[@]}" ;;
+    ssl) handle_ssl_commands "${args[@]}" ;;
     *) echo "错误：未知的服务：$service" >&2 && show_help && exit 1 ;;
     esac
 }

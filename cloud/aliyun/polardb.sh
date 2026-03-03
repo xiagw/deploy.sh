@@ -260,7 +260,7 @@ polardb_update() {
         # 选择集群ID
         if [ -z "$cluster_id" ]; then
             local cluster_list
-            cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.DBClusters[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+            cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.Items.DBCluster[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
 
             if [ -z "$cluster_list" ]; then
                 echo "错误：没有找到 PolarDB 集群。" >&2
@@ -292,7 +292,8 @@ polardb_update() {
     local result
     result=$(aliyun --profile "${profile:-}" polardb ModifyDBClusterDescription \
         --DBClusterId "$cluster_id" \
-        --DBClusterDescription "$new_name")
+        --DBClusterDescription "$new_name" \
+        --RegionId "$region")
     echo "$result" | jq '.'
     log_result "$profile" "$region" "polardb" "update" "$result"
 }
@@ -305,7 +306,7 @@ polardb_delete() {
         echo "使用 fzf 交互式模式删除 PolarDB 集群"
 
         local cluster_list
-        cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.DBClusters[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+        cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.Items.DBCluster[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
 
         if [ -z "$cluster_list" ]; then
             echo "错误：没有找到 PolarDB 集群。" >&2
@@ -333,7 +334,7 @@ polardb_delete() {
 
     echo "删除 PolarDB 集群："
     local result
-    result=$(aliyun --profile "${profile:-}" polardb DeleteDBCluster --DBClusterId "$cluster_id")
+    result=$(aliyun --profile "${profile:-}" polardb DeleteDBCluster --DBClusterId "$cluster_id" --RegionId "$region")
     echo "$result" | jq '.'
     log_result "$profile" "$region" "polardb" "delete" "$result"
 }
@@ -387,7 +388,8 @@ polardb_account_create() {
         --AccountName "$account_name" \
         --AccountPassword "$password" \
         --AccountDescription "$description" \
-        --AccountType Normal)
+        --AccountType Normal \
+        --RegionId "$region")
 
     ret=$?
     if [ $ret -eq 0 ]; then
@@ -432,7 +434,8 @@ polardb_account_delete() {
     local result
     result=$(aliyun --profile "${profile:-}" polardb DeleteAccount \
         --DBClusterId "$cluster_id" \
-        --AccountName "$account_name")
+        --AccountName "$account_name" \
+        --RegionId "$region")
 
     ret=$?
     if [ $ret -eq 0 ]; then
@@ -460,7 +463,7 @@ polardb_account_list() {
 
     echo "列出 PolarDB 账号："
     local result
-    result=$(aliyun --profile "${profile:-}" polardb DescribeAccounts --DBClusterId "$cluster_id")
+    result=$(aliyun --profile "${profile:-}" polardb DescribeAccounts --DBClusterId "$cluster_id" --RegionId "$region")
 
     case "$format" in
     json)
@@ -549,7 +552,7 @@ polardb_db_list() {
 
     echo "列出数据库："
     local result
-    result=$(aliyun --profile "${profile:-}" polardb DescribeDatabases --DBClusterId "$cluster_id")
+    result=$(aliyun --profile "${profile:-}" polardb DescribeDatabases --DBClusterId "$cluster_id" --RegionId "$region")
 
     case "$format" in
     json)
@@ -600,7 +603,8 @@ polardb_db_create() {
         --DBClusterId "$cluster_id" \
         --DBName "$db_name" \
         --CharacterSetName "$charset" \
-        --DBDescription "Created by CLI")
+        --DBDescription "Created by CLI" \
+        --RegionId "$region")
 
     if [ $? -eq 0 ]; then
         echo "数据库创建成功："
@@ -635,7 +639,8 @@ polardb_db_delete() {
     local result
     result=$(aliyun --profile "${profile:-}" polardb DeleteDatabase \
         --DBClusterId "$cluster_id" \
-        --DBName "$db_name")
+        --DBName "$db_name" \
+        --RegionId "$region")
 
     ret=$?
     if [ $ret -eq 0 ]; then
@@ -754,7 +759,8 @@ polardb_account_grant() {
         --DBClusterId "$cluster_id" \
         --AccountName "$account_name" \
         --DBName "$db_name" \
-        --AccountPrivilege "$privilege")
+        --AccountPrivilege "$privilege" \
+        --RegionId "$region")
 
     ret=$?
     if [ $ret -eq 0 ]; then
@@ -803,7 +809,7 @@ polardb_ip_get() {
     echo "获取集群 $cluster_id 的IP白名单："
 
     local result
-    result=$(aliyun --profile "${profile:-}" polardb DescribeDBClusterAccessWhitelist --DBClusterId "$cluster_id")
+    result=$(aliyun --profile "${profile:-}" polardb DescribeDBClusterAccessWhitelist --DBClusterId "$cluster_id" --RegionId "$region")
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取IP白名单信息。" >&2
@@ -968,7 +974,7 @@ polardb_ip_set() {
     fi
 
     local result
-    local params=(--DBClusterId "$cluster_id" --SecurityIps "$ips" --ModifyMode "Cover")
+    local params=(--DBClusterId "$cluster_id" --SecurityIps "$ips" --ModifyMode "Cover" --RegionId "$region")
 
     # 如果指定了IP白名单组名，需要添加相应参数
     if [ -n "$ip_array_name" ]; then
@@ -1046,7 +1052,8 @@ polardb_ip_append() {
     result=$(aliyun --profile "${profile:-}" polardb ModifyDBClusterAccessWhitelist \
         --DBClusterId "$cluster_id" \
         --SecurityIps "$ips" \
-        --ModifyMode "Append")
+        --ModifyMode "Append" \
+        --RegionId "$region")
 
     if [ $? -ne 0 ]; then
         echo "错误：追加IP白名单失败。" >&2
@@ -1112,7 +1119,8 @@ polardb_ip_clear() {
     result=$(aliyun --profile "${profile:-}" polardb ModifyDBClusterAccessWhitelist \
         --DBClusterId "$cluster_id" \
         --SecurityIps "127.0.0.1" \
-        --ModifyMode "Cover")
+        --ModifyMode "Cover" \
+        --RegionId "$region")
 
     if [ $? -ne 0 ]; then
         echo "错误：清空IP白名单失败。" >&2
