@@ -19,7 +19,7 @@ show_help() {
     echo "用法: $0 [--profile <配置名>] [--region <地域>] <服务> <操作> [参数...]"
     echo
     echo "可用服务:"
-    echo "  list-all - 列出所有服务的资源"
+    echo "  get-all - 列出所有服务的资源"
     echo "  ecs      - 弹性计算服务"
     echo "  oss      - 对象存储服务"
     echo "  domain   - 域名服务"

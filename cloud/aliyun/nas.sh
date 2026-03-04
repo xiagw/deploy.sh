@@ -9,13 +9,13 @@
 
 show_nas_help() {
     echo "NAS (文件存储) 操作："
-    echo "  list [format]                           - 列出 NAS 文件系统"
-    echo "  create <名称> [描述] [协议类型] [文件系统类型] [存储类型] - 创建 NAS 文件系统"
-    echo "  update <文件系统ID> <新名称> [新描述]     - 更新 NAS 文件系统"
-    echo "  delete <文件系统ID>                      - 删除 NAS 文件系统"
-    echo "  mount-list <文件系统ID>                  - 列出挂载点"
-    echo "  mount-create <文件系统ID> <VPC-ID> <交换机ID> - 创建挂载点"
-    echo "  mount-delete <文件系统ID> <挂载点ID>      - 删除挂载点"
+    echo "  get [format]                            - 列出 NAS 文件系统"
+    echo "  add <名称> [描述] [协议类型] [文件系统类型] [存储类型] - 创建 NAS 文件系统"
+    echo "  set [<文件系统ID>] [<新名称>] [<新描述>] - 更新 NAS 文件系统（文件系统ID和新名称都是可选的，可使用fzf选择）"
+    echo "  del [<文件系统ID>]                      - 删除 NAS 文件系统（文件系统ID可选，可使用fzf选择）"
+    echo "  mount-get [<文件系统ID>]                - 列出挂载点（文件系统ID可选，可使用fzf选择）"
+    echo "  mount-add <文件系统ID> <VPC-ID> <交换机ID> - 创建挂载点"
+    echo "  mount-del <文件系统ID> <挂载点ID>       - 删除挂载点"
     echo
     echo "文件系统类型："
     echo "  standard - 通用型 NAS，支持以下存储类型："
@@ -35,29 +35,31 @@ show_nas_help() {
     echo "  POSIX - 仅用于 CPFS 文件系统类型"
     echo
     echo "示例："
-    echo "  $0 nas list"
-    echo "  $0 nas list json"
-    echo "  $0 nas create"
-    echo "  $0 nas create my-nas '测试NAS' NFS standard Performance"
-    echo "  $0 nas update 12345678 new-name '新描述'"
-    echo "  $0 nas delete 12345678"
-    echo "  $0 nas mount-list 12345678"
-    echo "  $0 nas mount-create 12345678 vpc-xxx vsw-xxx"
-    echo "  $0 nas mount-delete 12345678 mount-xxx"
+    echo "  $0 nas get"
+    echo "  $0 nas get json"
+    echo "  $0 nas add"
+    echo "  $0 nas add my-nas '测试NAS' NFS standard Performance"
+    echo "  $0 nas set 12345678 new-name '新描述'"
+    echo "  $0 nas del 12345678"
+    echo "  $0 nas mount-get 12345678"
+    echo "  $0 nas mount-add 12345678 vpc-xxx vsw-xxx"
+    echo "  $0 nas mount-del 12345678 mount-xxx"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_nas_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) nas_list "$@" ;;
-    create) nas_create "$@" ;;
-    update) nas_update "$@" ;;
-    delete) nas_delete "$@" ;;
-    mount-list) nas_mount_list "$@" ;;
-    mount-create) nas_mount_create "$@" ;;
-    mount-delete) nas_mount_delete "$@" ;;
+    get) nas_list "$@" ;;
+    add) nas_create "$@" ;;
+    set) nas_update "$@" ;;
+    del) nas_delete "$@" ;;
+    mount-get) nas_mount_list "$@" ;;
+    mount-add) nas_mount_create "$@" ;;
+    mount-del) nas_mount_delete "$@" ;;
     help) show_nas_help ;;
     *)
         echo "错误：未知的 NAS 操作：$operation" >&2
@@ -196,6 +198,46 @@ nas_update() {
     local new_name=$2
     local new_description=${3:-}
 
+    if [ -z "$fs_id" ]; then
+        local fs_list
+        local result
+        result=$(call_aliyun_api nas DescribeFileSystems 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 NAS 文件系统列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        fs_list=$(echo "$result" | jq -r '.FileSystems.FileSystem[] | "\(.FileSystemId) (\(.FileSystemName)) [\(.Status)]"')
+
+        if [ -z "$fs_list" ]; then
+            echo "错误：没有找到 NAS 文件系统。" >&2
+            return 1
+        elif [ "$(echo "$fs_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            fs_id=$(echo "$fs_list" | awk '{print $1}')
+            echo "自动选择唯一的文件系统: $fs_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                fs_id=$(select_with_fzf "选择要更新的 NAS 文件系统" "$fs_list" | awk '{print $1}')
+                if [ -z "$fs_id" ]; then
+                    echo "错误：未选择文件系统。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择文件系统，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供新名称，则提示输入
+    if [ -z "$new_name" ]; then
+        read -r -p "请输入新的文件系统名称: " new_name
+        if [ -z "$new_name" ]; then
+            echo "错误：新名称不能为空。" >&2
+            return 1
+        fi
+    fi
+
     if ! validate_required_params "$fs_id" "$new_name" "错误：文件系统ID和新名称不能为空。"; then
         return 1
     fi
@@ -228,6 +270,39 @@ nas_update() {
 nas_delete() {
     local fs_id=$1
 
+    # 如果没有提供文件系统ID，则使用 fzf 选择
+    if [ -z "$fs_id" ]; then
+        local fs_list
+        local result
+        result=$(call_aliyun_api nas DescribeFileSystems 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 NAS 文件系统列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        fs_list=$(echo "$result" | jq -r '.FileSystems.FileSystem[] | "\(.FileSystemId) (\(.FileSystemName)) [\(.Status)]"')
+
+        if [ -z "$fs_list" ]; then
+            echo "错误：没有找到 NAS 文件系统。" >&2
+            return 1
+        elif [ "$(echo "$fs_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            fs_id=$(echo "$fs_list" | awk '{print $1}')
+            echo "自动选择唯一的文件系统: $fs_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                fs_id=$(select_with_fzf "选择要删除的 NAS 文件系统" "$fs_list" | awk '{print $1}')
+                if [ -z "$fs_id" ]; then
+                    echo "错误：未选择文件系统。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择文件系统，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查文件系统 ID 是否为空
     if [ -z "$fs_id" ]; then
         echo "错误：文件系统ID不能为空。" >&2
         return 1
@@ -246,6 +321,38 @@ nas_mount_list() {
     local fs_id=$1
     local format=${2:-human}
 
+    # 如果没有提供文件系统ID，则使用 fzf 选择
+    if [ -z "$fs_id" ]; then
+        local fs_list
+        local result
+        result=$(call_aliyun_api nas DescribeFileSystems 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 NAS 文件系统列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        fs_list=$(echo "$result" | jq -r '.FileSystems.FileSystem[] | "\(.FileSystemId) (\(.FileSystemName)) [\(.Status)]"')
+
+        if [ -z "$fs_list" ]; then
+            echo "错误：没有找到 NAS 文件系统。" >&2
+            return 1
+        elif [ "$(echo "$fs_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            fs_id=$(echo "$fs_list" | awk '{print $1}')
+            echo "自动选择唯一的文件系统: $fs_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                fs_id=$(select_with_fzf "选择要查看挂载点的 NAS 文件系统" "$fs_list" | awk '{print $1}')
+                if [ -z "$fs_id" ]; then
+                    echo "错误：未选择文件系统。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择文件系统，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if [ -z "$fs_id" ]; then
         echo "错误：文件系统ID不能为空。" >&2
         return 1
@@ -254,17 +361,17 @@ nas_mount_list() {
     local table_header="MountTargetDomain\tStatus\tNetworkType\tVpcId\tVSwitchId"
     local jq_filter=".MountTargets.MountTarget[] | [.MountTargetDomain, .Status, .NetworkType, .VpcId, .VSwitchId] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-8s  %-8s  %-16s  %-16s\n", $1, $2, $3, $4, $5}'
-    
+
     local result
     result=$(call_aliyun_api nas DescribeMountTargets \
         --RegionId "$region" \
         --FileSystemId "$fs_id")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取挂载点列表。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \

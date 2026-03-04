@@ -119,11 +119,11 @@ OSS (对象存储服务) 操作
                       从 aliyun cli 配置导入到 ossutil 配置
                       profile: 要导入的配置文件名称（默认：default）
                       --force: 强制覆盖现有配置
-  list   [region]     列出 OSS 存储桶
-  create <存储桶名称> [region]
+  get [region]        列出 OSS 存储桶
+  add <存储桶名称> [region]
                       创建 OSS 存储桶
-  delete <存储桶名称> [region]
-                      删除 OSS 存储桶
+  del [<存储桶名称>] [region]
+                      删除 OSS 存储桶（存储桶名称可选，可使用fzf选择）
   bind-domain <存储桶名称> <域名>
                       为存储桶绑定自定义域名
   batch-copy <源路径> <目标路径> [选项...]
@@ -161,12 +161,12 @@ logs 命令选项：
   $0 oss import prod --force    # 强制覆盖现有配置
 
 基本操作：
-  $0 oss list              # 列出所有存储桶
-  $0 oss --internal list   # 使用内网列出所有存储桶
+  $0 oss get              # 列出所有存储桶
+  $0 oss --internal get   # 使用内网列出所有存储桶
 
 存储桶管理：
-  $0 oss create my-bucket
-  $0 oss delete my-bucket
+  $0 oss add my-bucket
+  $0 oss del my-bucket
   $0 oss bind-domain my-bucket example.com
 
 批量操作：
@@ -213,8 +213,8 @@ handle_oss_commands() {
     # 确保 endpoint_url 使用正确的 region
     endpoint_url=${endpoint_url:-"http://oss-${region:-cn-hangzhou}.aliyuncs.com"}
 
-    # 如果没有指定操作，默认为 list
-    operation=${operation:-list}
+    # 如果没有指定操作，默认为 get
+    operation=${operation:-get}
 
     # 根据操作调用相应的函数
     case "$operation" in
@@ -229,9 +229,10 @@ handle_oss_commands() {
         done
         import_ossutil_config "$profile" "$force"
         ;;
-    list | ls) oss_list "${args[@]}" ;;
-    create) oss_create "${args[@]}" ;;
-    delete) oss_delete "${args[@]}" ;;
+    get | ls | list) oss_list "${args[@]}" ;;
+    add) oss_create "${args[@]}" ;;
+    del) oss_delete "${args[@]}" ;;
+    set) oss_set "${args[@]}" ;;
     bind-domain) oss_bind_domain "${args[@]}" ;;
     upload-cert) oss_upload_cert "${args[@]}" ;;
     delete-cert) oss_delete_cert "${args[@]}" ;;
@@ -361,9 +362,18 @@ oss_parse_cdn_logs() {
 oss_list() {
     local format=${1:-human}
 
+    # 检查 ossutil 配置文件是否存在
+    if [ ! -f "$HOME/.ossutilconfig" ]; then
+        echo "错误：未找到 ossutil 配置文件。请先运行 'import' 命令导入阿里云CLI配置。" >&2
+        echo "示例："
+        echo "  $0 oss import"
+        echo "  或者先配置阿里云CLI：aliyun configure"
+        return 1
+    fi
+
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     local result
-    result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" ls)
+    result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls)
 
     case "$format" in
     json)
@@ -396,17 +406,30 @@ oss_list() {
 
 oss_create() {
     local bucket_name=$1
-    
-    if [ -z "$bucket_name" ]; then
-        echo "错误：存储桶名称不能为空。" >&2
+
+    # 检查 ossutil 配置文件是否存在
+    if [ ! -f "$HOME/.ossutilconfig" ]; then
+        echo "错误：未找到 ossutil 配置文件。请先运行 'import' 命令导入阿里云CLI配置。" >&2
+        echo "示例："
+        echo "  $0 oss import"
+        echo "  或者先配置阿里云CLI：aliyun configure"
         return 1
     fi
-    
+
+    # 如果没有提供存储桶名称，则使用交互式输入
+    if [ -z "$bucket_name" ]; then
+        read -r -p "请输入 OSS 存储桶名称: " bucket_name
+        if [ -z "$bucket_name" ]; then
+            echo "错误：存储桶名称不能为空。" >&2
+            return 1
+        fi
+    fi
+
     echo "创建 OSS 存储桶："
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     local result
-    result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" mb "oss://$bucket_name")
-    
+    result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" mb "oss://$bucket_name")
+
     if [ $? -eq 0 ]; then
         echo "$result"
         log_result "${profile:-}" "$region" "oss" "create" "$result"
@@ -420,14 +443,49 @@ oss_create() {
 # 修改 oss_delete 函数，添加 endpoint 支持，使用框架确认
 oss_delete() {
     local bucket_name=$1
-    
+    local region_arg=$2
+
+    # 如果没有提供存储桶名称，则使用 fzf 选择
+    if [ -z "$bucket_name" ]; then
+        local bucket_list
+        endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
+        local result
+        result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls)
+
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 OSS 存储桶列表。" >&2
+            return 1
+        fi
+
+        bucket_list=$(echo "$result" | awk -F/ '/oss:/ {print $NF}' | grep -v '^$')
+
+        if [ -z "$bucket_list" ]; then
+            echo "错误：没有找到 OSS 存储桶。" >&2
+            return 1
+        elif [ "$(echo "$bucket_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            bucket_name=$(echo "$bucket_list" | head -n1)
+            echo "自动选择唯一的存储桶: $bucket_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                bucket_name=$(select_with_fzf "选择要删除的 OSS 存储桶" "$bucket_list")
+                if [ -z "$bucket_name" ]; then
+                    echo "错误：未选择存储桶。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择存储桶，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if [ -z "$bucket_name" ]; then
         echo "错误：存储桶名称不能为空。" >&2
         return 1
     fi
-    
+
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
-    
+
     if ! confirm_action "删除 OSS 存储桶：$bucket_name"; then
         return 1
     fi
@@ -435,7 +493,7 @@ oss_delete() {
     echo "删除 OSS 存储桶："
 
     # 首先检查存储桶是否存在
-    if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" ls "oss://$bucket_name" &>/dev/null; then
+    if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls "oss://$bucket_name" &>/dev/null; then
         echo "错误：存储桶 $bucket_name 不存在。"
         return 1
     fi
@@ -443,7 +501,7 @@ oss_delete() {
     # 先删除存储桶中的所有对象
     echo "正在删除存储桶中的所有对象..."
     local delete_objects_result
-    delete_objects_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" rm "oss://$bucket_name" -r -f)
+    delete_objects_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" rm "oss://$bucket_name" -r -f)
     local delete_objects_status=$?
 
     if [ $delete_objects_status -ne 0 ]; then
@@ -455,7 +513,7 @@ oss_delete() {
     # 删除存储桶本身
     echo "正在删除存储桶..."
     local delete_bucket_result
-    delete_bucket_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" rb "oss://$bucket_name")
+    delete_bucket_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" rb "oss://$bucket_name")
     local delete_bucket_status=$?
 
     if [ $delete_bucket_status -eq 0 ]; then
@@ -475,7 +533,7 @@ oss_delete() {
     local deleted=false
 
     while [ $retry -lt $max_retries ]; do
-        if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" ls "oss://$bucket_name" &>/dev/null; then
+        if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls "oss://$bucket_name" &>/dev/null; then
             deleted=true
             break
         fi
@@ -728,6 +786,7 @@ oss_batch_copy() {
     # 执行统一的复制命令
     ossutil --profile "${profile:-}" \
         --endpoint "$endpoint_url" \
+        --region "${region:-cn-hangzhou}" \
         cp "$source" "$dest" \
         -r -f --update --job 50 \
         --include-from "$file_list" \
@@ -810,6 +869,7 @@ oss_batch_delete() {
     local result
     result=$(ossutil --profile "${profile:-}" \
         --endpoint "$endpoint_url" \
+        --region "${region:-cn-hangzhou}" \
         rm "$bucket_path" \
         --all-versions -r -f \
         --include-from "$file_list" \
@@ -873,7 +933,7 @@ analyze_logs_for_status() {
 
     # 下载日志文件
     echo "正在下载日志文件: $log_file ..."
-    if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" cp "$log_file" "$local_gz_file"; then
+    if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" cp "$log_file" "$local_gz_file"; then
         echo "错误：下载日志文件失败: $log_file" >&2
         rm -rf "$temp_dir"
         return 1
@@ -1050,6 +1110,7 @@ oss_get_logs() {
     local result
     result=$(ossutil --profile "${profile:-}" \
         --endpoint "$endpoint_url" \
+        --region "${region:-cn-hangzhou}" \
         ls "oss://${bucket_path}" \
         -r \
         --include-from "$date_list_file")
@@ -1202,6 +1263,7 @@ set_object_standard() {
             echo "处理 URI: $uri"
             if ossutil --profile "${profile:-}" \
                 --endpoint "$endpoint_url" \
+                --region "${region:-cn-hangzhou}" \
                 set-props "oss://$bucket_name$uri" \
                 --storage-class "$storage_class" -f; then
                 # 处理成功，将状态更新为 1
@@ -1230,3 +1292,119 @@ set_object_standard() {
     echo "成功处理数量：$processed_count"
     echo "未处理数量：$((total_count - processed_count))"
 }
+
+oss_set() {
+    local bucket_name=$1
+    local setting_type=$2
+    local setting_value=$3
+
+    echo "更新 OSS 存储桶配置："
+    echo "此功能用于更新存储桶的特定设置。"
+    echo "可用的设置类型："
+    echo "  - acl: 访问控制策略 (public-read, private, public-read-write)"
+    echo "  - lifecycle: 生命周期规则"
+    echo "  - cors: 跨域资源共享设置"
+    echo "  - website: 静态网站托管设置"
+    echo "  - referer: 防盗链设置"
+
+    # 如果没有提供存储桶名称，则使用 fzf 选择
+    if [ -z "$bucket_name" ]; then
+        local bucket_list
+        endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
+        local result
+        result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls)
+
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 OSS 存储桶列表。" >&2
+            return 1
+        fi
+
+        bucket_list=$(echo "$result" | awk -F/ '/oss:/ {print $NF}' | grep -v '^$')
+
+        if [ -z "$bucket_list" ]; then
+            echo "错误：没有找到 OSS 存储桶。" >&2
+            return 1
+        elif [ "$(echo "$bucket_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            bucket_name=$(echo "$bucket_list" | head -n1)
+            echo "自动选择唯一的存储桶: $bucket_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                bucket_name=$(select_with_fzf "选择要更新的 OSS 存储桶" "$bucket_list")
+                if [ -z "$bucket_name" ]; then
+                    echo "错误：未选择存储桶。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择存储桶，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 如果没有提供设置类型，则使用交互式输入
+    if [ -z "$setting_type" ]; then
+        local setting_type_list="acl
+lifecycle
+cors
+website
+referer"
+        if type select_with_fzf >/dev/null 2>&1; then
+            setting_type=$(select_with_fzf "选择要更新的设置类型" "$setting_type_list")
+            if [ -z "$setting_type" ]; then
+                echo "错误：未选择设置类型。" >&2
+                return 1
+            fi
+        else
+            read -r -p "请输入设置类型 (acl/lifecycle/cors/website/referer): " setting_type
+            if [ -z "$setting_type" ]; then
+                echo "错误：设置类型不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 根据设置类型进行相应操作
+    case "$setting_type" in
+        "acl")
+            if [ -z "$setting_value" ]; then
+                local acl_list="public-read
+private
+public-read-write"
+                if type select_with_fzf >/dev/null 2>&1; then
+                    setting_value=$(select_with_fzf "选择 ACL 权限" "$acl_list")
+                    if [ -z "$setting_value" ]; then
+                        echo "错误：未选择 ACL 权限。" >&2
+                        return 1
+                    fi
+                else
+                    read -r -p "请输入 ACL 权限 (public-read/private/public-read-write): " setting_value
+                    if [ -z "$setting_value" ]; then
+                        echo "错误：ACL 权限不能为空。" >&2
+                        return 1
+                    fi
+                fi
+            fi
+
+            echo "正在设置存储桶 $bucket_name 的 ACL 权限为 $setting_value ..."
+            endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
+            local result
+            result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" set-acl "oss://$bucket_name" --acl "$setting_value")
+
+            if [ $? -eq 0 ]; then
+                echo "ACL 权限设置成功。"
+                echo "$result"
+                log_result "${profile:-}" "$region" "oss" "set-acl" "$result"
+            else
+                echo "错误：ACL 权限设置失败。"
+                echo "$result"
+                return 1
+            fi
+            ;;
+        *)
+            echo "错误：暂不支持更新 $setting_type 设置。" >&2
+            return 1
+            ;;
+    esac
+}
+
+# 确保文件末尾有适当的换行

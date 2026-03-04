@@ -16,11 +16,15 @@ is_demo_mode() {
     ## 判断条件:
     ##   1. 环境变量 ENV_DEMO_MODE=true
     ##   2. deploy.env 文件中包含示例配置（your_password/your_username）
-    if [[ "${ENV_DEMO_MODE:-false}" == "true" ]] || { [[ -f "$G_ENV" ]] && grep -qE '=your_(password|username)' "$G_ENV"; }; then
-        ## 如果通过旧方式检测到演示模式，提示用户使用新的环境变量方式
-        if [[ "${ENV_DEMO_MODE:-false}" != "true" ]]; then
-            _msg warning "demo mode detected. Please set ENV_DEMO_MODE=false in your deploy.env instead"
-        fi
+    if [[ "${ENV_DEMO_MODE:-false}" == "true" ]]; then
+        ## 通过环境变量明确启用演示模式
+        _msg purple "[Demo] Operation skipped: $skip_msg"
+        return 0
+    elif [[ -f "$G_ENV" ]] && grep -qE '=your_(password|username)' "$G_ENV"; then
+        ## 通过旧方式检测到演示模式，提示用户使用新的环境变量方式
+        _msg warning "Demo mode detected via old method (your_password/your_username in config)."
+        _msg warning "Please set ENV_DEMO_MODE=true in your deploy.env to explicitly enable demo mode,"
+        _msg warning "or update your config file to disable demo mode."
         _msg purple "[Demo] Operation skipped: $skip_msg"
         return 0
     fi
@@ -67,18 +71,28 @@ find_project_config() {
     project_conf="${G_DATA}/projects/${namespace}/${project_name}.json"
     if [[ -f "${project_conf}" ]]; then
         G_CONF="${project_conf}"
+        ## 读取构建和部署配置覆盖（如果存在）
+        _load_project_build_deploy_config "${project_conf}"
         return
     fi
 
     ## 如果项目专用配置文件不存在，自动创建默认配置
+    if ! command -v jq >/dev/null 2>&1; then
+        _install_packages "$IS_CHINA" jq
+    fi
+
     local template_file="${G_PATH}/conf/templates/project-config.json"
     if [[ -f "${template_file}" ]]; then
         ## 从模板创建配置文件，并替换项目路径
         jq --arg project_path "${project_path}" '.project = $project_path' \
-            "${template_file}" > "${project_conf}"
+            "${template_file}" >"${project_conf}"
 
         _msg info "Created default project config: ${project_conf}"
         _msg warning "Note: This is a template configuration. Modify it if you need rsync/ftp deployment."
+        G_CONF="${project_conf}"
+        ## 读取构建和部署配置覆盖（如果存在）
+        _load_project_build_deploy_config "${project_conf}"
+        return
     else
         _msg error "Project config not found: ${project_conf}"
         _msg error "Template file not found: ${template_file}"
@@ -127,6 +141,45 @@ config_deploy_file() {
         fi
     done
     export PATH
+}
+
+################################################################################
+# 函数: _load_project_build_deploy_config
+# 描述: 从项目配置文件中加载构建和部署方式配置
+# 参数:
+#   $1 - config_file: 项目配置文件路径
+# 返回: 无（设置全局变量）
+# 全局变量:
+#   - PROJECT_BUILD_METHOD: 构建方式 (auto/docker/system)
+#   - PROJECT_DEPLOY_METHOD: 部署方式 (auto/k8s/docker/rsync)
+#   - PROJECT_PREFER_DOCKER: 是否优先使用 Docker (true/false)
+#   - PROJECT_PREFER_K8S: 是否优先使用 k8s (true/false)
+################################################################################
+_load_project_build_deploy_config() {
+    local config_file="${1:-}"
+    [[ -z "$config_file" || ! -f "$config_file" ]] && return
+
+    ## 读取构建配置
+    if jq -e '.build' "$config_file" >/dev/null 2>&1; then
+        PROJECT_BUILD_METHOD=$(jq -r '.build.method // "auto"' "$config_file")
+        PROJECT_PREFER_DOCKER=$(jq -r '.build.prefer_docker // true' "$config_file")
+        export PROJECT_BUILD_METHOD PROJECT_PREFER_DOCKER
+    else
+        PROJECT_BUILD_METHOD="auto"
+        PROJECT_PREFER_DOCKER=true
+        export PROJECT_BUILD_METHOD PROJECT_PREFER_DOCKER
+    fi
+
+    ## 读取部署配置
+    if jq -e '.deploy' "$config_file" >/dev/null 2>&1; then
+        PROJECT_DEPLOY_METHOD=$(jq -r '.deploy.method // "auto"' "$config_file")
+        PROJECT_PREFER_K8S=$(jq -r '.deploy.prefer_k8s // true' "$config_file")
+        export PROJECT_DEPLOY_METHOD PROJECT_PREFER_K8S
+    else
+        PROJECT_DEPLOY_METHOD="auto"
+        PROJECT_PREFER_K8S=true
+        export PROJECT_DEPLOY_METHOD PROJECT_PREFER_K8S
+    fi
 }
 
 ################################################################################

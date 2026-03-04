@@ -12,31 +12,33 @@ CAS_CERT_FILE="${SCRIPT_DATA:? ERR: SCRIPT_DATA empty}/cas/cas_certs.json"
 
 show_cas_help() {
     echo "证书服务 (Certificate Authority Service) 操作："
-    echo "  list                                    - 列出所有已上传的证书"
-    echo "  create <证书名称> <证书文件> <私钥文件>    - 上传并创建新证书"
-    echo "  delete <证书ID>                          - 删除指定证书"
-    echo "  detail <证书ID>                          - 获取证书详情"
+    echo "  get                                     - 列出所有已上传的证书"
+    echo "  add <证书名称> <证书文件> <私钥文件>    - 上传并创建新证书"
+    echo "  del [<证书ID>]                          - 删除指定证书（证书ID可选，可使用fzf选择）"
+    echo "  get-detail [<证书ID>]                   - 获取证书详情（证书ID可选，可使用fzf选择）"
     echo "  batch-upload [domain...]                 - 批量上传证书并部署到CDN"
     echo
     echo "示例："
-    echo "  $0 cas list"
-    echo "  $0 cas create my-cert /path/to/cert.pem /path/to/key.pem"
-    echo "  $0 cas delete 15246052"
-    echo "  $0 cas detail 15246052"
+    echo "  $0 cas get"
+    echo "  $0 cas add my-cert /path/to/cert.pem /path/to/key.pem"
+    echo "  $0 cas del 15246052"
+    echo "  $0 cas get-detail 15246052"
     echo "  $0 cas batch-upload                # 自动处理所有CDN域名的证书"
     echo "  $0 cas batch-upload example.com    # 处理指定域名的证书"
+    echo ""
+    echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
 
 handle_cas_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) cas_list "$@" ;;
-    create) cas_create "$@" ;;
-    update) cas_update "$@" ;;
-    delete) cas_delete "$@" ;;
-    detail) cas_detail "$@" ;;
+    get) cas_list "$@" ;;
+    add) cas_create "$@" ;;
+    set) cas_update "$@" ;;  # 虽然实际不支持更新，但保留以符合ECS模式
+    del) cas_delete "$@" ;;
+    get-detail) cas_detail "$@" ;;
     batch-upload) cas_batch_upload_deploy "$@" ;;
     help) show_cas_help ;;
     *)
@@ -91,6 +93,38 @@ cas_create() {
     local cert_file=$2
     local key_file=$3
 
+    # 如果没有提供参数，则使用交互式输入
+    if [ -z "$name" ] || [ -z "$cert_file" ] || [ -z "$key_file" ]; then
+        echo "使用交互式模式创建证书"
+
+        # 输入证书名称
+        if [ -z "$name" ]; then
+            read -r -p "请输入证书名称: " name
+            if [ -z "$name" ]; then
+                echo "错误：证书名称不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 输入证书文件
+        if [ -z "$cert_file" ]; then
+            read -r -p "请输入证书文件路径: " cert_file
+            if [ -z "$cert_file" ]; then
+                echo "错误：证书文件路径不能为空。" >&2
+                return 1
+            fi
+        fi
+
+        # 输入私钥文件
+        if [ -z "$key_file" ]; then
+            read -r -p "请输入私钥文件路径: " key_file
+            if [ -z "$key_file" ]; then
+                echo "错误：私钥文件路径不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
     if ! validate_required_params "$name" "$cert_file" "$key_file" "错误：证书名称、证书文件和私钥文件不能为空。"; then
         echo "用法：cas create <证书名称> <证书文件> <私钥文件>" >&2
         return 1
@@ -122,10 +156,10 @@ cas_create() {
         # 将新证书信息添加到本地文件
         if [ -f "$CAS_CERT_FILE" ]; then
             jq --arg id "$cert_id" --arg name "$name" --arg time "$upload_time" \
-                '. += [{"CertId": $id, "Name": $name, "UploadTime": $time}]' "$CAS_CERT_FILE" > "${CAS_CERT_FILE}.tmp" &&
+                '. += [{"CertId": $id, "Name": $name, "UploadTime": $time}]' "$CAS_CERT_FILE" >"${CAS_CERT_FILE}.tmp" &&
                 mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
         else
-            echo '[{"CertId": "'"$cert_id"'", "Name": "'"$name"'", "UploadTime": "'"$upload_time"'"}]' > "$CAS_CERT_FILE"
+            echo '[{"CertId": "'"$cert_id"'", "Name": "'"$name"'", "UploadTime": "'"$upload_time"'"}]' >"$CAS_CERT_FILE"
         fi
     else
         echo "错误：证书创建失败。"
@@ -138,9 +172,41 @@ cas_create() {
 cas_delete() {
     local cert_id=$1
 
+    # 如果没有提供证书ID，则使用 fzf 选择
+    if [ -z "$cert_id" ]; then
+        local cert_list
+        local result
+        result=$(call_aliyun_api cas ListCert --SourceType user 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        cert_list=$(echo "$result" | jq -r '.CertList[]? | "\(.CertId) (\(.Name)) [\(.UploadTime)]"')
+
+        if [ -z "$cert_list" ]; then
+            echo "错误：没有找到证书。" >&2
+            return 1
+        elif [ "$(echo "$cert_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            cert_id=$(echo "$cert_list" | awk '{print $1}')
+            echo "自动选择唯一的证书: $cert_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                cert_id=$(select_with_fzf "选择要删除的证书" "$cert_list" | awk '{print $1}')
+                if [ -z "$cert_id" ]; then
+                    echo "错误：未选择证书。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择证书，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    # 检查证书 ID 是否为空
     if [ -z "$cert_id" ]; then
         echo "错误：证书ID不能为空。" >&2
-        echo "用法：cas delete <证书ID>" >&2
         return 1
     fi
 
@@ -156,7 +222,7 @@ cas_delete() {
         echo "证书删除成功。"
         # 从本地文件中删除证书信息
         if [ -f "$CAS_CERT_FILE" ]; then
-            jq --arg id "$cert_id" 'map(select(.CertId != $id))' "$CAS_CERT_FILE" > "${CAS_CERT_FILE}.tmp" &&
+            jq --arg id "$cert_id" 'map(select(.CertId != $id))' "$CAS_CERT_FILE" >"${CAS_CERT_FILE}.tmp" &&
                 mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
         fi
         log_delete_operation "${profile:-}" "${region:-}" "cas" "$cert_id" "证书" "成功"
@@ -173,6 +239,37 @@ cas_delete() {
 # 使用框架的详情函数
 cas_detail() {
     local cert_id=$1
+
+    if [ -z "$cert_id" ]; then
+        local cert_list
+        local result
+        result=$(call_aliyun_api cas ListCert --SourceType user 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        cert_list=$(echo "$result" | jq -r '.CertList[]? | "\(.CertId) (\(.Name)) [\(.UploadTime)]"')
+
+        if [ -z "$cert_list" ]; then
+            echo "错误：没有找到证书。" >&2
+            return 1
+        elif [ "$(echo "$cert_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            cert_id=$(echo "$cert_list" | awk '{print $1}')
+            echo "自动选择唯一的证书: $cert_id"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                cert_id=$(select_with_fzf "选择要查看详情的证书" "$cert_list" | awk '{print $1}')
+                if [ -z "$cert_id" ]; then
+                    echo "错误：未选择证书。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择证书，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
+    fi
 
     if [ -z "$cert_id" ]; then
         echo "错误：证书ID不能为空。" >&2
@@ -256,7 +353,7 @@ cas_batch_upload_deploy() {
 
         # 创建日志目录
         mkdir -p "$(dirname "$upload_log")"
-        echo "$result" > "$upload_log"
+        echo "$result" >"$upload_log"
 
         if [ $status -eq 0 ]; then
             echo "证书上传成功"
@@ -269,10 +366,10 @@ cas_batch_upload_deploy() {
             mkdir -p "$(dirname "$CAS_CERT_FILE")"
             if [ -f "$CAS_CERT_FILE" ]; then
                 jq --arg id "$cert_id" --arg name "$upload_name" --arg time "$upload_time" \
-                    '. += [{"CertId": $id, "Name": $name, "UploadTime": $time}]' "$CAS_CERT_FILE" > "${CAS_CERT_FILE}.tmp" &&
+                    '. += [{"CertId": $id, "Name": $name, "UploadTime": $time}]' "$CAS_CERT_FILE" >"${CAS_CERT_FILE}.tmp" &&
                     mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
             else
-                echo '[{"CertId": "'"$cert_id"'", "Name": "'"$upload_name"'", "UploadTime": "'"$upload_time"'"}]' > "$CAS_CERT_FILE"
+                echo '[{"CertId": "'"$cert_id"'", "Name": "'"$upload_name"'", "UploadTime": "'"$upload_time"'"}]' >"$CAS_CERT_FILE"
             fi
         else
             echo "错误：证书上传失败" >&2

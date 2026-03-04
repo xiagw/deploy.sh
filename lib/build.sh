@@ -118,30 +118,93 @@ build_image() {
 }
 
 # Main build function that determines which specific builder to run
+# Priority: Docker build (if available) > System command build
 # @param $1 lang The programming language
 # @param $2 keep_image Optional parameter for image retention
 build_all() {
     local lang="${1:?'lang parameter is required'}"
     local keep_image="${2:-}"
+    local lang_type="${lang%%:*}"  # Extract language type without version/docker suffix
+    local has_dockerfile=false
+    local docker_build_failed=false
 
     _msg step "[build] Starting build process for ${lang}"
 
-    # Language specific build
-    case "$lang" in
-    *:docker) build_image "${keep_image}" ;;
-    java:*) build_java ;;
-    node:*) build_node ;;
-    python:*) build_python ;;
-    android:*) build_android ;;
-    ios:*) build_ios ;;
-    ruby:*) build_ruby ;;
-    go:*) build_go ;;
-    c:*) build_c ;;
-    django:*) build_django ;;
-    php:*) build_php ;;
-    shell:*) build_shell ;;
-    *) _msg warn "No build function available for language: $lang" ;;
-    esac
+    ## 检查配置文件中的构建方式覆盖
+    if [[ -n "${PROJECT_BUILD_METHOD:-}" && "${PROJECT_BUILD_METHOD}" != "auto" ]]; then
+        case "${PROJECT_BUILD_METHOD}" in
+        docker)
+            if check_docker_available; then
+                _msg info "Using configured build method: docker"
+                build_image "${keep_image}"
+                return $?
+            else
+                _msg error "Configured build method 'docker' but Docker is not available"
+                return 1
+            fi
+            ;;
+        system)
+            _msg info "Using configured build method: system command"
+            # Skip Docker check, go directly to system build
+            has_dockerfile=false
+            ;;
+        esac
+    fi
+
+    # Check if Dockerfile exists
+    for file in Dockerfile{,.*}; do
+        if [[ -f "${G_REPO_DIR}/${file}" ]]; then
+            has_dockerfile=true
+            break
+        fi
+    done
+
+    # Priority 1: Try Docker build if Dockerfile exists and Docker is available
+    if [[ "$has_dockerfile" == true ]]; then
+        if check_docker_available; then
+            _msg info "Dockerfile found and Docker is available → attempting Docker build"
+            # Check if lang already has :docker suffix, if not, try Docker build first
+            if [[ "$lang" != *:docker ]]; then
+                # Try Docker build with fallback
+                if build_image "${keep_image}"; then
+                    _msg green "Docker build completed successfully"
+                    return 0
+                else
+                    _msg warn "Docker build failed, falling back to system command build"
+                    docker_build_failed=true
+                fi
+            else
+                # Lang already marked as docker, use Docker build directly
+                build_image "${keep_image}"
+                return $?
+            fi
+        else
+            _msg warn "Dockerfile found but Docker is not available, using system command build"
+        fi
+    fi
+
+    # Priority 2: Use system command build
+    # If Docker build was attempted and failed, or no Dockerfile/Docker available
+    if [[ "$docker_build_failed" == true ]] || [[ "$has_dockerfile" != true ]] || ! check_docker_available; then
+        _msg info "Using system command build for ${lang_type}"
+        case "$lang_type" in
+        java) build_java ;;
+        node) build_node ;;
+        python) build_python ;;
+        android) build_android ;;
+        ios) build_ios ;;
+        ruby) build_ruby ;;
+        go | golang) build_go ;;
+        c) build_c ;;
+        django) build_django ;;
+        php) build_php ;;
+        shell) build_shell ;;
+        *)
+            _msg warn "No build function available for language: $lang_type"
+            return 1
+            ;;
+        esac
+    fi
 }
 
 # Java Build
