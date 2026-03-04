@@ -385,6 +385,7 @@ _build_maven() {
 
     # Copy config files if needed
     [ -f /src/.jvm.options ] && cp -v /src/.jvm.options /jars/
+    [ -f /src/jvm.options ] && cp -v /src/jvm.options /jars/
 
     local i=0
     while IFS= read -r file; do

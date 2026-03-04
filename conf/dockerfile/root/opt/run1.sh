@@ -71,6 +71,7 @@ get_jvm_opts() {
     local final_opts="" file_opts
     local default_jvm_opts="-Xms512m -Xmx1024m" # 默认JVM参数
     local jvm_opts_files=(
+        "./.jvm.options"                # 当前目录
         "./jvm.options"                # 当前目录
         "${G_PATH}/jvm.options"        # 脚本目录
         "${G_PATH}/config/jvm.options" # 配置目录
