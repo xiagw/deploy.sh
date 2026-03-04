@@ -365,11 +365,23 @@ _build_maven() {
     # Run Maven build
     $mvn_opts
 
-    # Copy artifacts to /jars directory
+    # Copy artifacts to /jars directory: only runnable modules (with spring-boot-maven-plugin)
+    # to avoid copying library module jars (e.g. ruoyi-core, ruoyi-common) that are not deployed.
     mkdir -p /jars
-    find . -type f -path "*/target/*.jar" -not -iname '*-sources.jar' \
-        -not -iname '*-javadoc.jar' -not -iname '*-tests.jar' \
-        -not -iname '*-original.jar' -exec cp -v {} /jars/ \;
+    _copy_app_jars() {
+        find "$@" -not -iname '*-sources.jar' -not -iname '*-javadoc.jar' \
+            -not -iname '*-tests.jar' -not -iname '*-original.jar' -exec cp -v {} /jars/ \;
+    }
+    app_poms=$(find . -name 'pom.xml' -exec grep -l 'spring-boot-maven-plugin' {} \; 2>/dev/null)
+    if [ -n "$app_poms" ]; then
+        for pom in $app_poms; do
+            dir=$(dirname "$pom")
+            [ -d "$dir/target" ] && _copy_app_jars "$dir/target" -maxdepth 1 -type f -name '*.jar'
+        done
+    else
+        # Fallback: no Spring Boot app module found, copy all non-auxiliary jars (e.g. plain Maven project)
+        _copy_app_jars . -type f -path "*/target/*.jar"
+    fi
 
     # Copy config files if needed
     [ -f /src/.jvm.options ] && cp -v /src/.jvm.options /jars/
