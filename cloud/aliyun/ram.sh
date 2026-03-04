@@ -7,12 +7,28 @@
 # shellcheck source=/dev/null
 [ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
 
+# 生成 RAM 登录用随机密码（含大小写+数字，末尾加 @@ 满足策略）
+# 优先使用 common.sh 的 _get_random_password，否则用 openssl 等本地生成
+_ram_random_password() {
+    local p
+    if declare -f _get_random_password >/dev/null 2>&1; then
+        p=$(_get_random_password 14 2>/dev/null)
+    fi
+    if [ -z "$p" ] || [ "${#p}" -lt 8 ]; then
+        p=$(openssl rand -base64 16 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c 14)
+    fi
+    if [ -z "$p" ] || [ "${#p}" -lt 8 ]; then
+        p=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 14)
+    fi
+    [ -n "$p" ] && echo "${p}@@" || echo ""
+}
+
 show_ram_help() {
     echo "RAM (Resource Access Management) 操作："
     echo "  get                                     - 列出所有子账号"
-    echo "  add [<用户名>] [<显示名>]                - 创建子账号（用户名和显示名都是可选的，可使用fzf选择）"
-    echo "  set [<用户名>] [<新显示名>]              - 更新子账号（用户名和新显示名都是可选的，可使用fzf选择）"
-    echo "  del [<用户名>]                          - 删除子账号（用户名可选，可使用fzf选择）"
+    echo "  add [<用户名>] [<显示名>]                - 创建子账号（用户名和显示名都是可选的，可使用 fzf 选择）"
+    echo "  set [<用户名>] [<新显示名>] [--password <新密码>]  - 更新子账号（用户名、新显示名和密码都是可选的，可使用 fzf 选择）"
+    echo "  del [<用户名>]                          - 删除子账号（用户名可选，可使用 fzf 选择）"
     echo "  key-add <用户名>                        - 为子账号创建 AccessKey"
     echo "  perm-add <用户名>                       - 授予子账号权限"
     echo "  perm-get <用户名>                       - 列出用户的权限"
@@ -22,7 +38,10 @@ show_ram_help() {
     echo "  $0 ram add                           # 自动生成 dev 开头的用户名"
     echo "  $0 ram add test-user                 # 自动生成显示名称"
     echo "  $0 ram add test-user 'Test User'     # 指定用户名和显示名称"
-    echo "  $0 ram set test-user 'New Name'"
+    echo "  $0 ram set test-user 'New Name'      # 只修改显示名"
+    echo "  $0 ram set test-user --password 'NewPass123' # 只修改密码"
+    echo "  $0 ram set test-user 'New Name' --password 'NewPass123' # 同时修改显示名和密码"
+    echo "  （交互式 set 时若选择修改密码，将自动生成随机密码，无需手动输入）"
     echo "  $0 ram del test-user"
     echo "  $0 ram key-add test-user"
     echo "  $0 ram perm-add test-user"
@@ -38,7 +57,7 @@ handle_ram_commands() {
     case "$operation" in
     get) ram_list "$@" ;;
     add) ram_create "$1" "$2" ;;
-    set) ram_update "$1" "$2" ;;
+    set) ram_update "$@" ;;
     del) ram_delete "$1" ;;
     key-add) ram_create_key "$1" ;;
     perm-add) ram_grant_permission "$1" ;;
@@ -94,7 +113,7 @@ ram_create() {
             read -r -p "请输入用户名 (回车生成 dev-开头的用户名): " username_input
             if [ -z "$username_input" ]; then
                 username="dev-$(date +%Y%m%d-%H%M%S)"
-                echo "自动生成用户名: $username"
+                echo "自动生成用户名：$username"
             else
                 username="$username_input"
             fi
@@ -113,12 +132,16 @@ ram_create() {
 
     # 生成随机密码
     local password
-    password="$(_get_random_password 2>/dev/null)@@"
+    password=$(_ram_random_password)
+    if [ -z "$password" ]; then
+        echo "错误：无法生成随机密码。" >&2
+        return 1
+    fi
 
     echo "创建 RAM 子账号："
-    echo "用户名: $username"
-    echo "显示名: $display_name"
-    echo "密码: $password"
+    echo "用户名：$username"
+    echo "显示名：$display_name"
+    echo "密码：$password"
 
     local result
     result=$(call_aliyun_api ram CreateUser         --UserName "$username"         --DisplayName "$display_name")
@@ -130,7 +153,7 @@ ram_create() {
         # 创建登录配置
         call_aliyun_api ram CreateLoginProfile             --UserName "$username"             --Password "$password"             --PasswordResetRequired false >/dev/null 2>&1
 
-        echo "登录密码: $password"
+        echo "登录密码：$password"
         log_result "${profile:-}" "$region" "ram" "create" "$result"
     else
         echo "错误：子账号创建失败。"
@@ -139,10 +162,28 @@ ram_create() {
     fi
 }
 
-# 更新子账号（保持原有实现，但使用框架函数）
+# 更新子账号（支持修改显示名和密码）
 ram_update() {
     local username=$1
-    local new_display_name=$2
+    shift
+    local new_display_name=""
+    local new_password=""
+
+    # 解析参数：支持 --password 选项指定密码
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --password)
+                new_password="$2"
+                shift 2
+                ;;
+            *)
+                if [ -z "$new_display_name" ]; then
+                    new_display_name="$1"
+                fi
+                shift
+                ;;
+        esac
+    done
 
     # 如果没有提供用户名，则使用 fzf 选择
     if [ -z "$username" ]; then
@@ -161,7 +202,7 @@ ram_update() {
             return 1
         elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
             username=$(echo "$user_list" | awk '{print $1}')
-            echo "自动选择唯一的子账号: $username"
+            echo "自动选择唯一的子账号：$username"
         else
             if type select_with_fzf >/dev/null 2>&1; then
                 username=$(select_with_fzf "选择要更新的子账号" "$user_list" | awk '{print $1}')
@@ -176,36 +217,105 @@ ram_update() {
         fi
     fi
 
-    # 如果没有提供新显示名，则提示输入
-    if [ -z "$new_display_name" ]; then
-        read -r -p "请输入新的显示名称 [$username]: " new_display_name
-        new_display_name=${new_display_name:-$username}
-        if [ -z "$new_display_name" ]; then
-            echo "错误：新显示名不能为空。" >&2
+    # 交互式输入
+    if [ -z "$new_display_name" ] && [ -z "$new_password" ]; then
+        echo "交互式模式更新 RAM 子账号：$username"
+        echo ""
+        
+        # 使用 fzf 选择操作类型（修改密码一律使用随机密码，避免手动输入两次不一致）
+        local options=$'只修改显示名\n只修改密码（随机生成）\n同时修改显示名和密码（密码随机生成）'
+        local choice
+        if type select_with_fzf >/dev/null 2>&1; then
+            choice=$(select_with_fzf "选择操作类型" "$options")
+        else
+            echo "错误：需要选择操作类型，但未找到交互式选择工具。" >&2
             return 1
         fi
+        
+        if [ -z "$choice" ]; then
+            echo "错误：未选择操作类型。" >&2
+            return 1
+        fi
+        
+        case "$choice" in
+            "只修改显示名")
+                read -r -p "请输入新的显示名称： " new_display_name
+                if [ -z "$new_display_name" ]; then
+                    echo "错误：显示名称不能为空。" >&2
+                    return 1
+                fi
+                ;;
+            "只修改密码（随机生成）")
+                new_password=$(_ram_random_password)
+                if [ -z "$new_password" ]; then
+                    echo "错误：无法生成随机密码。" >&2
+                    return 1
+                fi
+                echo "自动生成密码：$new_password"
+                ;;
+            "同时修改显示名和密码（密码随机生成）")
+                read -r -p "请输入新的显示名称： " new_display_name
+                if [ -z "$new_display_name" ]; then
+                    echo "错误：显示名称不能为空。" >&2
+                    return 1
+                fi
+                new_password=$(_ram_random_password)
+                if [ -z "$new_password" ]; then
+                    echo "错误：无法生成随机密码。" >&2
+                    return 1
+                fi
+                echo "自动生成密码：$new_password"
+                ;;
+        esac
     fi
 
-    if ! validate_required_params "$username" "$new_display_name" "错误：用户名和新显示名不能为空。"; then
-        echo "用法：ram set <用户名> <新显示名>" >&2
+    # 如果什么都没有提供，至少需要修改一项
+    if [ -z "$new_display_name" ] && [ -z "$new_password" ]; then
+        echo "错误：至少需要提供显示名或密码其中之一。" >&2
+        echo "用法：ram set <用户名> [<新显示名>] [--password <新密码>]" >&2
         return 1
     fi
 
     echo "更新 RAM 子账号："
-    local result
-    result=$(call_aliyun_api ram UpdateUser \
-        --UserName "$username" \
-        --NewDisplayName "$new_display_name")
+    echo "用户名：$username"
 
-    if [ $? -eq 0 ]; then
-        echo "子账号更新成功："
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ram" "update" "$result"
-    else
-        echo "错误：子账号更新失败。"
-        echo "$result"
-        return 1
+    local updated_display_name="$new_display_name"
+
+    # 更新显示名（需要同时指定 NewUserName）
+    if [ -n "$new_display_name" ]; then
+        echo "新显示名：$new_display_name"
+        local result
+        result=$(call_aliyun_api ram UpdateUser \
+            --UserName "$username" \
+            --NewUserName "$username" \
+            --NewDisplayName "$new_display_name")
+
+        if [ $? -ne 0 ]; then
+            echo "错误：子账号更新失败。"
+            echo "$result"
+            return 1
+        fi
+        echo "显示名更新成功"
     fi
+
+    # 更新密码
+    if [ -n "$new_password" ]; then
+        echo "新密码：$new_password"
+        local result
+        result=$(call_aliyun_api ram UpdateLoginProfile \
+            --UserName "$username" \
+            --Password "$new_password" \
+            --PasswordResetRequired false)
+
+        if [ $? -ne 0 ]; then
+            echo "错误：密码更新失败。"
+            echo "$result"
+            return 1
+        fi
+        echo "密码更新成功"
+    fi
+
+    log_result "${profile:-}" "$region" "ram" "update" "{\"UserName\":\"$username\",\"DisplayName\":\"$updated_display_name\"}"
 }
 
 # 删除子账号（使用框架函数）
@@ -229,7 +339,7 @@ ram_delete() {
             return 1
         elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
             username=$(echo "$user_list" | awk '{print $1}')
-            echo "自动选择唯一的子账号: $username"
+            echo "自动选择唯一的子账号：$username"
         else
             if type select_with_fzf >/dev/null 2>&1; then
                 username=$(select_with_fzf "选择要删除的子账号" "$user_list" | awk '{print $1}')
@@ -260,11 +370,11 @@ ram_delete() {
 
     if [ $? -eq 0 ]; then
         echo "子账号删除成功。"
-        log_delete_operation "${profile:-}" "$region" "ram" "$username" "RAM子账号" "成功"
+        log_delete_operation "${profile:-}" "$region" "ram" "$username" "RAM 子账号" "成功"
     else
         echo "错误：子账号删除失败。"
         echo "$result"
-        log_delete_operation "${profile:-}" "$region" "ram" "$username" "RAM子账号" "失败"
+        log_delete_operation "${profile:-}" "$region" "ram" "$username" "RAM 子账号" "失败"
         return 1
     fi
 
@@ -292,7 +402,7 @@ ram_create_key() {
             return 1
         elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
             username=$(echo "$user_list" | awk '{print $1}')
-            echo "自动选择唯一的子账号: $username"
+            echo "自动选择唯一的子账号：$username"
         else
             if type select_with_fzf >/dev/null 2>&1; then
                 username=$(select_with_fzf "选择要为其创建 AccessKey 的子账号" "$user_list" | awk '{print $1}')
@@ -349,7 +459,7 @@ ram_grant_permission() {
             return 1
         elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
             username=$(echo "$user_list" | awk '{print $1}')
-            echo "自动选择唯一的子账号: $username"
+            echo "自动选择唯一的子账号：$username"
         else
             if type select_with_fzf >/dev/null 2>&1; then
                 username=$(select_with_fzf "选择要授予权限的子账号" "$user_list" | awk '{print $1}')
@@ -370,7 +480,7 @@ ram_grant_permission() {
     fi
 
     echo "授予子账号权限："
-    echo "用户名: $username"
+    echo "用户名：$username"
 
     # 授予 AliyunECSFullAccess 权限
     local result
@@ -411,7 +521,7 @@ ram_list_permissions() {
             return 1
         elif [ "$(echo "$user_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
             username=$(echo "$user_list" | awk '{print $1}')
-            echo "自动选择唯一的子账号: $username"
+            echo "自动选择唯一的子账号：$username"
         else
             if type select_with_fzf >/dev/null 2>&1; then
                 username=$(select_with_fzf "选择要查看权限的子账号" "$user_list" | awk '{print $1}')
@@ -432,7 +542,7 @@ ram_list_permissions() {
     fi
 
     echo "列出用户权限："
-    echo "用户名: $username"
+    echo "用户名：$username"
 
     local result
     result=$(call_aliyun_api ram ListPoliciesForUser --UserName "$username")
@@ -461,7 +571,7 @@ ram_create_updated() {
             read -r -p "请输入用户名 (回车生成 dev-开头的用户名): " username_input
             if [ -z "$username_input" ]; then
                 username="dev-$(date +%Y%m%d-%H%M%S)"
-                echo "自动生成用户名: $username"
+                echo "自动生成用户名：$username"
             else
                 username="$username_input"
             fi
@@ -480,12 +590,12 @@ ram_create_updated() {
 
     # 生成随机密码
     local password
-    password="$(_get_random_password 2>/dev/null)@@"
+    password=$(_ram_random_password)
 
     echo "创建 RAM 子账号："
-    echo "用户名: $username"
-    echo "显示名: $display_name"
-    echo "密码: $password"
+    echo "用户名：$username"
+    echo "显示名：$display_name"
+    echo "密码：$password"
 
     local result
     result=$(call_aliyun_api ram CreateUser \
@@ -502,7 +612,7 @@ ram_create_updated() {
             --Password "$password" \
             --PasswordResetRequired false >/dev/null 2>&1
 
-        echo "登录密码: $password"
+        echo "登录密码：$password"
         log_result "${profile:-}" "$region" "ram" "create" "$result"
     else
         echo "错误：子账号创建失败。"
@@ -510,3 +620,4 @@ ram_create_updated() {
         return 1
     fi
 }
+
