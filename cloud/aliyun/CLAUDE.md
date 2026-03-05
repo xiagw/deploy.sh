@@ -72,8 +72,8 @@ The project supports the following Alibaba Cloud services:
 ./main.sh cost daily [YYYY-MM-DD]
 
 # Configuration management
-./main.sh config list
-./main.sh config create <name> <access-key> <secret-key> [region]
+./main.sh config get
+./main.sh config add <name> <access-key> <secret-key> [region]
 ```
 
 ### Output Formats

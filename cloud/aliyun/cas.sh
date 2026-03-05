@@ -12,14 +12,17 @@ CAS_CERT_FILE="${SCRIPT_DATA:? ERR: SCRIPT_DATA empty}/cas/cas_certs.json"
 
 show_cas_help() {
     echo "证书服务 (Certificate Authority Service) 操作："
-    echo "  get                                     - 列出所有已上传的证书"
+    echo "  get [类型] [format]                      - 列出证书。类型: all=全部证书(默认), upload=仅上传, order=仅订单(购买/免费)"
     echo "  add <证书名称> <证书文件> <私钥文件>    - 上传并创建新证书"
     echo "  del [<证书ID>]                          - 删除指定证书（证书ID可选，可使用fzf选择）"
     echo "  get-detail [<证书ID>]                   - 获取证书详情（证书ID可选，可使用fzf选择）"
     echo "  batch-upload [domain...]                 - 批量上传证书并部署到CDN"
     echo
     echo "示例："
-    echo "  $0 cas get"
+    echo "  $0 cas get                  # 全部证书（签发+上传）"
+    echo "  $0 cas get upload           # 仅用户上传的证书"
+    echo "  $0 cas get order            # 仅订单（购买/免费证书）"
+    echo "  $0 cas get all json         # 全部证书，JSON 格式"
     echo "  $0 cas add my-cert /path/to/cert.pem /path/to/key.pem"
     echo "  $0 cas del 15246052"
     echo "  $0 cas get-detail 15246052"
@@ -49,13 +52,27 @@ handle_cas_commands() {
     esac
 }
 
-# CAS 列表：从 API 获取证书列表
+# CAS 列表：使用 ListUserCertificateOrder（官网文档：买的证书、免费证书、用户上传证书均由此接口查询）
+# OrderType: CERT=签发+上传证书, UPLOAD=仅上传证书, CPACK=资源/购买订单, BUY=售卖订单
 cas_list() {
-    local format=${1:-human}
-    local result
+    local list_type=${1:-all}
+    local format=${2:-human}
+    local order_type="CERT"
+    case "$list_type" in
+    all)     order_type="CERT" ;;   # 同时返回签发证书和上传证书
+    upload)  order_type="UPLOAD" ;; # 只返回上传证书
+    order)   order_type="CPACK" ;;  # 只返回订单（购买/免费等）
+    json|tsv|human) format="$list_type"; list_type="all"; order_type="CERT" ;;
+    *)       format="$list_type"; list_type="all"; order_type="CERT" ;;
+    esac
+    # 若 format 被误解析为 list_type，再校正一次
+    case "$format" in
+    json|tsv|human) ;;
+    *) format="human" ;;
+    esac
 
-    # 从 API 获取证书列表
-    result=$(call_aliyun_api cas ListCert --SourceType user)
+    local result
+    result=$(call_aliyun_api cas ListUserCertificateOrder --OrderType "$order_type" --ShowSize 100)
     if [ $? -ne 0 ]; then
         echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
         return 1
@@ -66,21 +83,45 @@ cas_list() {
         echo "$result" | jq '.'
         ;;
     tsv)
-        echo -e "CertId\tName\tUploadTime"
-        echo "$result" | jq -r '.CertList[]? | [.CertId, .Name, .UploadTime] | @tsv'
+        if [ "$order_type" = "CPACK" ]; then
+            echo -e "InstanceId\tOrderId\tProductName\tStatus\tCertType\tDomain\tBuyDate"
+            echo "$result" | jq -r '.CertificateOrderList[]? | [.InstanceId, .OrderId, (.ProductName // "-"), .Status, (.CertType // "-"), (.Domain // "-"), (.BuyDate // 0)] | @tsv'
+        else
+            echo -e "CertificateId\tName\t类型\tCommonName\tStartDate\tEndDate\tStatus"
+            echo "$result" | jq -r '.CertificateOrderList[]? | [.CertificateId, (.Name // "-"), (if .Upload then "上传" else "签发" end), (.CommonName // "-"), (.StartDate // "-"), (.EndDate // "-"), (.Status // "-")] | @tsv'
+        fi
         ;;
     human | *)
-        echo "列出所有已上传的证书："
-        local cert_count
-        cert_count=$(echo "$result" | jq '.CertList | length // 0')
-        if [ "$cert_count" -eq 0 ]; then
-            echo "没有找到已上传的证书记录。"
+        local title
+        if [ "$order_type" = "CPACK" ]; then
+            title="证书订单列表（购买/免费等）"
+            local count
+            count=$(echo "$result" | jq '.CertificateOrderList | length // 0')
+            if [ "$count" -eq 0 ]; then
+                echo "$title"
+                echo "没有找到订单记录。"
+            else
+                echo "$title"
+                echo "InstanceId/订单ID    产品/规格              状态        类型    域名"
+                echo "$result" | jq -r '.CertificateOrderList[]? | [.InstanceId, (.ProductName // .ProductCode // "-"), .Status, (.CertType // "-"), (.Domain // "-")] | @tsv' |
+                    awk 'BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-22s  %-10s  %-6s  %s\n", $1, substr($2,1,20), $3, $4, $5}'
+            fi
         else
-            echo "证书ID            名称                          上传时间"
-            echo "----------------  ----------------------------  -------------------------"
-            echo "$result" | jq -r '.CertList[]? | [.CertId, .Name, .UploadTime] | @tsv' |
-                awk 'BEGIN {FS="\t"; OFS="\t"}
-                {printf "%-16s  %-28s  %s\n", $1, $2, $3}'
+            title="证书列表（签发证书 + 用户上传证书）"
+            if [ "$order_type" = "UPLOAD" ]; then
+                title="用户上传的证书"
+            fi
+            local count
+            count=$(echo "$result" | jq '.CertificateOrderList | length // 0')
+            if [ "$count" -eq 0 ]; then
+                echo "$title"
+                echo "没有找到证书记录。"
+            else
+                echo "$title"
+                echo "证书ID    名称                类型  主域名              开始日期    到期日期    状态"
+                echo "$result" | jq -r '.CertificateOrderList[]? | [.CertificateId, (.Name // "-"), (if .Upload then "上传" else "签发" end), (.CommonName // "-"), (.StartDate // "-"), (.EndDate // "-"), (.Status // "-")] | @tsv' |
+                    awk 'BEGIN {FS="\t"; OFS="\t"} {printf "%-10s  %-18s  %-4s  %-18s  %-10s  %-10s  %s\n", $1, substr($2,1,16), $3, substr($4,1,16), $5, $6, $7}'
+            fi
         fi
         ;;
     esac
@@ -172,17 +213,17 @@ cas_create() {
 cas_delete() {
     local cert_id=$1
 
-    # 如果没有提供证书ID，则使用 fzf 选择
+    # 如果没有提供证书ID，则使用 fzf 选择（使用 ListUserCertificateOrder 查询证书列表）
     if [ -z "$cert_id" ]; then
         local cert_list
         local result
-        result=$(call_aliyun_api cas ListCert --SourceType user 2>/dev/null)
+        result=$(call_aliyun_api cas ListUserCertificateOrder --OrderType CERT --ShowSize 100 2>/dev/null)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
             return 1
         fi
 
-        cert_list=$(echo "$result" | jq -r '.CertList[]? | "\(.CertId) (\(.Name)) [\(.UploadTime)]"')
+        cert_list=$(echo "$result" | jq -r '.CertificateOrderList[]? | "\(.CertificateId) (\(.Name)) [\(.Status)] \(if .Upload then "上传" else "签发" end)"')
 
         if [ -z "$cert_list" ]; then
             echo "错误：没有找到证书。" >&2
@@ -243,13 +284,13 @@ cas_detail() {
     if [ -z "$cert_id" ]; then
         local cert_list
         local result
-        result=$(call_aliyun_api cas ListCert --SourceType user 2>/dev/null)
+        result=$(call_aliyun_api cas ListUserCertificateOrder --OrderType CERT --ShowSize 100 2>/dev/null)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
             return 1
         fi
 
-        cert_list=$(echo "$result" | jq -r '.CertList[]? | "\(.CertId) (\(.Name)) [\(.UploadTime)]"')
+        cert_list=$(echo "$result" | jq -r '.CertificateOrderList[]? | "\(.CertificateId) (\(.Name)) [\(.Status)]"')
 
         if [ -z "$cert_list" ]; then
             echo "错误：没有找到证书。" >&2

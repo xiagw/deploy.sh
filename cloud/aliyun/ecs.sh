@@ -21,6 +21,14 @@ show_ecs_help() {
     echo "  stop [<实例ID>]                          - 停止 ECS 实例（实例ID可选，可使用fzf选择）"
     echo "  key-attach [<实例ID>] [<密钥对名称>]     - 绑定 SSH 密钥对到实例（参数可选，可使用fzf选择）"
     echo "  key-detach [<实例ID>] [<密钥对名称>]     - 解绑实例的 SSH 密钥对（参数可选，可使用fzf选择）"
+    echo "  快照："
+    echo "  snapshot-get [format]                   - 列出快照"
+    echo "  snapshot-add [<磁盘ID>] [<快照名称>]    - 创建快照（参数可选，可使用fzf选择磁盘）"
+    echo "  snapshot-del [<快照ID>]                 - 删除快照（快照ID可选，可使用fzf选择）"
+    echo "  镜像（自定义镜像）："
+    echo "  image-get [format]                       - 列出自定义镜像"
+    echo "  image-add [<实例ID>] [<镜像名称>]       - 从实例创建自定义镜像（参数可选）"
+    echo "  image-del [<镜像ID>]                    - 删除自定义镜像（镜像ID可选，可使用fzf选择）"
     echo
     echo "示例："
     echo "  $0 ecs get"
@@ -36,6 +44,12 @@ show_ecs_help() {
     echo "  $0 ecs key-del my-key"
     echo "  $0 ecs key-attach i-bp67acfmxazb4ph**** my-key"
     echo "  $0 ecs key-detach i-bp67acfmxazb4ph**** my-key"
+    echo "  $0 ecs snapshot-get"
+    echo "  $0 ecs snapshot-add d-bp1xxx 我的快照"
+    echo "  $0 ecs snapshot-del s-bp1xxx"
+    echo "  $0 ecs image-get"
+    echo "  $0 ecs image-add i-bp1xxx 我的镜像"
+    echo "  $0 ecs image-del m-bp1xxx"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -57,6 +71,12 @@ handle_ecs_commands() {
     stop) ecs_stop "$@" ;;
     key-attach) ecs_key_attach "$@" ;;
     key-detach) ecs_key_detach "$@" ;;
+    snapshot-get) ecs_snapshot_list "$@" ;;
+    snapshot-add) ecs_snapshot_create "$@" ;;
+    snapshot-del) ecs_snapshot_delete "$@" ;;
+    image-get) ecs_image_list "$@" ;;
+    image-add) ecs_image_create "$@" ;;
+    image-del) ecs_image_delete "$@" ;;
     help) show_ecs_help ;;
     *)
         echo "错误：未知的 ECS 操作：$operation" >&2
@@ -171,14 +191,21 @@ ecs_create() {
         echo "未提供实例名称，自动生成: $instance_name"
     fi
 
-    # 选择 VPC（需要调用 vpc_list 函数）
+    # 选择 VPC（需要调用 vpc_list 或 API）
     local vpc_id
     local vpc_list
+    local vpc_result
     if type vpc_list >/dev/null 2>&1; then
-        vpc_list=$(vpc_list json 2>/dev/null | jq -r '.Vpcs.Vpc[] | select(.VpcId != null) | "\(.VpcId) (\(.VpcName))"')
+        vpc_result=$(vpc_list "" "json" 2>/dev/null)
     else
-        vpc_list=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null | jq -r '.Vpcs.Vpc[] | select(.VpcId != null) | "\(.VpcId) (\(.VpcName))"')
+        vpc_result=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null)
     fi
+    if ! echo "$vpc_result" | jq -e . >/dev/null 2>&1; then
+        echo "错误：获取 VPC 列表失败，请检查凭证、地域和权限。" >&2
+        [ -n "$vpc_result" ] && echo "$vpc_result" | head -5 >&2
+        return 1
+    fi
+    vpc_list=$(echo "$vpc_result" | jq -r '.Vpcs.Vpc[]? | select(.VpcId != null) | "\(.VpcId) (\(.VpcName // .VpcId))"')
 
     if [ -z "$vpc_list" ]; then
         echo "错误：没有找到 VPC，请先创建 VPC。" >&2
@@ -209,6 +236,11 @@ ecs_create() {
 
     if [ $vswitch_list_ret -ne 0 ] || [ -z "$vswitch_list_raw" ]; then
         echo "错误：在选定的 VPC 中没有找到交换机，请先创建交换机。" >&2
+        return 1
+    fi
+    if ! echo "$vswitch_list_raw" | jq -e . >/dev/null 2>&1; then
+        echo "错误：获取交换机列表失败。" >&2
+        [ -n "$vswitch_list_raw" ] && echo "$vswitch_list_raw" | head -5 >&2
         return 1
     fi
 
@@ -248,6 +280,11 @@ ecs_create() {
 
     if [ $security_group_list_ret -ne 0 ] || [ -z "$security_group_list_raw" ]; then
         echo "错误：无法获取安全组列表。请检查您的凭证和权限。" >&2
+        return 1
+    fi
+    if ! echo "$security_group_list_raw" | jq -e . >/dev/null 2>&1; then
+        echo "错误：获取安全组列表失败。" >&2
+        [ -n "$security_group_list_raw" ] && echo "$security_group_list_raw" | head -5 >&2
         return 1
     fi
 
@@ -354,11 +391,12 @@ cloud"
         else
             image_id=$(echo "$image_list" | head -1 | awk '{print $1}')
         fi
-        echo "选择镜像: $image_id"
+        echo "使用镜像: $image_id"
         create_command_image_param="--ImageId ${image_id:? 镜像ID不能为空}"
     else
         # x86 架构实例，使用镜像簇
         image_family="acs:ubuntu_24_04_x64"
+        echo "使用镜像簇: $image_family"
         create_command_image_param="--ImageFamily ${image_family:? 镜像簇不能为空}"
     fi
 
@@ -913,6 +951,214 @@ ecs_key_detach() {
     else
         echo "错误：SSH 密钥对解绑失败。"
         echo "$result"
+        return 1
+    fi
+}
+
+# ---------- 快照 ----------
+ecs_snapshot_list() {
+    local format=${1:-human}
+    local table_header="SnapshotId\tSnapshotName\tDiskId\tProgress\tStatus\tSourceDiskSize\tCreationTime"
+    local jq_filter='.Snapshots.Snapshot[]? | [.SnapshotId, (.SnapshotName // "-"), .SourceDiskId, (.Progress // "-"), .Status, (.SourceDiskSize // "-"), .CreationTime] | @tsv'
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-22s  %-20s  %-22s  %-8s  %-10s  %-8s  %s\n", $1, substr($2,1,18), $3, $4, $5, $6, $7}'
+    local result
+    result=$(call_aliyun_api ecs DescribeSnapshots --RegionId "${region:-}")
+    if [ $? -ne 0 ]; then
+        echo "错误：无法获取快照列表。请检查您的凭证和权限。" >&2
+        return 1
+    fi
+    format_output \
+        "$result" \
+        "$format" \
+        "ecs" \
+        "snapshot-get" \
+        "$table_header" \
+        "$jq_filter" \
+        "$status_mapper" \
+        "没有找到快照。" \
+        "列出快照："
+}
+
+ecs_snapshot_create() {
+    local disk_id=$1
+    local snapshot_name=$2
+    if [ -z "$disk_id" ]; then
+        local result
+        result=$(call_aliyun_api ecs DescribeDisks --RegionId "${region:-}" 2>/dev/null)
+        if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
+            echo "错误：无法获取磁盘列表。" >&2
+            return 1
+        fi
+        local disk_list
+        disk_list=$(echo "$result" | jq -r '.Disks.Disk[]? | "\(.DiskId) (\(.DiskName // .DiskId)) [\(.Status)] 实例:\(.InstanceId // "未挂载")"')
+        if [ -z "$disk_list" ]; then
+            echo "错误：没有找到磁盘。" >&2
+            return 1
+        fi
+        if type select_with_fzf >/dev/null 2>&1; then
+            disk_id=$(select_with_fzf "选择要创建快照的磁盘" "$disk_list" | awk '{print $1}')
+        else
+            echo "请指定磁盘ID。示例：$0 ecs snapshot-add d-bp1xxx 快照名称" >&2
+            return 1
+        fi
+        [ -z "$disk_id" ] && echo "错误：未选择磁盘。" >&2 && return 1
+    fi
+    if [ -z "$snapshot_name" ]; then
+        snapshot_name="snap-$(date +%Y%m%d-%H%M%S)"
+        echo "未提供快照名称，使用: $snapshot_name"
+    fi
+    echo "创建快照：磁盘=$disk_id 名称=$snapshot_name"
+    local result
+    result=$(call_aliyun_api ecs CreateSnapshot --RegionId "${region:-}" --DiskId "$disk_id" --SnapshotName "$snapshot_name")
+    if [ $? -eq 0 ]; then
+        echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ecs" "snapshot-add" "$result"
+    else
+        echo "错误：创建快照失败。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+}
+
+ecs_snapshot_delete() {
+    local snapshot_id=$1
+    if [ -z "$snapshot_id" ]; then
+        local result
+        result=$(call_aliyun_api ecs DescribeSnapshots --RegionId "${region:-}" 2>/dev/null)
+        if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
+            echo "错误：无法获取快照列表。" >&2
+            return 1
+        fi
+        local snapshot_list
+        snapshot_list=$(echo "$result" | jq -r '.Snapshots.Snapshot[]? | "\(.SnapshotId) (\(.SnapshotName // "-")) [\(.Status)]"')
+        if [ -z "$snapshot_list" ]; then
+            echo "错误：没有找到快照。" >&2
+            return 1
+        fi
+        if type select_with_fzf >/dev/null 2>&1; then
+            snapshot_id=$(select_with_fzf "选择要删除的快照" "$snapshot_list" | awk '{print $1}')
+        else
+            echo "请指定快照ID。示例：$0 ecs snapshot-del s-bp1xxx" >&2
+            return 1
+        fi
+        [ -z "$snapshot_id" ] && echo "错误：未选择快照。" >&2 && return 1
+    fi
+    if ! confirm_action "删除快照：$snapshot_id"; then
+        return 1
+    fi
+    local result
+    result=$(call_aliyun_api ecs DeleteSnapshot --RegionId "${region:-}" --SnapshotId "$snapshot_id")
+    if [ $? -eq 0 ]; then
+        echo "快照删除成功。"
+        log_delete_operation "${profile:-}" "$region" "ecs" "$snapshot_id" "快照" "成功"
+    else
+        echo "错误：快照删除失败。" >&2
+        echo "$result" >&2
+        log_delete_operation "${profile:-}" "$region" "ecs" "$snapshot_id" "快照" "失败"
+        return 1
+    fi
+}
+
+# ---------- 自定义镜像 ----------
+ecs_image_list() {
+    local format=${1:-human}
+    local table_header="ImageId\tImageName\tOSName\tSize\tStatus\tCreationTime"
+    local jq_filter='.Images.Image[]? | [.ImageId, (.ImageName // "-"), (.OSName // "-"), (.Size // "-"), .Status, .CreationTime] | @tsv'
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-22s  %-24s  %-20s  %-6s  %-10s  %s\n", $1, substr($2,1,22), substr($3,1,18), $4, $5, $6}'
+    local result
+    result=$(call_aliyun_api ecs DescribeImages --RegionId "${region:-}" --ImageOwnerAlias self --Status Available 2>/dev/null)
+    if [ $? -ne 0 ]; then
+        echo "错误：无法获取自定义镜像列表。请检查您的凭证和权限。" >&2
+        return 1
+    fi
+    format_output \
+        "$result" \
+        "$format" \
+        "ecs" \
+        "image-get" \
+        "$table_header" \
+        "$jq_filter" \
+        "$status_mapper" \
+        "没有找到自定义镜像。" \
+        "列出自定义镜像："
+}
+
+ecs_image_create() {
+    local instance_id=$1
+    local image_name=$2
+    if [ -z "$instance_id" ]; then
+        local result
+        result=$(ecs_describe_all_instances)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取实例列表。" >&2
+            return 1
+        fi
+        local instance_list
+        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
+        if [ -z "$instance_list" ]; then
+            echo "错误：没有找到 ECS 实例。" >&2
+            return 1
+        fi
+        if type select_with_fzf >/dev/null 2>&1; then
+            instance_id=$(select_with_fzf "选择要创建镜像的实例" "$instance_list" | awk '{print $1}')
+        else
+            echo "请指定实例ID。示例：$0 ecs image-add i-bp1xxx 我的镜像" >&2
+            return 1
+        fi
+        [ -z "$instance_id" ] && echo "错误：未选择实例。" >&2 && return 1
+    fi
+    if [ -z "$image_name" ]; then
+        image_name="image-$(date +%Y%m%d-%H%M%S)"
+        echo "未提供镜像名称，使用: $image_name"
+    fi
+    echo "从实例创建自定义镜像：实例=$instance_id 镜像名称=$image_name"
+    local result
+    result=$(call_aliyun_api ecs CreateImage --RegionId "${region:-}" --InstanceId "$instance_id" --ImageName "$image_name")
+    if [ $? -eq 0 ]; then
+        echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "ecs" "image-add" "$result"
+    else
+        echo "错误：创建镜像失败。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+}
+
+ecs_image_delete() {
+    local image_id=$1
+    if [ -z "$image_id" ]; then
+        local result
+        result=$(call_aliyun_api ecs DescribeImages --RegionId "${region:-}" --ImageOwnerAlias self 2>/dev/null)
+        if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
+            echo "错误：无法获取自定义镜像列表。" >&2
+            return 1
+        fi
+        local image_list
+        image_list=$(echo "$result" | jq -r '.Images.Image[]? | "\(.ImageId) (\(.ImageName // "-")) [\(.Status)]"')
+        if [ -z "$image_list" ]; then
+            echo "错误：没有找到自定义镜像。" >&2
+            return 1
+        fi
+        if type select_with_fzf >/dev/null 2>&1; then
+            image_id=$(select_with_fzf "选择要删除的镜像" "$image_list" | awk '{print $1}')
+        else
+            echo "请指定镜像ID。示例：$0 ecs image-del m-bp1xxx" >&2
+            return 1
+        fi
+        [ -z "$image_id" ] && echo "错误：未选择镜像。" >&2 && return 1
+    fi
+    if ! confirm_action "删除自定义镜像：$image_id"; then
+        return 1
+    fi
+    local result
+    result=$(call_aliyun_api ecs DeleteImage --RegionId "${region:-}" --ImageId "$image_id")
+    if [ $? -eq 0 ]; then
+        echo "镜像删除成功。"
+        log_delete_operation "${profile:-}" "$region" "ecs" "$image_id" "自定义镜像" "成功"
+    else
+        echo "错误：镜像删除失败。" >&2
+        echo "$result" >&2
+        log_delete_operation "${profile:-}" "$region" "ecs" "$image_id" "自定义镜像" "失败"
         return 1
     fi
 }

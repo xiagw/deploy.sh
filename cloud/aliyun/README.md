@@ -69,10 +69,10 @@
 
 1. 支持多配置文件管理：
 ```bash
-./main.sh config create <配置名> <AccessKey> <SecretKey> [RegionId]
-./main.sh config list
-./main.sh config update <配置名> <AccessKey> <SecretKey> [RegionId]
-./main.sh config delete <配置名>
+./main.sh config get
+./main.sh config add <配置名> <AccessKey> <SecretKey> [RegionId]
+./main.sh config set <配置名> <AccessKey> <SecretKey> [RegionId]
+./main.sh config del <配置名>
 ```
 
 ## 使用方法

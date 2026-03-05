@@ -9,19 +9,20 @@
 
 show_lbs_help() {
     echo "负载均衡服务 (Load Balancer Services) 操作："
-    echo "  get [type] [format]                     - 列出负载均衡实例，type 可选 slb/nlb/alb"
+    echo "  get [type] [format]                     - 列出负载均衡实例，type 可选 clb/nlb/alb"
     echo "  add <type> <名称> [其他参数...]         - 创建负载均衡实例"
     echo "  set <type> [<实例ID>] [<新名称>]        - 更新负载均衡实例（实例ID和新名称都是可选的，可使用fzf选择）"
-    echo "  del <type> [<实例ID>]                   - 删除负载均衡实例（实例ID可选，可使用fzf选择）"
+    echo "  del [type] [<实例ID>]                   - 删除负载均衡实例（type 和实例ID 均可选，未提供时用 fzf 选择）"
     echo
     echo "示例："
     echo "  $0 lbs get"
     echo "  $0 lbs get nlb"
-    echo "  $0 lbs get slb json"
-    echo "  $0 lbs add slb my-slb slb.s1.small PayOnDemand"
+    echo "  $0 lbs get clb json"
+    echo "  $0 lbs add clb my-clb slb.s1.small PayOnDemand"
     echo "  $0 lbs add nlb my-nlb vpc-xxx vsw-xxx"
     echo "  $0 lbs set alb alb-bp1b6c719dfa08exfuca1 new-name"
-    echo "  $0 lbs del slb lb-bp1b6c719dfa08exfuca1"
+    echo "  $0 lbs del                              # 交互选择类型和实例"
+    echo "  $0 lbs del clb lb-bp1b6c719dfa08exfuca1"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -66,7 +67,7 @@ lbs_list() {
 
     case "$lb_type" in
     all)
-        echo "列出 ALB、NLB、SLB 实例："
+        echo "列出 ALB、NLB、CLB 实例："
         alb_list "$format"
         nlb_list "$format"
         clb_list "$format"
@@ -77,7 +78,7 @@ lbs_list() {
     nlb)
         nlb_list "$format"
         ;;
-    slb | clb)
+    clb | slb)
         clb_list "$format"
         ;;
     *)
@@ -87,7 +88,7 @@ lbs_list() {
     esac
 }
 
-# CLB (原 SLB) 列表
+# CLB 列表
 clb_list() {
     local format=${1:-human}
 
@@ -202,7 +203,7 @@ lbs_create() {
     shift
 
     case "$lb_type" in
-    slb | clb)
+    clb | slb)
         slb_create "$@"
         ;;
     nlb)
@@ -213,7 +214,7 @@ lbs_create() {
         ;;
     *)
         echo "错误：未知的负载均衡类型：$lb_type" >&2
-        echo "支持的类型：slb/clb, nlb, alb" >&2
+        echo "支持的类型：clb, nlb, alb（clb 即传统型负载均衡）" >&2
         return 1
         ;;
     esac
@@ -478,7 +479,7 @@ lbs_update() {
     shift
 
     case "$lb_type" in
-    slb | clb)
+    clb | slb)
         slb_update "$@"
         ;;
     nlb)
@@ -694,8 +695,28 @@ lbs_delete() {
     local lb_type=$1
     shift
 
+    # 未指定类型时，先让用户选择类型（clb/nlb/alb）
+    if [ -z "$lb_type" ]; then
+        local type_list="clb (传统型负载均衡)
+nlb (网络型负载均衡)
+alb (应用型负载均衡)"
+        if type select_with_fzf >/dev/null 2>&1; then
+            local selected
+            selected=$(select_with_fzf "选择要删除的负载均衡类型" "$type_list")
+            lb_type=$(echo "$selected" | awk '{print $1}')
+        else
+            echo "请先指定负载均衡类型：clb / nlb / alb" >&2
+            echo "示例：$0 lbs del clb   或  $0 lbs del clb <实例ID>" >&2
+            return 1
+        fi
+        if [ -z "$lb_type" ]; then
+            echo "错误：未选择类型。" >&2
+            return 1
+        fi
+    fi
+
     case "$lb_type" in
-    slb | clb)
+    clb | slb)
         slb_delete "$@"
         ;;
     nlb)
@@ -706,6 +727,7 @@ lbs_delete() {
         ;;
     *)
         echo "错误：未知的负载均衡类型：$lb_type" >&2
+        echo "支持的类型：clb, nlb, alb（clb 即传统型负载均衡）" >&2
         return 1
         ;;
     esac
