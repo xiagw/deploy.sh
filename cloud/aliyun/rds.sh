@@ -20,6 +20,10 @@ show_rds_help() {
     echo "  db-get <实例ID> [format]                - 列出数据库"
     echo "  db-add <实例ID> <数据库名> [字符集]     - 创建数据库"
     echo "  db-del <实例ID> <数据库名>              - 删除数据库"
+    echo "  backup-list [<实例ID>] [format]         - 列出实例备份集"
+    echo "  recovery-time [<实例ID>]                - 查询可恢复时间范围（需开启日志备份，显示本地时间）"
+    echo "  restore-clone [实例ID] [备份ID|时间点] [新实例名] - 克隆实例恢复（Serverless）"
+    echo "  restore-table <实例ID> <备份ID|时间点> <TableMeta> - 库表恢复到原实例（MySQL/PostgreSQL）"
     echo
     echo "示例："
     echo "  $0 rds get"
@@ -35,6 +39,10 @@ show_rds_help() {
     echo "  $0 rds db-get rm-xxx"
     echo "  $0 rds db-add rm-xxx mydb utf8mb4"
     echo "  $0 rds db-del rm-xxx mydb"
+    echo "  $0 rds backup-list rm-xxx"
+    echo "  $0 rds recovery-time rm-xxx"
+    echo "  $0 rds restore-clone                    # 交互选择实例、备份、可省略新实例名"
+    echo "  $0 rds restore-table rm-xxx 902xxxx '[{\"type\":\"db\",\"name\":\"mydb\",\"newname\":\"mydb_restored\"}]'"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -55,6 +63,10 @@ handle_rds_commands() {
     db-get) rds_db_list "$@" ;;
     db-add) rds_db_create "$@" ;;
     db-del) rds_db_delete "$@" ;;
+    backup-list) rds_backup_list "$@" ;;
+    recovery-time) rds_recovery_time "$@" ;;
+    restore-clone) rds_restore_clone "$@" ;;
+    restore-table) rds_restore_table "$@" ;;
     help) show_rds_help ;;
     *)
         echo "错误：未知的 RDS 操作：$operation" >&2
@@ -1172,6 +1184,402 @@ DML"
     else
         echo "错误：权限设置失败。"
         echo "$result"
+        return 1
+    fi
+}
+
+# 解析 RDS 实例 ID（未传入时用 fzf 选择）
+_rds_resolve_instance_id() {
+    local instance_id=$1
+    local prompt=${2:-"选择 RDS 实例"}
+    if [ -n "$instance_id" ]; then
+        echo "$instance_id"
+        return 0
+    fi
+    local result
+    result=$(call_aliyun_api rds DescribeDBInstances --RegionId "$region" 2>/dev/null)
+    if [ $? -ne 0 ]; then
+        echo "错误：无法获取 RDS 实例列表。" >&2
+        return 1
+    fi
+    local instance_list
+    instance_list=$(echo "$result" | jq -r '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"')
+    if [ -z "$instance_list" ] || [ "$instance_list" = "" ]; then
+        echo "错误：没有找到 RDS 实例。" >&2
+        return 1
+    fi
+    if [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+        echo "$instance_list" | awk '{print $1}'
+        return 0
+    fi
+    if type select_with_fzf >/dev/null 2>&1; then
+        instance_id=$(select_with_fzf "$prompt" "$instance_list" | awk '{print $1}')
+        if [ -z "$instance_id" ]; then
+            echo "错误：未选择实例。" >&2
+            return 1
+        fi
+        echo "$instance_id"
+        return 0
+    fi
+    echo "错误：需要选择 RDS 实例，但未找到交互式选择工具。" >&2
+    return 1
+}
+
+# 列出实例备份集（DescribeBackups）
+rds_backup_list() {
+    local instance_id
+    instance_id=$(_rds_resolve_instance_id "$1" "选择要查看备份的 RDS 实例")
+    [ $? -ne 0 ] && return 1
+    local format=${2:-human}
+
+    local table_header="BackupId\tBackupMode\tBackupStatus\tBackupStartTime\tBackupEndTime\tBackupType\tBackupMethod\tBackupSize\tMetaStatus"
+    local jq_filter='.Items.Backup[]? | [.BackupId, .BackupMode, .BackupStatus, .BackupStartTime, .BackupEndTime, .BackupType, .BackupMethod, (.BackupSize // 0 | tostring), (.MetaStatus // "-")] | @tsv'
+    local result
+    result=$(call_aliyun_api rds DescribeBackups \
+        --DBInstanceId "$instance_id" \
+        --PageSize 30 \
+        --PageNumber 1)
+
+    if [ $? -ne 0 ]; then
+        echo "错误：无法获取备份列表。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    case "$format" in
+    json)
+        echo "$result"
+        ;;
+    tsv)
+        echo -e "$table_header"
+        echo "$result" | jq -r "$jq_filter"
+        ;;
+    human | *)
+        echo "列出 RDS 实例备份：$instance_id"
+        local count
+        count=$(echo "$result" | jq -r '.Items.Backup | length' 2>/dev/null || echo "0")
+        if [ -z "$count" ] || [ "$count" = "0" ] || [ "$count" = "null" ]; then
+            echo "没有找到备份集。"
+        else
+            echo -e "$table_header" | head -1
+            echo "$result" | jq -r "$jq_filter" | awk 'BEGIN {FS="\t"; OFS="\t"} {
+                mode=$2; if(mode=="Manual") mode="手动"; else if(mode=="Automated") mode="自动";
+                status=$3; if(status=="Success") status="成功"; else if(status=="Failed") status="失败";
+                printf "%-12s  %-6s  %-6s  %s  %s  %-12s  %-8s  %s  %s\n", $1, mode, status, $4, $5, $6, $7, $8, $9
+            }'
+        fi
+        ;;
+    esac
+}
+
+# 时间解析顺序：先 macOS 原生 date，再 gdate，最后 fallback 到 date；任一成功即返回
+_rds_local_to_utc() {
+    local local_time="$1"
+    [ -z "$local_time" ] && return 1
+    local epoch out
+    # 1. macOS 原生：/usr/bin/date 才支持 -j -f
+    if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/date ]; then
+        for fmt in "%Y-%m-%dT%H:%M:%S" "%Y-%m-%dT%H:%M" "%Y-%m-%d %H:%M:%S" "%Y-%m-%d %H:%M"; do
+            epoch=$(/usr/bin/date -j -f "$fmt" "$local_time" +%s 2>/dev/null)
+            if [ -n "$epoch" ] && [ "$epoch" -gt 0 ] 2>/dev/null; then
+                out=$(/usr/bin/date -r "$epoch" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+                [ -n "$out" ] && echo "$out" && return 0
+            fi
+        done
+    fi
+    # 2. gdate（GNU coreutils）
+    if command -v gdate >/dev/null 2>&1; then
+        epoch=$(gdate -d "$local_time" +%s 2>/dev/null)
+        if [ -n "$epoch" ] && [ "$epoch" -gt 0 ] 2>/dev/null; then
+            out=$(gdate -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+            [ -n "$out" ] && echo "$out" && return 0
+        fi
+    fi
+    # 3. fallback：系统 date（GNU date -d）
+    epoch=$(date -d "$local_time" +%s 2>/dev/null)
+    if [ -n "$epoch" ] && [ "$epoch" -gt 0 ] 2>/dev/null; then
+        out=$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+        [ -n "$out" ] && echo "$out" && return 0
+    fi
+    return 1
+}
+
+# UTC -> 本地时间（展示用），输出 yyyy-MM-ddTHH:mm:ss（无 Z=本地）。顺序：macOS /usr/bin/date -> gdate -> date
+_rds_utc_to_local() {
+    local utc_time="$1"
+    [ -z "$utc_time" ] && return 1
+    local epoch out
+    # 1. macOS 原生
+    if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/date ]; then
+        utc_time="${utc_time/Z/}"
+        epoch=$(TZ=UTC /usr/bin/date -j -f "%Y-%m-%dT%H:%M:%S" "$utc_time" +%s 2>/dev/null)
+        [ -z "$epoch" ] && epoch=$(TZ=UTC /usr/bin/date -j -f "%Y-%m-%d %H:%M:%S" "${utc_time/T/ }" +%s 2>/dev/null)
+        if [ -n "$epoch" ] && [ "$epoch" -gt 0 ] 2>/dev/null; then
+            out=$(/usr/bin/date -r "$epoch" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null)
+            [ -n "$out" ] && echo "$out" && return
+        fi
+    fi
+    # 2. gdate
+    if command -v gdate >/dev/null 2>&1; then
+        epoch=$(gdate -d "$utc_time" +%s 2>/dev/null)
+        if [ -n "$epoch" ] && [ "$epoch" -gt 0 ] 2>/dev/null; then
+            out=$(gdate -d "@$epoch" +%Y-%m-%dT%H:%M:%S 2>/dev/null)
+            [ -n "$out" ] && echo "$out" && return
+        fi
+    fi
+    # 3. fallback：系统 date
+    epoch=$(date -d "$utc_time" +%s 2>/dev/null)
+    if [ -n "$epoch" ] && [ "$epoch" -gt 0 ] 2>/dev/null; then
+        out=$(date -d "@$epoch" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null)
+        [ -n "$out" ] && echo "$out" && return
+    fi
+    echo "$1"
+}
+
+# 查询可恢复时间范围（DescribeLocalAvailableRecoveryTime）
+rds_recovery_time() {
+    local instance_id
+    instance_id=$(_rds_resolve_instance_id "$1" "选择要查询可恢复时间的 RDS 实例")
+    [ $? -ne 0 ] && return 1
+
+    local result
+    result=$(call_aliyun_api rds DescribeLocalAvailableRecoveryTime --DBInstanceId "$instance_id")
+
+    if [ $? -ne 0 ]; then
+        echo "错误：无法获取可恢复时间范围。请确认实例已开启日志备份。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    local begin end begin_local end_local
+    begin=$(echo "$result" | jq -r '.RecoveryBeginTime')
+    end=$(echo "$result" | jq -r '.RecoveryEndTime')
+    begin_local=$(_rds_utc_to_local "$begin")
+    end_local=$(_rds_utc_to_local "$end")
+    echo "实例: $instance_id"
+    echo "可恢复时间范围（本地时间）: $begin_local ~ $end_local"
+    echo "（API 用 UTC）: $begin ~ $end"
+    echo "$result" | jq '.'
+}
+
+# 用 fzf 选择备份或时间点（返回选中的 BackupId 或 RestoreTime）
+_rds_select_backup_or_time() {
+    local instance_id=$1
+    local backups_json
+    backups_json=$(call_aliyun_api rds DescribeBackups --DBInstanceId "$instance_id" --PageSize 50 --PageNumber 1 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$backups_json" ]; then
+        echo "错误：无法获取备份列表。" >&2
+        return 1
+    fi
+    local list
+    list="TIME_POINT	⏱ 按时间点恢复（输入本地时间）"
+    local line
+    while IFS= read -r line; do
+        [ -n "$line" ] && list="$list"$'\n'"$line"
+    done < <(echo "$backups_json" | jq -r '.Items.Backup[]? | "\(.BackupId)\t\(.BackupEndTime) \(.BackupMode) \(.BackupStatus)"' 2>/dev/null)
+    if [ -z "$list" ] || [ "$list" = "TIME_POINT	⏱ 按时间点恢复（输入本地时间）" ]; then
+        echo "没有可用备份，尝试按时间点恢复。" >&2
+        list="TIME_POINT	⏱ 按时间点恢复（输入本地时间）"
+    fi
+    local choice
+    if type select_with_fzf >/dev/null 2>&1; then
+        choice=$(select_with_fzf "选择备份集或按时间点恢复" "$list")
+    else
+        echo "请选择备份或时间点（输入备份ID 或本地时间 yyyy-MM-dd HH:mm）：" >&2
+        echo "$list" | head -20
+        read -r choice
+    fi
+    [ -z "$choice" ] && return 1
+    if [[ "$choice" == TIME_POINT* ]] || [[ "$choice" == *"按时间点恢复"* ]]; then
+        local range_json
+        range_json=$(call_aliyun_api rds DescribeLocalAvailableRecoveryTime --DBInstanceId "$instance_id" 2>/dev/null)
+        local begin end
+        begin=$(echo "$range_json" | jq -r '.RecoveryBeginTime // empty')
+        end=$(echo "$range_json" | jq -r '.RecoveryEndTime // empty')
+        if [ -n "$begin" ] && [ -n "$end" ]; then
+            echo "可恢复时间范围（本地，无 Z）: $(_rds_utc_to_local "$begin") ~ $(_rds_utc_to_local "$end")" >&2
+        fi
+        read -r -p "输入恢复时间（无Z=本地 带Z=UTC，格式 yyyy-MM-ddTHH:mm:ss）: " restore_time
+        if [ -z "$restore_time" ]; then
+            echo "错误：未输入时间点。" >&2
+            return 1
+        fi
+        local utc_time
+        utc_time=$(_rds_local_to_utc "$restore_time")
+        if [ -z "$utc_time" ]; then
+            echo "错误：时间格式不正确。" >&2
+            return 1
+        fi
+        echo "RESTORE_TIME:$utc_time"
+    else
+        local bid
+        bid=$(echo "$choice" | awk '{print $1}')
+        if [ -n "$bid" ] && [[ "$bid" =~ ^[0-9]+$ ]]; then
+            echo "BACKUP_ID:$bid"
+        else
+            echo "错误：未识别备份ID。" >&2
+            return 1
+        fi
+    fi
+}
+
+# 克隆实例恢复（CloneDBInstance）：按备份集或时间点恢复到新实例
+rds_restore_clone() {
+    local instance_id
+    instance_id=$(_rds_resolve_instance_id "$1" "选择源 RDS 实例")
+    [ $? -ne 0 ] && return 1
+    shift
+
+    local backup_or_time=$1
+    local new_name=$2
+
+    # 未提供备份/时间点时用 fzf 选择
+    if [ -z "$backup_or_time" ]; then
+        local selection
+        selection=$(_rds_select_backup_or_time "$instance_id")
+        [ $? -ne 0 ] && return 1
+        if [[ "$selection" == RESTORE_TIME:* ]]; then
+            backup_or_time="${selection#RESTORE_TIME:}"
+        elif [[ "$selection" == BACKUP_ID:* ]]; then
+            backup_or_time="${selection#BACKUP_ID:}"
+        else
+            echo "错误：未选择有效的备份或时间点。" >&2
+            return 1
+        fi
+    fi
+
+    # 新实例名可选：不填则自动生成（阿里云 API 的 DBInstanceDescription 为可选）
+    if [ -z "$new_name" ]; then
+        new_name="clone-${instance_id}-$(date +%Y%m%d-%H%M)"
+        echo "未指定新实例名，使用: $new_name"
+    fi
+
+    local backup_id=""
+    local restore_time=""
+    if [[ "$backup_or_time" =~ ^[0-9]+$ ]]; then
+        backup_id=$backup_or_time
+    else
+        restore_time=$backup_or_time
+        # 若像本地时间（含空格或无 Z），转为 UTC
+        if [[ "$restore_time" =~ [\ ] ]] || [[ "$restore_time" != *Z ]]; then
+            local utc
+            utc=$(_rds_local_to_utc "$restore_time")
+            [ -n "$utc" ] && restore_time=$utc
+        fi
+    fi
+
+    echo "克隆实例恢复：源 $instance_id -> 新实例 $new_name (Serverless)"
+    if [ -n "$backup_id" ]; then
+        echo "  使用备份集: $backup_id"
+    else
+        echo "  使用时间点: $restore_time"
+    fi
+
+    if ! confirm_action "将创建新 RDS Serverless 实例并产生费用"; then
+        return 1
+    fi
+
+    # 仅需从源实例取 ZoneId（定价依赖）
+    local src_json
+    src_json=$(call_aliyun_api rds DescribeDBInstances --RegionId "${region:-cn-hangzhou}" --DBInstanceId "$instance_id" 2>/dev/null)
+    local zone_id
+    zone_id=$(echo "$src_json" | jq -r --arg id "$instance_id" '.Items.DBInstance[] | select(.DBInstanceId==$id) | .ZoneId // empty')
+
+    # 最少参数：Serverless + VPC + ZoneId + ServerlessConfig
+    local api_args=(
+        --RegionId "${region:-cn-hangzhou}"
+        --DBInstanceId "$instance_id"
+        --PayType "Serverless"
+        --InstanceNetworkType "VPC"
+        --DBInstanceStorageType "general_essd"
+        --DBInstanceDescription "$new_name"
+        --Category "serverless_basic"
+        --ServerlessConfig '{"AutoPause":true,"SwitchForce":true}'
+    )
+    [ -n "$zone_id" ] && api_args+=(--ZoneId "$zone_id")
+    [ -n "$backup_id" ] && api_args+=(--BackupId "$backup_id")
+    [ -n "$restore_time" ] && api_args+=(--RestoreTime "$restore_time")
+
+    local result
+    result=$(call_aliyun_api rds CloneDBInstance "${api_args[@]}")
+
+    if [ $? -eq 0 ]; then
+        echo "克隆任务已提交："
+        echo "$result" | jq '.'
+        local new_id
+        new_id=$(echo "$result" | jq -r '.DBInstanceId')
+        [ -n "$new_id" ] && [ "$new_id" != "null" ] && echo "新实例 ID: $new_id"
+        log_result "${profile:-}" "$region" "rds" "restore-clone" "$result"
+    else
+        echo "错误：克隆实例失败。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+}
+
+# 库表恢复到原实例（RestoreTable）：仅 MySQL/PostgreSQL，需开启日志备份
+rds_restore_table() {
+    local instance_id
+    instance_id=$(_rds_resolve_instance_id "$1" "选择要恢复库表的 RDS 实例")
+    [ $? -ne 0 ] && return 1
+    shift
+
+    local backup_or_time=$1
+    local table_meta=$2
+
+    if [ -z "$backup_or_time" ]; then
+        echo "用法: rds restore-table <实例ID> <备份ID|时间点> <TableMeta>" >&2
+        echo "  TableMeta 为 JSON，例如只恢复库:" >&2
+        echo '    [{"type":"db","name":"mydb","newname":"mydb_restored"}]' >&2
+        echo "  恢复库及表（MySQL）:" >&2
+        echo '    [{"type":"db","name":"mydb","newname":"mydb_restored","tables":[{"type":"table","name":"t1","newname":"t1_restored"}]}]' >&2
+        echo "  时间点支持本地时间（如 yyyy-MM-dd HH:mm）。先使用 backup-list / recovery-time 确认。" >&2
+        return 1
+    fi
+
+    local backup_id=""
+    local restore_time=""
+    if [[ "$backup_or_time" =~ ^[0-9]+$ ]]; then
+        backup_id=$backup_or_time
+    else
+        restore_time=$backup_or_time
+        if [[ "$restore_time" =~ [\ ] ]] || [[ "$restore_time" != *Z ]]; then
+            local utc
+            utc=$(_rds_local_to_utc "$restore_time")
+            [ -n "$utc" ] && restore_time=$utc
+        fi
+    fi
+
+    if [ -z "$table_meta" ]; then
+        read -r -p "请输入 TableMeta JSON（恢复的库/表及新名称）: " table_meta
+        if [ -z "$table_meta" ]; then
+            echo "错误：TableMeta 不能为空。" >&2
+            return 1
+        fi
+    fi
+
+    if ! echo "$table_meta" | jq . >/dev/null 2>&1; then
+        echo "错误：TableMeta 必须是合法 JSON。" >&2
+        return 1
+    fi
+
+    local api_args=(
+        --DBInstanceId "$instance_id"
+        --TableMeta "$table_meta"
+    )
+    [ -n "$backup_id" ] && api_args+=(--BackupId "$backup_id")
+    [ -n "$restore_time" ] && api_args+=(--RestoreTime "$restore_time")
+
+    local result
+    result=$(call_aliyun_api rds RestoreTable "${api_args[@]}")
+
+    if [ $? -eq 0 ]; then
+        echo "库表恢复任务已提交。"
+        echo "$result" | jq '.'
+        log_result "${profile:-}" "$region" "rds" "restore-table" "$result"
+    else
+        echo "错误：库表恢复失败。请确认实例已开启日志备份且备份集支持库表恢复（MetaStatus=OK）。" >&2
+        echo "$result" >&2
         return 1
     fi
 }
