@@ -177,3 +177,82 @@ handle_config_commands() {
         ;;
     esac
 }
+
+# ---------- 地域列表（region list）----------
+# 与 config 同文件：地域列表用于辅助选择 RegionId，归属配置相关能力
+
+show_region_help() {
+    echo "地域 (region) 操作："
+    echo "  list [human|json|tsv]   - 查询可用地域列表（默认 human 格式）"
+    echo "  help | h                - 显示此帮助"
+    echo ""
+    echo "示例："
+    echo "  $0 region list"
+    echo "  $0 region list json"
+    echo "  $0 region list tsv"
+}
+
+region_list() {
+    local format=${1:-human}
+    local result
+    if ! result=$(call_aliyun_api ecs DescribeRegions --AcceptLanguage zh-CN 2>/dev/null); then
+        echo "错误：无法获取地域列表。请检查您的凭证和网络。" >&2
+        return 1
+    fi
+
+    local table_header="RegionId\tLocalName\tStatus\tRegionEndpoint"
+    local jq_filter='.Regions.Region[]? | [.RegionId, .LocalName, .Status, .RegionEndpoint] | @tsv'
+    local empty_message="未获取到地域列表。"
+    local title="可用地域列表："
+
+    case "$format" in
+    json)
+        echo "$result"
+        log_result "${profile:-}" "${region:-}" "region" "list" "$result" "json"
+        ;;
+    tsv)
+        echo -e "$table_header"
+        echo "$result" | jq -r "$jq_filter" 2>/dev/null
+        log_result "${profile:-}" "${region:-}" "region" "list" "$result" "tsv"
+        ;;
+    human | *)
+        echo "$title"
+        local temp_output
+        temp_output=$(echo "$result" | jq -r "$jq_filter" 2>/dev/null)
+        local count
+        if [ -n "$temp_output" ] && [ "$temp_output" != "null" ] && [ "$temp_output" != "" ]; then
+            count=$(echo "$temp_output" | grep -c . || echo "0")
+        else
+            count="0"
+        fi
+
+        if [ "$count" = "0" ] || [ -z "$count" ]; then
+            echo "$empty_message"
+        else
+            echo -e "$table_header" | head -1
+            echo "$temp_output" | awk 'BEGIN {FS="\t"; OFS="\t"} {
+                for (i=1; i<=NF; i++) {
+                    printf "%-28s  ", $i
+                }
+                print ""
+            }'
+        fi
+        log_result "${profile:-}" "${region:-}" "region" "list" "$result" "$format"
+        ;;
+    esac
+}
+
+handle_region_commands() {
+    local operation=${1:-list}
+    shift
+
+    case "$operation" in
+    list) region_list "${1:-human}" ;;
+    help | h) show_region_help ;;
+    *)
+        echo "错误：未知的 region 操作：$operation" >&2
+        show_region_help
+        return 1
+        ;;
+    esac
+}

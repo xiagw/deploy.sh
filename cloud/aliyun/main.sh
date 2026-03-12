@@ -110,6 +110,7 @@ main() {
     case "$service" in
     get-all) list_all_services ;;
     config) handle_config_commands "${args[@]}" ;;
+    region) handle_region_commands "${args[@]}" ;;
     balance) handle_balance_commands "${args[@]}" ;;
     cost) handle_cost_commands "${args[@]}" ;;
     ecs) handle_ecs_commands "${args[@]}" ;;

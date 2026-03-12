@@ -37,6 +37,7 @@ show_help() {
     echo "  nas      - 文件存储"
     echo "  ack      - 容器服务 Kubernetes 版"
     echo "  config   - 配置管理"
+    echo "  region   - 地域列表查询"
     echo "  balance  - 账户余额查询"
     echo "  cost     - 费用查询"
     echo
