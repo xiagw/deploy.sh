@@ -84,16 +84,23 @@ find_and_sync_files() {
         return 1
     fi
 
+    # 目录则在该目录下列文件；单文件则取其所在目录，均用 fzf 选择
+    local search_path
     if [[ -d "$source_path" ]]; then
-        key_file=$(find "$source_path" -type f -name "*.key" | head -n 1)
-        pem_file=$(find "$source_path" -type f -name "*.pem" | head -n 1)
-        crt_file=$(find "$source_path" -type f -name "*.crt" | head -n 1)
+        search_path="$source_path"
     else
-        case "$source_path" in
-        *.key) key_file="$source_path" ;;
-        *.pem) pem_file="$source_path" ;;
-        *.crt) crt_file="$source_path" ;;
-        esac
+        search_path=$(dirname "$source_path")
+    fi
+    local cert_sel
+    # 由 fzf 通过 FZF_DEFAULT_COMMAND 直接浏览目录中的文件，无需先 find
+    key_file=$(FZF_DEFAULT_COMMAND="find \"$search_path\" -type f" fzf --height=50% --prompt="选择私钥文件 (同步为 default.key，Enter 跳过): " 2>/dev/null) || key_file=""
+    cert_sel=$(FZF_DEFAULT_COMMAND="find \"$search_path\" -type f" fzf --height=50% --prompt="选择证书文件 (同步为 default.pem，Enter 跳过): " 2>/dev/null) || cert_sel=""
+    if [[ -n "$cert_sel" ]]; then
+        if [[ "$cert_sel" == *.crt ]]; then
+            crt_file="$cert_sel"
+        else
+            pem_file="$cert_sel"
+        fi
     fi
 
     for file in {"$key_file:default.key","$pem_file:default.pem","$crt_file:default.pem"}; do
@@ -127,7 +134,7 @@ find_and_sync_files() {
     done
 
     if [[ -z "$key_file" && -z "$pem_file" && -z "$crt_file" ]]; then
-        echo "错误: 未找到 .key, .pem 或 .crt 文件" >&2
+        echo "错误: 未选择任何要同步的私钥或证书文件" >&2
         return 1
     fi
 
@@ -222,10 +229,17 @@ deploy_ssl() {
     echo "正在查找并同步文件..."
     if ! find_and_sync_files "$extracted_path" "$target_host" "$target_path"; then
         echo "错误: 同步失败，请检查错误信息" >&2
+        [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]] && rm -rf "$TEMP_DIR" && unset TEMP_DIR
         return 1
     fi
 
     echo "同步完成"
+    # 若源为 zip 则解压到了临时目录，同步完成后立即清理
+    if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" && "$extracted_path" == "$TEMP_DIR" ]]; then
+        echo "清理临时目录: $TEMP_DIR"
+        rm -rf "$TEMP_DIR"
+        unset TEMP_DIR
+    fi
 }
 
 # 添加微信验证文件处理函数
