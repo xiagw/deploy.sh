@@ -1,3 +1,5 @@
+# Redis 基础镜像，可通过 REDIS_PASSWORD 配置密码。
+# 示例：docker build -f conf/dockerfile/Dockerfile.base.redis -t redis:base . && docker run -e REDIS_PASSWORD=xxx redis:base
 ARG MIRROR=
 ARG REDIS_VERSION=latest
 FROM ${MIRROR}redis:${REDIS_VERSION}

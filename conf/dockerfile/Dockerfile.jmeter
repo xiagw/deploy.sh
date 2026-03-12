@@ -1,3 +1,5 @@
+# JMeter 压测镜像，需在构建时 mount 源码或提供 build.sh。
+# 示例：docker build -f conf/dockerfile/Dockerfile.jmeter --build-arg JMETER_VERSION=5.6 -t jmeter:run .
 FROM openjdk:8-jre-slim
 ARG IN_CHINA=false
 ARG JMETER_VERSION=5.6

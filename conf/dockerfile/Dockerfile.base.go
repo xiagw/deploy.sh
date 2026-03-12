@@ -1,3 +1,5 @@
+# Go 多阶段构建：编译二进制 + Nginx 运行；需在构建时 mount 源码到 /src。
+# 示例：docker build -f conf/dockerfile/Dockerfile.base.go --build-arg GO_VERSION=1.22 -t mygo:app .
 # Build stage
 ARG MIRROR=
 ARG GO_VERSION=1.22

@@ -1,3 +1,5 @@
+# Python 基础镜像，工作目录 /app，可 COPY requirements.txt 后 ONBUILD 执行 onbuild.sh。
+# 示例：docker build -f conf/dockerfile/Dockerfile.base.python --build-arg PYTHON_VERSION=3.12 -t mypy:base .
 ARG PYTHON_VERSION=3.12
 FROM python:${PYTHON_VERSION}-slim
 # Set Timezone

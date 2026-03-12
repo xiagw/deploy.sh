@@ -1,4 +1,8 @@
-# 使用多阶段构建
+# =============================================================================
+# Nginx 基础镜像（Alpine），含 GeoIP2 模块
+# 阶段1：编译带 GeoIP2 的 nginx；阶段2：复制二进制到最终镜像
+# 示例：docker build -f conf/dockerfile/Dockerfile.base.nginx -t mynginx:base .
+# =============================================================================
 ARG MIRROR=
 ARG NGINX_VERSION=stable-alpine
 ARG IN_CHINA=false
@@ -18,7 +22,7 @@ RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
     sh $BUILD_SH geo
 
 
-# 最终镜像
+# 最终镜像（与官方 nginx 同结构，仅替换为带 GeoIP2 的二进制）
 FROM ${MIRROR}nginx:${NGINX_VERSION}
 
 LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"

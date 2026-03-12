@@ -1,3 +1,5 @@
+# Node 基础镜像，构建时安装 npm 依赖，运行由 run1.sh 执行 npm run start。
+# 示例：docker build -f conf/dockerfile/Dockerfile.base.node --build-arg IN_CHINA=true -t mynode:base .
 ARG MIRROR=
 ARG NODE_VERSION=20
 

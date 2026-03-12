@@ -1,3 +1,5 @@
+# PHP CodeSniffer 镜像，用于代码规范检查。
+# 示例：docker run --rm -v $(pwd):/project phpcs --standard=PSR12 src/
 FROM php:7.2-alpine
 ARG IN_CHINA=false
 RUN set -xe; \

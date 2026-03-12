@@ -1,3 +1,5 @@
+# PHP 基础镜像（Ubuntu + PHP-FPM + Swoole 等），run0/run1 启动服务。
+# 示例：docker build -f conf/dockerfile/Dockerfile.base.php --build-arg PHP_VERSION=8.5 -t myphp:base .
 ARG MIRROR=
 ## PHP <= 7.2
 # ARG SWOOLE_VERSION=4.8

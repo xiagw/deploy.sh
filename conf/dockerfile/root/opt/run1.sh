@@ -2,11 +2,9 @@
 # -*- coding: utf-8 -*-
 
 #=====================================================
-# 文件名: run1.sh
-# 版本: 1.0
-# 描述: Spring Boot JAR / Nodejs / PHP 智能启动脚本
-# 作者: AI Assistant
-# 创建时间: 2025-03-21
+# run1.sh：按环境自动启动 Java（JAR）/ PHP（PHP-FPM + Nginx）/ Node（npm run start）
+# 支持 jvm.options、JAVA_OPTS、多 JAR、多配置文件。由 run0.sh 调用。
+# 示例：在容器内可 touch /opt/.nohup 使用 nohup 启动；或 touch /opt/.debug 进入调试（tail -f 日志）
 #=====================================================
 
 # 进程ID数组
@@ -54,10 +52,10 @@ rotate_log() {
     fi
 }
 
-# 函数：清理进程
+# 函数：清理进程（收到 SIGTERM 时由 trap 调用，确保业务进程收到 SIGTERM 后退出）
+# 注意：/opt/run1.pid 由 run0 在发完信号后删除，run1 不删避免权限/竞态问题
 cleanup() {
     log "begin clean..."
-
     for pid in "${G_PIDS[@]}"; do
         if kill -0 "${pid}" 2>/dev/null; then
             kill -TERM "${pid}" 2>/dev/null
@@ -385,6 +383,9 @@ main() {
     G_NAME=$(basename "$0")
     G_PATH=$(dirname "$(readlink -f "$0")")
     G_HTML=/var/www/html
+
+    # 供 run0 在 docker stop 时向本进程发 SIGTERM，以便本脚本 trap 后向业务进程传递
+    printf '%s' "$$" >/opt/run1.pid 2>/dev/null || true
 
     # 初始化日志文件路径
     if [ -w "/app" ]; then

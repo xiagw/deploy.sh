@@ -1,7 +1,9 @@
+# 构建时忽略下列文件/目录，减小上下文、避免敏感或无关文件进镜像。用法：与 Dockerfile 同目录或通过 -f 指定。
 ######################### COMMON ###############################################
-# https://raw.githubusercontent.com/erdaltsksn/dockerignore/main/templates/Common.dockerignore
+# 参考：https://raw.githubusercontent.com/erdaltsksn/dockerignore/main/templates/Common.dockerignore
 ################################################################################
-# Git
+
+# 版本控制与协作
 .git/
 .gitignore
 .gitattributes
@@ -14,14 +16,15 @@
 Dockerfile*
 docker-compose.*
 
-# Documentation
+# 文档与测试（通常不需要打进运行镜像）
 *.md
 doc/
 docs/
 LICENSE
 tests/
 
-# macOS (optional)
+# 系统与编辑器
+# macOS
 .DS_Store
 
 ## vim swp
@@ -53,5 +56,5 @@ storage/logs/*
 *.log
 package-lock.json
 logs
-## Dependency directories
+# 若构建时需安装依赖，可不忽略 node_modules
 # node_modules/

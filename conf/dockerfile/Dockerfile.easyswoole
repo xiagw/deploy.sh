@@ -1,3 +1,5 @@
+# EasySwoole / Swoole 运行镜像（PHP 7.4 + Swoole 4.7），用于常驻进程服务。
+# 示例：docker build -f conf/dockerfile/Dockerfile.easyswoole -t easyswoole:app .
 FROM phpswoole/swoole:4.7-php7.4
 ARG IN_CHINA=true
 ARG COMPOSER_INSTALL=true

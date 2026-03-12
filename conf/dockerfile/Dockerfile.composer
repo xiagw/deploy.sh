@@ -1,4 +1,5 @@
-
+# Composer 依赖构建镜像，用于安装 PHP 依赖后拷贝到运行镜像。
+# 示例：docker run --rm -v $(pwd):/app composer install --no-dev
 FROM composer:2.0.8
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>"
 #ENV TIMEZONE="UTC"

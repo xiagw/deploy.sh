@@ -1,5 +1,16 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
+# =============================================================================
+# MySQL 备份脚本（在 MySQL 容器内以后台任务方式运行）
+# 功能：等待 MySQL 就绪后，在指定时间窗口内执行全库 mysqldump，输出到 /backup，
+#       并可根据 BACKUP_DIR/.clean 中写的天数清理过期备份。
+#
+# 使用：由 MySQL 镜像的 Dockerfile 在 entrypoint 中注入并后台执行，例如
+#       (exec /opt/mbk.sh) &
+#
+# 依赖环境变量：MYSQL_ROOT_PASSWORD
+# 备份目录：/backup；清理规则：在 /backup/.clean 中写数字 N 表示删除 N 天前的备份
+# =============================================================================
 
 # set -Eeo pipefail
 

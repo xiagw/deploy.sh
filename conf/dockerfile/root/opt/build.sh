@@ -1,4 +1,21 @@
 #!/bin/bash
+# =============================================================================
+# 构建阶段通用脚本（在 Docker 镜像构建时由 Dockerfile 调用）
+# 根据当前镜像内已存在的命令自动选择：Maven / Composer / Node / Nginx / PHP /
+# JDK 运行时 / MySQL / Redis / JMeter / Tomcat 等，执行依赖安装与配置。
+#
+# 用法（由 Dockerfile 通过 mount 传入 /src，或从 BUILD_URL 拉取）：
+#   bash build.sh              # 自动检测环境
+#   bash build.sh geo           # Nginx：仅安装 GeoIP 相关（builder 阶段）
+#   bash build.sh runtime       # Nginx：仅运行时依赖
+#   bash build.sh swoole        # PHP：拷贝已编译的 swoole 扩展
+#
+# 依赖环境变量（示例）：
+#   IN_CHINA=true               # 使用国内 apt/apk/maven/npm 镜像
+#   PHP_VERSION=8.2             # PHP 版本
+#   MVN_PROFILE=main            # Maven profile
+#   INSTALL_FONTS=true          # JDK 镜像中安装字体
+# =============================================================================
 
 _is_china() {
     ${IN_CHINA:-false} || ${CHANGE_SOURCE:-false}
