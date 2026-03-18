@@ -319,6 +319,7 @@ execute_command() {
     local config_section
     config_section=$(grep -A10 "^\[$gitlab_profile\]" "$gitlab_python_config")
     GITLAB_URL=$(echo "$config_section" | grep "^url" | head -1 | cut -d= -f2 | tr -d ' ')
+    GITLAB_URL="${GITLAB_URL%/}"
     GITLAB_TOKEN=$(echo "$config_section" | grep "^private_token" | head -1 | cut -d= -f2 | tr -d ' ')
     [[ -z "$GITLAB_URL" ]] && { _msg error "Cannot read url from config"; return 1; }
     [[ -z "$GITLAB_TOKEN" ]] && { _msg error "Cannot read private_token from config"; return 1; }
