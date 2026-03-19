@@ -351,6 +351,7 @@ execute_command() {
             # 从 GitLab URL 提取默认邮箱域名
             local default_email_domain email_domain
             default_email_domain=$(echo "$GITLAB_URL" | sed -E 's|^https?://||' | cut -d. -f2-)
+            default_email_domain="${default_email_domain%/}"
             read -rp "[?] Username: " gitlab_account
             read -rp "[?] Email domain [$default_email_domain]: " email_domain
             email_domain="${email_domain:-$default_email_domain}"
