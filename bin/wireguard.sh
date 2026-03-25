@@ -2,6 +2,48 @@
 # shellcheck disable=SC2029
 # set -xe
 
+_check_fzf() {
+    command -v fzf >/dev/null 2>&1 || {
+        _msg red "fzf not found / 未安装 fzf: brew install fzf"
+        return 1
+    }
+}
+
+# shellcheck disable=SC2164
+_fzf_pick_wg_conf() {
+    local prompt="$1"
+    local with_quit="${2:-1}"
+    local conf confs=()
+    _check_fzf || return 1
+    cd "$G_DATA" || return 1
+    shopt -s nullglob
+    confs=(wg*.conf)
+    shopt -u nullglob
+    if [[ ${#confs[@]} -eq 0 ]]; then
+        _msg yellow "no wg*.conf in $G_DATA"
+        return 1
+    fi
+    if [[ "$with_quit" == 1 ]]; then
+        conf=$({
+            printf '%s\n' quit
+            printf '%s\n' "${confs[@]}" | LC_ALL=C sort
+        } | fzf --prompt="${prompt}: " --height "${FZF_HEIGHT:-40%}") || return 1
+    else
+        conf=$(printf '%s\n' "${confs[@]}" | LC_ALL=C sort | fzf --prompt="${prompt}: " --height "${FZF_HEIGHT:-40%}") || return 1
+    fi
+    [[ -z "$conf" ]] && return 1
+    printf '%s' "$conf"
+}
+
+_fzf_pick_line() {
+    local prompt="$1"
+    _check_fzf || return 1
+    local choice
+    choice=$(cat | fzf --prompt="${prompt}: " --height "${FZF_HEIGHT:-40%}") || return 1
+    [[ -z "$choice" ]] && return 1
+    printf '%s' "$choice"
+}
+
 set_peer() {
     local file="$1"
     ## 新建的client，直接选择对端配置文件
@@ -10,11 +52,8 @@ set_peer() {
     ## 不是新建的client，需要选择已存在的client
     else
         _msg green "select exist conf/选择已存在的配置"
-        cd "$G_DATA" || exit 1
-        select file in wg*.conf quit; do
-            [[ "$file" == 'quit' ]] && exit
-            break
-        done
+        file=$(_fzf_pick_wg_conf "select exist conf/选择已存在的配置" 1) || exit 1
+        [[ "$file" == 'quit' ]] && exit
         client_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$file")
         client_key_pre=$(awk '/PresharedKey/ {print $4; exit}' "$file")
         client_ip_public=$(awk '/^### public_ip:/ {print $3; exit}' "$file")
@@ -26,7 +65,8 @@ set_peer() {
     _msg red "select peer conf/选择对端配置文件"
     cd "$G_DATA" || exit 1
     # select peer_conf in $G_DATA/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
-    select peer_conf in wg*.conf quit; do
+    while true; do
+        peer_conf=$(_fzf_pick_wg_conf "select peer conf/选择对端配置文件" 1) || break
         [[ "$peer_conf" == 'quit' ]] && break
         peer_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$peer_conf")
         peer_ip_pub=$(awk '/^### public_ip:/ {print $3; exit}' "$peer_conf")
@@ -140,7 +180,8 @@ get_qrcode() {
     fi
     local conf
     cd "$G_DATA" || exit 1
-    select conf in wg*.conf quit; do
+    while true; do
+        conf=$(_fzf_pick_wg_conf "qrcode conf/选择配置" 1) || break
         [[ "${conf}" == 'quit' || ! -f "${conf}" ]] && break
         _msg green "${conf}.png"
         qrencode -o "${conf}.png" -t PNG <"$conf"
@@ -151,17 +192,15 @@ revoke_client() {
     _msg green "Select conf to revoke/选择要撤销的配置文件"
     cd "$G_DATA" || exit 1
     local conf
-    select conf in wg*.conf quit; do
-        [[ "$conf" == 'quit' ]] && break
-        _msg green "Selected/已选择: $conf"
-        _msg yellow "revoke from all conf/撤销在所有配置文件中的引用: ${conf##*/}"
-        grep --color "^### ${conf##*/} begin" "$G_DATA"/wg*.conf
-        sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$G_DATA"/wg*.conf
-        _msg yellow "remove/删除: $conf"
-        rm -f "$conf"
-        _msg red "!!! DONT forget update conf to Server/Client and restart wireguard/不要忘记更新配置到服务器/客户端并重启 WireGuard !!!"
-        break
-    done
+    conf=$(_fzf_pick_wg_conf "revoke conf/撤销配置" 1) || return 1
+    [[ "$conf" == 'quit' ]] && return 0
+    _msg green "Selected/已选择: $conf"
+    _msg yellow "revoke from all conf/撤销在所有配置文件中的引用: ${conf##*/}"
+    grep --color "^### ${conf##*/} begin" "$G_DATA"/wg*.conf
+    sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$G_DATA"/wg*.conf
+    _msg yellow "remove/删除: $conf"
+    rm -f "$conf"
+    _msg red "!!! DONT forget update conf to Server/Client and restart wireguard/不要忘记更新配置到服务器/客户端并重启 WireGuard !!!"
 }
 
 restart_host() {
@@ -182,24 +221,26 @@ restart_host() {
 }
 
 reload_conf() {
+    local conf host
     _msg red "Please select conf/请选择配置文件"
     cd "$G_DATA" || exit 1
-    select conf in wg*.conf quit; do
-        [[ "${conf}" == 'quit' ]] && break
-        _msg red "selected/已选择配置文件: $conf"
-        if [ -f "$HOME/.ssh/config" ]; then
-            select host in $(awk 'NR>1' "$HOME/.ssh/config"* | awk '/^Host/ {print $2}') quit; do
-                [[ "${host}" == 'quit' ]] && break
-                restart_host "$conf" "$host"
-                break
-            done
-        else
-            _msg yellow "not found/未找到: $HOME/.ssh/config"
-            read -rp "Enter host IP/输入主机IP: " host
-            restart_host "$conf" "$host"
-        fi
-        break
-    done
+    conf=$(_fzf_pick_wg_conf "Please select conf/请选择配置文件" 1) || return 1
+    [[ "${conf}" == 'quit' ]] && return 0
+    _msg red "selected/已选择配置文件: $conf"
+    if [ -f "$HOME/.ssh/config" ]; then
+        host=$(
+            {
+                printf '%s\n' quit
+                awk 'NR>1' "$HOME/.ssh/config"* | awk '/^Host/ {print $2}'
+            } | LC_ALL=C sort -u | _fzf_pick_line "SSH host"
+        ) || return 1
+        [[ "${host}" == 'quit' || -z "${host}" ]] && return 0
+        restart_host "$conf" "$host"
+    else
+        _msg yellow "not found/未找到: $HOME/.ssh/config"
+        read -rp "Enter host IP/输入主机IP: " host
+        restart_host "$conf" "$host"
+    fi
 }
 # ssh root@"$host" "systemctl restart wg-quick@wg0"
 # wg genkey | tee privatekey | wg pubkey > publickey; cat privatekey publickey; rm privatekey publickey
