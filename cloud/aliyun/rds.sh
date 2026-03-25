@@ -16,7 +16,7 @@ show_rds_help() {
     echo "  account-add <实例ID> <账号> <密码> [描述] - 创建数据库账号"
     echo "  account-del <实例ID> <账号>             - 删除数据库账号"
     echo "  account-get <实例ID> [format]           - 列出数据库账号"
-    echo "  account-set <实例ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
+    echo "  account-set <实例ID> <账号> <数据库名> [权限]  - 设置账号数据库权限（只读/读写）"
     echo "  db-get <实例ID> [format]                - 列出数据库"
     echo "  db-add <实例ID> <数据库名> [字符集]     - 创建数据库"
     echo "  db-del <实例ID> <数据库名>              - 删除数据库"
@@ -36,6 +36,7 @@ show_rds_help() {
     echo "  $0 rds account-del rm-xxx myuser"
     echo "  $0 rds account-get rm-xxx"
     echo "  $0 rds account-set rm-xxx myuser mydb ReadWrite"
+    echo "  $0 rds account-set rm-xxx myuser mydb 只读"
     echo "  $0 rds db-get rm-xxx"
     echo "  $0 rds db-add rm-xxx mydb utf8mb4"
     echo "  $0 rds db-del rm-xxx mydb"
@@ -387,6 +388,7 @@ rds_update() {
     echo "更新 RDS 实例："
     local result
     result=$(call_aliyun_api rds ModifyDBInstanceDescription \
+        --RegionId "${region:-}" \
         --DBInstanceId "$instance_id" \
         --DBInstanceDescription "$new_name")
 
@@ -447,7 +449,9 @@ rds_delete() {
 
     echo "删除 RDS 实例："
     local result
-    result=$(call_aliyun_api rds DeleteDBInstance --DBInstanceId "$instance_id")
+    result=$(call_aliyun_api rds DeleteDBInstance \
+        --RegionId "${region:-}" \
+        --DBInstanceId "$instance_id")
 
     if [ $? -eq 0 ]; then
         echo "RDS 实例删除成功。"
@@ -466,7 +470,7 @@ rds_delete() {
 rds_account_create() {
     local instance_id=$1
     local account_name=$2
-    local password=${3:-$(_get_random_password 2>/dev/null)}
+    local password=$3
     local description=${4:-"Created by CLI"}
 
     # 如果没有提供实例ID，则使用 fzf 交互式选择
@@ -514,7 +518,19 @@ rds_account_create() {
     if [ -z "$password" ]; then
         read -r -p "请输入密码 (回车生成随机密码): " password_input
         if [ -z "$password_input" ]; then
-            password=$(_get_random_password 2>/dev/null)
+            local try_count=0
+            local candidate_password=""
+            password=""
+            while [ $try_count -lt 10 ]; do
+                try_count=$((try_count + 1))
+                candidate_password=$(_get_random_password 14 2>/dev/null)
+                [ -z "$candidate_password" ] && continue
+                echo "$candidate_password" | grep -q "[A-Z]" || continue
+                echo "$candidate_password" | grep -q "[a-z]" || continue
+                echo "$candidate_password" | grep -q "[0-9]" || continue
+                password="$candidate_password"
+                break
+            done
             if [ -z "$password" ]; then
                 echo "错误：无法生成密码，请手动指定密码。" >&2
                 return 1
@@ -1142,25 +1158,42 @@ rds_account_grant() {
         fi
     fi
 
-    # 如果没有提供权限，则使用 fzf 选择
+    # 如果没有提供权限，则使用 fzf 选择（仅只读/读写）
     if [ -z "$privilege" ]; then
-        local privilege_list="ReadWrite
-ReadOnly
-DDL
-DML"
+        local privilege_list="读写 (ReadWrite)
+只读 (ReadOnly)"
         if type select_with_fzf >/dev/null 2>&1; then
             privilege=$(select_with_fzf "选择权限级别" "$privilege_list")
             if [ -z "$privilege" ]; then
                 privilege="ReadWrite"  # 默认权限
+            elif [[ "$privilege" == *"ReadOnly"* ]]; then
+                privilege="ReadOnly"
+            else
+                privilege="ReadWrite"
             fi
         else
-            read -r -p "请输入权限 (ReadWrite/ReadOnly/DDL/DML) [默认: ReadWrite]: " privilege_input
+            read -r -p "请输入权限 (读写/只读 或 ReadWrite/ReadOnly) [默认: 读写]: " privilege_input
             privilege=${privilege_input:-ReadWrite}
         fi
     fi
 
+    # 兼容中文权限输入
+    case "$privilege" in
+    读写 | readwrite | Readwrite | READWRITE)
+        privilege="ReadWrite"
+        ;;
+    只读 | readonly | Readonly | READONLY)
+        privilege="ReadOnly"
+        ;;
+    esac
+
     if ! validate_required_params "$instance_id" "$account_name" "$db_name" "错误：实例ID、账号名和数据库名不能为空。"; then
         echo "用法：rds account-set <实例ID> <账号> <数据库名> [权限]" >&2
+        return 1
+    fi
+
+    if [ "$privilege" != "ReadWrite" ] && [ "$privilege" != "ReadOnly" ]; then
+        echo "错误：权限仅支持 读写/只读（或 ReadWrite/ReadOnly）。" >&2
         return 1
     fi
 

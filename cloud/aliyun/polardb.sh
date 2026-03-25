@@ -19,7 +19,7 @@ show_polardb_help() {
     echo "  account-set <集群ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
     echo "  db-get <集群ID>                        - 列出数据库"
     echo "  db-add <集群ID> <数据库名> [字符集]    - 创建数据库"
-    echo "  db-del <集群ID> <数据库名>             - 删除数据库"
+    echo "  db-del [<集群ID> <数据库名>]         - 删除数据库（参数可选，可用 fzf 选择）"
     echo "  ip-get <集群ID>                        - 列出集群IP白名单"
     echo "  ip-set <集群ID> <IP列表>               - 设置集群IP白名单（覆盖模式）"
     echo "  ip-append <集群ID> <IP列表>            - 追加IP到白名单"
@@ -625,9 +625,65 @@ polardb_db_delete() {
     local cluster_id=$1
     local db_name=$2
 
+    if [ -n "$db_name" ] && [ -z "$cluster_id" ]; then
+        echo "错误：仅提供数据库名时无法定位集群，请提供集群 ID，或使用「polardb db-del」由 fzf 依次选择集群与数据库。" >&2
+        echo "用法：polardb db-del [<集群ID> <数据库名>]" >&2
+        return 1
+    fi
+
+    if [ -z "$cluster_id" ] || [ -z "$db_name" ]; then
+        if [ -z "$cluster_id" ]; then
+            local cluster_list
+            cluster_list=$(aliyun --profile "${profile:-}" polardb DescribeDBClusters --RegionId "$region" 2>/dev/null | jq -r '.Items.DBCluster[] | "\(.DBClusterId) (\(.DBClusterDescription)) [\(.DBType)]"')
+
+            if [ -z "$cluster_list" ]; then
+                echo "错误：没有找到 PolarDB 集群。" >&2
+                return 1
+            elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                cluster_id=$(echo "$cluster_list" | awk '{print $1}')
+                echo "自动选择唯一的 PolarDB 集群: $cluster_id"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    cluster_id=$(select_with_fzf "选择 PolarDB 集群" "$cluster_list" | awk '{print $1}')
+                    if [ -z "$cluster_id" ]; then
+                        echo "错误：未选择集群。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择 PolarDB 集群，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+
+        if [ -z "$db_name" ]; then
+            local db_list
+            db_list=$(aliyun --profile "${profile:-}" polardb DescribeDatabases --DBClusterId "$cluster_id" 2>/dev/null | jq -r '.Databases.Database[] | "\(.DBName) [\(.CharacterSetName)] [\(.DBStatus)]"')
+
+            if [ -z "$db_list" ]; then
+                echo "错误：在指定集群中没有找到数据库。" >&2
+                return 1
+            elif [ "$(echo "$db_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                db_name=$(echo "$db_list" | awk '{print $1}')
+                echo "自动选择唯一的数据库: $db_name"
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    db_name=$(select_with_fzf "选择要删除的数据库" "$db_list" | awk '{print $1}')
+                    if [ -z "$db_name" ]; then
+                        echo "错误：未选择数据库。" >&2
+                        return 1
+                    fi
+                else
+                    echo "错误：需要选择数据库，但未找到交互式选择工具。" >&2
+                    return 1
+                fi
+            fi
+        fi
+    fi
+
     if [ -z "$cluster_id" ] || [ -z "$db_name" ]; then
         echo "错误：集群ID和数据库名不能为空。" >&2
-        echo "用法：polardb db-del <集群ID> <数据库名>" >&2
+        echo "用法：polardb db-del [<集群ID> <数据库名>]" >&2
         return 1
     fi
 

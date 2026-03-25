@@ -2,12 +2,14 @@
 # shellcheck disable=SC2034
 # -*- coding: utf-8 -*-
 
-## 定义执行所在目录
-SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
-## 定义上一级 lib/ 目录
-SCRIPT_LIB=$(dirname "${SCRIPT_DIR}")
+## 定义执行所在目录（macOS 用 Homebrew coreutils 的 greadlink -f，Linux 用 readlink -f）
+SCRIPT_DIR="$(dirname "$($(command -v greadlink || command -v readlink) -f "${BASH_SOURCE[0]}")")"
+## 定义 cloud/ 目录
+SCRIPT_CLOUD="$(dirname "${SCRIPT_DIR}")"
 ## 定义项目根目录
-PROJECT_ROOT=$(dirname "${SCRIPT_LIB}")
+PROJECT_ROOT="$(dirname "${SCRIPT_CLOUD}")"
+## 定义 lib/ 目录
+SCRIPT_LIB="${PROJECT_ROOT}/lib"
 # 定义通用数据目录
 SCRIPT_DATA="${PROJECT_ROOT}/data"
 

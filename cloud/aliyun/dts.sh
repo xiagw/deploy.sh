@@ -16,7 +16,7 @@ show_dts_help() {
     echo "  add <任务名称> <源库类型> <目标库类型> - 添加 DTS 迁移任务"
     echo "  add-sync <任务名称> <源库类型> <目标库类型> - 添加 DTS 同步任务"
     echo "  set [<任务ID>] [<新名称>]             - 设置 DTS 迁移任务（任务ID和新名称可选，可使用fzf选择）"
-    echo "  del [<任务ID>]                        - 删除 DTS 迁移任务（任务ID可选，可使用fzf选择）"
+    echo "  del [<任务ID>]                        - 删除 DTS 任务（迁移/同步/订阅，任务ID可选；无参数时用 fzf 选择）"
     echo "  start [<任务ID>]                      - 启动 DTS 迁移任务（任务ID可选，可使用fzf选择）"
     echo "  stop [<任务ID>]                       - 停止 DTS 迁移任务（任务ID可选，可使用fzf选择）"
     echo "  status [<任务ID>]                     - 查看 DTS 迁移任务状态（任务ID可选，可使用fzf选择）"
@@ -404,32 +404,51 @@ dts_update() {
     fi
 }
 
-# DTS 任务删除（支持fzf选择任务）
+# DTS 任务删除（迁移/同步/订阅；无参数时 fzf 从合并列表选择）
 dts_delete() {
     local task_id=$1
+    local kind=""
+    local mig syn sub combined
 
-    # 如果没有提供任务ID，则使用 fzf 选择
+    mig=$(call_aliyun_api dts DescribeMigrationJobs --RegionId "${region:-}") || {
+        echo "错误：无法获取 DTS 迁移任务列表。请检查您的凭证和权限。" >&2
+        return 1
+    }
+    syn=$(call_aliyun_api dts DescribeSynchronizationJobs --RegionId "${region:-}") || {
+        echo "错误：无法获取 DTS 同步任务列表。请检查您的凭证和权限。" >&2
+        return 1
+    }
+    sub=$(call_aliyun_api dts DescribeSubscriptionInstances --RegionId "${region:-}") || {
+        echo "错误：无法获取 DTS 订阅任务列表。请检查您的凭证和权限。" >&2
+        return 1
+    }
+
+    combined=$(
+        {
+            echo "$mig" | jq -r '.MigrationJobs.MigrationJob[]? | "migration \(.MigrationJobId) (\(.MigrationJobName)) [\(.Status)]"'
+            echo "$syn" | jq -r '.SynchronizationInstances[]? | "sync \(.SynchronizationJobId // .InstanceId // .Id) (\(.SynchronizationJobName // .InstanceName // .Name // .SynchronizationObject)) [\(.Status // .DataSynchronizationStatus.Status)]"'
+            echo "$sub" | jq -r '.SubscriptionInstanceInfos.SubscriptionInstanceInfo[]? | "subscribe \(.SubscriptionInstanceId) (\(.SubscriptionInstanceName)) [\(.Status)]"'
+        } | sed '/^$/d'
+    )
+
     if [ -z "$task_id" ]; then
-        local task_list
-        local result
-        result=$(call_aliyun_api dts DescribeMigrationJobs --RegionId "${region:-}")
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 DTS 迁移任务列表。请检查您的凭证和权限。" >&2
+        if [ -z "$combined" ]; then
+            echo "错误：没有找到任何 DTS 任务（迁移、同步、订阅）。" >&2
             return 1
         fi
-
-        task_list=$(echo "$result" | jq -r '.MigrationJobs.MigrationJob[]? | "\(.MigrationJobId) (\(.MigrationJobName)) [\(.Status)]"')
-
-        if [ -z "$task_list" ]; then
-            echo "错误：没有找到任何 DTS 迁移任务。" >&2
-            return 1
-        elif [ "$(echo "$task_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            task_id=$(echo "$task_list" | awk '{print $1}')
-            echo "自动选择唯一的任务: $task_id"
+        local line_count
+        line_count=$(echo "$combined" | grep -c '[^[:space:]]' || true)
+        if [ "$line_count" -eq 1 ]; then
+            kind=$(echo "$combined" | awk '{print $1}')
+            task_id=$(echo "$combined" | awk '{print $2}')
+            echo "自动选择唯一任务: [$kind] $task_id"
         else
             if type select_with_fzf >/dev/null 2>&1; then
-                task_id=$(select_with_fzf "选择要删除的 DTS 迁移任务" "$task_list" | awk '{print $1}')
-                if [ -z "$task_id" ]; then
+                local selected
+                selected=$(select_with_fzf "选择要删除的 DTS 任务（迁移/同步/订阅）" "$combined")
+                kind=$(echo "$selected" | awk '{print $1}')
+                task_id=$(echo "$selected" | awk '{print $2}')
+                if [ -z "$task_id" ] || [ -z "$kind" ]; then
                     echo "错误：未选择任务。" >&2
                     return 1
                 fi
@@ -438,31 +457,70 @@ dts_delete() {
                 return 1
             fi
         fi
+    else
+        kind=$(echo "$combined" | awk -v tid="$task_id" '$2 == tid { print $1; exit }')
+        if [ -z "$kind" ]; then
+            echo "错误：未找到 ID 为 $task_id 的 DTS 任务（迁移、同步、订阅）。" >&2
+            return 1
+        fi
     fi
 
-    # 检查任务 ID 是否为空
     if [ -z "$task_id" ]; then
         echo "错误：任务 ID 不能为空。" >&2
         return 1
     fi
 
-    if ! confirm_action "删除 DTS 迁移任务：$task_id"; then
+    local kind_cn del_label
+    case "$kind" in
+    migration)
+        kind_cn="迁移"
+        del_label="DTS迁移任务"
+        ;;
+    sync)
+        kind_cn="同步"
+        del_label="DTS同步任务"
+        ;;
+    subscribe)
+        kind_cn="订阅"
+        del_label="DTS订阅任务"
+        ;;
+    *)
+        echo "错误：未知的任务类型：$kind" >&2
+        return 1
+        ;;
+    esac
+
+    if ! confirm_action "删除 DTS ${kind_cn}任务：$task_id"; then
         return 1
     fi
 
-    echo "删除 DTS 迁移任务："
+    echo "删除 DTS ${kind_cn}任务："
     local result
-    result=$(call_aliyun_api dts DeleteMigrationJob \
-        --RegionId "$region" \
-        --MigrationJobId "$task_id")
+    case "$kind" in
+    migration)
+        result=$(call_aliyun_api dts DeleteMigrationJob \
+            --RegionId "$region" \
+            --MigrationJobId "$task_id")
+        ;;
+    sync)
+        result=$(call_aliyun_api dts DeleteSynchronizationJob \
+            --RegionId "$region" \
+            --SynchronizationJobId "$task_id")
+        ;;
+    subscribe)
+        result=$(call_aliyun_api dts DeleteSubscriptionInstance \
+            --RegionId "$region" \
+            --SubscriptionInstanceId "$task_id")
+        ;;
+    esac
 
     if [ $? -eq 0 ]; then
-        echo "DTS 迁移任务删除成功。"
-        log_delete_operation "${profile:-}" "$region" "dts" "$task_id" "DTS迁移任务" "成功"
+        echo "DTS ${kind_cn}任务删除成功。"
+        log_delete_operation "${profile:-}" "$region" "dts" "$task_id" "$del_label" "成功"
     else
-        echo "DTS 迁移任务删除失败。"
+        echo "DTS ${kind_cn}任务删除失败。"
         echo "$result"
-        log_delete_operation "${profile:-}" "$region" "dts" "$task_id" "DTS迁移任务" "失败"
+        log_delete_operation "${profile:-}" "$region" "dts" "$task_id" "$del_label" "失败"
         return 1
     fi
 

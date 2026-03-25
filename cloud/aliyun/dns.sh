@@ -145,9 +145,28 @@ dns_create() {
     if [ -z "$domain" ] || [ -z "$rr" ] || [ -z "$type" ] || [ -z "$value" ]; then
         echo "使用交互式模式创建 DNS 记录"
 
-        # 输入域名 - 必须用户明确输入
+        # 选择/输入域名：优先使用 fzf，从已有域名中选择
         if [ -z "$domain" ]; then
-            read -r -p "请输入域名: " domain
+            local domain_list
+            local domain_result
+            domain_result=$(call_aliyun_api alidns DescribeDomains 2>/dev/null)
+            if [ $? -eq 0 ]; then
+                domain_list=$(echo "$domain_result" | jq -r '.Domains.Domain[]? | "\(.DomainName) (\(.DomainId))"')
+            fi
+
+            if [ -n "$domain_list" ]; then
+                if [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+                    domain=$(echo "$domain_list" | awk '{print $1}')
+                    echo "自动选择唯一的域名: $domain"
+                elif type select_with_fzf >/dev/null 2>&1; then
+                    domain=$(select_with_fzf "选择域名" "$domain_list" | awk '{print $1}')
+                else
+                    read -r -p "请输入域名: " domain
+                fi
+            else
+                read -r -p "请输入域名: " domain
+            fi
+
             if [ -z "$domain" ]; then
                 echo "错误：域名不能为空。" >&2
                 return 1
@@ -249,16 +268,39 @@ dns_update() {
 
     # 如果没有提供记录ID，则使用 fzf 选择
     if [ -z "$record_id" ]; then
-        local domain_name
-        read -r -p "请输入域名以查找记录 (留空则查看所有域名): " domain_name
-
         local record_list
         local result
-        if [ -n "$domain_name" ]; then
+        local domain_name=""
+        local domain_list
+        domain_list=$(call_aliyun_api alidns DescribeDomains 2>/dev/null | jq -r '.Domains.Domain[] | "\(.DomainName) (\(.DomainId))"')
+
+        if [ -z "$domain_list" ]; then
+            echo "错误：没有找到任何域名。" >&2
+            return 1
+        fi
+
+        if [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            domain_name=$(echo "$domain_list" | awk '{print $1}')
+            echo "自动选择唯一的域名: $domain_name"
             result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
         else
-            echo "请输入域名以查找要更新的记录。" >&2
-            return 1
+            read -r -p "请输入域名以查找记录 (留空则查看所有域名): " domain_name
+
+            if [ -n "$domain_name" ]; then
+                result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    domain_name=$(select_with_fzf "选择域名以查找要更新的记录" "$domain_list" | awk '{print $1}')
+                    if [ -z "$domain_name" ]; then
+                        echo "错误：未选择域名。" >&2
+                        return 1
+                    fi
+                    result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+                else
+                    echo "请输入域名以查找要更新的记录。" >&2
+                    return 1
+                fi
+            fi
         fi
 
         if [ $? -ne 0 ]; then
@@ -403,16 +445,39 @@ dns_delete() {
 
     # 如果没有提供记录ID，则使用 fzf 选择
     if [ -z "$record_id" ]; then
-        local domain_name
-        read -r -p "请输入域名以查找记录 (留空则查看所有域名): " domain_name
-
         local record_list
         local result
-        if [ -n "$domain_name" ]; then
+        local domain_name=""
+        local domain_list
+        domain_list=$(call_aliyun_api alidns DescribeDomains 2>/dev/null | jq -r '.Domains.Domain[] | "\(.DomainName) (\(.DomainId))"')
+
+        if [ -z "$domain_list" ]; then
+            echo "错误：没有找到任何域名。" >&2
+            return 1
+        fi
+
+        if [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            domain_name=$(echo "$domain_list" | awk '{print $1}')
+            echo "自动选择唯一的域名: $domain_name"
             result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
         else
-            echo "请输入域名以查找要删除的记录。" >&2
-            return 1
+            read -r -p "请输入域名以查找记录 (留空则查看所有域名): " domain_name
+
+            if [ -n "$domain_name" ]; then
+                result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+            else
+                if type select_with_fzf >/dev/null 2>&1; then
+                    domain_name=$(select_with_fzf "选择域名以查找要删除的记录" "$domain_list" | awk '{print $1}')
+                    if [ -z "$domain_name" ]; then
+                        echo "错误：未选择域名。" >&2
+                        return 1
+                    fi
+                    result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+                else
+                    echo "请输入域名以查找要删除的记录。" >&2
+                    return 1
+                fi
+            fi
         fi
 
         if [ $? -ne 0 ]; then
