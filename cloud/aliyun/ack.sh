@@ -817,6 +817,7 @@ ack_auto_scale() {
     local CPU_NORMAL_FACTOR=500         # CPU 正常阈值因子
     local MEM_NORMAL_FACTOR=500         # 内存正常阈值因子
     local SCALE_CHANGE=2                # 每次扩缩容的节点数量
+    local MIN_REPLICAS=2                # 自动缩容下限，不低于此副本数
     local COOLDOWN_MINUTES_SCALE_UP=1   # 扩容冷却时间（分钟）
     local COOLDOWN_MINUTES_SCALE_DOWN=5 # 缩容冷却时间（分钟）
 
@@ -861,8 +862,12 @@ ack_auto_scale() {
     # 检查是否需要缩容
     if ((cpu < pod_cpu_normal)); then
         if ((pod_total > node_fixed)); then
-            kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-            scale_deployment "down" $((pod_total - SCALE_CHANGE)) "$lock_file_up" "$lock_file_down"
+            local new_replicas=$((pod_total - SCALE_CHANGE))
+            ((new_replicas < MIN_REPLICAS)) && new_replicas=$MIN_REPLICAS
+            if ((new_replicas < pod_total)); then
+                kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
+                scale_deployment "down" "$new_replicas" "$lock_file_up" "$lock_file_down"
+            fi
             return
         fi
         ## 检查是否有pod运行在虚拟节点，如果有则执行 kubectl rollout restart 命令
