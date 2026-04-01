@@ -135,11 +135,23 @@ add_account_to_groups() {
 update_account_password() {
     local user="$1"
     local password_rand="$2"
-    local user_id send_msg
+    local user_id email username name user_json send_msg
 
-    user_id=$($cmd_gitlab user list --username "$user" | jq -r '.[].id')
+    user_json=$($cmd_gitlab user list --username "$user")
+    user_id=$(echo "$user_json" | jq -r '.[0].id // empty')
+    email=$(echo "$user_json" | jq -r '.[0].email // empty')
+    username=$(echo "$user_json" | jq -r '.[0].username // empty')
+    name=$(echo "$user_json" | jq -r '.[0].name // empty')
+
+    [[ -z "$user_id" || -z "$email" || -z "$username" || -z "$name" ]] && {
+        _msg error "User not found or missing fields: $user"
+        return 1
+    }
 
     $cmd_gitlab user update --id "${user_id}" \
+        --email "${email}" \
+        --username "${username}" \
+        --name "${name}" \
         --password "${password_rand}" \
         --skip-reconfirmation 1
 
