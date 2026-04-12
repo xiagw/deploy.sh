@@ -65,19 +65,19 @@ handle_ack_commands() {
 # 使用新框架的列表函数
 ack_list() {
     local format=${1:-human}
-    
+
     local table_header="ClusterId\tName\tState\tRegionId\tVersion\tNodeCount\tCreated"
     local jq_filter=".[] | [.cluster_id, .name, .state, .region_id, .version, .size, .created] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-18s  %-8s  %-12s  %-7s  %-6s  %s\n", $1, $2, $3, $4, $5, $6, $7}'
-    
+
     local result
     result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -146,7 +146,7 @@ ack_create() {
         vpc_result=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null)
         vpc_id=$(echo "$vpc_result" | jq -r '.Vpcs.Vpc[0].VpcId // empty')
     fi
-    
+
     if [ -z "$vpc_id" ]; then
         echo "错误：未找到可用的 VPC。" >&2
         return 1
@@ -161,7 +161,7 @@ ack_create() {
         vswitch_result=$(call_aliyun_api vpc DescribeVSwitches --VpcId "$vpc_id" --RegionId "$region" 2>/dev/null)
         vswitch_id=$(echo "$vswitch_result" | jq -r '.VSwitches.VSwitch[0].VSwitchId // empty')
     fi
-    
+
     if [ -z "$vswitch_id" ]; then
         echo "错误：未找到可用的交换机。" >&2
         return 1
@@ -782,7 +782,7 @@ scale_deployment() {
     # 记录操作日志
     msg_body="${msg_body}，结果: ${result}"
     log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
-    
+
     # 如果存在通知函数，则调用
     if type _notify_wecom >/dev/null 2>&1; then
         _notify_wecom "${WECOM_KEY:-}" "$msg_body"
@@ -858,7 +858,7 @@ ack_auto_scale() {
     if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
         return
     fi
-    
+
     # 检查是否需要缩容
     if ((cpu < pod_cpu_normal)); then
         if ((pod_total > node_fixed)); then

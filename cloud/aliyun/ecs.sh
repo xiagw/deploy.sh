@@ -14,7 +14,7 @@ show_ecs_help() {
     echo "  set [<实例ID>] [<新名称>]                - 设置 ECS 实例（实例ID和新名称都是可选的，可使用fzf选择）"
     echo "  del [<实例ID>]                           - 删除 ECS 实例（实例ID可选，可使用fzf选择）"
     echo "  key-get                                  - 列出 SSH 密钥对"
-    echo "  key-add <密钥对名称>                     - 添加 SSH 密钥对"
+    echo "  key-add [密钥对名称]                     - 添加 SSH 密钥对（无参数时可交互选择创建/导入）"
     echo "  key-set [<密钥对名称>] [<公钥内容> | github:<用户名>] - 导入 SSH 密钥对（参数可选，可使用fzf选择）"
     echo "  key-del [<密钥对名称>]                   - 删除 SSH 密钥对（密钥对名称可选，可使用fzf选择）"
     echo "  start [<实例ID>]                         - 启动 ECS 实例（实例ID可选，可使用fzf选择）"
@@ -39,6 +39,7 @@ show_ecs_help() {
     echo "  $0 ecs stop i-bp67acfmxazb4ph****"
     echo "  $0 ecs key-get"
     echo "  $0 ecs key-add my-key"
+    echo "  $0 ecs key-add                           # 交互选择创建或从 GitHub/本地导入"
     echo "  $0 ecs key-set my-key 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD...'"
     echo "  $0 ecs key-set my-key github:username"
     echo "  $0 ecs key-del my-key"
@@ -407,9 +408,9 @@ cloud"
     key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
 
     if [ $? -eq 0 ] && [ -n "$key_result" ]; then
-        key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[] | .KeyPairName' 2>/dev/null)
+        key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
         local key_count
-        key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]' 2>/dev/null || echo "0")
+        key_count=$(printf '%s\n' "$key_pair_list" | awk 'NF{c++} END{print c+0}')
 
         if [ "$key_count" -eq 0 ] || [ "$key_count" = "0" ]; then
             echo "错误：没有找到 SSH 密钥对，请先创建 SSH 密钥对。" >&2
@@ -639,7 +640,7 @@ ecs_key_list() {
     local format=${1:-human}
 
     local table_header="KeyPairName\tKeyPairFingerPrint\tCreationTime"
-    local jq_filter=".KeyPairs.KeyPair[] | [.KeyPairName, .KeyPairFingerPrint, .CreationTime] | @tsv"
+    local jq_filter=".KeyPairs.KeyPair[]? | [.KeyPairName, .KeyPairFingerPrint, .CreationTime] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-36s  %s\n", $1, $2, $3}'
 
     local result
@@ -665,10 +666,107 @@ ecs_key_list() {
 # 创建 SSH 密钥对（使用框架函数）
 ecs_key_create() {
     local key_name=$1
+    local import_source=$2
 
+    # 兼容扩展调用：key-add <name> <github:user|公钥内容>
+    if [ -n "$key_name" ] && [ -n "$import_source" ]; then
+        ecs_key_import "$key_name" "$import_source"
+        return $?
+    fi
+
+    # 无参数时，交互选择创建或导入
     if [ -z "$key_name" ]; then
-        echo "错误：密钥对名称不能为空。" >&2
-        return 1
+        local mode mode_list
+        mode_list="创建新密钥对（阿里云生成私钥）
+从 GitHub 用户导入公钥
+从本地 .pub 文件导入公钥
+手动粘贴公钥导入"
+
+        if type select_with_fzf >/dev/null 2>&1; then
+            mode=$(select_with_fzf "选择密钥对操作" "$mode_list")
+        else
+            echo "请选择密钥对操作："
+            echo "1) 创建新密钥对（阿里云生成私钥）"
+            echo "2) 从 GitHub 用户导入公钥"
+            echo "3) 从本地 .pub 文件导入公钥"
+            echo "4) 手动粘贴公钥导入"
+            echo -n "请输入选项 [1-4]: "
+            local choice
+            read -r choice
+            case "$choice" in
+            1) mode="创建新密钥对（阿里云生成私钥）" ;;
+            2) mode="从 GitHub 用户导入公钥" ;;
+            3) mode="从本地 .pub 文件导入公钥" ;;
+            4) mode="手动粘贴公钥导入" ;;
+            *)
+                echo "未选择有效选项，操作取消。"
+                return 1
+                ;;
+            esac
+        fi
+
+        [ -z "$mode" ] && echo "未选择选项，操作取消。" && return 1
+
+        echo -n "请输入密钥对名称: "
+        read -r key_name
+        if [ -z "$key_name" ]; then
+            echo "错误：密钥对名称不能为空。" >&2
+            return 1
+        fi
+
+        case "$mode" in
+        "创建新密钥对（阿里云生成私钥）")
+            ;;
+        "从 GitHub 用户导入公钥")
+            local github_username
+            echo -n "请输入 GitHub 用户名: "
+            read -r github_username
+            if [ -z "$github_username" ]; then
+                echo "错误：GitHub 用户名不能为空。" >&2
+                return 1
+            fi
+            ecs_key_import "$key_name" "github:$github_username"
+            return $?
+            ;;
+        "从本地 .pub 文件导入公钥")
+            local pub_file public_key pub_candidates
+            pub_candidates=$(ls -1 "$HOME"/.ssh/*.pub 2>/dev/null)
+            if [ -n "$pub_candidates" ] && type select_with_fzf >/dev/null 2>&1; then
+                pub_file=$(select_with_fzf "选择本地公钥文件" "$pub_candidates")
+            else
+                echo -n "请输入本地公钥文件路径（如 ~/.ssh/id_rsa.pub）: "
+                read -r pub_file
+            fi
+            [ -z "$pub_file" ] && echo "未选择公钥文件，操作取消。" && return 1
+            [[ "$pub_file" == ~/* ]] && pub_file="${HOME}/${pub_file#~/}"
+            if [ ! -f "$pub_file" ]; then
+                echo "错误：公钥文件不存在：$pub_file" >&2
+                return 1
+            fi
+            public_key=$(<"$pub_file")
+            if [ -z "$public_key" ]; then
+                echo "错误：公钥文件内容为空。" >&2
+                return 1
+            fi
+            ecs_key_import "$key_name" "$public_key"
+            return $?
+            ;;
+        "手动粘贴公钥导入")
+            local pasted_public_key
+            echo -n "请粘贴 SSH 公钥（单行，以 ssh-rsa/ssh-ed25519 开头）: "
+            read -r pasted_public_key
+            if [ -z "$pasted_public_key" ]; then
+                echo "错误：公钥内容不能为空。" >&2
+                return 1
+            fi
+            ecs_key_import "$key_name" "$pasted_public_key"
+            return $?
+            ;;
+        *)
+            echo "未选择有效选项，操作取消。"
+            return 1
+            ;;
+        esac
     fi
 
     echo "创建 SSH 密钥对："
@@ -809,9 +907,9 @@ ecs_key_attach() {
         key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
 
         if [ $? -eq 0 ] && [ -n "$key_result" ]; then
-            key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[] | .KeyPairName' 2>/dev/null)
+            key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
             local key_count
-            key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]' 2>/dev/null || echo "0")
+            key_count=$(printf '%s\n' "$key_pair_list" | awk 'NF{c++} END{print c+0}')
 
             if [ "$key_count" -eq 0 ] || [ "$key_count" = "0" ]; then
                 echo "错误：没有找到 SSH 密钥对。" >&2
@@ -904,9 +1002,9 @@ ecs_key_detach() {
         key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
 
         if [ $? -eq 0 ] && [ -n "$key_result" ]; then
-            key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[] | .KeyPairName' 2>/dev/null)
+            key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
             local key_count
-            key_count=$(echo "$key_pair_list" | grep -c '[^[:space:]]' 2>/dev/null || echo "0")
+            key_count=$(printf '%s\n' "$key_pair_list" | awk 'NF{c++} END{print c+0}')
 
             if [ "$key_count" -eq 0 ] || [ "$key_count" = "0" ]; then
                 echo "错误：没有找到 SSH 密钥对。" >&2
@@ -1183,9 +1281,9 @@ get_supported_disk_categories() {
 
     local disk_categories
     disk_categories=$(echo "$result" | jq -r '
-        .AvailableZones.AvailableZone[].AvailableResources.AvailableResource[] |
+        .AvailableZones.AvailableZone[]?.AvailableResources.AvailableResource[]? |
         select(.Type == "SystemDisk") |
-        .SupportedResources.SupportedResource[] |
+        .SupportedResources.SupportedResource[]? |
         "\(.Value) [\(.Min)-\(.Max)\(.Unit)]"
     ' | sort -u)
 
