@@ -74,19 +74,19 @@ handle_ram_commands() {
 # 使用新框架的列表函数
 ram_list() {
     local format=${1:-human}
-    
+
     local table_header="UserName\tDisplayName\tCreateDate"
     local jq_filter=".Users.User[] | [.UserName, .DisplayName, .CreateDate] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-20s  %s\n", $1, $2, $3}'
-    
+
     local result
     result=$(call_aliyun_api ram ListUsers)
-    
+
     if [ $? -ne 0 ]; then
         echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output \
         "$result" \
         "$format" \
@@ -221,7 +221,7 @@ ram_update() {
     if [ -z "$new_display_name" ] && [ -z "$new_password" ]; then
         echo "交互式模式更新 RAM 子账号：$username"
         echo ""
-        
+
         # 使用 fzf 选择操作类型（修改密码一律使用随机密码，避免手动输入两次不一致）
         local options=$'只修改显示名\n只修改密码（随机生成）\n同时修改显示名和密码（密码随机生成）'
         local choice
@@ -231,12 +231,12 @@ ram_update() {
             echo "错误：需要选择操作类型，但未找到交互式选择工具。" >&2
             return 1
         fi
-        
+
         if [ -z "$choice" ]; then
             echo "错误：未选择操作类型。" >&2
             return 1
         fi
-        
+
         case "$choice" in
             "只修改显示名")
                 read -r -p "请输入新的显示名称： " new_display_name
@@ -482,20 +482,37 @@ ram_grant_permission() {
     echo "授予子账号权限："
     echo "用户名：$username"
 
-    # 授予 AliyunECSFullAccess 权限
+    # 说明：AttachPolicyToUser 每次只能授权一个策略，因此需要循环依次调用以同时授予多个权限。  AliyunECSFullAccess
+    local policies=(
+        AliyunDNSFullAccess
+        AliyunCDNFullAccess
+    )
     local result
-    result=$(call_aliyun_api ram AttachPolicyToUser \
-        --PolicyType System \
-        --PolicyName AliyunECSFullAccess \
-        --UserName "$username")
+    local policy_name
+    local all_results=""
+    local has_error=0
 
-    if [ $? -eq 0 ]; then
-        echo "权限授予成功："
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ram" "grant-permission" "$result"
-    else
-        echo "错误：权限授予失败。"
-        echo "$result"
+    for policy_name in "${policies[@]}"; do
+        result=$(call_aliyun_api ram AttachPolicyToUser \
+            --PolicyType System \
+            --PolicyName "$policy_name" \
+            --UserName "$username")
+
+        if [ $? -eq 0 ]; then
+            echo "权限授予成功：$policy_name"
+            echo "$result" | jq '.'
+        else
+            echo "错误：权限授予失败：$policy_name"
+            echo "$result"
+            has_error=1
+        fi
+
+        all_results+="${policy_name}: ${result}"$'\n'
+    done
+
+    log_result "${profile:-}" "$region" "ram" "grant-permission" "$all_results"
+
+    if [ "$has_error" -ne 0 ]; then
         return 1
     fi
 }
