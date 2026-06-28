@@ -9,6 +9,8 @@
 
 get_docker_context() {
     ## ENV_DOCKER_CONTEXT: local/remote/both
+    ## In debug mode, use local Docker only and skip context switching.
+    [[ ${DEBUG_ON:-false} == true ]] && return
     [[ ${ENV_DOCKER_CONTEXT:-local} == local ]] && return
 
     local docker_contexts docker_endpoints selected_context response
