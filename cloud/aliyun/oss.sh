@@ -501,7 +501,7 @@ oss_delete() {
     # 先删除存储桶中的所有对象
     echo "正在删除存储桶中的所有对象..."
     local delete_objects_result
-    delete_objects_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" rm "oss://$bucket_name" -r -f)
+    delete_objects_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" rm "oss://$bucket_name/" -r -f --all-versions)
     local delete_objects_status=$?
 
     if [ $delete_objects_status -ne 0 ]; then
