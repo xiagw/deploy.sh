@@ -59,13 +59,12 @@ repo_inject_file() {
                     echo "Checking package.json hash..."
                     hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
                     mkdir -p "${G_DATA}/hash_saved"
-                    hash_saved="$(cat "${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" || true)"
+                    hash_saved="$(cat "${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" || echo 0)"
                     if [[ "$hash_now" = "$hash_saved" ]]; then
                         rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
                     else
                         echo "Copying Dockerfile.base.${lang}..."
                         cp -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${lang}" "${G_REPO_DIR}/Dockerfile.base"
-                        echo "${hash_now}" >"${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5"
                     fi
                     base_tag="${ENV_DOCKER_REGISTRY%/*}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
                     echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"

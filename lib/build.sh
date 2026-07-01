@@ -38,7 +38,7 @@ get_docker_context() {
     case ${ENV_DOCKER_CONTEXT_ALGO:-rr} in
     rand)
         ## random algorithm / 随机算法
-        selected_context="${docker_contexts[RANDOM % ${#docker_contexts[@]}]}"
+        selected_context="${docker_contexts[RANDOM%${#docker_contexts[@]}]}"
         ;;
     rr)
         ## round-robin algorithm / 轮询算法
@@ -87,6 +87,13 @@ build_image() {
         echo "  ${base_tag}"
         echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
         $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}"
+        ret="$?"
+        if [ "$ret" -ne 0 ]; then
+            _msg error "Base image build failed, exiting."
+            return 1
+        else
+            echo "${hash_now}" >"${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5"
+        fi
     fi
 
     repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
@@ -126,7 +133,7 @@ build_image() {
 build_all() {
     local lang="${1:?'lang parameter is required'}"
     local keep_image="${2:-}"
-    local lang_type="${lang%%:*}"  # Extract language type without version/docker suffix
+    local lang_type="${lang%%:*}" # Extract language type without version/docker suffix
     local has_dockerfile=false
     local docker_build_failed=false
 
