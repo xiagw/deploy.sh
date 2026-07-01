@@ -333,8 +333,14 @@ execute_command() {
     GITLAB_URL=$(echo "$config_section" | grep "^url" | head -1 | cut -d= -f2 | tr -d ' ')
     GITLAB_URL="${GITLAB_URL%/}"
     GITLAB_TOKEN=$(echo "$config_section" | grep "^private_token" | head -1 | cut -d= -f2 | tr -d ' ')
-    [[ -z "$GITLAB_URL" ]] && { _msg error "Cannot read url from config"; return 1; }
-    [[ -z "$GITLAB_TOKEN" ]] && { _msg error "Cannot read private_token from config"; return 1; }
+    [[ -z "$GITLAB_URL" ]] && {
+        _msg error "Cannot read url from config"
+        return 1
+    }
+    [[ -z "$GITLAB_TOKEN" ]] && {
+        _msg error "Cannot read private_token from config"
+        return 1
+    }
 
     if [ -f "$ME_ENV" ]; then
         . "$ME_ENV" "$gitlab_profile"
@@ -367,20 +373,29 @@ execute_command() {
             read -rp "[?] Username: " gitlab_account
             read -rp "[?] Email domain [$default_email_domain]: " email_domain
             email_domain="${email_domain:-$default_email_domain}"
-            [[ -z "$gitlab_account" ]] && { _msg error "Username required"; return 1; }
+            [[ -z "$gitlab_account" ]] && {
+                _msg error "Username required"
+                return 1
+            }
             add_account "$gitlab_account" "$email_domain"
             add_account_to_groups "$gitlab_account"
             ;;
         set)
             read -rp "[?] Username: " gitlab_account
-            [[ -z "$gitlab_account" ]] && { _msg error "Username required"; return 1; }
+            [[ -z "$gitlab_account" ]] && {
+                _msg error "Username required"
+                return 1
+            }
             local password_rand
             password_rand=$(_get_random_password 2>/dev/null)
             update_account_password "$gitlab_account" "$password_rand"
             ;;
         block)
             read -rp "[?] Username: " gitlab_account
-            [[ -z "$gitlab_account" ]] && { _msg error "Username required"; return 1; }
+            [[ -z "$gitlab_account" ]] && {
+                _msg error "Username required"
+                return 1
+            }
             block_account "$gitlab_account"
             ;;
         esac
@@ -398,7 +413,10 @@ execute_command() {
             ;;
         del)
             read -rp "[?] Project path (e.g. group/project): " project_path
-            [[ -z "$project_path" ]] && { _msg error "Project path required"; return 1; }
+            [[ -z "$project_path" ]] && {
+                _msg error "Project path required"
+                return 1
+            }
             delete_project_path "$project_path"
             ;;
         dp)
@@ -421,4 +439,33 @@ main() {
     execute_command
 }
 
-main
+main "$@"
+
+STORAGE="zfs01"
+
+grep -rl "ostype: win" /etc/pve/nodes/*/qemu-server/ |
+    awk -F'/' '{print $(NF-2), $NF}' |
+    sed 's/.conf//g' |
+    while read -r NODE VMID; do
+        echo "正在检查 VM $VMID 是否已配置 EFI 磁盘..."
+        # 使用 pvesh 查询当前配置，并检测是否包含 efidisk0
+        if pvesh get "/nodes/$NODE/qemu/$VMID/config" --output-format json | grep -q "efidisk0"; then
+            echo "【提示】VM $VMID 已经存在 EFI 磁盘，跳过添加，避免覆盖报错。"
+        else
+            echo "【警告】未检测到 EFI 磁盘，正在为您无损添加..."
+            pvesh create "/nodes/$NODE/qemu/$VMID/config" --efidisk0 ${STORAGE}:1
+        fi
+
+        # 1. Update all hardware configurations at once
+        echo "Updated VM $VMID on node $NODE to use q35 machine type and host CPU with 16 cores."
+        pvesh create "/nodes/${NODE}/qemu/${VMID}/config" --machine pc-q35-11.0 --cpu host --sockets 1 --cores 16 --vga virtio
+
+        # 2. Hard stop the VM to break the old hardware lock
+        echo "Stopped VM $VMID on node $NODE to apply new hardware configuration."
+        pvesh create "/nodes/${NODE}/qemu/${VMID}/status/stop"
+
+        # 3. Boot it back up with the brand new q35 layer
+        echo "Booted VM $VMID on node $NODE with new hardware configuration."
+        sleep 3
+        pvesh create "/nodes/${NODE}/qemu/${VMID}/status/start"
+    done
