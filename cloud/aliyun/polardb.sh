@@ -13,10 +13,10 @@ show_polardb_help() {
     echo "  add <名称> <引擎> <版本> <规格> [地域]  - 创建 PolarDB 集群"
     echo "  set [<集群ID>] [<新名称>] [地域]       - 更新 PolarDB 集群（集群ID和新名称都是可选的，可使用fzf选择）"
     echo "  del [<集群ID>] [地域]                  - 删除 PolarDB 集群（集群ID可选，可使用fzf选择）"
-    echo "  account-add <集群ID> <账号> <密码> [描述] - 创建数据库账号"
-    echo "  account-del <集群ID> <账号>            - 删除数据库账号"
-    echo "  account-get <集群ID>                   - 列出数据库账号"
-    echo "  account-set <集群ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
+    echo "  acc-add <集群ID> <账号> <密码> [描述] - 创建数据库账号"
+    echo "  acc-del <集群ID> <账号>            - 删除数据库账号"
+    echo "  acc-get <集群ID>                   - 列出数据库账号"
+    echo "  acc-set <集群ID> <账号> <数据库名> [权限]  - 设置账号数据库权限"
     echo "  db-get <集群ID>                        - 列出数据库"
     echo "  db-add <集群ID> <数据库名> [字符集]    - 创建数据库"
     echo "  db-del [<集群ID> <数据库名>]         - 删除数据库（参数可选，可用 fzf 选择）"
@@ -31,10 +31,10 @@ show_polardb_help() {
     echo "  $0 polardb add my-polardb MySQL 8.0 polar.mysql.x4.large"
     echo "  $0 polardb set pc-xxxxxxxxxxxxx new-name"
     echo "  $0 polardb del pc-xxxxxxxxxxxxx"
-    echo "  $0 polardb account-add pc-xxxxxxxxxxxxx myuser mypassword '测试账号'"
-    echo "  $0 polardb account-del pc-xxxxxxxxxxxxx myuser"
-    echo "  $0 polardb account-get pc-xxxxxxxxxxxxx"
-    echo "  $0 polardb account-set pc-xxxxxxxxxxxxx myuser mydb ReadWrite"
+    echo "  $0 polardb acc-add pc-xxxxxxxxxxxxx myuser mypassword '测试账号'"
+    echo "  $0 polardb acc-del pc-xxxxxxxxxxxxx myuser"
+    echo "  $0 polardb acc-get pc-xxxxxxxxxxxxx"
+    echo "  $0 polardb acc-set pc-xxxxxxxxxxxxx myuser mydb ReadWrite"
     echo "  $0 polardb db-get pc-xxxxxxxxxxxxx"
     echo "  $0 polardb db-add pc-xxxxxxxxxxxxx mydb utf8mb4"
     echo "  $0 polardb db-del pc-xxxxxxxxxxxxx mydb"
@@ -55,13 +55,13 @@ handle_polardb_commands() {
     add) polardb_create "$@" ;;
     set) polardb_update "$@" ;;
     del) polardb_delete "$@" ;;
-    account-add) polardb_account_create "$@" ;;
-    account-del) polardb_account_delete "$@" ;;
-    account-get) polardb_account_list "$@" ;;
+    acc-add) polardb_account_create "$@" ;;
+    acc-set) polardb_account_grant "$@" ;;
+    acc-del) polardb_account_delete "$@" ;;
+    acc-get) polardb_account_list "$@" ;;
     db-get) polardb_db_list "$@" ;;
     db-add) polardb_db_create "$@" ;;
     db-del) polardb_db_delete "$@" ;;
-    account-set) polardb_account_grant "$@" ;;
     ip-get) polardb_ip_get "$@" ;;
     ip-set) polardb_ip_set "$@" ;;
     ip-append) polardb_ip_append "$@" ;;
@@ -352,7 +352,7 @@ polardb_account_create() {
 
     if [ -z "$cluster_id" ] || [ -z "$account_name" ] || [ -z "$password" ]; then
         echo "错误：集群ID、账号名和密码不能为空。" >&2
-        echo "用法：polardb account-add <集群ID> <账号> <密码> [描述]" >&2
+        echo "用法：polardb acc-add <集群ID> <账号> <密码> [描述]" >&2
         return 1
     fi
 
@@ -422,7 +422,7 @@ polardb_account_delete() {
 
     if [ -z "$cluster_id" ] || [ -z "$account_name" ]; then
         echo "错误：集群ID和账号名不能为空。" >&2
-        echo "用法：polardb account-del <集群ID> <账号>" >&2
+        echo "用法：polardb acc-del <集群ID> <账号>" >&2
         return 1
     fi
 
@@ -461,7 +461,7 @@ polardb_account_list() {
 
     if [ -z "$cluster_id" ]; then
         echo "错误：集群ID不能为空。" >&2
-        echo "用法：polardb account-get <集群ID> [format]" >&2
+        echo "用法：polardb acc-get <集群ID> [format]" >&2
         return 1
     fi
 
@@ -804,7 +804,7 @@ polardb_account_grant() {
 
     if [ -z "$cluster_id" ] || [ -z "$account_name" ] || [ -z "$db_name" ]; then
         echo "错误：集群ID、账号名和数据库名不能为空。" >&2
-        echo "用法：polardb account-set <集群ID> <账号> <数据库名> [权限]" >&2
+        echo "用法：polardb acc-set <集群ID> <账号> <数据库名> [权限]" >&2
         return 1
     fi
 

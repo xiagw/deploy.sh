@@ -13,10 +13,10 @@ show_rds_help() {
     echo "  add <名称> <引擎> <版本> <规格> [地域]  - 创建 RDS 实例"
     echo "  set [<实例ID>] [<新名称>] [地域]        - 更新 RDS 实例（实例ID和新名称都是可选的，可使用fzf选择）"
     echo "  del [<实例ID>] [地域]                   - 删除 RDS 实例（实例ID可选，可使用fzf选择）"
-    echo "  account-add <实例ID> <账号> <密码> [描述] - 创建数据库账号"
-    echo "  account-del <实例ID> <账号>             - 删除数据库账号"
-    echo "  account-get <实例ID> [format]           - 列出数据库账号"
-    echo "  account-set <实例ID> <账号> <数据库名> [权限]  - 设置账号数据库权限（只读/读写）"
+    echo "  acc-add <实例ID> <账号> <密码> [描述] - 创建数据库账号"
+    echo "  acc-del <实例ID> <账号>             - 删除数据库账号"
+    echo "  acc-get <实例ID> [format]           - 列出数据库账号"
+    echo "  acc-set <实例ID> <账号> <数据库名> [权限]  - 设置账号数据库权限（只读/读写）"
     echo "  db-get <实例ID> [format]                - 列出数据库"
     echo "  db-add <实例ID> <数据库名> [字符集]     - 创建数据库"
     echo "  db-del <实例ID> <数据库名>              - 删除数据库"
@@ -32,11 +32,11 @@ show_rds_help() {
     echo "  $0 rds add my-rds MySQL 8.0 rds.mysql.x4.large"
     echo "  $0 rds set rm-xxx new-name"
     echo "  $0 rds del rm-xxx"
-    echo "  $0 rds account-add rm-xxx myuser mypassword '测试账号'"
-    echo "  $0 rds account-del rm-xxx myuser"
-    echo "  $0 rds account-get rm-xxx"
-    echo "  $0 rds account-set rm-xxx myuser mydb ReadWrite"
-    echo "  $0 rds account-set rm-xxx myuser mydb 只读"
+    echo "  $0 rds acc-add rm-xxx myuser mypassword '测试账号'"
+    echo "  $0 rds acc-del rm-xxx myuser"
+    echo "  $0 rds acc-get rm-xxx"
+    echo "  $0 rds acc-set rm-xxx myuser mydb ReadWrite"
+    echo "  $0 rds acc-set rm-xxx myuser mydb 只读"
     echo "  $0 rds db-get rm-xxx"
     echo "  $0 rds db-add rm-xxx mydb utf8mb4"
     echo "  $0 rds db-del rm-xxx mydb"
@@ -57,10 +57,10 @@ handle_rds_commands() {
     add) rds_create "$@" ;;
     set) rds_update "$@" ;;
     del) rds_delete "$@" ;;
-    account-add) rds_account_create "$@" ;;
-    account-del) rds_account_delete "$@" ;;
-    account-get) rds_account_list "$@" ;;
-    account-set) rds_account_grant "$@" ;;
+    acc-add) rds_account_create "$@" ;;
+    acc-del) rds_account_delete "$@" ;;
+    acc-get) rds_account_list "$@" ;;
+    acc-set) rds_account_grant "$@" ;;
     db-get) rds_db_list "$@" ;;
     db-add) rds_db_create "$@" ;;
     db-del) rds_db_delete "$@" ;;
@@ -125,7 +125,7 @@ rds_create() {
         if [ -z "$engine" ]; then
             echo "正在获取可用的数据库引擎..."
             local engine_result
-            engine_result=$(call_aliyun_api rds DescribeRegions --RegionId "$region" 2>/dev/null)
+            engine_result=$(call_aliyun_api rds DescribeRegions --RegionId "${region:-cn-hangzhou}" 2>/dev/null)
 
             if [ $? -eq 0 ] && [ -n "$engine_result" ]; then
                 # 获取支持的数据库引擎
@@ -548,7 +548,7 @@ rds_account_create() {
     fi
 
     if ! validate_required_params "$instance_id" "$account_name" "错误：实例ID和账号名不能为空。"; then
-        echo "用法：rds account-add <实例ID> <账号> [密码] [描述]" >&2
+        echo "用法：rds acc-add <实例ID> <账号> [密码] [描述]" >&2
         return 1
     fi
 
@@ -586,7 +586,7 @@ rds_account_create() {
 
     echo "创建 RDS 账号："
     echo "实例ID: $instance_id"
-    echo "账号: $account_name / $password"
+    echo "账号/密码: $account_name  /  $password"
     echo "描述: $description"
 
     local result
@@ -687,7 +687,7 @@ rds_account_delete() {
     fi
 
     if ! validate_required_params "$instance_id" "$account_name" "错误：实例ID和账号名不能为空。"; then
-        echo "用法：rds account-del <实例ID> <账号>" >&2
+        echo "用法：rds acc-del <实例ID> <账号>" >&2
         return 1
     fi
 
@@ -1188,7 +1188,7 @@ rds_account_grant() {
     esac
 
     if ! validate_required_params "$instance_id" "$account_name" "$db_name" "错误：实例ID、账号名和数据库名不能为空。"; then
-        echo "用法：rds account-set <实例ID> <账号> <数据库名> [权限]" >&2
+        echo "用法：rds acc-set <实例ID> <账号> <数据库名> [权限]" >&2
         return 1
     fi
 
