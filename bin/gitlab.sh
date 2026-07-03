@@ -440,32 +440,3 @@ main() {
 }
 
 main "$@"
-
-STORAGE="zfs01"
-
-grep -rl "ostype: win" /etc/pve/nodes/*/qemu-server/ |
-    awk -F'/' '{print $(NF-2), $NF}' |
-    sed 's/.conf//g' |
-    while read -r NODE VMID; do
-        echo "正在检查 VM $VMID 是否已配置 EFI 磁盘..."
-        # 使用 pvesh 查询当前配置，并检测是否包含 efidisk0
-        if pvesh get "/nodes/$NODE/qemu/$VMID/config" --output-format json | grep -q "efidisk0"; then
-            echo "【提示】VM $VMID 已经存在 EFI 磁盘，跳过添加，避免覆盖报错。"
-        else
-            echo "【警告】未检测到 EFI 磁盘，正在为您无损添加..."
-            pvesh create "/nodes/$NODE/qemu/$VMID/config" --efidisk0 ${STORAGE}:1
-        fi
-
-        # 1. Update all hardware configurations at once
-        echo "Updated VM $VMID on node $NODE to use q35 machine type and host CPU with 16 cores."
-        pvesh create "/nodes/${NODE}/qemu/${VMID}/config" --machine pc-q35-11.0 --cpu host --sockets 1 --cores 16 --vga virtio
-
-        # 2. Hard stop the VM to break the old hardware lock
-        echo "Stopped VM $VMID on node $NODE to apply new hardware configuration."
-        pvesh create "/nodes/${NODE}/qemu/${VMID}/status/stop"
-
-        # 3. Boot it back up with the brand new q35 layer
-        echo "Booted VM $VMID on node $NODE with new hardware configuration."
-        sleep 3
-        pvesh create "/nodes/${NODE}/qemu/${VMID}/status/start"
-    done
