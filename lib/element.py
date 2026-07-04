@@ -11,20 +11,34 @@
 
 import sys
 import asyncio
-from nio import AsyncClient, MatrixRoom, RoomMessageText
-
+from nio import AsyncClient, AsyncClientConfig, RoomMessageText
 
 async def main(homeserver, user_id, password, room_id, message):
-    client = AsyncClient(homeserver, user_id)
+    store_path = "./nio_store"          # 本地存储密钥和状态
+    device_id = "MYDEVICE"             # 可选，建议固定
+    config = AsyncClientConfig(encryption_enabled=True)
+    client = AsyncClient(
+        homeserver,
+        user_id,
+        device_id=device_id,
+        store_path=store_path,
+        config=config,
+    )
+
     await client.login(password)
+
+    # 先同步一次，获取房间和加密状态
+    await client.sync(30000)
+
     await client.room_send(
         room_id=room_id,
         message_type="m.room.message",
         content={
             "msgtype": "m.text",
-            "body": message
-        }
+            "body": message,
+        },
     )
+
     await client.close()
 
 if __name__ == "__main__":
@@ -39,6 +53,6 @@ if __name__ == "__main__":
 
     # Read message from stdin
     message = sys.stdin.read().strip()
-
     asyncio.get_event_loop().run_until_complete(
-        main(homeserver, user_id, password, room_id, message))
+        main(homeserver, user_id, password, room_id, message)
+    )
