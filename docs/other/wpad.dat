@@ -1,4 +1,4 @@
-// 存放位置 openwrt:/www/wpad.dat
+// 网关的dns名设置为 wpad, 本文件存放位置 openwrt:/www/wpad.dat，这样可以通过 http://wpad/wpad.dat 自动获取，windows 设置中直接打开允许自动代理即可
 
 function FindProxyForURL(url, host) {
     // 检查主机名是否为本地地址、简单主机名或私有网络地址
