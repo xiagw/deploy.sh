@@ -220,7 +220,7 @@ select_profile() {
 
 select_action() {
     local actions=(
-        "user add      Create a new user"
+        "user add      Create a new user/Add user to groups"
         "user get      List all users"
         "user set      Update user password"
         "user block    Block a user"
