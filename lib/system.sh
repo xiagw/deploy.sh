@@ -286,16 +286,16 @@ system_cert_renew() {
             _msg yellow "dns type: Goddady"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
             api_goddady="https://api.godaddy.com/v1/domains"
-            domains="$(curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true)"
             export GD_Key="${SAVED_GD_Key:-none}"
             export GD_Secret="${SAVED_GD_Secret:-none}"
+            domains="$(curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true)"
             ;;
         dns_cf)
             _msg yellow "dns type: cloudflare"
             _install_flarectl
-            domains="$(flarectl zone list | awk '/active/ {print $3}' || true)"
             export CF_Token="${SAVED_CF_Token:-none}"
             export CF_Account_ID="${SAVED_CF_Account_ID:-none}"
+            domains="$(flarectl zone list | awk '/active/ {print $3}' || true)"
             ;;
         dns_ali)
             _msg yellow "dns type: aliyun"
@@ -307,10 +307,10 @@ system_cert_renew() {
                 --region "${SAVED_Ali_region:-none}" \
                 --access-key-id "${SAVED_Ali_Key:-none}" \
                 --access-key-secret "${SAVED_Ali_Secret:-none}"
-            domains="$(aliyun --profile "${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 |
-                jq -r '.Data.Domain[].DomainName' || true)"
             export Ali_Key=$SAVED_Ali_Key
             export Ali_Secret=$SAVED_Ali_Secret
+            domains="$(aliyun --profile "${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 |
+                jq -r '.Data.Domain[].DomainName' || true)"
             ;;
         dns_tencent)
             _msg yellow "dns type: tencent"
@@ -319,7 +319,10 @@ system_cert_renew() {
             domains="$(tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true)"
             ;;
         dns_manual)
-            _msg yellow "get domains from env file"
+            _msg yellow "get domains from account.conf.xxx.dns_manual file"
+            # "${acme_home}/account.conf.xxx.dns_manual" 内有 domains="example1.com example2.com example3.com"
+            echo "$domains"
+            # domains="$(grep -oP 'domains=\K.*' "${acme_home}/account.conf.xxx.dns_manual" 2>/dev/null || true)"
             ;;
         *)
             _msg yellow "unknown dns type: $dns_type"
