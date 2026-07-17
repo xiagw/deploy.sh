@@ -444,7 +444,6 @@ _install_flarectl() {
         return
     fi
     _msg green "Installing flarectl"
-    local ver='0.115.0'
     local temp_file
     temp_file="$(mktemp)"
 
@@ -457,13 +456,32 @@ _install_flarectl() {
     *) _msg error "Unsupported operating system: $OSTYPE" && return 1 ;;
     esac
 
-    local url="https://github.com/cloudflare/cloudflare-go/releases/download/v${ver}/flarectl_${ver}_${os}_amd64.tar.gz"
+    # 标准化架构名称
+    local arch
+    arch=$(uname -m | tr '[:upper:]' '[:lower:]')
+    case "$arch" in
+    x86_64 | x64 | amd64) arch="amd64" ;;
+    aarch64 | arm64) arch="arm64" ;;
+    *)
+        if [ "$arch" != "amd64" ]; then
+            _msg warning "Unknown architecture: $arch, using amd64"
+            arch="amd64"
+        fi
+        ;;
+    esac
 
-    if curl -fsSLo "$temp_file" $url; then
+    local ver
+    ver="$(
+        curl -sS https://api.github.com/repos/cloudflare/cloudflare-go/releases |
+            jq -r '[.[] | select(.assets[].browser_download_url | contains("/flarectl_"))] | .[0] | .tag_name'
+    )"
+    local url="https://github.com/cloudflare/cloudflare-go/releases/download/${ver}/flarectl_${ver}_${os}_${arch}.tar.gz"
+
+    if curl -fsSLo "$temp_file" "$url"; then
         _msg green "Extracting flarectl to /tmp"
         tar -C /tmp -xzf "$temp_file" flarectl
         _msg green "Installing to /usr/local/bin/flarectl"
-        $use_sudo install -m 0755 /tmp/flarectl /usr/local/bin/flarectl
+        sudo install -m 0755 /tmp/flarectl /usr/local/bin/flarectl
         _msg success "flarectl installed successfully"
         _msg green "Showing version"
         flarectl -version
