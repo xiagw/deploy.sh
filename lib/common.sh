@@ -475,7 +475,7 @@ _install_flarectl() {
         curl -sS https://api.github.com/repos/cloudflare/cloudflare-go/releases |
             jq -r '[.[] | select(.assets[].browser_download_url | contains("/flarectl_"))] | .[0] | .tag_name'
     )"
-    local url="https://github.com/cloudflare/cloudflare-go/releases/download/${ver}/flarectl_${ver:#v}_${os}_${arch}.tar.gz"
+    local url="https://github.com/cloudflare/cloudflare-go/releases/download/${ver}/flarectl_${ver#v}_${os}_${arch}.tar.gz"
 
     if curl -fsSLo "$temp_file" "$url"; then
         _msg green "Extracting flarectl to /tmp"
