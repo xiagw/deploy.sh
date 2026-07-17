@@ -293,6 +293,7 @@ system_cert_renew() {
         dns_cf)
             _msg yellow "dns type: cloudflare"
             _install_flarectl
+            export CF_API_TOKEN="${SAVED_CF_API_TOKEN:-none}"
             export CF_Token="${SAVED_CF_Token:-none}"
             export CF_Account_ID="${SAVED_CF_Account_ID:-none}"
             domains="$(flarectl zone list | awk '/active/ {print $3}' || true)"
