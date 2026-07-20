@@ -293,9 +293,15 @@ system_cert_renew() {
         dns_cf)
             _msg yellow "dns type: cloudflare"
             _install_flarectl
-            export CF_API_TOKEN="${SAVED_CF_API_TOKEN:-none}"
-            export CF_Token="${SAVED_CF_Token:-none}"
-            export CF_Account_ID="${SAVED_CF_Account_ID:-none}"
+            if [[ -n "$SAVED_CF_API_TOKEN" ]]; then
+                export CF_API_TOKEN="$SAVED_CF_API_TOKEN"
+            elif [[ -n "$SAVED_CF_Token" && -n "$SAVED_CF_Account_ID" ]]; then
+                export CF_Token="$SAVED_CF_Token"
+                export CF_Account_ID="$SAVED_CF_Account_ID"
+            else
+                _msg error "Missing Cloudflare credentials in $file"
+                continue
+            fi
             domains="$(flarectl zone list | awk '/active/ {print $3}' || true)"
             ;;
         dns_ali)
