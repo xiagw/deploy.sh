@@ -422,18 +422,68 @@ _install_aliyun_cli() {
         return
     fi
     _check_distribution
+
+    _msg green "Installing/Upgrading Alibaba Cloud CLI using official installer script"
+
+    # Prefer official one-line installer (recommended by Alibaba Cloud)
+    if /bin/bash -c "$(curl -fsSL https://aliyuncli.alicdn.com/install.sh)"; then
+        _msg green "Alibaba Cloud CLI installed/updated via official installer"
+        return 0
+    else
+        _msg warn "Official installer failed or is not usable; falling back to direct CDN download"
+    fi
+
+    # Fallback: construct CDN URL based on OS and ARCH
     local os=${lsb_dist/ubuntu/linux}
     os=${os/centos/linux}
-    local url="https://help.aliyun.com/zh/cli/install-cli-on-${os}"
+    local arch
+    arch=$(uname -m)
+    local arch_name
+    case "$arch" in
+        x86_64|amd64) arch_name="amd64" ;;
+        aarch64|arm64) arch_name="arm64" ;;
+        *) arch_name="amd64" ;;
+    esac
+
     local url_down
-    url_down=$(curl -fsSL "$url" | grep -oE 'href="[^\"]+"' | grep -o "https.*aliyun-cli.*${os}.*\.tgz")
+    if [[ "$os" == "macos" ]]; then
+        url_down="https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-universal.tgz"
+    elif [[ "$os" == "linux" ]]; then
+        url_down="https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-${arch_name}.tgz"
+    else
+        local url="https://help.aliyun.com/zh/cli/install-cli-on-${os}"
+        url_down=$(curl -fsSL "$url" | grep -oE 'href="[^" ]+"' | grep -o "https.*aliyun-cli.*${os}.*\.tgz" || true)
+    fi
+
+    if [ -z "$url_down" ]; then
+        url_down="https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz"
+    fi
+
+    # Download, extract, and install
     local temp_dir
     temp_dir=$(mktemp -d)
-    curl -fLo "$temp_dir/aly.tgz" "$url_down"
+    if ! curl -fLo "$temp_dir/aly.tgz" "$url_down"; then
+        _msg error "Failed to download aliyun cli from $url_down"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
     tar -xzf "$temp_dir/aly.tgz" -C "$temp_dir"
+
+    local extracted="$temp_dir/aliyun"
+    if [ ! -f "$extracted" ]; then
+        extracted=$(find "$temp_dir" -type f -name aliyun -print -quit || true)
+    fi
+
+    if [ -z "$extracted" ]; then
+        _msg error "Failed to find aliyun binary in the archive"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
     local cmd=/usr/local/bin/aliyun
     _msg green "Installing to $cmd"
-    $use_sudo install -m 0755 "$temp_dir/aliyun" "$cmd"
+    $use_sudo install -m 0755 "$extracted" "$cmd"
     _msg green "Showing version"
     "$cmd" version | head -n 1
     rm -rf "$temp_dir"
