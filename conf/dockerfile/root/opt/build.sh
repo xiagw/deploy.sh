@@ -125,8 +125,9 @@ EOF
     */composer)
         [ "$(id -u)" -eq 0 ] || return
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
-        mkdir -p /var/www/.composer /.composer
-        chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
+        mkdir -p /var/www
+        install -m 0755 -o 1000 -g 1000 -d /var/www/.composer /.composer
+        chown -R 1000:1000 /tmp/cache /tmp/config.json /tmp/auth.json
         ;;
     */node)
         # npm_mirror=https://mirrors.ustc.edu.cn/node/
@@ -343,8 +344,7 @@ _build_node() {
     $cmd_pkg_opt less vim curl ca-certificates
 
     # Create necessary directories
-    mkdir -p /.cache /app
-    chown -R node:node /.cache /app
+    install -m 0755 -o node -g node -d /.cache /app
 
     # Update npm and install cnpm if in China
     node_ver=$(node --version | sed -E 's/^[^0-9]*([0-9]+).*/\1/')
@@ -463,9 +463,9 @@ _build_jdk_runtime() {
     _check_run_sh
 
     # Set up app directory and permissions
-    mkdir -p /app
-    chown -R 1000:1000 /app
+    install -m 0755 -o 1000 -g 1000 -d /app
     [ -f /src/.jvm.options ] && cp -avf /src/.jvm.options /app/
+    [ -f /src/jvm.options ] && cp -avf /src/jvm.options /app/
     command -v su || command -v runuser || $cmd_pkg install -y util-linux
     command -v useradd || $cmd_pkg install -y shadow-utils
 
@@ -649,8 +649,8 @@ _build_redis() {
     cat >>/root/.bashrc <<'EOF'
 export REDISPASS_AUTH=${REDIS_PASSWORD}
 EOF
-    mkdir /run/redis
-    chown redis:redis /run/redis
+    mkdir /run
+    install -m 0755 -o redis -g redis -d /run/redis
 }
 
 _build_tomcat() {
