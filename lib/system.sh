@@ -292,7 +292,9 @@ system_cert_renew() {
             fi
             export GD_Key="${SAVED_GD_Key}"
             export GD_Secret="${SAVED_GD_Secret}"
-            domains="$(curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true)"
+            domains="$(
+                curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true
+            )"
             ;;
         dns_cf)
             _msg yellow "dns type: cloudflare"
@@ -308,7 +310,7 @@ system_cert_renew() {
             domains="$(
                 curl -fsSL -X GET "https://api.cloudflare.com/client/v4/zones" \
                     -H "Authorization: Bearer ${CF_API_TOKEN:-$CF_Token}" \
-                    -H "Content-Type: application/json" | jq -r '.result[].name'
+                    -H "Content-Type: application/json" | jq -r '.result[].name' || true
             )"
             ;;
         dns_ali)
@@ -323,14 +325,18 @@ system_cert_renew() {
                 --access-key-secret "${SAVED_Ali_Secret:-none}"
             export Ali_Key=$SAVED_Ali_Key
             export Ali_Secret=$SAVED_Ali_Secret
-            domains="$(aliyun --profile "${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 |
-                jq -r '.Data.Domain[].DomainName' || true)"
+            domains="$(
+                aliyun --profile "${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 |
+                jq -r '.Data.Domain[].DomainName' || true
+            )"
             ;;
         dns_tencent)
             _msg yellow "dns type: tencent"
             _install_tencent_cli
             tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
-            domains="$(tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true)"
+            domains="$(
+                tccli domain DescribeDomainNameList --output json | jq -r '.DomainSet[] | .DomainName' || true
+            )"
             ;;
         dns_manual)
             _msg yellow "get domains from account.conf.xxx.dns_manual file"
@@ -345,6 +351,10 @@ system_cert_renew() {
         esac
 
         ## single account may have multiple domains / 单个账号可能有多个域名
+        if [[ -z "$domains" ]]; then
+            _msg warn "No domains found, skipping."
+            continue
+        fi
         acme_cmd="${acme_cmd} --accountconf $file"
         for domain in ${domains}; do
             _msg orange "Checking domain: $domain"
