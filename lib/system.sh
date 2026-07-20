@@ -307,7 +307,7 @@ system_cert_renew() {
             fi
             domains="$(
                 curl -fsSL -X GET "https://api.cloudflare.com/client/v4/zones" \
-                    -H "Authorization: Bearer ${SAVED_CF_API_TOKEN:-$SAVED_CF_Token}" \
+                    -H "Authorization: Bearer ${CF_API_TOKEN:-$CF_Token}" \
                     -H "Content-Type: application/json" | jq -r '.result[].name'
             )"
             ;;
