@@ -286,13 +286,16 @@ system_cert_renew() {
             _msg yellow "dns type: Goddady"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
             api_goddady="https://api.godaddy.com/v1/domains"
-            export GD_Key="${SAVED_GD_Key:-none}"
-            export GD_Secret="${SAVED_GD_Secret:-none}"
+            if [[ -z "$SAVED_GD_Key" || -z "$SAVED_GD_Secret" ]]; then
+                _msg error "Missing Goddady credentials in $file"
+                continue
+            fi
+            export GD_Key="${SAVED_GD_Key}"
+            export GD_Secret="${SAVED_GD_Secret}"
             domains="$(curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true)"
             ;;
         dns_cf)
             _msg yellow "dns type: cloudflare"
-            _install_flarectl
             if [[ -n "$SAVED_CF_API_TOKEN" ]]; then
                 export CF_API_TOKEN="$SAVED_CF_API_TOKEN"
             elif [[ -n "$SAVED_CF_Token" && -n "$SAVED_CF_Account_ID" ]]; then
@@ -302,7 +305,11 @@ system_cert_renew() {
                 _msg error "Missing Cloudflare credentials in $file"
                 continue
             fi
-            domains="$(flarectl zone list | awk '/active/ {print $3}' || true)"
+            domains="$(
+                curl -fsSL -X GET "https://api.cloudflare.com/client/v4/zones" \
+                    -H "Authorization: Bearer ${SAVED_CF_API_TOKEN:-$SAVED_CF_Token}" \
+                    -H "Content-Type: application/json" | jq -r '.result[].name'
+            )"
             ;;
         dns_ali)
             _msg yellow "dns type: aliyun"
@@ -450,7 +457,6 @@ system_install_tools() {
     ${ENV_INSTALL_PYTHON_ELEMENT:-false} && _install_python_element "$@" "$IS_CHINA"
     ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab "$@" "$IS_CHINA"
     ${ENV_INSTALL_JMETER:-false} && _install_jmeter
-    ${ENV_INSTALL_FLARECTL:-false} && _install_flarectl
 
     ## 容器工具安装
     ${ENV_INSTALL_DOCKER:-false} && _install_docker "$([[ "$IS_CHINA" == "true" ]] && echo "--mirror Aliyun" || echo "")"
@@ -492,7 +498,7 @@ check_k8s_available() {
     # 检查 helm 是否可用（可选，但推荐）
     if ! command -v helm &>/dev/null; then
         _msg warn "Helm is not installed, but kubectl is available"
-        return 0  # kubectl 可用即可
+        return 0 # kubectl 可用即可
     fi
     return 0
 }
