@@ -340,9 +340,13 @@ config_build_env() {
             MVN_VERSION="3.9-amazoncorretto-21"
             JDK_VERSION="21-base"
             ;;
-        java:23 | java:23:*)
-            MVN_VERSION="3.9-amazoncorretto-23"
-            JDK_VERSION="23-base"
+        java:25 | java:25:*)
+            MVN_VERSION="3.9-amazoncorretto-25"
+            JDK_VERSION="25-base"
+            ;;
+        java:26 | java:26:*)
+            MVN_VERSION="3.9-amazoncorretto-26"
+            JDK_VERSION="26-base"
             ;;
         *)
             ## 默认使用Java 8
