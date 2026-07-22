@@ -223,17 +223,33 @@ system_check() {
 system_proxy() {
     case "$1" in
     0 | off | disable)
-        _msg time "unset http_proxy https_proxy all_proxy"
-        unset http_proxy https_proxy all_proxy
+        _msg time "unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY"
+        unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
         ;;
     1 | on | enable)
-        if [ -z "$ENV_HTTP_PROXY" ]; then
-            _msg warn "ENV_HTTP_PROXY is empty, proxy not set."
+        if [ -z "$ENV_HTTP_PROXY" ] && [ -z "$ENV_HTTPS_PROXY" ] && [ -z "$ENV_ALL_PROXY" ]; then
+            _msg warn "ENV_HTTP_PROXY/ENV_HTTPS_PROXY/ENV_ALL_PROXY is empty, proxy not set."
         else
-            _msg time "set http_proxy https_proxy all_proxy"
-            export http_proxy="$ENV_HTTP_PROXY"
-            export https_proxy="$ENV_HTTP_PROXY"
-            export all_proxy="$ENV_HTTP_PROXY"
+            _msg time "set proxy environment variables"
+            if [ -n "$ENV_HTTP_PROXY" ]; then
+                export http_proxy="$ENV_HTTP_PROXY"
+                export HTTP_PROXY="$ENV_HTTP_PROXY"
+            fi
+            if [ -n "$ENV_HTTPS_PROXY" ]; then
+                export https_proxy="$ENV_HTTPS_PROXY"
+                export HTTPS_PROXY="$ENV_HTTPS_PROXY"
+            elif [ -n "$ENV_HTTP_PROXY" ]; then
+                export https_proxy="$ENV_HTTP_PROXY"
+                export HTTPS_PROXY="$ENV_HTTP_PROXY"
+            fi
+            if [ -n "$ENV_ALL_PROXY" ]; then
+                export all_proxy="$ENV_ALL_PROXY"
+                export ALL_PROXY="$ENV_ALL_PROXY"
+            fi
+            if [ -n "$ENV_NO_PROXY" ]; then
+                export no_proxy="$ENV_NO_PROXY"
+                export NO_PROXY="$ENV_NO_PROXY"
+            fi
         fi
         ;;
     esac

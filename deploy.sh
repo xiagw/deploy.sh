@@ -560,8 +560,15 @@ main() {
     ## 中国地区特殊配置
     ## 如果指定了 --in-china 参数，更新环境配置文件中的 ENV_IN_CHINA 为 true
     ## 这将影响后续的镜像源选择、代理配置等
-    ## ========================================================================
-    ${arg_in_china:-false} && sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
+    if ${arg_in_china:-false}; then
+        sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
+        ENV_IN_CHINA=true
+    fi
+
+    ## 如果处于中国区环境，启用 deploy.env 中的代理设置
+    if [[ "${ENV_IN_CHINA:-false}" == true ]]; then
+        system_proxy on
+    fi
 
     ## ========================================================================
     ## 独立功能: 创建Helm Chart
