@@ -288,6 +288,10 @@ build_base_image() {
   registry=$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")
   base_tag="${registry}/${tag}-base"
   cmd=$(command -v docker || command -v podman || echo docker)
+  if [ -z "${HTTP_PROXY:-}" ]; then
+    HTTP_PROXY=$(awk -F= '/^ENV_HTTP_PROXY=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")
+    HTTPS_PROXY="${HTTP_PROXY}"
+  fi
   cmd_opt=(
     "$cmd"
     build

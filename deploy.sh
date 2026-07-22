@@ -309,13 +309,6 @@ config_build_env() {
         G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR}/"
     fi
 
-    ## 兼容大小写代理变量和 deploy.env 中的 ENV_* 代理设置
-    if [ -z "${HTTP_PROXY:-}" ]; then
-        HTTP_PROXY=$(awk -F= '/^ENV_HTTP_PROXY=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")
-    fi
-    G_ARGS+=" --build-arg HTTP_PROXY=${HTTP_PROXY}"
-    G_ARGS+=" --build-arg HTTPS_PROXY=${HTTP_PROXY}"
-
     ## 根据项目语言类型配置特定的构建参数
     case "${lang}" in
     java:*)
