@@ -310,28 +310,11 @@ config_build_env() {
     fi
 
     ## 兼容大小写代理变量和 deploy.env 中的 ENV_* 代理设置
-    local proxy_http proxy_https proxy_all proxy_no
-    proxy_http="${http_proxy:-${HTTP_PROXY:-${ENV_HTTP_PROXY:-}}}"
-    proxy_https="${https_proxy:-${HTTPS_PROXY:-${ENV_HTTPS_PROXY:-${proxy_http}}}}"
-    proxy_all="${all_proxy:-${ALL_PROXY:-${ENV_ALL_PROXY:-${proxy_http}}}}"
-    proxy_no="${no_proxy:-${NO_PROXY:-${ENV_NO_PROXY:-}}}"
-
-    if [ -n "${proxy_http}" ]; then
-        G_ARGS+=" --build-arg HTTP_PROXY=${proxy_http}"
-        G_ARGS+=" --build-arg http_proxy=${proxy_http}"
+    if [ -z "${HTTP_PROXY:-}" ]; then
+        HTTP_PROXY=$(awk -F= '/^ENV_HTTP_PROXY=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")
     fi
-    if [ -n "${proxy_https}" ]; then
-        G_ARGS+=" --build-arg HTTPS_PROXY=${proxy_https}"
-        G_ARGS+=" --build-arg https_proxy=${proxy_https}"
-    fi
-    if [ -n "${proxy_all}" ]; then
-        G_ARGS+=" --build-arg ALL_PROXY=${proxy_all}"
-        G_ARGS+=" --build-arg all_proxy=${proxy_all}"
-    fi
-    if [ -n "${proxy_no}" ]; then
-        G_ARGS+=" --build-arg NO_PROXY=${proxy_no}"
-        G_ARGS+=" --build-arg no_proxy=${proxy_no}"
-    fi
+    G_ARGS+=" --build-arg HTTP_PROXY=${HTTP_PROXY}"
+    G_ARGS+=" --build-arg HTTPS_PROXY=${HTTP_PROXY}"
 
     ## 根据项目语言类型配置特定的构建参数
     case "${lang}" in
@@ -394,8 +377,8 @@ config_build_env() {
     node:*)
         ## Node.js项目配置
         ## 从语言标识中提取Node版本号（格式: node:20:dockerfile）
-        local ver="${lang#*:}"  # 移除 "node:" 前缀
-        ver="${ver%:*}"          # 移除 ":dockerfile" 后缀
+        local ver="${lang#*:}" # 移除 "node:" 前缀
+        ver="${ver%:*}"        # 移除 ":dockerfile" 后缀
         ## 默认使用Node 20（如果未指定版本）
         G_ARGS+=" --build-arg NODE_VERSION=${ver:-20}"
         ;;
@@ -443,16 +426,16 @@ main() {
     ## ========================================================================
 
     ## 脚本基本信息
-    G_NAME="$(basename "${BASH_SOURCE[0]}")"              # 脚本名称
-    G_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"  # 脚本所在目录的绝对路径
-    G_LIB="${G_PATH}/lib"                                  # 功能模块库目录
-    G_DATA="${G_PATH}/data"                                # 数据目录（配置文件、日志等）
+    G_NAME="$(basename "${BASH_SOURCE[0]}")"                 # 脚本名称
+    G_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" # 脚本所在目录的绝对路径
+    G_LIB="${G_PATH}/lib"                                    # 功能模块库目录
+    G_DATA="${G_PATH}/data"                                  # 数据目录（配置文件、日志等）
 
     ## 日志和配置文件路径
-    G_LOG="${G_DATA}/${G_NAME}.log"                        # 日志文件路径
+    G_LOG="${G_DATA}/${G_NAME}.log" # 日志文件路径
     ## 配置文件路径（由 find_project_config 函数设置）
-    G_CONF=""                                               # 部署配置文件（JSON格式，在 find_project_config 中设置）
-    G_ENV="${G_DATA}/deploy.env"                           # 环境变量配置文件
+    G_CONF=""                    # 部署配置文件（JSON格式，在 find_project_config 中设置）
+    G_ENV="${G_DATA}/deploy.env" # 环境变量配置文件
 
     ## ========================================================================
     ## 功能标志数组初始化
@@ -678,8 +661,8 @@ main() {
     ## 返回格式: "lang:version:dockerfile" (例如: "java:17:Dockerfile")
     ## ========================================================================
     _msg step "[lang] Probe program language"
-    get_lang=$(repo_language_detect)  # 完整语言标识: lang:ver:docker
-    repo_lang=${get_lang%%:*}         # 仅语言类型: lang
+    get_lang=$(repo_language_detect) # 完整语言标识: lang:ver:docker
+    repo_lang=${get_lang%%:*}        # 仅语言类型: lang
     echo "${get_lang}"
 
     ## ========================================================================
