@@ -309,6 +309,28 @@ config_build_env() {
         G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR}/"
     fi
 
+    ## 如果设置了代理变量，传递到 Docker 构建上下文
+    ## 这在 IN_CHINA=true 时尤其有用，用于通过代理访问外网资源
+    if [ -n "${http_proxy:-}" ]; then
+        G_ARGS+=" --build-arg HTTP_PROXY=${http_proxy}"
+        G_ARGS+=" --build-arg http_proxy=${http_proxy}"
+    fi
+    if [ -n "${https_proxy:-}" ]; then
+        G_ARGS+=" --build-arg HTTPS_PROXY=${https_proxy}"
+        G_ARGS+=" --build-arg https_proxy=${https_proxy}"
+    elif [ -n "${http_proxy:-}" ]; then
+        G_ARGS+=" --build-arg HTTPS_PROXY=${http_proxy}"
+        G_ARGS+=" --build-arg https_proxy=${http_proxy}"
+    fi
+    if [ -n "${all_proxy:-}" ]; then
+        G_ARGS+=" --build-arg ALL_PROXY=${all_proxy}"
+        G_ARGS+=" --build-arg all_proxy=${all_proxy}"
+    fi
+    if [ -n "${no_proxy:-}" ]; then
+        G_ARGS+=" --build-arg NO_PROXY=${no_proxy}"
+        G_ARGS+=" --build-arg no_proxy=${no_proxy}"
+    fi
+
     ## 根据项目语言类型配置特定的构建参数
     case "${lang}" in
     java:*)
