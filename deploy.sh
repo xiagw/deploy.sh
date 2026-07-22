@@ -309,26 +309,28 @@ config_build_env() {
         G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR}/"
     fi
 
-    ## 如果设置了代理变量，传递到 Docker 构建上下文
-    ## 这在 IN_CHINA=true 时尤其有用，用于通过代理访问外网资源
-    if [ -n "${http_proxy:-}" ]; then
-        G_ARGS+=" --build-arg HTTP_PROXY=${http_proxy}"
-        G_ARGS+=" --build-arg http_proxy=${http_proxy}"
+    ## 兼容大小写代理变量和 deploy.env 中的 ENV_* 代理设置
+    local proxy_http proxy_https proxy_all proxy_no
+    proxy_http="${http_proxy:-${HTTP_PROXY:-${ENV_HTTP_PROXY:-}}}"
+    proxy_https="${https_proxy:-${HTTPS_PROXY:-${ENV_HTTPS_PROXY:-${proxy_http}}}}"
+    proxy_all="${all_proxy:-${ALL_PROXY:-${ENV_ALL_PROXY:-${proxy_http}}}}"
+    proxy_no="${no_proxy:-${NO_PROXY:-${ENV_NO_PROXY:-}}}"
+
+    if [ -n "${proxy_http}" ]; then
+        G_ARGS+=" --build-arg HTTP_PROXY=${proxy_http}"
+        G_ARGS+=" --build-arg http_proxy=${proxy_http}"
     fi
-    if [ -n "${https_proxy:-}" ]; then
-        G_ARGS+=" --build-arg HTTPS_PROXY=${https_proxy}"
-        G_ARGS+=" --build-arg https_proxy=${https_proxy}"
-    elif [ -n "${http_proxy:-}" ]; then
-        G_ARGS+=" --build-arg HTTPS_PROXY=${http_proxy}"
-        G_ARGS+=" --build-arg https_proxy=${http_proxy}"
+    if [ -n "${proxy_https}" ]; then
+        G_ARGS+=" --build-arg HTTPS_PROXY=${proxy_https}"
+        G_ARGS+=" --build-arg https_proxy=${proxy_https}"
     fi
-    if [ -n "${all_proxy:-}" ]; then
-        G_ARGS+=" --build-arg ALL_PROXY=${all_proxy}"
-        G_ARGS+=" --build-arg all_proxy=${all_proxy}"
+    if [ -n "${proxy_all}" ]; then
+        G_ARGS+=" --build-arg ALL_PROXY=${proxy_all}"
+        G_ARGS+=" --build-arg all_proxy=${proxy_all}"
     fi
-    if [ -n "${no_proxy:-}" ]; then
-        G_ARGS+=" --build-arg NO_PROXY=${no_proxy}"
-        G_ARGS+=" --build-arg no_proxy=${no_proxy}"
+    if [ -n "${proxy_no}" ]; then
+        G_ARGS+=" --build-arg NO_PROXY=${proxy_no}"
+        G_ARGS+=" --build-arg no_proxy=${proxy_no}"
     fi
 
     ## 根据项目语言类型配置特定的构建参数

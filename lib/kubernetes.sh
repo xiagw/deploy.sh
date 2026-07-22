@@ -297,8 +297,8 @@ build_base_image() {
     --platform "linux/amd64,linux/arm64"
     --build-arg CHANGE_SOURCE=true
     --build-arg IN_CHINA=true
-    --build-arg HTTP_PROXY="${http_proxy-}"
-    --build-arg HTTPS_PROXY="${http_proxy-}"
+    --build-arg HTTP_PROXY="${HTTP_PROXY:-}"
+    --build-arg HTTPS_PROXY="${HTTPS_PROXY:-}"
   )
 
   case "$tag" in

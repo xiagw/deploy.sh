@@ -250,6 +250,14 @@ system_proxy() {
                 export no_proxy="$ENV_NO_PROXY"
                 export NO_PROXY="$ENV_NO_PROXY"
             fi
+            if [ -n "$ENV_HTTP_PROXY" ] && [ -z "$ENV_HTTPS_PROXY" ]; then
+                export https_proxy="$ENV_HTTP_PROXY"
+                export HTTPS_PROXY="$ENV_HTTP_PROXY"
+            fi
+            if [ -n "$ENV_HTTP_PROXY" ] && [ -z "$ENV_ALL_PROXY" ]; then
+                export all_proxy="$ENV_HTTP_PROXY"
+                export ALL_PROXY="$ENV_HTTP_PROXY"
+            fi
         fi
         ;;
     esac
