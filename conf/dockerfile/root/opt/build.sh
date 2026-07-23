@@ -403,6 +403,7 @@ _build_maven() {
     # Copy config files if needed
     [ -f /src/.jvm.options ] && cp -v /src/.jvm.options /jars/
     [ -f /src/jvm.options ] && cp -v /src/jvm.options /jars/
+    [ -d /src/cert ] && cp -rv /src/cert /jars/
 
     local i=0
     while IFS= read -r file; do
@@ -466,6 +467,7 @@ _build_jdk_runtime() {
     install -m 0755 -o 1000 -g 1000 -d /app
     [ -f /src/.jvm.options ] && cp -avf /src/.jvm.options /app/
     [ -f /src/jvm.options ] && cp -avf /src/jvm.options /app/
+    [ -d /src/cert ] && cp -rv /src/cert /app/
     command -v su || command -v runuser || $cmd_pkg install -y util-linux
     command -v useradd || $cmd_pkg install -y shadow-utils
 
