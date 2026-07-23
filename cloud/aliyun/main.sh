@@ -43,12 +43,12 @@ load_module() {
 main() {
     # 先加载基础服务框架
     # shellcheck source=/dev/null
-    [[ -f "${SCRIPT_DIR}/base_service.sh" ]] && source "${SCRIPT_DIR}/base_service.sh"
+    [[ -f "${SCRIPT_DIR}/base.sh" ]] && source "${SCRIPT_DIR}/base.sh"
 
     # 导入其他脚本
     for file in "${SCRIPT_DIR}"/*.sh "${SCRIPT_LIB}"/common.sh; do
         case "$file" in
-        */run.sh | */main.sh | */base_service.sh | */service_template.sh | */test_*.sh) continue ;;
+        */run.sh | */main.sh | */base.sh | */test_*.sh) continue ;;
         *.sh)
             # shellcheck source=/dev/null
             [[ -f "$file" ]] && source "$file"
@@ -60,7 +60,9 @@ main() {
 
     check_dependencies
 
-    local profile="default"
+    local profile
+    profile=$(aliyun configure list 2>/dev/null | awk -F'|' '$1 ~ /\*/ {gsub(/[ *]/, "", $1); print $1; exit}')
+    profile=${profile:-default}
     local region=""
     local args=()
     local i=0

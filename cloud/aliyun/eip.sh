@@ -5,7 +5,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 show_eip_help() {
     echo "EIP (弹性公网IP) 操作："
@@ -51,16 +51,15 @@ eip_list() {
     # 使用单行 awk 脚本，避免多行字符串的转义问题
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-14s  %-7s  %-10s  %-18s  %s\n", $1, $2, $3, $4, $5, $6}'
 
-    generic_list \
-        "vpc" \
-        "DescribeEipAddresses" \
-        "eip" \
-        "$format" \
-        "$table_header" \
-        "$jq_filter" \
-        "$status_mapper" \
-        "没有找到 EIP。" \
-        "列出 EIP："
+    local result
+    result=$(call_aliyun_api vpc describe-eip-addresses --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
+    ret=$?
+    if [ $ret -eq 0 ]; then
+        format_output "$result" "$format" "eip" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 EIP。" "列出 EIP："
+    else
+        echo "错误：无法获取 EIP 列表。" >&2
+        return 1
+    fi
 }
 
 # 使用新框架的创建函数
@@ -73,7 +72,7 @@ eip_create() {
 
         echo "正在获取可用的 EIP 带宽选项..."
         local bandwidth_result
-        bandwidth_result=$(call_aliyun_api vpc DescribeCommonBandwidthPackages --RegionId "$region" 2>/dev/null)
+        bandwidth_result=$(call_aliyun_api vpc describe-common-bandwidth-packages --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
 
         local bandwidth_list
         if [ $? -eq 0 ] && [ -n "$bandwidth_result" ]; then
@@ -123,8 +122,8 @@ eip_create() {
     fi
 
     local api_args=(
-        "--Bandwidth" "$bandwidth"
-        "--InternetChargeType" "PayByTraffic"
+        "--bandwidth" "$bandwidth"
+        "--internet-charge-type" "PayByTraffic"
     )
 
     generic_create \
@@ -146,30 +145,16 @@ eip_update() {
 
         # 选择 EIP ID
         if [ -z "$eip_id" ]; then
-            local eip_list
-            eip_list=$(call_aliyun_api vpc DescribeEipAddresses --RegionId "$region" 2>/dev/null | jq -r '.EipAddresses.EipAddress[] | "\(.AllocationId) (\(.IpAddress)) [\(.Bandwidth)Mbps] [\(.Status)]"')
-
-            if [ -z "$eip_list" ]; then
-                echo "错误：没有找到 EIP。" >&2
-                return 1
-            elif [ "$(echo "$eip_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                eip_id=$(echo "$eip_list" | awk '{print $1}')
-                echo "自动选择唯一的 EIP: $eip_id"
-            else
-                if type select_with_fzf >/dev/null 2>&1; then
-                    eip_id=$(select_with_fzf "选择 EIP" "$eip_list" | awk '{print $1}')
-                else
-                    echo "错误：需要选择 EIP，但未找到交互式选择工具。" >&2
-                    return 1
-                fi
-            fi
+            eip_id=$(resolve_resource_id "" "选择 EIP" "错误：没有找到 EIP。" \
+                '.EipAddresses.EipAddress[] | "\(.AllocationId) (\(.IpAddress)) [\(.Bandwidth)Mbps] [\(.Status)]"' \
+                -- vpc describe-eip-addresses --biz-region-id "${region:-}" --region "${region:-}") || return 1
         fi
 
         # 选择新带宽
         if [ -z "$new_bandwidth" ]; then
             echo "正在获取可用的 EIP 带宽选项..."
             local bandwidth_result
-            bandwidth_result=$(call_aliyun_api vpc DescribeCommonBandwidthPackages --RegionId "$region" 2>/dev/null)
+            bandwidth_result=$(call_aliyun_api vpc describe-common-bandwidth-packages --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
 
             local bandwidth_list
             if [ $? -eq 0 ] && [ -n "$bandwidth_result" ]; then
@@ -221,20 +206,9 @@ eip_update() {
     fi
 
     echo "更新 EIP 带宽："
-    local result
-    result=$(call_aliyun_api vpc ModifyEipAddressAttribute \
-        --RegionId "$region" \
-        --AllocationId "$eip_id" \
-        --Bandwidth "$new_bandwidth")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "eip" "update" "$result"
-    else
-        echo "错误：更新失败。" >&2
-        echo "$result" >&2
-        return 1
-    fi
+    call_api_logged "eip" "update" "错误：更新失败。" \
+        -- vpc modify-eip-address-attribute --biz-region-id "${region:-}" --region "${region:-}" \
+        --allocation-id "$eip_id" --bandwidth "$new_bandwidth"
 }
 
 # 删除函数需要特殊处理（需要先解绑）
@@ -245,23 +219,9 @@ eip_delete() {
     if [ -z "$eip_id" ]; then
         echo "使用 fzf 交互式模式删除 EIP"
 
-        local eip_list
-        eip_list=$(call_aliyun_api vpc DescribeEipAddresses --RegionId "$region" 2>/dev/null | jq -r '.EipAddresses.EipAddress[] | "\(.AllocationId) (\(.IpAddress)) [\(.Bandwidth)Mbps] [\(.Status)]"')
-
-        if [ -z "$eip_list" ]; then
-            echo "错误：没有找到 EIP。" >&2
-            return 1
-        elif [ "$(echo "$eip_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            eip_id=$(echo "$eip_list" | awk '{print $1}')
-            echo "自动选择唯一的 EIP: $eip_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                eip_id=$(select_with_fzf "选择要删除的 EIP" "$eip_list" | awk '{print $1}')
-            else
-                echo "错误：需要选择 EIP，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
+        eip_id=$(resolve_resource_id "" "选择要删除的 EIP" "错误：没有找到 EIP。" \
+            '.EipAddresses.EipAddress[] | "\(.AllocationId) (\(.IpAddress)) [\(.Bandwidth)Mbps] [\(.Status)]"' \
+            -- vpc describe-eip-addresses --biz-region-id "${region:-}" --region "${region:-}") || return 1
     fi
 
     if [ -z "$eip_id" ]; then
@@ -271,7 +231,7 @@ eip_delete() {
 
     # 获取 EIP 详细信息
     local eip_info
-    eip_info=$(call_aliyun_api vpc DescribeEipAddresses --AllocationId "$eip_id" --RegionId "$region")
+    eip_info=$(call_aliyun_api vpc describe-eip-addresses --biz-region-id "${region:-}" --region "${region:-}" --allocation-id "$eip_id")
     local ip_address
     ip_address=$(echo "$eip_info" | jq -r '.EipAddresses.EipAddress[0].IpAddress // empty')
     local eip_status
@@ -297,9 +257,8 @@ eip_delete() {
     if [[ "$eip_status" != "Available" ]]; then
         echo "解绑 EIP..."
         local unbind_result
-        unbind_result=$(call_aliyun_api vpc UnassociateEipAddress \
-            --AllocationId "$eip_id" \
-            --RegionId "$region")
+        unbind_result=$(call_aliyun_api vpc unassociate-eip-address --biz-region-id "${region:-}" --region "${region:-}" \
+            --allocation-id "$eip_id")
 
         if [ $? -eq 0 ]; then
             echo "$unbind_result" | jq '.'
@@ -313,22 +272,8 @@ eip_delete() {
 
     # 删除 EIP
     echo "删除 EIP："
-    local result
-    result=$(call_aliyun_api vpc ReleaseEipAddress \
-        --RegionId "$region" \
-        --AllocationId "$eip_id")
-
-    local ret=$?
-    if [ $ret -eq 0 ]; then
-        echo "EIP 删除成功。"
-        echo "$result" | jq '.'
-        log_delete_operation "${profile:-}" "$region" "eip" "$eip_id" "$ip_address" "成功"
-    else
-        echo "错误：EIP 删除失败。" >&2
-        echo "$result" >&2
-        log_delete_operation "${profile:-}" "$region" "eip" "$eip_id" "$ip_address" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "eip" "delete" "$result"
+    call_api_del_logged "eip" "$eip_id" "$ip_address" "错误：EIP 删除失败。" \
+        -- vpc release-eip-address --biz-region-id "${region:-}" --region "${region:-}" \
+        --allocation-id "$eip_id" || return 1
+    echo "EIP 删除成功。"
 }

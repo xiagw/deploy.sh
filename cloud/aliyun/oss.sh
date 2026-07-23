@@ -6,106 +6,10 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 # 在文件开头添加全局变量
 endpoint_url=""
-
-import_ossutil_config() {
-    local profile_name=${1:-default}
-    local force=${2:-false}
-
-    # 检查 aliyun cli 配置文件是否存在
-    local aliyun_config_file="$HOME/.aliyun/config.json"
-    if [ ! -f "$aliyun_config_file" ]; then
-        echo "错误：找不到 aliyun cli 配置文件：$aliyun_config_file" >&2
-        return 1
-    fi
-
-    # 检查 jq 命令是否可用
-    if ! command -v jq >/dev/null 2>&1; then
-        echo "错误：需要安装 jq 命令来解析 JSON 配置文件" >&2
-        return 1
-    fi
-
-    # 从 aliyun cli 配置文件中读取指定 profile 的配置
-    local config
-    config=$(jq -r --arg profile "$profile_name" '.profiles[] | select(.name == $profile)' "$aliyun_config_file")
-    if [ -z "$config" ]; then
-        echo "错误：在 aliyun cli 配置中找不到指定的 profile：$profile_name" >&2
-        return 1
-    fi
-
-    # 提取配置信息
-    local access_key_id
-    local access_key_secret
-    local region
-    access_key_id=$(echo "$config" | jq -r '.access_key_id')
-    access_key_secret=$(echo "$config" | jq -r '.access_key_secret')
-    region=$(echo "$config" | jq -r '.region_id')
-
-    # 确保 ossutil 配置目录存在
-    local ossutil_config_file="$HOME/.ossutilconfig"
-
-    # 创建临时文件
-    local temp_config
-    temp_config=$(mktemp)
-
-    # 如果配置文件已存在，先读取现有配置
-    if [ -f "$ossutil_config_file" ]; then
-        cp "$ossutil_config_file" "$temp_config"
-    else
-        # 如果文件不存在，创建基本结构
-        cat >"$temp_config" <<EOF
-[Credentials]
-language=CH
-EOF
-    fi
-
-    # 检查是否已存在相同的 profile
-    if grep -q "\\[${profile_name}\\]" "$temp_config" && [ "$force" != "true" ]; then
-        echo "警告：ossutil 配置文件中已存在 profile '${profile_name}'"
-        read -r -p "是否覆盖现有配置？[y/N] " response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
-            echo "操作已取消"
-            rm -f "$temp_config"
-            return 1
-        fi
-    fi
-
-    # 如果是默认配置，更新 [Credentials] 部分
-    if [ "$profile_name" = "default" ]; then
-        sed -i.bak '/^\[Credentials\]/,/^\[.*\]/{/^\[Credentials\]/!{/^\[.*\]/!d}}' "$temp_config"
-        sed -i.bak "/^\[Credentials\]/a\\
-endpoint=oss-${region}.aliyuncs.com\\
-accessKeyID=${access_key_id}\\
-accessKeySecret=${access_key_secret}" "$temp_config"
-    else
-        # 删除已存在的同名配置（如果存在）
-        sed -i.bak "/^\[${profile_name}\]/,/^\[.*\]/d" "$temp_config"
-        # 添加新的配置
-        cat >>"$temp_config" <<EOF
-
-[profile ${profile_name}]
-region=${region}
-endpoint=oss-${region}.aliyuncs.com
-accessKeyID=${access_key_id}
-accessKeySecret=${access_key_secret}
-EOF
-    fi
-
-    # 删除备份文件
-    rm -f "${temp_config}.bak"
-
-    # 移动临时文件到目标位置
-    mv "$temp_config" "$ossutil_config_file"
-
-    # 设置配置文件权限
-    chmod 600 "$ossutil_config_file"
-
-    echo "已成功将 aliyun cli profile '${profile_name}' 导入到 ossutil 配置"
-    echo "配置文件位置：$ossutil_config_file"
-}
 
 show_oss_help() {
     cat <<'EOF'
@@ -115,10 +19,6 @@ OSS (对象存储服务) 操作
   -in, --internal     使用内网 endpoint 进行操作（仅在阿里云 ECS 等内网环境中使用）
 
 命令：
-  import [profile] [--force]
-                      从 aliyun cli 配置导入到 ossutil 配置
-                      profile: 要导入的配置文件名称（默认：default）
-                      --force: 强制覆盖现有配置
   get [region]        列出 OSS 存储桶
   add <存储桶名称> [region]
                       创建 OSS 存储桶
@@ -155,11 +55,6 @@ logs 命令选项：
   --target-bucket NAME     指定目标存储桶（用于自动处理分析结果）
 
 示例：
-配置导入：
-  $0 oss import                  # 导入默认配置
-  $0 oss import prod            # 导入指定的配置
-  $0 oss import prod --force    # 强制覆盖现有配置
-
 基本操作：
   $0 oss get              # 列出所有存储桶
   $0 oss --internal get   # 使用内网列出所有存储桶
@@ -218,17 +113,6 @@ handle_oss_commands() {
 
     # 根据操作调用相应的函数
     case "$operation" in
-    import)
-        local profile="default"
-        local force=false
-        for arg in "${args[@]}"; do
-            case "$arg" in
-            --force) force=true ;;
-            *) profile="$arg" ;;
-            esac
-        done
-        import_ossutil_config "$profile" "$force"
-        ;;
     get | ls | list) oss_list "${args[@]}" ;;
     add) oss_create "${args[@]}" ;;
     del) oss_delete "${args[@]}" ;;
@@ -362,18 +246,9 @@ oss_parse_cdn_logs() {
 oss_list() {
     local format=${1:-human}
 
-    # 检查 ossutil 配置文件是否存在
-    if [ ! -f "$HOME/.ossutilconfig" ]; then
-        echo "错误：未找到 ossutil 配置文件。请先运行 'import' 命令导入阿里云CLI配置。" >&2
-        echo "示例："
-        echo "  $0 oss import"
-        echo "  或者先配置阿里云CLI：aliyun configure"
-        return 1
-    fi
-
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     local result
-    result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls)
+    result=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}")
 
     case "$format" in
     json)
@@ -407,15 +282,6 @@ oss_list() {
 oss_create() {
     local bucket_name=$1
 
-    # 检查 ossutil 配置文件是否存在
-    if [ ! -f "$HOME/.ossutilconfig" ]; then
-        echo "错误：未找到 ossutil 配置文件。请先运行 'import' 命令导入阿里云CLI配置。" >&2
-        echo "示例："
-        echo "  $0 oss import"
-        echo "  或者先配置阿里云CLI：aliyun configure"
-        return 1
-    fi
-
     # 如果没有提供存储桶名称，则使用交互式输入
     if [ -z "$bucket_name" ]; then
         read -r -p "请输入 OSS 存储桶名称: " bucket_name
@@ -428,7 +294,7 @@ oss_create() {
     echo "创建 OSS 存储桶："
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     local result
-    result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" mb "oss://$bucket_name")
+    result=$(aliyun --profile "${profile:-}" ossutil mb --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name")
 
     if [ $? -eq 0 ]; then
         echo "$result"
@@ -450,7 +316,7 @@ oss_delete() {
         local bucket_list
         endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
         local result
-        result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls)
+        result=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}")
 
         if [ $? -ne 0 ]; then
             echo "错误：无法获取 OSS 存储桶列表。" >&2
@@ -493,7 +359,7 @@ oss_delete() {
     echo "删除 OSS 存储桶："
 
     # 首先检查存储桶是否存在
-    if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls "oss://$bucket_name" &>/dev/null; then
+    if ! aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" &>/dev/null; then
         echo "错误：存储桶 $bucket_name 不存在。"
         return 1
     fi
@@ -501,7 +367,7 @@ oss_delete() {
     # 先删除存储桶中的所有对象
     echo "正在删除存储桶中的所有对象..."
     local delete_objects_result
-    delete_objects_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" rm "oss://$bucket_name/" -r -f --all-versions)
+    delete_objects_result=$(aliyun --profile "${profile:-}" ossutil rm --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name/" -r -f --all-versions)
     local delete_objects_status=$?
 
     if [ $delete_objects_status -ne 0 ]; then
@@ -513,16 +379,16 @@ oss_delete() {
     # 删除存储桶本身
     echo "正在删除存储桶..."
     local delete_bucket_result
-    delete_bucket_result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" rb "oss://$bucket_name")
+    delete_bucket_result=$(aliyun --profile "${profile:-}" ossutil rb --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name")
     local delete_bucket_status=$?
 
     if [ $delete_bucket_status -eq 0 ]; then
         echo "OSS 存储桶删除成功。"
-        log_delete_operation "${profile:-}" "$region" "oss" "$bucket_name" "存储桶" "成功"
+        log_delete_operation "${profile:-}" "$region" "oss" "$bucket_name" "存储桶" "成功" "$delete_bucket_result"
     else
         echo "错误：存储桶删除失败。"
         echo "$delete_bucket_result"
-        log_delete_operation "${profile:-}" "$region" "oss" "$bucket_name" "存储桶" "失败"
+        log_delete_operation "${profile:-}" "$region" "oss" "$bucket_name" "存储桶" "失败" "$delete_bucket_result"
         return 1
     fi
 
@@ -533,7 +399,7 @@ oss_delete() {
     local deleted=false
 
     while [ $retry -lt $max_retries ]; do
-        if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls "oss://$bucket_name" &>/dev/null; then
+        if ! aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" &>/dev/null; then
             deleted=true
             break
         fi
@@ -546,8 +412,6 @@ oss_delete() {
         echo "错误：存储桶删除验证失败，存储桶似乎仍然存在。"
         return 1
     fi
-
-    log_result "${profile:-}" "$region" "oss" "delete" "$delete_bucket_result"
 }
 
 get_cname_token() {
@@ -555,7 +419,7 @@ get_cname_token() {
     local domain=$2
     echo "获取 CNAME 令牌："
     local result
-    result=$(aliyun --profile "${profile:-}" oss bucket-cname --method get --item token oss://"$bucket_name" "$domain" --region "$region")
+    result=$(aliyun --profile "${profile:-}" ossutil get-cname-token --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" "$domain")
     echo "$result"
     local token
     token=$(echo "$result" | grep -oP '(?<=<Token>)[^<]+')
@@ -576,7 +440,7 @@ oss_bind_domain() {
     # 绑定域名
     echo "正在绑定域名..."
     local result
-    result=$(aliyun --profile "${profile:-}" oss bucket-cname --method put --item token "oss://${bucket_name}" "${domain}" --region "$region")
+    result=$(aliyun --profile "${profile:-}" ossutil put-cname-token --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" "$domain")
 
     echo "绑定域名响应："
     echo "$result"
@@ -630,7 +494,7 @@ oss_bind_domain() {
     # 验证域名所有权
     echo "验证域名所有权..."
     local verify_result
-    verify_result=$(aliyun --profile "${profile:-}" oss bucket-cname --method put --item cname "oss://${bucket_name}" "${domain}" --region "$region")
+    verify_result=$(aliyun --profile "${profile:-}" ossutil put-cname-token --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" "$domain")
     echo "验证结果："
     echo "$verify_result"
     log_result "${profile:-}" "$region" "oss" "verify-domain" "$verify_result"
@@ -682,7 +546,7 @@ verify_domain_ownership() {
     local token=$3
     echo "验证域名所有权："
     local result
-    result=$(aliyun --profile "${profile:-}" oss PutCnameToken --bucket "$bucket_name" --domain "$domain" --token "$token" --region "$region")
+    result=$(aliyun --profile "${profile:-}" ossutil put-cname-token --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" "$domain" "$token")
     echo "$result"
 }
 
@@ -784,14 +648,8 @@ oss_batch_copy() {
     [ "$dest_type" = "local" ] && mkdir -p "$dest"
 
     # 执行统一的复制命令
-    ossutil --profile "${profile:-}" \
-        --endpoint "$endpoint_url" \
-        --region "${region:-cn-hangzhou}" \
-        cp "$source" "$dest" \
-        -r -f --update --job 50 \
-        --include-from "$file_list" \
-        --metadata-include "x-oss-storage-class=$storage_class" \
-        --storage-class "$storage_class"
+    aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" \
+        cp "$source" "$dest" -r -f --update --job 50 --include-from "$file_list" --metadata-include "x-oss-storage-class=$storage_class" --storage-class "$storage_class"
 
     # 如果使用了临时文件，则删除它
     [ -n "$temp_list_file" ] && rm -f "$temp_list_file"
@@ -867,13 +725,7 @@ oss_batch_delete() {
     fi
 
     local result
-    result=$(ossutil --profile "${profile:-}" \
-        --endpoint "$endpoint_url" \
-        --region "${region:-cn-hangzhou}" \
-        rm "$bucket_path" \
-        --all-versions -r -f \
-        --include-from "$file_list" \
-        --metadata-include "x-oss-storage-class=$storage_class")
+    result=$(aliyun --profile "${profile:-}" ossutil rm --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "$bucket_path" --all-versions -r -f --include-from "$file_list" --metadata-include "x-oss-storage-class=$storage_class")
 
     local status=$?
     echo "$result"
@@ -933,7 +785,7 @@ analyze_logs_for_status() {
 
     # 下载日志文件
     echo "正在下载日志文件: $log_file ..."
-    if ! ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" cp "$log_file" "$local_gz_file"; then
+    if ! aliyun --profile "${profile:-}" ossutil cp --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "$log_file" "$local_gz_file"; then
         echo "错误：下载日志文件失败: $log_file" >&2
         rm -rf "$temp_dir"
         return 1
@@ -1108,12 +960,7 @@ oss_get_logs() {
 
     # 使用日期列表文件查询日志
     local result
-    result=$(ossutil --profile "${profile:-}" \
-        --endpoint "$endpoint_url" \
-        --region "${region:-cn-hangzhou}" \
-        ls "oss://${bucket_path}" \
-        -r \
-        --include-from "$date_list_file")
+    result=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_path" -r --include-from "$date_list_file")
 
     # 如果指定了域名，则过滤指定域名的日志
     if [ -n "$domain" ]; then
@@ -1261,11 +1108,7 @@ set_object_standard() {
         # 只处理未处理的 URI（状态为 0）
         if [ "$status" = "0" ]; then
             echo "处理 URI: $uri"
-            if ossutil --profile "${profile:-}" \
-                --endpoint "$endpoint_url" \
-                --region "${region:-cn-hangzhou}" \
-                set-props "oss://$bucket_name$uri" \
-                --storage-class "$storage_class" -f; then
+            if aliyun --profile "${profile:-}" ossutil set-props --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name$uri" --storage-class "$storage_class" -f; then
                 # 处理成功，将状态更新为 1
                 echo "$uri 1" >>"$temp_file"
             else
@@ -1312,7 +1155,7 @@ oss_set() {
         local bucket_list
         endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
         local result
-        result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" ls)
+        result=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}")
 
         if [ $? -ne 0 ]; then
             echo "错误：无法获取 OSS 存储桶列表。" >&2
@@ -1388,7 +1231,7 @@ public-read-write"
             echo "正在设置存储桶 $bucket_name 的 ACL 权限为 $setting_value ..."
             endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
             local result
-            result=$(ossutil --profile "${profile:-}" --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" set-acl "oss://$bucket_name" --acl "$setting_value")
+            result=$(aliyun --profile "${profile:-}" ossutil set-acl --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" --acl "$setting_value")
 
             if [ $? -eq 0 ]; then
                 echo "ACL 权限设置成功。"

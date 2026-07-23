@@ -3,29 +3,144 @@
 
 # 基础服务框架 - 提供统一的 API 调用、格式化输出、错误处理等功能
 
-# 调用阿里云 API
-# 用法: call_aliyun_api <service> <action> [参数...]
-# 示例: call_aliyun_api rds DescribeDBInstances --RegionId cn-hangzhou
+# 统一调用阿里云 CLI/API
+# 用法: call_aliyun_api <product/command> [action] [参数...]
+# 示例 1 (API): call_aliyun_api ecs describe-instances --biz-region-id cn-hangzhou
+# 示例 2 (命令): call_aliyun_api configure list
 call_aliyun_api() {
-    local service=$1
-    shift
-    local action=$1
-    shift
-    local args=("$@")
-    
-    aliyun --profile "${profile:-}" "$service" "$action" "${args[@]}"
+    # 确保至少有一个参数
+    [[ $# -lt 1 ]] && {
+        echo "Error: Missing arguments."
+        return 1
+    }
+
+    # 回显完整命令便于排错；stdout 被 $() 捕获、stderr 常被 2>/dev/null 丢弃，故优先写 /dev/tty
+    # local debug_cmd
+    # debug_cmd=$(printf '%q ' aliyun --profile "${profile:-}" "$@")
+    # if { true >/dev/tty; } 2>/dev/null; then
+    #     echo "+ ${debug_cmd% }" >/dev/tty
+    # else
+    #     echo "+ ${debug_cmd% }" >&2
+    # fi
+
+    aliyun --profile "${profile:-}" --auto-plugin-install true --auto-plugin-install-enable-pre true "$@"
+}
+
+# 通用资源 ID 解析器：已提供则直通；否则 列表 API -> jq 提取 "ID (名称)" 行
+#   -> 空报错 -> 唯一自动选中 -> fzf 选择
+# 用法: id=$(resolve_resource_id <当前值> <提示语> <空列表消息> <jq过滤器> -- <product> <action> [API 参数...]) || return 1
+# 注意: 本函数 stdout 会被 $() 捕获，所有提示信息必须写 stderr
+resolve_resource_id() {
+    local current=$1 prompt=$2 empty_msg=$3 jq_filter=$4
+    shift 4
+    [ "$1" = "--" ] && shift
+
+    if [ -n "$current" ]; then
+        echo "$current"
+        return 0
+    fi
+
+    local result
+    if ! result=$(call_aliyun_api "$@" 2>/dev/null); then
+        echo "错误：无法获取资源列表（${prompt}）。请检查您的凭证和权限。" >&2
+        return 1
+    fi
+
+    resolve_from_candidates "" "$prompt" "$empty_msg" \
+        "$(echo "$result" | jq -r "$jq_filter" 2>/dev/null)"
+}
+
+# 从预取的候选行解析 ID（首列为 ID）：空报错 -> 唯一自动选中 -> fzf 选择
+# 用法: id=$(resolve_from_candidates <当前值> <提示语> <空列表消息> <候选行>) || return 1
+# 注意: 本函数 stdout 会被 $() 捕获，所有提示信息必须写 stderr
+resolve_from_candidates() {
+    local current=$1 prompt=$2 empty_msg=$3 candidates=$4
+
+    if [ -n "$current" ]; then
+        echo "$current"
+        return 0
+    fi
+
+    if [ -z "$candidates" ]; then
+        echo "${empty_msg:-错误：没有找到资源。}" >&2
+        return 1
+    fi
+
+    if [ "$(echo "$candidates" | grep -c '[^[:space:]]')" -eq 1 ]; then
+        local only_id
+        only_id=$(echo "$candidates" | awk '{print $1}')
+        echo "自动选择唯一候选（${prompt}）: $only_id" >&2
+        echo "$only_id"
+        return 0
+    fi
+
+    local selected
+    selected=$(select_with_fzf "$prompt" "$candidates" | awk '{print $1}')
+    if [ -z "$selected" ]; then
+        echo "错误：未选择（${prompt}），操作取消。" >&2
+        return 1
+    fi
+    echo "$selected"
+}
+
+# 变更操作统一收尾：调用 API，成功则 jq 美化 + log_result；失败则中文报错 + 原始结果到 stderr + return 1
+# 用法: call_api_logged <service_name> <operation> <失败消息> -- <product> <action> [API 参数...]
+call_api_logged() {
+    local service_name=$1 operation=$2 err_msg=$3
+    shift 3
+    [ "$1" = "--" ] && shift
+
+    local result
+    if result=$(call_aliyun_api "$@" 2>&1); then
+        echo "$result" | jq '.' 2>/dev/null || echo "$result"
+        log_result "${profile:-}" "${region:-}" "$service_name" "$operation" "$result"
+        return 0
+    fi
+    echo "${err_msg:-错误：${operation} 操作失败。}" >&2
+    echo "$result" >&2
+    return 1
+}
+
+# 删除操作统一收尾：成功/失败均写 log_delete_operation
+# 用法: call_api_del_logged <service_name> <resource_id> <resource_name> <失败消息> -- <product> <action> [API 参数...]
+call_api_del_logged() {
+    local service_name=$1 resource_id=$2 resource_name=$3 err_msg=$4
+    shift 4
+    [ "$1" = "--" ] && shift
+
+    local result
+    if result=$(call_aliyun_api "$@" 2>&1); then
+        echo "$result" | jq '.' 2>/dev/null || echo "$result"
+        log_delete_operation "${profile:-}" "${region:-}" "$service_name" "$resource_id" "$resource_name" "成功" "$result"
+        return 0
+    fi
+    echo "${err_msg:-错误：删除失败。}" >&2
+    echo "$result" >&2
+    log_delete_operation "${profile:-}" "${region:-}" "$service_name" "$resource_id" "$resource_name" "失败" "$result"
+    return 1
+}
+
+is_output_format() {
+    case "$1" in
+    json | tsv | human) return 0 ;;
+    *) return 1 ;;
+    esac
 }
 
 # 格式化输出结果
-# 用法: format_output <result> <format> <service_name> <operation> <table_header> <jq_filter> [status_mapper]
+# 用法: format_output <result> <format> <service_name> <operation> <table_header> <jq_filter> [status_mapper] [empty_message] [title] [human_header] [count_filter]
 # 参数:
 #   - result: API 返回的 JSON 结果
-#   - format: 输出格式 (json/tsv/human)
+#   - format: 输出格式 (json/tsv/human)，json 为原样透传
 #   - service_name: 服务名称（用于日志）
 #   - operation: 操作名称（用于日志）
 #   - table_header: TSV 格式的表头
 #   - jq_filter: jq 过滤表达式，用于提取数据
 #   - status_mapper: 可选的 awk 脚本，用于状态映射
+#   - empty_message: 可选的空结果提示
+#   - title: 可选的 human 模式标题
+#   - human_header: 可选的 human 模式专用表头（可多行，含分隔线；"-" 表示不打印表头）
+#   - count_filter: 可选的 jq 计数表达式，如 '.Items.Backup | length'
 format_output() {
     local result=$1
     local format=$2
@@ -36,7 +151,9 @@ format_output() {
     local status_mapper=${7:-""}
     local empty_message=${8:-"没有找到资源。"}
     local title=${9:-"列出资源："}
-    
+    local human_header=${10:-""}
+    local count_filter=${11:-""}
+
     case "$format" in
     json)
         echo "$result"
@@ -51,24 +168,30 @@ format_output() {
         ;;
     human | *)
         echo "$title"
-        # 计算结果数量 - 直接执行 jq_filter 并计算输出行数（更可靠）
         local temp_output
         temp_output=$(echo "$result" | jq -r "$jq_filter" 2>/dev/null)
         local count
-        if [ -n "$temp_output" ] && [ "$temp_output" != "null" ] && [ "$temp_output" != "" ]; then
+        if [ -n "$count_filter" ]; then
+            count=$(echo "$result" | jq -r "$count_filter" 2>/dev/null || echo "0")
+            [ "$count" = "null" ] || [ -z "$count" ] && count="0"
+        elif [ -n "$temp_output" ] && [ "$temp_output" != "null" ]; then
             count=$(echo "$temp_output" | grep -c . || echo "0")
         else
             count="0"
         fi
-        
-        if [ "$count" = "0" ] || [ -z "$count" ]; then
+
+        if [ "$count" = "0" ]; then
             echo "$empty_message"
         else
-            if [ -n "$table_header" ]; then
+            if [ "$human_header" = "-" ]; then
+                : # "-" 表示 human 模式不打印表头（句式输出用）
+            elif [ -n "$human_header" ]; then
+                echo -e "$human_header"
+            elif [ -n "$table_header" ]; then
                 # 输出表头（TSV 格式的第一行，需要解析 \t）
                 echo -e "$table_header" | head -1
             fi
-            if [ -n "$temp_output" ] && [ "$temp_output" != "null" ] && [ "$temp_output" != "" ]; then
+            if [ -n "$temp_output" ] && [ "$temp_output" != "null" ]; then
                 if [ -n "$status_mapper" ]; then
                     echo "$temp_output" | awk "$status_mapper"
                 else
@@ -84,7 +207,7 @@ format_output() {
         fi
         ;;
     esac
-    
+
     log_result "${profile:-}" "${region:-}" "$service_name" "$operation" "$result" "$format"
 }
 
@@ -100,20 +223,20 @@ generic_list() {
     local status_mapper=${7:-""}
     local empty_message=${8:-"没有找到资源。"}
     local title=${9:-"列出资源："}
-    
+
     local result
     local api_args=()
-    
+
     # 添加 RegionId 参数
-    if [[ "$api_action" != *"RegionId"* ]]; then
-        api_args+=("--RegionId" "${region:-}")
+    if [[ "$api_action" != *"biz-region-id"* ]]; then
+        api_args+=("--biz-region-id" "${region:-}")
     fi
-    
+
     if ! result=$(call_aliyun_api "$service" "$api_action" "${api_args[@]}"); then
         echo "错误：无法获取资源列表。请检查您的凭证和权限。" >&2
         return 1
     fi
-    
+
     format_output "$result" "$format" "$service_name" "list" "$table_header" "$jq_filter" "$status_mapper" "$empty_message" "$title"
 }
 
@@ -126,18 +249,18 @@ generic_create() {
     local resource_name=$4
     shift 4
     local extra_args=("$@")
-    
+
     echo "创建 $service_name 资源："
-    
+
     local result
-    local api_args=("--RegionId" "$region")
-    
+    local api_args=("--biz-region-id" "${region:-}")
+
     # 添加额外参数
     api_args+=("${extra_args[@]}")
-    
+
     result=$(call_aliyun_api "$service" "$api_action" "${api_args[@]}")
     local ret=$?
-    
+
     if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "$service_name" "create" "$result"
@@ -158,12 +281,12 @@ generic_update() {
     local new_name=$5
     shift 5
     local extra_args=("$@")
-    
+
     echo "更新 $service_name 资源："
-    
+
     local result
-    local api_args=("--RegionId" "$region")
-    
+    local api_args=("--biz-region-id" "${region:-}")
+
     # 添加资源ID和名称参数（根据不同的API调整参数名）
     if [[ "$api_action" == *"Description"* ]]; then
         # 对于 Description 类型的更新
@@ -172,15 +295,15 @@ generic_update() {
     else
         # 通用方式
         api_args+=("--${service_name^}Id" "$resource_id")
-        api_args+=("--Name" "$new_name")
+        api_args+=("--name" "$new_name")
     fi
-    
+
     # 添加额外参数
     api_args+=("${extra_args[@]}")
-    
+
     result=$(call_aliyun_api "$service" "$api_action" "${api_args[@]}")
     local ret=$?
-    
+
     if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "$service_name" "update" "$result"
@@ -201,53 +324,45 @@ generic_delete() {
     local resource_type=$5
     shift 5
     local extra_args=("$@")
-    
-    echo "警告：您即将删除 $service_name $resource_type：$resource_id"
-    read -r -p "请输入 'YES' 以确认删除操作: " confirm
-    
-    if [ "$confirm" != "YES" ]; then
-        echo "操作已取消。"
-        return 1
-    fi
-    
+
+    confirm_action "您即将删除 $service_name $resource_type：$resource_id" || return 1
+
     echo "删除 $service_name $resource_type："
-    
+
     local result
     local api_args=()
-    
+
     # 根据不同的API调整参数名
     case "$service" in
     rds)
-        api_args+=("--DBInstanceId" "$resource_id")
+        api_args+=("--db-instance-id" "$resource_id")
         ;;
     polardb)
-        api_args+=("--DBClusterId" "$resource_id")
+        api_args+=("--db-cluster-id" "$resource_id")
         ;;
     ecs)
-        api_args+=("--RegionId" "$region")
-        api_args+=("--InstanceId" "$resource_id")
-        api_args+=("--Force" "true")
+        api_args+=("--instance-id" "$resource_id")
+        api_args+=("--biz-force" "true")
         ;;
     *)
         # 通用方式
         api_args+=("--${service_name^}Id" "$resource_id")
         ;;
     esac
-    
+
     # 添加额外参数
     api_args+=("${extra_args[@]}")
-    
-    result=$(call_aliyun_api "$service" "$api_action" "${api_args[@]}")
+
+    result=$(call_aliyun_api "$service" "$api_action" "${api_args[@]}" 2>&1)
     local ret=$?
-    
+
     if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
-        log_delete_operation "${profile:-}" "$region" "$service_name" "$resource_id" "$resource_type" "成功"
-        log_result "${profile:-}" "$region" "$service_name" "delete" "$result"
+        log_delete_operation "${profile:-}" "$region" "$service_name" "$resource_id" "$resource_type" "成功" "$result"
     else
         echo "错误：删除失败。" >&2
         echo "$result" >&2
-        log_delete_operation "${profile:-}" "$region" "$service_name" "$resource_id" "$resource_type" "失败"
+        log_delete_operation "${profile:-}" "$region" "$service_name" "$resource_id" "$resource_type" "失败" "$result"
         return 1
     fi
 }
@@ -259,26 +374,26 @@ map_status() {
     local field_index=$1
     shift
     local mapping_rules="$*"
-    
+
     # 构建 awk 脚本
     local awk_script="BEGIN {FS=\"\\t\"; OFS=\"\\t\"}
     {
         status = \$$field_index;"
-    
+
     # 解析映射规则
-    IFS=',' read -ra RULES <<< "$mapping_rules"
+    IFS=',' read -ra RULES <<<"$mapping_rules"
     for rule in "${RULES[@]}"; do
-        IFS=':' read -ra PARTS <<< "$rule"
+        IFS=':' read -ra PARTS <<<"$rule"
         local from="${PARTS[0]}"
         local to="${PARTS[1]}"
         awk_script+="
         if (status == \"$from\") status = \"$to\";"
     done
-    
+
     awk_script+="
         print
     }"
-    
+
     echo "$awk_script"
 }
 
@@ -287,21 +402,21 @@ map_status() {
 validate_required_params() {
     local params=("$@")
     local error_msg="${params[-1]}"
-    
+
     # 如果最后一个参数包含空格，可能是错误消息
     if [[ "$error_msg" == *" "* ]]; then
         unset 'params[-1]'
     else
         error_msg="错误：缺少必需参数。"
     fi
-    
+
     for param in "${params[@]}"; do
         if [ -z "$param" ]; then
             echo "$error_msg" >&2
             return 1
         fi
     done
-    
+
     return 0
 }
 
@@ -310,12 +425,12 @@ validate_required_params() {
 confirm_action() {
     local message=$1
     echo "警告：$message"
-    read -r -p "请输入 'YES' 以确认操作: " confirm
-    
-    if [ "$confirm" != "YES" ]; then
+    read -r -p "确认操作？[y/N] " confirm
+
+    if [[ ! "$confirm" =~ ^([yY]|[yY][eE][sS])$ ]]; then
         echo "操作已取消。"
         return 1
     fi
-    
+
     return 0
 }

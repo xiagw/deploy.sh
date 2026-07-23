@@ -5,7 +5,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 show_ecs_help() {
     echo "ECS (弹性计算服务) 操作："
@@ -13,22 +13,22 @@ show_ecs_help() {
     echo "  add [名称]                               - 添加 ECS 实例（名称可选，如未提供将自动生成）"
     echo "  set [<实例ID>] [<新名称>]                - 设置 ECS 实例（实例ID和新名称都是可选的，可使用fzf选择）"
     echo "  del [<实例ID>]                           - 删除 ECS 实例（实例ID可选，可使用fzf选择）"
-    echo "  key-get                                  - 列出 SSH 密钥对"
-    echo "  key-add [密钥对名称]                     - 添加 SSH 密钥对（无参数时可交互选择创建/导入）"
-    echo "  key-set [<密钥对名称>] [<公钥内容> | github:<用户名>] - 导入 SSH 密钥对（参数可选，可使用fzf选择）"
-    echo "  key-del [<密钥对名称>]                   - 删除 SSH 密钥对（密钥对名称可选，可使用fzf选择）"
+    echo "  get-key                                  - 列出 SSH 密钥对"
+    echo "  add-key [密钥对名称]                     - 添加 SSH 密钥对（无参数时可交互选择创建/导入，名称默认 xkk）"
+    echo "  set-key [<密钥对名称>] [<公钥内容> | github:<用户名>] - 导入 SSH 密钥对（参数可选，可使用fzf选择）"
+    echo "  del-key [<密钥对名称>]                   - 删除 SSH 密钥对（密钥对名称可选，可使用fzf选择）"
     echo "  start [<实例ID>]                         - 启动 ECS 实例（实例ID可选，可使用fzf选择）"
     echo "  stop [<实例ID>]                          - 停止 ECS 实例（实例ID可选，可使用fzf选择）"
     echo "  key-attach [<实例ID>] [<密钥对名称>]     - 绑定 SSH 密钥对到实例（参数可选，可使用fzf选择）"
     echo "  key-detach [<实例ID>] [<密钥对名称>]     - 解绑实例的 SSH 密钥对（参数可选，可使用fzf选择）"
     echo "  快照："
-    echo "  snapshot-get [format]                   - 列出快照"
-    echo "  snapshot-add [<磁盘ID>] [<快照名称>]    - 创建快照（参数可选，可使用fzf选择磁盘）"
-    echo "  snapshot-del [<快照ID>]                 - 删除快照（快照ID可选，可使用fzf选择）"
+    echo "  get-snap [format]                   - 列出快照"
+    echo "  add-snap [<磁盘ID>] [<快照名称>]    - 创建快照（参数可选，可使用fzf选择磁盘）"
+    echo "  del-snap [<快照ID>]                 - 删除快照（快照ID可选，可使用fzf选择）"
     echo "  镜像（自定义镜像）："
-    echo "  image-get [format]                       - 列出自定义镜像"
-    echo "  image-add [<实例ID>] [<镜像名称>]       - 从实例创建自定义镜像（参数可选）"
-    echo "  image-del [<镜像ID>]                    - 删除自定义镜像（镜像ID可选，可使用fzf选择）"
+    echo "  get-image [format]                       - 列出自定义镜像"
+    echo "  add-image [<实例ID>] [<镜像名称>]       - 从实例创建自定义镜像（参数可选）"
+    echo "  del-image [<镜像ID>]                    - 删除自定义镜像（镜像ID可选，可使用fzf选择）"
     echo
     echo "示例："
     echo "  $0 ecs get"
@@ -37,20 +37,20 @@ show_ecs_help() {
     echo "  $0 ecs del i-bp67acfmxazb4ph****"
     echo "  $0 ecs start i-bp67acfmxazb4ph****"
     echo "  $0 ecs stop i-bp67acfmxazb4ph****"
-    echo "  $0 ecs key-get"
-    echo "  $0 ecs key-add my-key"
-    echo "  $0 ecs key-add                           # 交互选择创建或从 GitHub/本地导入"
-    echo "  $0 ecs key-set my-key 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD...'"
-    echo "  $0 ecs key-set my-key github:username"
-    echo "  $0 ecs key-del my-key"
+    echo "  $0 ecs get-key"
+    echo "  $0 ecs add-key my-key"
+    echo "  $0 ecs add-key                           # 交互选择创建或从 GitHub/本地导入"
+    echo "  $0 ecs set-key my-key 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD...'"
+    echo "  $0 ecs set-key my-key github:username"
+    echo "  $0 ecs del-key my-key"
     echo "  $0 ecs key-attach i-bp67acfmxazb4ph**** my-key"
     echo "  $0 ecs key-detach i-bp67acfmxazb4ph**** my-key"
-    echo "  $0 ecs snapshot-get"
-    echo "  $0 ecs snapshot-add d-bp1xxx 我的快照"
-    echo "  $0 ecs snapshot-del s-bp1xxx"
-    echo "  $0 ecs image-get"
-    echo "  $0 ecs image-add i-bp1xxx 我的镜像"
-    echo "  $0 ecs image-del m-bp1xxx"
+    echo "  $0 ecs get-snap"
+    echo "  $0 ecs add-snap d-bp1xxx 我的快照"
+    echo "  $0 ecs del-snap s-bp1xxx"
+    echo "  $0 ecs get-image"
+    echo "  $0 ecs add-image i-bp1xxx 我的镜像"
+    echo "  $0 ecs del-image m-bp1xxx"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -64,20 +64,20 @@ handle_ecs_commands() {
     add) ecs_create "$@" ;;
     set) ecs_update "$@" ;;
     del) ecs_delete "$@" ;;
-    key-get) ecs_key_list "$@" ;;
-    key-add) ecs_key_create "$@" ;;
-    key-set) ecs_key_import "$@" ;;
-    key-del) ecs_key_delete "$@" ;;
+    get-key) ecs_key_list "$@" ;;
+    add-key) ecs_key_create "$@" ;;
+    set-key) ecs_key_import "$@" ;;
+    del-key) ecs_key_delete "$@" ;;
     start) ecs_start "$@" ;;
     stop) ecs_stop "$@" ;;
     key-attach) ecs_key_attach "$@" ;;
     key-detach) ecs_key_detach "$@" ;;
-    snapshot-get) ecs_snapshot_list "$@" ;;
-    snapshot-add) ecs_snapshot_create "$@" ;;
-    snapshot-del) ecs_snapshot_delete "$@" ;;
-    image-get) ecs_image_list "$@" ;;
-    image-add) ecs_image_create "$@" ;;
-    image-del) ecs_image_delete "$@" ;;
+    get-snap) ecs_snapshot_list "$@" ;;
+    add-snap) ecs_snapshot_create "$@" ;;
+    del-snap) ecs_snapshot_delete "$@" ;;
+    get-image) ecs_image_list "$@" ;;
+    add-image) ecs_image_create "$@" ;;
+    del-image) ecs_image_delete "$@" ;;
     help) show_ecs_help ;;
     *)
         echo "错误：未知的 ECS 操作：$operation" >&2
@@ -90,17 +90,19 @@ handle_ecs_commands() {
 # 分页获取全部 ECS 实例（DescribeInstances 默认每页最多 100 条）
 ecs_describe_all_instances() {
     local page=1
-    local result merged total
-    result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}" --PageSize 100 --PageNumber "$page")
-    if [ $? -ne 0 ]; then
+    local result merged total ret
+    result=$(call_aliyun_api ecs describe-instances --biz-region-id "${region:-}" --page-size 100 --page-number "$page")
+    ret=$?
+    if [ $ret -ne 0 ]; then
         return 1
     fi
     merged=$result
     total=$(echo "$result" | jq -r '.TotalCount // 0')
     while [ "$total" -gt $((page * 100)) ]; do
         page=$((page + 1))
-        result=$(call_aliyun_api ecs DescribeInstances --RegionId "${region:-}" --PageSize 100 --PageNumber "$page")
-        if [ $? -ne 0 ]; then
+        result=$(call_aliyun_api ecs describe-instances --biz-region-id "${region:-}" --page-size 100 --page-number "$page")
+        ret=$?
+        if [ $ret -ne 0 ]; then
             return 1
         fi
         merged=$(echo "$merged" "$result" | jq -s '.[0].Instances.Instance = ((.[0].Instances.Instance // []) + (.[1].Instances.Instance // [])) | .[0]')
@@ -111,16 +113,17 @@ ecs_describe_all_instances() {
 # ECS 列表（特殊处理：需要合并 EIP 信息）
 ecs_list() {
     local format=${1:-human}
-    local result eip_result
+    local result eip_result ret
 
     result=$(ecs_describe_all_instances)
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
         return 1
     fi
 
     # 获取 EIP 列表（用于合并显示）
-    eip_result=$(call_aliyun_api vpc DescribeEipAddresses --RegionId "${region:-}" 2>/dev/null)
+    eip_result=$(call_aliyun_api vpc describe-eip-addresses --biz-region-id "${region:-}" 2>/dev/null)
 
     case "$format" in
     json)
@@ -199,7 +202,7 @@ ecs_create() {
     if type vpc_list >/dev/null 2>&1; then
         vpc_result=$(vpc_list "" "json" 2>/dev/null)
     else
-        vpc_result=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null)
+        vpc_result=$(call_aliyun_api vpc describe-vpcs 2>/dev/null)
     fi
     if ! echo "$vpc_result" | jq -e . >/dev/null 2>&1; then
         echo "错误：获取 VPC 列表失败，请检查凭证、地域和权限。" >&2
@@ -231,7 +234,7 @@ ecs_create() {
         vswitch_list_raw=$(vpc_vswitch_list "$vpc_id" json 2>/dev/null)
         local vswitch_list_ret=$?
     else
-        vswitch_list_raw=$(call_aliyun_api vpc DescribeVSwitches --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null)
+        vswitch_list_raw=$(call_aliyun_api vpc describe-vswitches --vpc-id "$vpc_id" 2>/dev/null)
         local vswitch_list_ret=$?
     fi
 
@@ -275,7 +278,7 @@ ecs_create() {
         security_group_list_raw=$(vpc_sg_list "$vpc_id" json 2>/dev/null)
         local security_group_list_ret=$?
     else
-        security_group_list_raw=$(call_aliyun_api ecs DescribeSecurityGroups --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null)
+        security_group_list_raw=$(call_aliyun_api ecs describe-security-groups --biz-region-id "${region:-cn-hangzhou}" --vpc-id "$vpc_id" 2>/dev/null)
         local security_group_list_ret=$?
     fi
 
@@ -310,7 +313,7 @@ ecs_create() {
     # 选择实例类型
     if [ -z "$instance_type" ]; then
         local instance_type_list instance_types_json
-        instance_types_json=$(call_aliyun_api ecs DescribeInstanceTypes --RegionId "$region")
+        instance_types_json=$(call_aliyun_api ecs describe-instance-types)
         instance_type_list=$(echo "$instance_types_json" |
             jq -r '.InstanceTypes.InstanceType[] | "\(.InstanceTypeId) \(.CpuCoreCount)核 \(.MemorySize)GB [\(.ProcessorArchitecture)]"')
 
@@ -380,12 +383,11 @@ cloud"
             $instance_type == *".g6r."* || $instance_type == *".c6r."* ]]; then
         # ARM 架构实例，需要使用具体的镜像 ID
         local image_list
-        image_list=$(call_aliyun_api ecs DescribeImages \
-            --RegionId "$region" \
-            --Architecture arm64 \
-            --OSType linux \
-            --ImageOwnerAlias system \
-            --Status Available | jq -r '.Images.Image[] | "\(.ImageId) [\(.OSName)]"')
+        image_list=$(call_aliyun_api ecs describe-images --biz-region-id "${region:-cn-hangzhou}" \
+            --architecture arm64 \
+            --os-type linux \
+            --image-owner-alias system \
+            --status Available | jq -r '.Images.Image[] | "\(.ImageId) [\(.OSName)]"')
 
         if type select_with_fzf >/dev/null 2>&1; then
             image_id=$(select_with_fzf "选择 ARM 架构镜像" "$image_list" | awk '{print $1}')
@@ -393,19 +395,19 @@ cloud"
             image_id=$(echo "$image_list" | head -1 | awk '{print $1}')
         fi
         echo "使用镜像: $image_id"
-        create_command_image_param="--ImageId ${image_id:? 镜像ID不能为空}"
+        create_command_image_param="--image-id ${image_id:? 镜像ID不能为空}"
     else
         # x86 架构实例，使用镜像簇
         image_family="acs:ubuntu_24_04_x64"
         echo "使用镜像簇: $image_family"
-        create_command_image_param="--ImageFamily ${image_family:? 镜像簇不能为空}"
+        create_command_image_param="--image-family ${image_family:? 镜像簇不能为空}"
     fi
 
     # 选择 SSH 密钥对
     local key_pair_name
     local key_pair_list
     local key_result
-    key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
+    key_result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
 
     if [ $? -eq 0 ] && [ -n "$key_result" ]; then
         key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
@@ -439,35 +441,42 @@ cloud"
     echo "创建并运行 ECS 实例："
 
     local api_args=(
-        "--RegionId" "${region:? 区域不能为空}"
-        "--ZoneId" "${zone_id:? 可用区不能为空}"
-        "--InstanceName" "$instance_name"
-        "--InstanceType" "${instance_type:? ECS 实例类型不能为空}"
-        "--VSwitchId" "${vswitch_id:? 交换机ID不能为空}"
-        "--SecurityGroupId" "${security_group_id:? 安全组ID不能为空}"
-        "--SystemDisk.Category" "${system_disk_category:? 系统盘类型不能为空}"
-        "--InstanceChargeType" "PostPaid"
-        "--SpotStrategy" "NoSpot"
-        "--Amount" "1"
-        "--InternetChargeType" "PayByTraffic"
-        "--InternetMaxBandwidthOut" "$internet_max_bandwidth_out"
+        "--zone-id" "${zone_id:? 可用区不能为空}"
+        "--instance-name" "$instance_name"
+        "--instance-type" "${instance_type:? ECS 实例类型不能为空}"
+        "--vswitch-id" "${vswitch_id:? 交换机ID不能为空}"
+        "--security-group-id" "${security_group_id:? 安全组ID不能为空}"
+        "--system-disk-category" "${system_disk_category:? 系统盘类型不能为空}"
+        "--instance-charge-type" "PostPaid"
+        "--spot-strategy" "NoSpot"
+        "--amount" "1"
+        "--internet-charge-type" "PayByTraffic"
+        "--internet-max-bandwidth-out" "$internet_max_bandwidth_out"
     )
 
     # 添加镜像参数
-    if [[ "$create_command_image_param" == *"--ImageId"* ]]; then
-        api_args+=("--ImageId" "$image_id")
+    if [[ "$create_command_image_param" == *"--image-id"* ]]; then
+        api_args+=("--image-id" "$image_id")
     else
-        api_args+=("--ImageFamily" "$image_family")
+        api_args+=("--image-family" "$image_family")
     fi
 
     # 添加密钥对
     if [ -n "$key_pair_name" ]; then
-        api_args+=("--KeyPairName" "$key_pair_name")
+        api_args+=("--biz-key-pair-name" "$key_pair_name")
+    fi
+
+    # 交换机已分配 IPv6 网段时，自动为实例分配 IPv6 地址
+    local vsw_ipv6
+    vsw_ipv6=$(call_aliyun_api vpc describe-vswitches --vswitch-id "$vswitch_id" --biz-region-id "${region:-cn-hangzhou}" --region "${region:-cn-hangzhou}" 2>/dev/null | jq -r '.VSwitches.VSwitch[0].Ipv6CidrBlock // ""')
+    if [ -n "$vsw_ipv6" ]; then
+        echo "交换机已分配 IPv6 网段 ($vsw_ipv6)，自动为实例分配 IPv6 地址"
+        api_args+=("--ipv6-address-count" "1")
     fi
 
     echo "正在创建 ECS 实例..."
     local result
-    result=$(call_aliyun_api ecs RunInstances "${api_args[@]}")
+    result=$(call_aliyun_api ecs run-instances --biz-region-id "${region:-cn-hangzhou}" "${api_args[@]}")
 
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
@@ -482,7 +491,7 @@ cloud"
         local public_ip
         for i in {1..30}; do
             sleep 5
-            public_ip=$(call_aliyun_api ecs DescribeInstanceAttribute --InstanceId "$instance_id" 2>/dev/null | jq -r '.PublicIpAddress.IpAddress[0]')
+            public_ip=$(call_aliyun_api ecs describe-instance-attribute --instance-id "$instance_id" 2>/dev/null | jq -r '.PublicIpAddress.IpAddress[0]')
             if [ -n "$public_ip" ] && [ "$public_ip" != "null" ]; then
                 echo "公网IP: $public_ip"
                 break
@@ -499,48 +508,26 @@ cloud"
     fi
 }
 
-# 使用新框架的更新函数（支持 fzf 选择实例）
-ecs_update() {
-    local instance_id=$1
-    local new_name=$2
-
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$instance_id" ]; then
-        local instance_list
-        local result
-        result=$(ecs_describe_all_instances)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
-
-        if [ -z "$instance_list" ]; then
-            echo "错误：没有找到任何 ECS 实例。" >&2
-            return 1
-        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            instance_id=$(echo "$instance_list" | awk '{print $1}')
-            echo "自动选择唯一的实例: $instance_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                instance_id=$(select_with_fzf "选择 ECS 实例" "$instance_list" | awk '{print $1}')
-                if [ -z "$instance_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查实例 ID 是否为空
-    if [ -z "$instance_id" ]; then
-        echo "错误：实例 ID 不能为空。" >&2
+# 交互式解析 ECS 实例ID（通过分页拉取全量列表，支持单实例自动选中）
+_ecs_resolve_instance_id() {
+    local current=$1 prompt=${2:-选择 ECS 实例}
+    local all_result
+    if ! all_result=$(ecs_describe_all_instances); then
+        echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
         return 1
     fi
+    local candidates
+    candidates=$(echo "$all_result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
+    resolve_from_candidates "$current" "$prompt" "错误：没有找到任何 ECS 实例。" "$candidates"
+}
+
+# 使用新框架的更新函数（支持 fzf 选择实例）
+ecs_update() {
+    local instance_id new_name=$2
+
+    local raw
+    raw=$(_ecs_resolve_instance_id "$1" "选择要更新的 ECS 实例") || return 1
+    instance_id=$(echo "$raw" | awk '{print $1}')
 
     # 如果没有提供新名称，提示输入
     if [ -z "$new_name" ]; then
@@ -553,86 +540,27 @@ ecs_update() {
     fi
 
     echo "更新 ECS 实例："
-    local result
-    result=$(call_aliyun_api ecs ModifyInstanceAttribute \
-        --RegionId "$region" \
-        --InstanceId "$instance_id" \
-        --InstanceName "$new_name")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ecs" "set" "$result"
-    else
-        echo "错误：ECS 实例更新失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "ecs" "set" "错误：ECS 实例更新失败。" \
+        -- ecs modify-instance-attribute \
+        --instance-id "$instance_id" \
+        --instance-name "$new_name"
 }
 
 # 使用新框架的删除函数（支持 fzf 选择实例）
 ecs_delete() {
-    local instance_id=$1
+    local instance_id
 
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$instance_id" ]; then
-        local instance_list
-        local result
-        result=$(ecs_describe_all_instances)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
+    local raw
+    raw=$(_ecs_resolve_instance_id "$1" "选择要删除的 ECS 实例") || return 1
+    instance_id=$(echo "$raw" | awk '{print $1}')
 
-        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
-
-        if [ -z "$instance_list" ]; then
-            echo "错误：没有找到任何 ECS 实例。" >&2
-            return 1
-        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            instance_id=$(echo "$instance_list" | awk '{print $1}')
-            echo "自动选择唯一的实例: $instance_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                instance_id=$(select_with_fzf "选择要删除的 ECS 实例" "$instance_list" | awk '{print $1}')
-                if [ -z "$instance_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查实例 ID 是否为空
-    if [ -z "$instance_id" ]; then
-        echo "错误：实例 ID 不能为空。" >&2
-        return 1
-    fi
-
-    if ! confirm_action "删除 ECS 实例：$instance_id"; then
-        return 1
-    fi
+    confirm_action "删除 ECS 实例：$instance_id" || return 1
 
     echo "删除 ECS 实例："
-    local result
-    result=$(call_aliyun_api ecs DeleteInstance \
-        --RegionId "$region" \
-        --InstanceId "$instance_id" \
-        --Force true)
-
-    if [ $? -eq 0 ]; then
-        echo "ECS 实例删除成功。"
-        log_delete_operation "${profile:-}" "$region" "ecs" "$instance_id" "ECS实例" "成功"
-    else
-        echo "ECS 实例删除失败。"
-        echo "$result"
-        log_delete_operation "${profile:-}" "$region" "ecs" "$instance_id" "ECS实例" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "ecs" "del" "$result"
+    call_api_del_logged "ecs" "$instance_id" "ECS实例" "错误：ECS 实例删除失败。" \
+        -- ecs delete-instance \
+        --instance-id "$instance_id" \
+        --biz-force true
 }
 
 # SSH 密钥对列表（使用框架函数）
@@ -644,7 +572,7 @@ ecs_key_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-36s  %s\n", $1, $2, $3}'
 
     local result
-    result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region")
+    result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}")
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 SSH 密钥对列表。请检查您的凭证和权限。" >&2
@@ -655,7 +583,7 @@ ecs_key_list() {
         "$result" \
         "$format" \
         "ecs" \
-        "key-get" \
+        "get-key" \
         "$table_header" \
         "$jq_filter" \
         "$status_mapper" \
@@ -668,7 +596,7 @@ ecs_key_create() {
     local key_name=$1
     local import_source=$2
 
-    # 兼容扩展调用：key-add <name> <github:user|公钥内容>
+    # 兼容扩展调用：add-key <name> <github:user|公钥内容>
     if [ -n "$key_name" ] && [ -n "$import_source" ]; then
         ecs_key_import "$key_name" "$import_source"
         return $?
@@ -677,9 +605,9 @@ ecs_key_create() {
     # 无参数时，交互选择创建或导入
     if [ -z "$key_name" ]; then
         local mode mode_list
-        mode_list="创建新密钥对（阿里云生成私钥）
-从 GitHub 用户导入公钥
+        mode_list="从 GitHub 用户导入公钥
 从本地 .pub 文件导入公钥
+创建新密钥对（阿里云生成私钥）
 手动粘贴公钥导入"
 
         if type select_with_fzf >/dev/null 2>&1; then
@@ -707,16 +635,12 @@ ecs_key_create() {
 
         [ -z "$mode" ] && echo "未选择选项，操作取消。" && return 1
 
-        echo -n "请输入密钥对名称: "
+        echo -n "请输入密钥对名称 [默认: xkk]: "
         read -r key_name
-        if [ -z "$key_name" ]; then
-            echo "错误：密钥对名称不能为空。" >&2
-            return 1
-        fi
+        key_name=${key_name:-xkk}
 
         case "$mode" in
-        "创建新密钥对（阿里云生成私钥）")
-            ;;
+        "创建新密钥对（阿里云生成私钥）") ;;
         "从 GitHub 用户导入公钥")
             local github_username
             echo -n "请输入 GitHub 用户名: "
@@ -771,16 +695,14 @@ ecs_key_create() {
 
     echo "创建 SSH 密钥对："
     local result
-    result=$(call_aliyun_api ecs CreateKeyPair \
-        --RegionId "$region" \
-        --KeyPairName "$key_name")
+    result=$(call_aliyun_api ecs create-key-pair --biz-region-id "${region:-cn-hangzhou}" --biz-key-pair-name "$key_name")
 
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对创建成功："
         echo "$result" | jq '.'
         echo "请保存私钥内容，它只会显示一次！"
         echo "$result" | jq -r '.PrivateKeyBody'
-        log_result "${profile:-}" "$region" "ecs" "key-add" "$result"
+        log_result "${profile:-}" "$region" "ecs" "add-key" "$result"
     else
         echo "错误：SSH 密钥对创建失败。"
         echo "$result"
@@ -815,15 +737,13 @@ ecs_key_import() {
     fi
 
     local result
-    result=$(call_aliyun_api ecs ImportKeyPair \
-        --RegionId "$region" \
-        --KeyPairName "$key_name" \
-        --PublicKeyBody "$public_key")
+    result=$(call_aliyun_api ecs import-key-pair --biz-region-id "${region:-cn-hangzhou}" --biz-key-pair-name "$key_name" \
+        --public-key-body "$public_key")
 
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对导入成功："
         echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ecs" "key-set" "$result"
+        log_result "${profile:-}" "$region" "ecs" "set-key" "$result"
     else
         echo "错误：SSH 密钥对导入失败。"
         echo "$result"
@@ -835,9 +755,35 @@ ecs_key_import() {
 ecs_key_delete() {
     local key_name=$1
 
+    # 如果没有提供密钥对名称，则使用 fzf 选择
     if [ -z "$key_name" ]; then
-        echo "错误：密钥对名称不能为空。" >&2
-        return 1
+        local key_result key_list
+        key_result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            echo "错误：无法获取 SSH 密钥对列表。请检查您的凭证和权限。" >&2
+            return 1
+        fi
+
+        key_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[] | "\(.KeyPairName) [\(.CreationTime)]"')
+
+        if [ -z "$key_list" ]; then
+            echo "错误：没有找到 SSH 密钥对。" >&2
+            return 1
+        elif [ "$(echo "$key_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
+            key_name=$(echo "$key_list" | awk '{print $1}')
+            echo "自动选择唯一的密钥对：$key_name"
+        else
+            if type select_with_fzf >/dev/null 2>&1; then
+                key_name=$(select_with_fzf "选择要删除的 SSH 密钥对" "$key_list" | awk '{print $1}')
+                if [ -z "$key_name" ]; then
+                    echo "错误：未选择密钥对。" >&2
+                    return 1
+                fi
+            else
+                echo "错误：需要选择密钥对，但未找到交互式选择工具。" >&2
+                return 1
+            fi
+        fi
     fi
 
     if ! confirm_action "删除 SSH 密钥对：$key_name"; then
@@ -846,21 +792,17 @@ ecs_key_delete() {
 
     echo "删除 SSH 密钥对："
     local result
-    result=$(call_aliyun_api ecs DeleteKeyPairs \
-        --RegionId "$region" \
-        --KeyPairNames "['$key_name']")
+    result=$(call_aliyun_api ecs delete-key-pairs --biz-region-id "${region:-cn-hangzhou}" --key-pair-names "['$key_name']")
 
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对删除成功。"
-        log_delete_operation "${profile:-}" "$region" "ecs" "$key_name" "SSH密钥对" "成功"
+        log_delete_operation "${profile:-}" "$region" "ecs" "$key_name" "SSH密钥对" "成功" "$result"
     else
         echo "SSH 密钥对删除失败。"
         echo "$result"
-        log_delete_operation "${profile:-}" "$region" "ecs" "$key_name" "SSH密钥对" "失败"
+        log_delete_operation "${profile:-}" "$region" "ecs" "$key_name" "SSH密钥对" "失败" "$result"
         return 1
     fi
-
-    log_result "${profile:-}" "$region" "ecs" "key-del" "$result"
 }
 
 # 绑定 SSH 密钥对到实例（使用框架函数）
@@ -904,7 +846,7 @@ ecs_key_attach() {
     if [ -z "$key_pair_name" ]; then
         local key_pair_list
         local key_result
-        key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
+        key_result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
 
         if [ $? -eq 0 ] && [ -n "$key_result" ]; then
             key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
@@ -942,10 +884,8 @@ ecs_key_attach() {
 
     echo "绑定 SSH 密钥对到实例："
     local result
-    result=$(call_aliyun_api ecs AttachKeyPair \
-        --RegionId "$region" \
-        --InstanceIds "['$instance_id']" \
-        --KeyPairName "$key_pair_name")
+    result=$(call_aliyun_api ecs attach-key-pair --biz-region-id "${region:-cn-hangzhou}" --instance-ids "['$instance_id']" \
+        --biz-key-pair-name "$key_pair_name")
 
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对绑定成功。"
@@ -999,7 +939,7 @@ ecs_key_detach() {
     if [ -z "$key_pair_name" ]; then
         local key_pair_list
         local key_result
-        key_result=$(call_aliyun_api ecs DescribeKeyPairs --RegionId "$region" 2>/dev/null)
+        key_result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
 
         if [ $? -eq 0 ] && [ -n "$key_result" ]; then
             key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
@@ -1037,10 +977,9 @@ ecs_key_detach() {
 
     echo "解绑实例的 SSH 密钥对："
     local result
-    result=$(call_aliyun_api ecs DetachKeyPair \
-        --RegionId "$region" \
-        --InstanceIds "['$instance_id']" \
-        --KeyPairName "$key_pair_name")
+    result=$(call_aliyun_api ecs detach-key-pair --biz-region-id "${region:-cn-hangzhou}" \
+        --instance-ids "['$instance_id']" \
+        --biz-key-pair-name "$key_pair_name")
 
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对解绑成功。"
@@ -1060,7 +999,7 @@ ecs_snapshot_list() {
     local jq_filter='.Snapshots.Snapshot[]? | [.SnapshotId, (.SnapshotName // "-"), .SourceDiskId, (.Progress // "-"), .Status, (.SourceDiskSize // "-"), .CreationTime] | @tsv'
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-22s  %-20s  %-22s  %-8s  %-10s  %-8s  %s\n", $1, substr($2,1,18), $3, $4, $5, $6, $7}'
     local result
-    result=$(call_aliyun_api ecs DescribeSnapshots --RegionId "${region:-}")
+    result=$(call_aliyun_api ecs describe-snapshots --biz-region-id "${region:-cn-hangzhou}")
     if [ $? -ne 0 ]; then
         echo "错误：无法获取快照列表。请检查您的凭证和权限。" >&2
         return 1
@@ -1069,7 +1008,7 @@ ecs_snapshot_list() {
         "$result" \
         "$format" \
         "ecs" \
-        "snapshot-get" \
+        "get-snap" \
         "$table_header" \
         "$jq_filter" \
         "$status_mapper" \
@@ -1082,7 +1021,7 @@ ecs_snapshot_create() {
     local snapshot_name=$2
     if [ -z "$disk_id" ]; then
         local result
-        result=$(call_aliyun_api ecs DescribeDisks --RegionId "${region:-}" 2>/dev/null)
+        result=$(call_aliyun_api ecs describe-disks --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
         if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
             echo "错误：无法获取磁盘列表。" >&2
             return 1
@@ -1096,7 +1035,7 @@ ecs_snapshot_create() {
         if type select_with_fzf >/dev/null 2>&1; then
             disk_id=$(select_with_fzf "选择要创建快照的磁盘" "$disk_list" | awk '{print $1}')
         else
-            echo "请指定磁盘ID。示例：$0 ecs snapshot-add d-bp1xxx 快照名称" >&2
+            echo "请指定磁盘ID。示例：$0 ecs add-snap d-bp1xxx 快照名称" >&2
             return 1
         fi
         [ -z "$disk_id" ] && echo "错误：未选择磁盘。" >&2 && return 1
@@ -1107,10 +1046,10 @@ ecs_snapshot_create() {
     fi
     echo "创建快照：磁盘=$disk_id 名称=$snapshot_name"
     local result
-    result=$(call_aliyun_api ecs CreateSnapshot --RegionId "${region:-}" --DiskId "$disk_id" --SnapshotName "$snapshot_name")
+    result=$(call_aliyun_api ecs create-snapshot --disk-id "$disk_id" --snapshot-name "$snapshot_name")
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ecs" "snapshot-add" "$result"
+        log_result "${profile:-}" "$region" "ecs" "add-snap" "$result"
     else
         echo "错误：创建快照失败。" >&2
         echo "$result" >&2
@@ -1122,7 +1061,7 @@ ecs_snapshot_delete() {
     local snapshot_id=$1
     if [ -z "$snapshot_id" ]; then
         local result
-        result=$(call_aliyun_api ecs DescribeSnapshots --RegionId "${region:-}" 2>/dev/null)
+        result=$(call_aliyun_api ecs describe-snapshots --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
         if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
             echo "错误：无法获取快照列表。" >&2
             return 1
@@ -1136,7 +1075,7 @@ ecs_snapshot_delete() {
         if type select_with_fzf >/dev/null 2>&1; then
             snapshot_id=$(select_with_fzf "选择要删除的快照" "$snapshot_list" | awk '{print $1}')
         else
-            echo "请指定快照ID。示例：$0 ecs snapshot-del s-bp1xxx" >&2
+            echo "请指定快照ID。示例：$0 ecs del-snap s-bp1xxx" >&2
             return 1
         fi
         [ -z "$snapshot_id" ] && echo "错误：未选择快照。" >&2 && return 1
@@ -1145,14 +1084,14 @@ ecs_snapshot_delete() {
         return 1
     fi
     local result
-    result=$(call_aliyun_api ecs DeleteSnapshot --RegionId "${region:-}" --SnapshotId "$snapshot_id")
+    result=$(call_aliyun_api ecs delete-snapshot --snapshot-id "$snapshot_id")
     if [ $? -eq 0 ]; then
         echo "快照删除成功。"
-        log_delete_operation "${profile:-}" "$region" "ecs" "$snapshot_id" "快照" "成功"
+        log_delete_operation "${profile:-}" "$region" "ecs" "$snapshot_id" "快照" "成功" "$result"
     else
         echo "错误：快照删除失败。" >&2
         echo "$result" >&2
-        log_delete_operation "${profile:-}" "$region" "ecs" "$snapshot_id" "快照" "失败"
+        log_delete_operation "${profile:-}" "$region" "ecs" "$snapshot_id" "快照" "失败" "$result"
         return 1
     fi
 }
@@ -1164,7 +1103,7 @@ ecs_image_list() {
     local jq_filter='.Images.Image[]? | [.ImageId, (.ImageName // "-"), (.OSName // "-"), (.Size // "-"), .Status, .CreationTime] | @tsv'
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-22s  %-24s  %-20s  %-6s  %-10s  %s\n", $1, substr($2,1,22), substr($3,1,18), $4, $5, $6}'
     local result
-    result=$(call_aliyun_api ecs DescribeImages --RegionId "${region:-}" --ImageOwnerAlias self --Status Available 2>/dev/null)
+    result=$(call_aliyun_api ecs describe-images --biz-region-id "${region:-cn-hangzhou}" --image-owner-alias self --status Available 2>/dev/null)
     if [ $? -ne 0 ]; then
         echo "错误：无法获取自定义镜像列表。请检查您的凭证和权限。" >&2
         return 1
@@ -1173,7 +1112,7 @@ ecs_image_list() {
         "$result" \
         "$format" \
         "ecs" \
-        "image-get" \
+        "get-image" \
         "$table_header" \
         "$jq_filter" \
         "$status_mapper" \
@@ -1200,7 +1139,7 @@ ecs_image_create() {
         if type select_with_fzf >/dev/null 2>&1; then
             instance_id=$(select_with_fzf "选择要创建镜像的实例" "$instance_list" | awk '{print $1}')
         else
-            echo "请指定实例ID。示例：$0 ecs image-add i-bp1xxx 我的镜像" >&2
+            echo "请指定实例ID。示例：$0 ecs add-image i-bp1xxx 我的镜像" >&2
             return 1
         fi
         [ -z "$instance_id" ] && echo "错误：未选择实例。" >&2 && return 1
@@ -1211,10 +1150,10 @@ ecs_image_create() {
     fi
     echo "从实例创建自定义镜像：实例=$instance_id 镜像名称=$image_name"
     local result
-    result=$(call_aliyun_api ecs CreateImage --RegionId "${region:-}" --InstanceId "$instance_id" --ImageName "$image_name")
+    result=$(call_aliyun_api ecs create-image --biz-region-id "${region:-cn-hangzhou}" --instance-id "$instance_id" --image-name "$image_name")
     if [ $? -eq 0 ]; then
         echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ecs" "image-add" "$result"
+        log_result "${profile:-}" "$region" "ecs" "add-image" "$result"
     else
         echo "错误：创建镜像失败。" >&2
         echo "$result" >&2
@@ -1226,7 +1165,7 @@ ecs_image_delete() {
     local image_id=$1
     if [ -z "$image_id" ]; then
         local result
-        result=$(call_aliyun_api ecs DescribeImages --RegionId "${region:-}" --ImageOwnerAlias self 2>/dev/null)
+        result=$(call_aliyun_api ecs describe-images --biz-region-id "${region:-cn-hangzhou}" --image-owner-alias self 2>/dev/null)
         if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
             echo "错误：无法获取自定义镜像列表。" >&2
             return 1
@@ -1240,7 +1179,7 @@ ecs_image_delete() {
         if type select_with_fzf >/dev/null 2>&1; then
             image_id=$(select_with_fzf "选择要删除的镜像" "$image_list" | awk '{print $1}')
         else
-            echo "请指定镜像ID。示例：$0 ecs image-del m-bp1xxx" >&2
+            echo "请指定镜像ID。示例：$0 ecs del-image m-bp1xxx" >&2
             return 1
         fi
         [ -z "$image_id" ] && echo "错误：未选择镜像。" >&2 && return 1
@@ -1249,14 +1188,14 @@ ecs_image_delete() {
         return 1
     fi
     local result
-    result=$(call_aliyun_api ecs DeleteImage --RegionId "${region:-}" --ImageId "$image_id")
+    result=$(call_aliyun_api ecs delete-image --biz-region-id "${region:-cn-hangzhou}" --image-id "$image_id")
     if [ $? -eq 0 ]; then
         echo "镜像删除成功。"
-        log_delete_operation "${profile:-}" "$region" "ecs" "$image_id" "自定义镜像" "成功"
+        log_delete_operation "${profile:-}" "$region" "ecs" "$image_id" "自定义镜像" "成功" "$result"
     else
         echo "错误：镜像删除失败。" >&2
         echo "$result" >&2
-        log_delete_operation "${profile:-}" "$region" "ecs" "$image_id" "自定义镜像" "失败"
+        log_delete_operation "${profile:-}" "$region" "ecs" "$image_id" "自定义镜像" "失败" "$result"
         return 1
     fi
 }
@@ -1267,11 +1206,9 @@ get_supported_disk_categories() {
     local result
 
     echo "正在获取支持的磁盘类型..."
-    result=$(call_aliyun_api ecs DescribeAvailableResource \
-        --RegionId "$region" \
-        --ZoneId "$zone_id" \
-        --DestinationResource SystemDisk \
-        --InstanceType "${instance_type:-}")
+    result=$(call_aliyun_api ecs describe-available-resource --biz-region-id "${region:-cn-hangzhou}" --zone-id "$zone_id" \
+        --destination-resource SystemDisk \
+        --instance-type "${instance_type:-}")
 
     if [ $? -ne 0 ]; then
         echo "错误：调用 DescribeAvailableResource API 失败。" >&2
@@ -1314,51 +1251,15 @@ cloud_auto [20-2048GiB]"
 
 # 启动 ECS 实例（使用框架函数）
 ecs_start() {
-    local instance_id=$1
+    local instance_id
 
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$instance_id" ]; then
-        local instance_list
-        local result
-        result=$(ecs_describe_all_instances)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
-
-        if [ -z "$instance_list" ]; then
-            echo "错误：没有找到任何 ECS 实例。" >&2
-            return 1
-        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            instance_id=$(echo "$instance_list" | awk '{print $1}')
-            echo "自动选择唯一的实例: $instance_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                instance_id=$(select_with_fzf "选择要启动的 ECS 实例" "$instance_list" | awk '{print $1}')
-                if [ -z "$instance_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查实例 ID 是否为空
-    if [ -z "$instance_id" ]; then
-        echo "错误：实例 ID 不能为空。" >&2
-        return 1
-    fi
+    local raw
+    raw=$(_ecs_resolve_instance_id "$1" "选择要启动的 ECS 实例") || return 1
+    instance_id=$(echo "$raw" | awk '{print $1}')
 
     echo "启动 ECS 实例：$instance_id"
     local result
-    result=$(call_aliyun_api ecs StartInstance \
-        --RegionId "$region" \
-        --InstanceId "$instance_id")
+    result=$(call_aliyun_api ecs start-instance --instance-id "$instance_id")
 
     if [ $? -eq 0 ]; then
         echo "ECS 实例启动命令已发送。"
@@ -1369,9 +1270,7 @@ ecs_start() {
         local status
         for i in {1..30}; do
             sleep 5
-            status=$(call_aliyun_api ecs DescribeInstanceAttribute \
-                --InstanceId "$instance_id" \
-                --RegionId "$region" 2>/dev/null | jq -r '.Status')
+            status=$(call_aliyun_api ecs describe-instance-attribute --instance-id "$instance_id" 2>/dev/null | jq -r '.Status')
             if [ "$status" = "Running" ]; then
                 echo "实例已成功启动。"
                 break
@@ -1388,53 +1287,18 @@ ecs_start() {
 
 # 停止 ECS 实例（使用框架函数）
 ecs_stop() {
-    local instance_id=$1
+    local instance_id
 
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$instance_id" ]; then
-        local instance_list
-        local result
-        result=$(ecs_describe_all_instances)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        instance_list=$(echo "$result" | jq -r '.Instances.Instance[] | "\(.InstanceId) (\(.InstanceName // "无名称")) [\(.Status)]"')
-
-        if [ -z "$instance_list" ]; then
-            echo "错误：没有找到任何 ECS 实例。" >&2
-            return 1
-        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            instance_id=$(echo "$instance_list" | awk '{print $1}')
-            echo "自动选择唯一的实例: $instance_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                instance_id=$(select_with_fzf "选择要停止的 ECS 实例" "$instance_list" | awk '{print $1}')
-                if [ -z "$instance_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查实例 ID 是否为空
-    if [ -z "$instance_id" ]; then
-        echo "错误：实例 ID 不能为空。" >&2
-        return 1
-    fi
+    local raw
+    raw=$(_ecs_resolve_instance_id "$1" "选择要停止的 ECS 实例") || return 1
+    instance_id=$(echo "$raw" | awk '{print $1}')
 
     echo "停止 ECS 实例：$instance_id (使用节省停机模式)"
     local result
-    result=$(call_aliyun_api ecs StopInstance \
-        --RegionId "$region" \
-        --InstanceId "$instance_id" \
-        --StoppedMode StopCharging \
-        --ForceStop false)
+    result=$(call_aliyun_api ecs stop-instance \
+        --instance-id "$instance_id" \
+        --stopped-mode StopCharging \
+        --force-stop false)
 
     if [ $? -eq 0 ]; then
         echo "ECS 实例停止命令已发送。"
@@ -1445,9 +1309,8 @@ ecs_stop() {
         local status
         for ((i = 1; i <= 30; i++)); do
             sleep 5
-            status=$(call_aliyun_api ecs DescribeInstanceAttribute \
-                --InstanceId "$instance_id" \
-                --RegionId "$region" 2>/dev/null | jq -r '.Status')
+            status=$(call_aliyun_api ecs describe-instance-attribute \
+                --instance-id "$instance_id" 2>/dev/null | jq -r '.Status')
             if [ "$status" = "Stopped" ]; then
                 echo "实例已成功停止。"
                 break
@@ -1477,51 +1340,18 @@ show_region_help() {
 region_list() {
     local format=${1:-human}
     local result
-    if ! result=$(call_aliyun_api ecs DescribeRegions --AcceptLanguage zh-CN 2>/dev/null); then
+    if ! result=$(call_aliyun_api ecs describe-regions --accept-language zh-CN 2>/dev/null); then
         echo "错误：无法获取地域列表。请检查您的凭证和网络。" >&2
         return 1
     fi
 
     local table_header="RegionId\tLocalName\tStatus\tRegionEndpoint"
     local jq_filter='.Regions.Region[]? | [.RegionId, .LocalName, .Status, .RegionEndpoint] | @tsv'
-    local empty_message="未获取到地域列表。"
-    local title="可用地域列表："
+    local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-28s  %-20s  %-12s  %s\n", $1, $2, $3, $4}'
 
-    case "$format" in
-    json)
-        echo "$result"
-        log_result "${profile:-}" "${region:-}" "region" "list" "$result" "json"
-        ;;
-    tsv)
-        echo -e "$table_header"
-        echo "$result" | jq -r "$jq_filter" 2>/dev/null
-        log_result "${profile:-}" "${region:-}" "region" "list" "$result" "tsv"
-        ;;
-    human | *)
-        echo "$title"
-        local temp_output
-        temp_output=$(echo "$result" | jq -r "$jq_filter" 2>/dev/null)
-        local count
-        if [ -n "$temp_output" ] && [ "$temp_output" != "null" ] && [ "$temp_output" != "" ]; then
-            count=$(echo "$temp_output" | grep -c . || echo "0")
-        else
-            count="0"
-        fi
-
-        if [ "$count" = "0" ] || [ -z "$count" ]; then
-            echo "$empty_message"
-        else
-            echo -e "$table_header" | head -1
-            echo "$temp_output" | awk 'BEGIN {FS="\t"; OFS="\t"} {
-                for (i=1; i<=NF; i++) {
-                    printf "%-28s  ", $i
-                }
-                print ""
-            }'
-        fi
-        log_result "${profile:-}" "${region:-}" "region" "list" "$result" "$format"
-        ;;
-    esac
+    format_output "$result" "$format" "region" "list" \
+        "$table_header" "$jq_filter" "$status_mapper" \
+        "未获取到地域列表。" "可用地域列表："
 }
 
 handle_region_commands() {

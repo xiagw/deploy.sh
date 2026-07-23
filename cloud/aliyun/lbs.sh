@@ -5,7 +5,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 show_lbs_help() {
     echo "负载均衡服务 (Load Balancer Services) 操作："
@@ -104,7 +104,7 @@ clb_list() {
     }'
 
     local result
-    result=$(call_aliyun_api slb DescribeLoadBalancers --RegionId "${region:-}")
+    result=$(call_aliyun_api slb describe-load-balancers --biz-region-id "${region:-}" --api-version 2014-05-15)
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 CLB 实例列表。请检查您的凭证和权限。" >&2
@@ -150,7 +150,7 @@ nlb_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-20s  %-10s  %-30s  %-15s  %-15s  %-18s  %s\n", $1, $2, $3, $4, $5, $6, $7, $8}'
 
     local result
-    result=$(call_aliyun_api nlb ListLoadBalancers --RegionId "$region")
+    result=$(call_aliyun_api nlb list-load-balancers --biz-region-id "${region:-}" --api-version 2022-04-30)
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 NLB 实例列表。请检查您的凭证和权限。" >&2
@@ -178,7 +178,7 @@ alb_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-20s  %-10s  %-12s  %-18s  %s\n", $1, $2, $3, $4, $5, $6}'
 
     local result
-    result=$(call_aliyun_api alb ListLoadBalancers --RegionId "$region")
+    result=$(call_aliyun_api alb list-load-balancers --biz-region-id "${region:-}" --api-version 2022-04-30)
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取 ALB 实例列表。请检查您的凭证和权限。" >&2
@@ -240,7 +240,7 @@ slb_create() {
         if [ -z "$spec" ]; then
             echo "正在获取可用的 CLB 规格..."
             local spec_result
-            spec_result=$(call_aliyun_api slb DescribeLoadBalancers --RegionId "$region" 2>/dev/null)
+            spec_result=$(call_aliyun_api slb describe-load-balancers --biz-region-id "${region:-}" --api-version 2014-05-15 2>/dev/null)
 
             local spec_list
             if [ $? -eq 0 ] && [ -n "$spec_result" ]; then
@@ -292,21 +292,11 @@ PrePaid"
     fi
 
     echo "创建 CLB 实例："
-    local result
-    result=$(call_aliyun_api slb CreateLoadBalancer \
-        --RegionId "$region" \
-        --LoadBalancerName "$name" \
-        --LoadBalancerSpec "$spec" \
-        --PayType "$pay_type")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "slb" "create" "$result"
-    else
-        echo "错误：CLB 实例创建失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "slb" "create" "错误：CLB 实例创建失败。" \
+        -- slb create-load-balancer --biz-region-id "${region:-}" --api-version 2014-05-15 \
+        --load-balancer-name "$name" \
+        --load-balancer-spec "$spec" \
+        --pay-type "$pay_type"
 }
 
 nlb_create() {
@@ -327,44 +317,16 @@ nlb_create() {
 
         # 选择 VPC
         if [ -z "$vpc_id" ]; then
-            local vpc_list
-            vpc_list=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null | jq -r '.Vpcs.Vpc[] | "\(.VpcId) (\(.VpcName // .VpcId)) [\(.CidrBlock)]"')
-
-            if [ -z "$vpc_list" ]; then
-                echo "错误：没有找到 VPC。" >&2
-                return 1
-            elif [ "$(echo "$vpc_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                vpc_id=$(echo "$vpc_list" | awk '{print $1}')
-                echo "自动选择唯一的 VPC: $vpc_id"
-            else
-                if type select_with_fzf >/dev/null 2>&1; then
-                    vpc_id=$(select_with_fzf "选择 VPC" "$vpc_list" | awk '{print $1}')
-                else
-                    echo "错误：需要选择 VPC，但未找到交互式选择工具。" >&2
-                    return 1
-                fi
-            fi
+            vpc_id=$(resolve_resource_id "" "选择 VPC" "错误：没有找到 VPC。" \
+                '.Vpcs.Vpc[] | "\(.VpcId) (\(.VpcName // .VpcId)) [\(.CidrBlock)]"' \
+                -- vpc describe-vpcs --biz-region-id "${region:-}" --api-version 2016-04-28) || return 1
         fi
 
         # 选择交换机
         if [ -z "$vswitch_id" ]; then
-            local vswitch_list
-            vswitch_list=$(call_aliyun_api vpc DescribeVSwitches --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null | jq -r '.VSwitches.VSwitch[] | "\(.VSwitchId) (\(.VSwitchName // .VSwitchId)) [\(.CidrBlock)]"')
-
-            if [ -z "$vswitch_list" ]; then
-                echo "错误：在选定的 VPC 中没有找到交换机。" >&2
-                return 1
-            elif [ "$(echo "$vswitch_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                vswitch_id=$(echo "$vswitch_list" | awk '{print $1}')
-                echo "自动选择唯一的交换机: $vswitch_id"
-            else
-                if type select_with_fzf >/dev/null 2>&1; then
-                    vswitch_id=$(select_with_fzf "选择交换机" "$vswitch_list" | awk '{print $1}')
-                else
-                    echo "错误：需要选择交换机，但未找到交互式选择工具。" >&2
-                    return 1
-                fi
-            fi
+            vswitch_id=$(resolve_resource_id "" "选择交换机" "错误：在选定的 VPC 中没有找到交换机。" \
+                '.VSwitches.VSwitch[] | "\(.VSwitchId) (\(.VSwitchName // .VSwitchId)) [\(.CidrBlock)]"' \
+                -- vpc describe-vswitches --biz-region-id "${region:-}" --api-version 2016-04-28 --vpc-id "$vpc_id") || return 1
         fi
     fi
 
@@ -373,22 +335,12 @@ nlb_create() {
     fi
 
     echo "创建 NLB 实例："
-    local result
-    result=$(call_aliyun_api nlb CreateLoadBalancer \
-        --RegionId "$region" \
-        --LoadBalancerName "$name" \
-        --VpcId "$vpc_id" \
-        --ZoneMappings "[{\"VSwitchId\":\"$vswitch_id\",\"ZoneId\":\"${zone:-}\"}]" \
-        --AddressType Internet)
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "nlb" "create" "$result"
-    else
-        echo "错误：NLB 实例创建失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "nlb" "create" "错误：NLB 实例创建失败。" \
+        -- nlb create-load-balancer --biz-region-id "${region:-}" --api-version 2022-04-30 \
+        --load-balancer-name "$name" \
+        --vpc-id "$vpc_id" \
+        --zone-mappings "[{\"VSwitchId\":\"$vswitch_id\",\"ZoneId\":\"${zone:-}\"}]" \
+        --address-type Internet
 }
 
 alb_create() {
@@ -409,44 +361,16 @@ alb_create() {
 
         # 选择 VPC
         if [ -z "$vpc_id" ]; then
-            local vpc_list
-            vpc_list=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null | jq -r '.Vpcs.Vpc[] | "\(.VpcId) (\(.VpcName // .VpcId)) [\(.CidrBlock)]"')
-
-            if [ -z "$vpc_list" ]; then
-                echo "错误：没有找到 VPC。" >&2
-                return 1
-            elif [ "$(echo "$vpc_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                vpc_id=$(echo "$vpc_list" | awk '{print $1}')
-                echo "自动选择唯一的 VPC: $vpc_id"
-            else
-                if type select_with_fzf >/dev/null 2>&1; then
-                    vpc_id=$(select_with_fzf "选择 VPC" "$vpc_list" | awk '{print $1}')
-                else
-                    echo "错误：需要选择 VPC，但未找到交互式选择工具。" >&2
-                    return 1
-                fi
-            fi
+            vpc_id=$(resolve_resource_id "" "选择 VPC" "错误：没有找到 VPC。" \
+                '.Vpcs.Vpc[] | "\(.VpcId) (\(.VpcName // .VpcId)) [\(.CidrBlock)]"' \
+                -- vpc describe-vpcs --biz-region-id "${region:-}" --api-version 2016-04-28) || return 1
         fi
 
         # 选择交换机
         if [ -z "$vswitch_id" ]; then
-            local vswitch_list
-            vswitch_list=$(call_aliyun_api vpc DescribeVSwitches --RegionId "$region" --VpcId "$vpc_id" 2>/dev/null | jq -r '.VSwitches.VSwitch[] | "\(.VSwitchId) (\(.VSwitchName // .VSwitchId)) [\(.CidrBlock)]"')
-
-            if [ -z "$vswitch_list" ]; then
-                echo "错误：在选定的 VPC 中没有找到交换机。" >&2
-                return 1
-            elif [ "$(echo "$vswitch_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                vswitch_id=$(echo "$vswitch_list" | awk '{print $1}')
-                echo "自动选择唯一的交换机: $vswitch_id"
-            else
-                if type select_with_fzf >/dev/null 2>&1; then
-                    vswitch_id=$(select_with_fzf "选择交换机" "$vswitch_list" | awk '{print $1}')
-                else
-                    echo "错误：需要选择交换机，但未找到交互式选择工具。" >&2
-                    return 1
-                fi
-            fi
+            vswitch_id=$(resolve_resource_id "" "选择交换机" "错误：在选定的 VPC 中没有找到交换机。" \
+                '.VSwitches.VSwitch[] | "\(.VSwitchId) (\(.VSwitchName // .VSwitchId)) [\(.CidrBlock)]"' \
+                -- vpc describe-vswitches --biz-region-id "${region:-}" --api-version 2016-04-28 --vpc-id "$vpc_id") || return 1
         fi
     fi
 
@@ -455,147 +379,59 @@ alb_create() {
     fi
 
     echo "创建 ALB 实例："
-    local result
-    result=$(call_aliyun_api alb CreateLoadBalancer \
-        --RegionId "$region" \
-        --LoadBalancerName "$name" \
-        --VpcId "$vpc_id" \
-        --ZoneMappings "[{\"VSwitchId\":\"$vswitch_id\",\"ZoneId\":\"${zone:-}\"}]" \
-        --AddressType Internet)
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "alb" "create" "$result"
-    else
-        echo "错误：ALB 实例创建失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "alb" "create" "错误：ALB 实例创建失败。" \
+        -- alb create-load-balancer --biz-region-id "${region:-}" --api-version 2022-04-30 \
+        --load-balancer-name "$name" \
+        --vpc-id "$vpc_id" \
+        --zone-mappings "[{\"VSwitchId\":\"$vswitch_id\",\"ZoneId\":\"${zone:-}\"}]" \
+        --address-type Internet
 }
 
-# 更新函数（使用框架函数）
-lbs_update() {
-    local lb_type=$1
-    shift
-
-    case "$lb_type" in
+# 按类型填充 LB 元数据（调用方需先 local 声明这些变量，避免污染全局）
+_lbs_set_meta() {
+    case "$1" in
     clb | slb)
-        slb_update "$@"
+        _lb_product=slb _lb_api_ver=2014-05-15 _lb_list_action=describe-load-balancers
+        _lb_jq_root='.LoadBalancers.LoadBalancer[]' _lb_label=CLB
+        _lb_update_action=set-load-balancer-name
         ;;
     nlb)
-        nlb_update "$@"
+        _lb_product=nlb _lb_api_ver=2022-04-30 _lb_list_action=list-load-balancers
+        _lb_jq_root='.LoadBalancers[]' _lb_label=NLB
+        _lb_update_action=update-load-balancer-attribute
         ;;
     alb)
-        alb_update "$@"
+        _lb_product=alb _lb_api_ver=2022-04-30 _lb_list_action=list-load-balancers
+        _lb_jq_root='.LoadBalancers[]' _lb_label=ALB
+        _lb_update_action=update-load-balancer-attribute
         ;;
     *)
-        echo "错误：未知的负载均衡类型：$lb_type" >&2
+        echo "错误：未知的负载均衡类型：$1" >&2
         return 1
         ;;
     esac
 }
 
-slb_update() {
-    local lb_id=$1 new_name=$2
-
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$lb_id" ]; then
-        local lb_list
-        local result
-        result=$(call_aliyun_api slb DescribeLoadBalancers --RegionId "${region:-}" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 CLB 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        lb_list=$(echo "$result" | jq -r '.LoadBalancers.LoadBalancer[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
-
-        if [ -z "$lb_list" ]; then
-            echo "错误：没有找到 CLB 实例。" >&2
-            return 1
-        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            lb_id=$(echo "$lb_list" | awk '{print $1}')
-            echo "自动选择唯一的 CLB 实例: $lb_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                lb_id=$(select_with_fzf "选择要更新的 CLB 实例" "$lb_list" | awk '{print $1}')
-                if [ -z "$lb_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 如果没有提供新名称，则提示输入
-    if [ -z "$new_name" ]; then
-        read -r -p "请输入新的实例名称: " new_name
-        if [ -z "$new_name" ]; then
-            echo "错误：新名称不能为空。" >&2
-            return 1
-        fi
-    fi
-
-    if ! validate_required_params "$lb_id" "$new_name" "错误：实例ID和新名称不能为空。"; then
-        return 1
-    fi
-
-    echo "更新 CLB 实例："
-    local result
-    result=$(call_aliyun_api slb SetLoadBalancerName \
-        --RegionId "$region" \
-        --LoadBalancerId "$lb_id" \
-        --LoadBalancerName "$new_name")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "slb" "update" "$result"
-    else
-        echo "错误：CLB 实例更新失败。"
-        echo "$result"
-        return 1
-    fi
+# 解析 LB 实例 ID（未传入时 fzf 选择）: _lbs_resolve_lb_id <type> <current> <动词>
+_lbs_resolve_lb_id() {
+    local _lb_product _lb_api_ver _lb_list_action _lb_jq_root _lb_label _lb_update_action
+    _lbs_set_meta "$1" || return 1
+    resolve_resource_id "$2" "选择要$3的 ${_lb_label} 实例" "错误：没有找到 ${_lb_label} 实例。" \
+        "${_lb_jq_root} | \"\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]\"" \
+        -- "$_lb_product" "$_lb_list_action" --biz-region-id "${region:-}" --api-version "$_lb_api_ver"
 }
 
-nlb_update() {
-    local lb_id=$1 new_name=$2
+# 更新函数（clb/nlb/alb 通用）
+lbs_update() {
+    local lb_type=$1
+    shift
 
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$lb_id" ]; then
-        local lb_list
-        local result
-        result=$(call_aliyun_api nlb ListLoadBalancers --RegionId "$region" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 NLB 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
+    local _lb_product _lb_api_ver _lb_list_action _lb_jq_root _lb_label _lb_update_action
+    _lbs_set_meta "$lb_type" || return 1
 
-        lb_list=$(echo "$result" | jq -r '.LoadBalancers[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
+    local lb_id new_name=$2
+    lb_id=$(_lbs_resolve_lb_id "$lb_type" "$1" "更新") || return 1
 
-        if [ -z "$lb_list" ]; then
-            echo "错误：没有找到 NLB 实例。" >&2
-            return 1
-        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            lb_id=$(echo "$lb_list" | awk '{print $1}')
-            echo "自动选择唯一的 NLB 实例: $lb_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                lb_id=$(select_with_fzf "选择要更新的 NLB 实例" "$lb_list" | awk '{print $1}')
-                if [ -z "$lb_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 如果没有提供新名称，则提示输入
     if [ -z "$new_name" ]; then
         read -r -p "请输入新的实例名称: " new_name
         if [ -z "$new_name" ]; then
@@ -604,90 +440,11 @@ nlb_update() {
         fi
     fi
 
-    if ! validate_required_params "$lb_id" "$new_name" "错误：实例ID和新名称不能为空。"; then
-        return 1
-    fi
-
-    echo "更新 NLB 实例："
-    local result
-    result=$(call_aliyun_api nlb UpdateLoadBalancerAttribute \
-        --RegionId "$region" \
-        --LoadBalancerId "$lb_id" \
-        --LoadBalancerName "$new_name")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "nlb" "update" "$result"
-    else
-        echo "错误：NLB 实例更新失败。"
-        echo "$result"
-        return 1
-    fi
-}
-
-alb_update() {
-    local lb_id=$1 new_name=$2
-
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$lb_id" ]; then
-        local lb_list
-        local result
-        result=$(call_aliyun_api alb ListLoadBalancers --RegionId "$region" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 ALB 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        lb_list=$(echo "$result" | jq -r '.LoadBalancers[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
-
-        if [ -z "$lb_list" ]; then
-            echo "错误：没有找到 ALB 实例。" >&2
-            return 1
-        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            lb_id=$(echo "$lb_list" | awk '{print $1}')
-            echo "自动选择唯一的 ALB 实例: $lb_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                lb_id=$(select_with_fzf "选择要更新的 ALB 实例" "$lb_list" | awk '{print $1}')
-                if [ -z "$lb_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 如果没有提供新名称，则提示输入
-    if [ -z "$new_name" ]; then
-        read -r -p "请输入新的实例名称: " new_name
-        if [ -z "$new_name" ]; then
-            echo "错误：新名称不能为空。" >&2
-            return 1
-        fi
-    fi
-
-    if ! validate_required_params "$lb_id" "$new_name" "错误：实例ID和新名称不能为空。"; then
-        return 1
-    fi
-
-    echo "更新 ALB 实例："
-    local result
-    result=$(call_aliyun_api alb UpdateLoadBalancerAttribute \
-        --RegionId "$region" \
-        --LoadBalancerId "$lb_id" \
-        --LoadBalancerName "$new_name")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "alb" "update" "$result"
-    else
-        echo "错误：ALB 实例更新失败。"
-        echo "$result"
-        return 1
-    fi
+    echo "更新 ${_lb_label} 实例："
+    call_api_logged "$_lb_product" "update" "错误：${_lb_label} 实例更新失败。" \
+        -- "$_lb_product" "$_lb_update_action" --biz-region-id "${region:-}" --api-version "$_lb_api_ver" \
+        --load-balancer-id "$lb_id" \
+        --load-balancer-name "$new_name"
 }
 
 # 删除函数（使用框架函数）
@@ -715,212 +472,19 @@ alb (应用型负载均衡)"
         fi
     fi
 
-    case "$lb_type" in
-    clb | slb)
-        slb_delete "$@"
-        ;;
-    nlb)
-        nlb_delete "$@"
-        ;;
-    alb)
-        alb_delete "$@"
-        ;;
-    *)
-        echo "错误：未知的负载均衡类型：$lb_type" >&2
-        echo "支持的类型：clb, nlb, alb（clb 即传统型负载均衡）" >&2
-        return 1
-        ;;
-    esac
-}
+    local _lb_product _lb_api_ver _lb_list_action _lb_jq_root _lb_label _lb_update_action
+    _lbs_set_meta "$lb_type" || return 1
 
-slb_delete() {
-    local lb_id=$1
+    local lb_id
+    lb_id=$(_lbs_resolve_lb_id "$lb_type" "$1" "删除") || return 1
 
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$lb_id" ]; then
-        local lb_list
-        local result
-        result=$(call_aliyun_api slb DescribeLoadBalancers --RegionId "${region:-}" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 CLB 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        lb_list=$(echo "$result" | jq -r '.LoadBalancers.LoadBalancer[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
-
-        if [ -z "$lb_list" ]; then
-            echo "错误：没有找到 CLB 实例。" >&2
-            return 1
-        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            lb_id=$(echo "$lb_list" | awk '{print $1}')
-            echo "自动选择唯一的 CLB 实例: $lb_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                lb_id=$(select_with_fzf "选择要删除的 CLB 实例" "$lb_list" | awk '{print $1}')
-                if [ -z "$lb_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查实例 ID 是否为空
-    if [ -z "$lb_id" ]; then
-        echo "错误：实例ID不能为空。" >&2
+    if ! confirm_action "删除 ${_lb_label} 实例：$lb_id"; then
         return 1
     fi
 
-    if ! confirm_action "删除 CLB 实例：$lb_id"; then
-        return 1
-    fi
-
-    echo "删除 CLB 实例："
-    local result
-    result=$(call_aliyun_api slb DeleteLoadBalancer \
-        --RegionId "$region" \
-        --LoadBalancerId "$lb_id")
-
-    if [ $? -eq 0 ]; then
-        echo "CLB 实例删除成功。"
-        log_delete_operation "${profile:-}" "$region" "slb" "$lb_id" "CLB实例" "成功"
-    else
-        echo "错误：CLB 实例删除失败。"
-        echo "$result"
-        log_delete_operation "${profile:-}" "$region" "slb" "$lb_id" "CLB实例" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "slb" "delete" "$result"
-}
-
-nlb_delete() {
-    local lb_id=$1
-
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$lb_id" ]; then
-        local lb_list
-        local result
-        result=$(call_aliyun_api nlb ListLoadBalancers --RegionId "$region" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 NLB 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        lb_list=$(echo "$result" | jq -r '.LoadBalancers[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
-
-        if [ -z "$lb_list" ]; then
-            echo "错误：没有找到 NLB 实例。" >&2
-            return 1
-        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            lb_id=$(echo "$lb_list" | awk '{print $1}')
-            echo "自动选择唯一的 NLB 实例: $lb_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                lb_id=$(select_with_fzf "选择要删除的 NLB 实例" "$lb_list" | awk '{print $1}')
-                if [ -z "$lb_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查实例 ID 是否为空
-    if [ -z "$lb_id" ]; then
-        echo "错误：实例ID不能为空。" >&2
-        return 1
-    fi
-
-    if ! confirm_action "删除 NLB 实例：$lb_id"; then
-        return 1
-    fi
-
-    echo "删除 NLB 实例："
-    local result
-    result=$(call_aliyun_api nlb DeleteLoadBalancer \
-        --RegionId "$region" \
-        --LoadBalancerId "$lb_id")
-
-    if [ $? -eq 0 ]; then
-        echo "NLB 实例删除成功。"
-        log_delete_operation "${profile:-}" "$region" "nlb" "$lb_id" "NLB实例" "成功"
-    else
-        echo "错误：NLB 实例删除失败。"
-        echo "$result"
-        log_delete_operation "${profile:-}" "$region" "nlb" "$lb_id" "NLB实例" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "nlb" "delete" "$result"
-}
-
-alb_delete() {
-    local lb_id=$1
-
-    # 如果没有提供实例ID，则使用 fzf 选择
-    if [ -z "$lb_id" ]; then
-        local lb_list
-        local result
-        result=$(call_aliyun_api alb ListLoadBalancers --RegionId "$region" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 ALB 实例列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        lb_list=$(echo "$result" | jq -r '.LoadBalancers[] | "\(.LoadBalancerId) (\(.LoadBalancerName)) [\(.LoadBalancerStatus)]"')
-
-        if [ -z "$lb_list" ]; then
-            echo "错误：没有找到 ALB 实例。" >&2
-            return 1
-        elif [ "$(echo "$lb_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            lb_id=$(echo "$lb_list" | awk '{print $1}')
-            echo "自动选择唯一的 ALB 实例: $lb_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                lb_id=$(select_with_fzf "选择要删除的 ALB 实例" "$lb_list" | awk '{print $1}')
-                if [ -z "$lb_id" ]; then
-                    echo "错误：未选择实例。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查实例 ID 是否为空
-    if [ -z "$lb_id" ]; then
-        echo "错误：实例ID不能为空。" >&2
-        return 1
-    fi
-
-    if ! confirm_action "删除 ALB 实例：$lb_id"; then
-        return 1
-    fi
-
-    echo "删除 ALB 实例："
-    local result
-    result=$(call_aliyun_api alb DeleteLoadBalancer \
-        --RegionId "$region" \
-        --LoadBalancerId "$lb_id")
-
-    if [ $? -eq 0 ]; then
-        echo "ALB 实例删除成功。"
-        log_delete_operation "${profile:-}" "$region" "alb" "$lb_id" "ALB实例" "成功"
-    else
-        echo "错误：ALB 实例删除失败。"
-        echo "$result"
-        log_delete_operation "${profile:-}" "$region" "alb" "$lb_id" "ALB实例" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "alb" "delete" "$result"
+    echo "删除 ${_lb_label} 实例："
+    call_api_del_logged "$_lb_product" "$lb_id" "${_lb_label}实例" "错误：${_lb_label} 实例删除失败。" \
+        -- "$_lb_product" delete-load-balancer --biz-region-id "${region:-}" --api-version "$_lb_api_ver" \
+        --load-balancer-id "$lb_id" || return 1
+    echo "${_lb_label} 实例删除成功。"
 }

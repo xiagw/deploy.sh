@@ -5,7 +5,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 # 使用通用数据目录
 CAS_CERT_FILE="${SCRIPT_DATA:? ERR: SCRIPT_DATA empty}/cas/cas_certs.json"
@@ -52,6 +52,13 @@ handle_cas_commands() {
     esac
 }
 
+# 解析证书 ID（未提供时列表选择；cas 为中心化服务，固定 --region cn-hangzhou）
+_cas_resolve_cert_id() {
+    resolve_resource_id "$1" "${2:-选择证书}" "错误：没有找到证书。" \
+        '.CertificateOrderList[]? | "\(.CertificateId) (\(.Name)) [\(.Status)] \(if .Upload then "上传" else "签发" end)"' \
+        -- cas list-user-certificate-order --api-version 2020-04-07 --region cn-hangzhou --order-type CERT --show-size 100
+}
+
 # CAS 列表：使用 ListUserCertificateOrder（官网文档：买的证书、免费证书、用户上传证书均由此接口查询）
 # OrderType: CERT=签发+上传证书, UPLOAD=仅上传证书, CPACK=资源/购买订单, BUY=售卖订单
 cas_list() {
@@ -70,62 +77,43 @@ cas_list() {
     json|tsv|human) ;;
     *) format="human" ;;
     esac
-
+    # aliyun cas list-user-certificate-order --api-version 2020-04-07 --region cn-hangzhou
     local result
-    result=$(call_aliyun_api cas ListUserCertificateOrder --OrderType "$order_type" --ShowSize 100)
-    if [ $? -ne 0 ]; then
+    if ! result=$(call_aliyun_api cas list-user-certificate-order --api-version 2020-04-07 --region cn-hangzhou --order-type "$order_type" --show-size 100); then
         echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
         return 1
     fi
 
-    case "$format" in
-    json)
-        echo "$result" | jq '.'
-        ;;
-    tsv)
-        if [ "$order_type" = "CPACK" ]; then
-            echo -e "InstanceId\tOrderId\tProductName\tStatus\tCertType\tDomain\tBuyDate"
-            echo "$result" | jq -r '.CertificateOrderList[]? | [.InstanceId, .OrderId, (.ProductName // "-"), .Status, (.CertType // "-"), (.Domain // "-"), (.BuyDate // 0)] | @tsv'
-        else
-            echo -e "CertificateId\tName\t类型\tCommonName\tStartDate\tEndDate\tStatus"
-            echo "$result" | jq -r '.CertificateOrderList[]? | [.CertificateId, (.Name // "-"), (if .Upload then "上传" else "签发" end), (.CommonName // "-"), (.StartDate // "-"), (.EndDate // "-"), (.Status // "-")] | @tsv'
+    local table_header jq_filter status_mapper title human_header
+    if [ "$order_type" = "CPACK" ]; then
+        table_header="InstanceId\tOrderId\tProductName\tStatus\tCertType\tDomain\tBuyDate"
+        jq_filter='.CertificateOrderList[]? | [.InstanceId, .OrderId, (.ProductName // .ProductCode // "-"), .Status, (.CertType // "-"), (.Domain // "-"), (.BuyDate // 0)] | @tsv'
+        status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-22s  %-10s  %-6s  %s\n", $1, substr($3,1,20), $4, $5, $6}'
+        title="证书订单列表（购买/免费等）"
+        human_header="InstanceId/订单ID    产品/规格              状态        类型    域名"
+    else
+        table_header="CertificateId\tName\t类型\tCommonName\tStartDate\tEndDate\tStatus"
+        jq_filter='.CertificateOrderList[]? | [.CertificateId, (.Name // "-"), (if .Upload then "上传" else "签发" end), (.CommonName // "-"), (.StartDate // "-"), (.EndDate // "-"), (.Status // "-")] | @tsv'
+        status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-10s  %-18s  %-4s  %-18s  %-10s  %-10s  %s\n", $1, substr($2,1,16), $3, substr($4,1,16), $5, $6, $7}'
+        title="证书列表（签发证书 + 用户上传证书）"
+        if [ "$order_type" = "UPLOAD" ]; then
+            title="用户上传的证书"
         fi
-        ;;
-    human | *)
-        local title
-        if [ "$order_type" = "CPACK" ]; then
-            title="证书订单列表（购买/免费等）"
-            local count
-            count=$(echo "$result" | jq '.CertificateOrderList | length // 0')
-            if [ "$count" -eq 0 ]; then
-                echo "$title"
-                echo "没有找到订单记录。"
-            else
-                echo "$title"
-                echo "InstanceId/订单ID    产品/规格              状态        类型    域名"
-                echo "$result" | jq -r '.CertificateOrderList[]? | [.InstanceId, (.ProductName // .ProductCode // "-"), .Status, (.CertType // "-"), (.Domain // "-")] | @tsv' |
-                    awk 'BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-22s  %-10s  %-6s  %s\n", $1, substr($2,1,20), $3, $4, $5}'
-            fi
-        else
-            title="证书列表（签发证书 + 用户上传证书）"
-            if [ "$order_type" = "UPLOAD" ]; then
-                title="用户上传的证书"
-            fi
-            local count
-            count=$(echo "$result" | jq '.CertificateOrderList | length // 0')
-            if [ "$count" -eq 0 ]; then
-                echo "$title"
-                echo "没有找到证书记录。"
-            else
-                echo "$title"
-                echo "证书ID    名称                类型  主域名              开始日期    到期日期    状态"
-                echo "$result" | jq -r '.CertificateOrderList[]? | [.CertificateId, (.Name // "-"), (if .Upload then "上传" else "签发" end), (.CommonName // "-"), (.StartDate // "-"), (.EndDate // "-"), (.Status // "-")] | @tsv' |
-                    awk 'BEGIN {FS="\t"; OFS="\t"} {printf "%-10s  %-18s  %-4s  %-18s  %-10s  %-10s  %s\n", $1, substr($2,1,16), $3, substr($4,1,16), $5, $6, $7}'
-            fi
-        fi
-        ;;
-    esac
-    log_result "${profile:-}" "${region:-}" "cas" "list" "$result" "$format"
+        human_header="证书ID    名称                类型  主域名              开始日期    到期日期    状态"
+    fi
+
+    format_output \
+        "$result" \
+        "$format" \
+        "cas" \
+        "list" \
+        "$table_header" \
+        "$jq_filter" \
+        "$status_mapper" \
+        "没有找到证书记录。" \
+        "$title" \
+        "$human_header" \
+        '.CertificateOrderList | length // 0'
 }
 
 # 使用框架的创建函数（但需要特殊处理文件读取）
@@ -178,10 +166,10 @@ cas_create() {
 
     echo "上传并创建新证书："
     local result
-    result=$(call_aliyun_api cas UploadUserCertificate \
-        --Name "$name" \
-        --Cert "$(cat "$cert_file")" \
-        --Key "$(cat "$key_file")")
+    result=$(call_aliyun_api cas upload-user-certificate --api-version 2020-04-07 --region cn-hangzhou \
+        --name "$name" \
+        --cert "$(cat "$cert_file")" \
+        --key "$(cat "$key_file")")
 
     if [ $? -eq 0 ]; then
         echo "证书创建成功："
@@ -211,124 +199,32 @@ cas_create() {
 
 # 使用框架的删除函数
 cas_delete() {
-    local cert_id=$1
-
-    # 如果没有提供证书ID，则使用 fzf 选择（使用 ListUserCertificateOrder 查询证书列表）
-    if [ -z "$cert_id" ]; then
-        local cert_list
-        local result
-        result=$(call_aliyun_api cas ListUserCertificateOrder --OrderType CERT --ShowSize 100 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cert_list=$(echo "$result" | jq -r '.CertificateOrderList[]? | "\(.CertificateId) (\(.Name)) [\(.Status)] \(if .Upload then "上传" else "签发" end)"')
-
-        if [ -z "$cert_list" ]; then
-            echo "错误：没有找到证书。" >&2
-            return 1
-        elif [ "$(echo "$cert_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cert_id=$(echo "$cert_list" | awk '{print $1}')
-            echo "自动选择唯一的证书: $cert_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cert_id=$(select_with_fzf "选择要删除的证书" "$cert_list" | awk '{print $1}')
-                if [ -z "$cert_id" ]; then
-                    echo "错误：未选择证书。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择证书，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查证书 ID 是否为空
-    if [ -z "$cert_id" ]; then
-        echo "错误：证书ID不能为空。" >&2
-        return 1
-    fi
+    local cert_id
+    cert_id=$(_cas_resolve_cert_id "$1" "选择要删除的证书") || return 1
 
     if ! confirm_action "删除证书 ID: $cert_id"; then
         return 1
     fi
 
     echo "删除证书："
-    local result
-    result=$(call_aliyun_api cas DeleteUserCertificate --CertId "$cert_id")
-
-    if [ $? -eq 0 ]; then
-        echo "证书删除成功。"
-        # 从本地文件中删除证书信息
-        if [ -f "$CAS_CERT_FILE" ]; then
-            jq --arg id "$cert_id" 'map(select(.CertId != $id))' "$CAS_CERT_FILE" >"${CAS_CERT_FILE}.tmp" &&
-                mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
-        fi
-        log_delete_operation "${profile:-}" "${region:-}" "cas" "$cert_id" "证书" "成功"
-    else
-        echo "错误：证书删除失败。"
-        echo "$result"
-        log_delete_operation "${profile:-}" "${region:-}" "cas" "$cert_id" "证书" "失败"
-        return 1
+    call_api_del_logged "cas" "$cert_id" "证书" "错误：证书删除失败。" \
+        -- cas delete-user-certificate --api-version 2020-04-07 --region cn-hangzhou --cert-id "$cert_id" || return 1
+    echo "证书删除成功。"
+    # 从本地文件中删除证书信息
+    if [ -f "$CAS_CERT_FILE" ]; then
+        jq --arg id "$cert_id" 'map(select(.CertId != $id))' "$CAS_CERT_FILE" >"${CAS_CERT_FILE}.tmp" &&
+            mv "${CAS_CERT_FILE}.tmp" "$CAS_CERT_FILE"
     fi
-
-    log_result "${profile:-}" "${region:-}" "cas" "delete" "$result"
 }
 
 # 使用框架的详情函数
 cas_detail() {
-    local cert_id=$1
-
-    if [ -z "$cert_id" ]; then
-        local cert_list
-        local result
-        result=$(call_aliyun_api cas ListUserCertificateOrder --OrderType CERT --ShowSize 100 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取证书列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cert_list=$(echo "$result" | jq -r '.CertificateOrderList[]? | "\(.CertificateId) (\(.Name)) [\(.Status)]"')
-
-        if [ -z "$cert_list" ]; then
-            echo "错误：没有找到证书。" >&2
-            return 1
-        elif [ "$(echo "$cert_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cert_id=$(echo "$cert_list" | awk '{print $1}')
-            echo "自动选择唯一的证书: $cert_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cert_id=$(select_with_fzf "选择要查看详情的证书" "$cert_list" | awk '{print $1}')
-                if [ -z "$cert_id" ]; then
-                    echo "错误：未选择证书。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择证书，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    if [ -z "$cert_id" ]; then
-        echo "错误：证书ID不能为空。" >&2
-        echo "用法：cas detail <证书ID>" >&2
-        return 1
-    fi
+    local cert_id
+    cert_id=$(_cas_resolve_cert_id "$1" "选择要查看详情的证书") || return 1
 
     echo "获取证书详情："
-    local result
-    result=$(call_aliyun_api cas GetUserCertificateDetail --CertId "$cert_id")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-    else
-        echo "错误：无法获取证书详情。"
-        echo "$result"
-    fi
-    log_result "${profile:-}" "${region:-}" "cas" "detail" "$result"
+    call_api_logged "cas" "detail" "错误：无法获取证书详情。" \
+        -- cas get-user-certificate-detail --api-version 2020-04-07 --region cn-hangzhou --cert-id "$cert_id"
 }
 
 # 更新函数（如果存在）
@@ -346,7 +242,7 @@ cas_batch_upload_deploy() {
     # 如果没有提供域名参数,则从CDN域名列表获取
     if [ ${#domains[@]} -eq 0 ]; then
         local cdn_result
-        cdn_result=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null)
+        cdn_result=$(call_aliyun_api cdn describe-user-domains --api-version 2018-05-10 --region "${region:-}" 2>/dev/null)
         if [ $? -eq 0 ]; then
             readarray -t domains < <(echo "$cdn_result" |
                 jq -r '.Domains.PageData[].DomainName' |
@@ -386,10 +282,10 @@ cas_batch_upload_deploy() {
 
         # 上传新证书
         local result
-        result=$(call_aliyun_api cas UploadUserCertificate \
-            --Name "$upload_name" \
-            --Cert "$(cat "$file_pem")" \
-            --Key "$(cat "$file_key")")
+        result=$(call_aliyun_api cas upload-user-certificate --api-version 2020-04-07 --region cn-hangzhou \
+            --name "$upload_name" \
+            --cert "$(cat "$file_pem")" \
+            --key "$(cat "$file_key")")
         local status=$?
 
         # 创建日志目录
@@ -421,7 +317,7 @@ cas_batch_upload_deploy() {
     # 为CDN域名部署证书
     echo "正在为CDN域名部署证书..."
     local cdn_result
-    cdn_result=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null)
+    cdn_result=$(call_aliyun_api cdn describe-user-domains --api-version 2018-05-10 --region "${region:-}" 2>/dev/null)
     if [ $? -eq 0 ]; then
         local cdn_domains
         readarray -t cdn_domains < <(echo "$cdn_result" | jq -r '.Domains.PageData[].DomainName')
@@ -432,11 +328,11 @@ cas_batch_upload_deploy() {
             echo "CDN域名: ${domain_cdn}"
             echo "设置证书: ${upload_name}"
 
-            call_aliyun_api cdn BatchSetCdnDomainServerCertificate \
-                --SSLProtocol on \
-                --CertType cas \
-                --DomainName "${domain_cdn}" \
-                --CertName "${upload_name}" >/dev/null 2>&1
+            call_aliyun_api cdn batch-set-cdn-domain-server-certificate --api-version 2018-05-10 --region "${region:-}" \
+                --ssl-protocol on \
+                --cert-type cas \
+                --domain-name "${domain_cdn}" \
+                --cert-name "${upload_name}" >/dev/null 2>&1
         done
     fi
 }

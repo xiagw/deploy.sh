@@ -5,7 +5,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 show_kvstore_help() {
     echo "KVStore (Redis) 操作："
@@ -42,6 +42,13 @@ handle_kvstore_commands() {
     esac
 }
 
+# 解析 KVStore 实例 ID（未提供时列表选择）
+_kvstore_resolve_instance_id() {
+    resolve_resource_id "$1" "${2:-选择 KVStore 实例}" "错误：没有找到 KVStore 实例。" \
+        '.Instances.KVStoreInstance[] | "\(.InstanceId) (\(.InstanceName)) [\(.InstanceClass)] [\(.Capacity)MB]"' \
+        -- r-kvstore describe-instances --biz-region-id "${region:-}"
+}
+
 # 使用新框架的列表函数
 kvstore_list() {
     local format=${1:-human}
@@ -59,16 +66,16 @@ kvstore_list() {
         printf "%-16s  %-18s  %-7s  %-9s  %-24s  %s\n", $1, $2, status, $4, $5, $6
     }'
 
-    generic_list \
-        "r-kvstore" \
-        "DescribeInstances" \
-        "kvstore" \
-        "$format" \
-        "$table_header" \
-        "$jq_filter" \
-        "$status_mapper" \
-        "没有找到 Redis 实例。" \
-        "列出 Redis 实例："
+    #aliyun r-kvstore describe-instances --biz-region-id "${region:-}" --region "${region:-}"
+    local result
+    result=$(call_aliyun_api r-kvstore describe-instances --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
+    ret=$?
+    if [ $ret -eq 0 ]; then
+        format_output "$result" "$format" "kvstore" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 Redis 实例。" "列出 Redis 实例："
+    else
+        echo "错误：无法获取 Redis 实例列表。" >&2
+        return 1
+    fi
 }
 
 # 使用新框架的创建函数
@@ -92,9 +99,10 @@ kvstore_create() {
         if [ -z "$instance_class" ]; then
             echo "正在获取可用的 KVStore 实例类型..."
             local class_result
-            class_result=$(call_aliyun_api r-kvstore DescribeInstanceClasses --RegionId "$region" --Engine "Redis" 2>/dev/null)
+            class_result=$(call_aliyun_api r-kvstore describe-instance-classes --biz-region-id "${region:-}" --engine "Redis" 2>/dev/null)
 
-            if [ $? -eq 0 ] && [ -n "$class_result" ]; then
+            ret=$?
+            if [ $ret -eq 0 ] && [ -n "$class_result" ]; then
                 local class_list
                 class_list=$(echo "$class_result" | jq -r '.AvailableZones.AvailableZone[].AvailableResources.AvailableResource[] | select(.Type == "InstanceClass") | .SupportedResources.SupportedResource[] | "\(.Value)"' | sort -u)
 
@@ -131,9 +139,10 @@ redis.master.4xlarge.default"
         if [ -z "$capacity" ]; then
             echo "正在获取可用的 KVStore 容量范围..."
             local capacity_result
-            capacity_result=$(call_aliyun_api r-kvstore DescribeInstanceClasses --RegionId "$region" --Engine "Redis" --InstanceClass "$instance_class" 2>/dev/null)
+            capacity_result=$(call_aliyun_api r-kvstore describe-instance-classes --biz-region-id "${region:-}" --engine "Redis" --instance-class "$instance_class" 2>/dev/null)
 
-            if [ $? -eq 0 ] && [ -n "$capacity_result" ]; then
+            ret=$?
+            if [ $ret -eq 0 ] && [ -n "$capacity_result" ]; then
                 local capacity_list
                 capacity_list=$(echo "$capacity_result" | jq -r '.AvailableZones.AvailableZone[].AvailableResources.AvailableResource[] | select(.Type == "Capacity") | .SupportedResources.SupportedResource[] | "\(.Value)"' | sort -n | uniq)
 
@@ -180,11 +189,11 @@ redis.master.4xlarge.default"
     fi
 
     local api_args=(
-        "--InstanceName" "$name"
-        "--InstanceClass" "$instance_class"
-        "--Capacity" "$capacity"
-        "--InstanceType" "Redis"
-        "--ChargeType" "PostPaid"
+        "--instance-name" "$name"
+        "--instance-class" "$instance_class"
+        "--capacity" "$capacity"
+        "--instance-type" "Redis"
+        "--charge-type" "PostPaid"
     )
 
     generic_create \
@@ -197,40 +206,15 @@ redis.master.4xlarge.default"
 
 # 使用新框架的更新函数
 kvstore_update() {
-    local instance_id=$1 new_name=$2
+    local instance_id new_name=$2
+    instance_id=$(_kvstore_resolve_instance_id "$1" "选择要更新的 KVStore 实例") || return 1
 
-    # 如果没有提供参数，则使用 fzf 交互式选择
-    if [ -z "$instance_id" ] || [ -z "$new_name" ]; then
-        echo "使用 fzf 交互式模式更新 KVStore 实例"
-
-        # 选择实例ID
-        if [ -z "$instance_id" ]; then
-            local instance_list
-            instance_list=$(call_aliyun_api r-kvstore DescribeInstances --RegionId "$region" 2>/dev/null | jq -r '.Instances.KVStoreInstance[] | "\(.InstanceId) (\(.InstanceName)) [\(.InstanceClass)] [\(.Capacity)MB]"')
-
-            if [ -z "$instance_list" ]; then
-                echo "错误：没有找到 KVStore 实例。" >&2
-                return 1
-            elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                instance_id=$(echo "$instance_list" | awk '{print $1}')
-                echo "自动选择唯一的 KVStore 实例: $instance_id"
-            else
-                if type select_with_fzf >/dev/null 2>&1; then
-                    instance_id=$(select_with_fzf "选择 KVStore 实例" "$instance_list" | awk '{print $1}')
-                else
-                    echo "错误：需要选择 KVStore 实例，但未找到交互式选择工具。" >&2
-                    return 1
-                fi
-            fi
-        fi
-
-        # 输入新名称
+    # 输入新名称
+    if [ -z "$new_name" ]; then
+        read -r -p "请输入新的实例名称: " new_name
         if [ -z "$new_name" ]; then
-            read -r -p "请输入新的实例名称: " new_name
-            if [ -z "$new_name" ]; then
-                echo "错误：新名称不能为空。" >&2
-                return 1
-            fi
+            echo "错误：新名称不能为空。" >&2
+            return 1
         fi
     fi
 
@@ -240,57 +224,21 @@ kvstore_update() {
     fi
 
     echo "更新 KVStore 实例："
-    local result
-    result=$(call_aliyun_api r-kvstore ModifyInstanceAttribute \
-        --InstanceId "$instance_id" \
-        --InstanceName "$new_name")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "kvstore" "update" "$result"
-    else
-        echo "错误：更新失败。" >&2
-        echo "$result" >&2
-        return 1
-    fi
+    call_api_logged "kvstore" "update" "错误：更新失败。" \
+        -- r-kvstore modify-instance-attribute --biz-region-id "${region:-}" \
+        --instance-id "$instance_id" \
+        --instance-name "$new_name"
 }
 
 # 删除函数需要特殊处理（需要确认）
 kvstore_delete() {
-    local instance_id=$1
-
-    # 如果没有提供实例ID，则使用 fzf 交互式选择
-    if [ -z "$instance_id" ]; then
-        echo "使用 fzf 交互式模式删除 KVStore 实例"
-
-        local instance_list
-        instance_list=$(call_aliyun_api r-kvstore DescribeInstances --RegionId "$region" 2>/dev/null | jq -r '.Instances.KVStoreInstance[] | "\(.InstanceId) (\(.InstanceName)) [\(.InstanceClass)] [\(.Capacity)MB]"')
-
-        if [ -z "$instance_list" ]; then
-            echo "错误：没有找到 KVStore 实例。" >&2
-            return 1
-        elif [ "$(echo "$instance_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            instance_id=$(echo "$instance_list" | awk '{print $1}')
-            echo "自动选择唯一的 KVStore 实例: $instance_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                instance_id=$(select_with_fzf "选择要删除的 KVStore 实例" "$instance_list" | awk '{print $1}')
-            else
-                echo "错误：需要选择 KVStore 实例，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    if [ -z "$instance_id" ]; then
-        echo "错误：实例ID不能为空。" >&2
-        return 1
-    fi
+    local instance_id
+    instance_id=$(_kvstore_resolve_instance_id "$1" "选择要删除的 KVStore 实例") || return 1
 
     # 获取实例详细信息
     local instance_info
-    instance_info=$(call_aliyun_api r-kvstore DescribeInstanceAttribute \
-        --InstanceId "$instance_id")
+    instance_info=$(call_aliyun_api r-kvstore describe-instance-attribute --biz-region-id "${region:-}" \
+        --instance-id "$instance_id")
 
     local instance_name
     instance_name=$(echo "$instance_info" | jq -r '.InstanceName // "未知"')
@@ -313,21 +261,8 @@ kvstore_delete() {
 
     # 删除实例
     echo "删除 Redis 实例："
-    local result
-    result=$(call_aliyun_api r-kvstore DeleteInstance \
-        --InstanceId "$instance_id")
-
-    local ret=$?
-    if [ $ret -eq 0 ]; then
-        echo "Redis 实例删除成功。"
-        echo "$result" | jq '.'
-        log_delete_operation "${profile:-}" "$region" "kvstore" "$instance_id" "$instance_name" "成功"
-    else
-        echo "错误：Redis 实例删除失败。" >&2
-        echo "$result" >&2
-        log_delete_operation "${profile:-}" "$region" "kvstore" "$instance_id" "$instance_name" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "kvstore" "delete" "$result"
+    call_api_del_logged "kvstore" "$instance_id" "$instance_name" "错误：Redis 实例删除失败。" \
+        -- r-kvstore delete-instance --biz-region-id "${region:-}" \
+        --instance-id "$instance_id" || return 1
+    echo "Redis 实例删除成功。"
 }

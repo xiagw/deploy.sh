@@ -5,7 +5,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 show_nat_help() {
     echo "NAT网关操作："
@@ -50,16 +50,16 @@ nat_list() {
     local jq_filter=".NatGateways.NatGateway[] | [.NatGatewayId, .Name, .Status, .Spec, .VpcId, .CreationTime] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-18s  %-6s  %-6s  %-18s  %s\n", $1, $2, $3, $4, $5, $6}'
 
-    generic_list \
-        "vpc" \
-        "DescribeNatGateways" \
-        "nat" \
-        "$format" \
-        "$table_header" \
-        "$jq_filter" \
-        "$status_mapper" \
-        "没有找到 NAT 网关。" \
-        "列出 NAT 网关："
+    #aliyun vpc describe-nat-gateways --biz-region-id cn-hangzhou --region cn-hangzhou
+    local result
+    result=$(call_aliyun_api vpc describe-nat-gateways --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
+    ret=$?
+    if [ $ret -eq 0 ]; then
+        format_output "$result" "$format" "nat" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 NAT 网关。" "列出 NAT 网关："
+    else
+        echo "错误：无法获取 NAT 网关列表。" >&2
+        return 1
+    fi
 }
 
 # 使用新框架的创建函数
@@ -72,26 +72,9 @@ nat_create() {
 
         # 选择 VPC
         if [ -z "$vpc_id" ]; then
-            local vpc_list
-            vpc_list=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null | jq -r '.Vpcs.Vpc[] | "\(.VpcId) (\(.VpcName // .VpcId)) [\(.CidrBlock)]"')
-
-            if [ -z "$vpc_list" ]; then
-                echo "错误：没有找到 VPC。" >&2
-                return 1
-            elif [ "$(echo "$vpc_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                vpc_id=$(echo "$vpc_list" | awk '{print $1}')
-                echo "自动选择唯一的 VPC: $vpc_id"
-            else
-                if type select_with_fzf >/dev/null 2>&1; then
-                    vpc_id=$(select_with_fzf "选择 VPC" "$vpc_list" | awk '{print $1}')
-                else
-                    read -r -p "请输入 VPC ID: " vpc_id
-                    if [ -z "$vpc_id" ]; then
-                        echo "错误：VPC ID不能为空。" >&2
-                        return 1
-                    fi
-                fi
-            fi
+            vpc_id=$(resolve_resource_id "" "选择 VPC" "错误：没有找到 VPC。" \
+                '.Vpcs.Vpc[] | "\(.VpcId) (\(.VpcName // .VpcId)) [\(.CidrBlock)]"' \
+                -- vpc describe-vpcs --biz-region-id "${region:-}" --region "${region:-}") || return 1
         fi
 
         # 输入名称
@@ -134,18 +117,10 @@ Large"
         ;;
     esac
 
-    local api_args=(
-        "--VpcId" "$vpc_id"
-        "--Name" "$name"
-        "--Spec" "$spec"
-    )
-
-    generic_create \
-        "vpc" \
-        "CreateNatGateway" \
-        "nat" \
-        "$name" \
-        "${api_args[@]}"
+    #aliyun vpc create-nat-gateway --biz-region-id cn-hangzhou --region cn-hangzhou
+    call_api_logged "nat" "create" "错误：创建失败。" \
+        -- vpc create-nat-gateway --biz-region-id "${region:-}" --region "${region:-}" \
+        --vpc-id "$vpc_id" --name "$name" --spec "$spec"
 }
 
 # 使用新框架的更新函数
@@ -158,26 +133,9 @@ nat_update() {
 
         # 选择 NAT 网关ID
         if [ -z "$nat_id" ]; then
-            local nat_list
-            nat_list=$(call_aliyun_api vpc DescribeNatGateways --RegionId "$region" 2>/dev/null | jq -r '.NatGateways.NatGateway[] | "\(.NatGatewayId) (\(.Name // .NatGatewayId)) [\(.Spec)] [\(.Status)]"')
-
-            if [ -z "$nat_list" ]; then
-                echo "错误：没有找到 NAT 网关。" >&2
-                return 1
-            elif [ "$(echo "$nat_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                nat_id=$(echo "$nat_list" | awk '{print $1}')
-                echo "自动选择唯一的 NAT 网关: $nat_id"
-            else
-                if type select_with_fzf >/dev/null 2>&1; then
-                    nat_id=$(select_with_fzf "选择 NAT 网关" "$nat_list" | awk '{print $1}')
-                else
-                    read -r -p "请输入 NAT 网关ID: " nat_id
-                    if [ -z "$nat_id" ]; then
-                        echo "错误：NAT网关ID不能为空。" >&2
-                        return 1
-                    fi
-                fi
-            fi
+            nat_id=$(resolve_resource_id "" "选择 NAT 网关" "错误：没有找到 NAT 网关。" \
+                '.NatGateways.NatGateway[] | "\(.NatGatewayId) (\(.Name // .NatGatewayId)) [\(.Spec)] [\(.Status)]"' \
+                -- vpc describe-nat-gateways --biz-region-id "${region:-}" --region "${region:-}") || return 1
         fi
 
         # 输入新名称
@@ -196,20 +154,9 @@ nat_update() {
     fi
 
     echo "更新NAT网关："
-    local result
-    result=$(call_aliyun_api vpc ModifyNatGatewayAttribute \
-        --RegionId "$region" \
-        --NatGatewayId "$nat_id" \
-        --Name "$new_name")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "nat" "update" "$result"
-    else
-        echo "错误：更新失败。" >&2
-        echo "$result" >&2
-        return 1
-    fi
+    call_api_logged "nat" "update" "错误：更新失败。" \
+        -- vpc modify-nat-gateway-attribute --biz-region-id "${region:-}" --region "${region:-}" \
+        --nat-gateway-id "$nat_id" --name "$new_name"
 }
 
 # 删除函数需要特殊处理（需要获取详细信息）
@@ -220,33 +167,15 @@ nat_delete() {
     if [ -z "$nat_id" ]; then
         echo "使用交互式模式删除 NAT 网关"
 
-        local nat_list
-        nat_list=$(call_aliyun_api vpc DescribeNatGateways --RegionId "$region" 2>/dev/null | jq -r '.NatGateways.NatGateway[] | "\(.NatGatewayId) (\(.Name // .NatGatewayId)) [\(.Spec)] [\(.Status)]"')
-
-        if [ -z "$nat_list" ]; then
-            echo "错误：没有找到 NAT 网关。" >&2
-            return 1
-        elif [ "$(echo "$nat_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            nat_id=$(echo "$nat_list" | awk '{print $1}')
-            echo "自动选择唯一的 NAT 网关: $nat_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                nat_id=$(select_with_fzf "选择要删除的 NAT 网关" "$nat_list" | awk '{print $1}')
-            else
-                read -r -p "请输入 NAT 网关ID: " nat_id
-                if [ -z "$nat_id" ]; then
-                    echo "错误：NAT网关ID不能为空。" >&2
-                    return 1
-                fi
-            fi
-        fi
+        nat_id=$(resolve_resource_id "" "选择要删除的 NAT 网关" "错误：没有找到 NAT 网关。" \
+            '.NatGateways.NatGateway[] | "\(.NatGatewayId) (\(.Name // .NatGatewayId)) [\(.Spec)] [\(.Status)]"' \
+            -- vpc describe-nat-gateways --biz-region-id "${region:-}" --region "${region:-}") || return 1
     fi
 
     # 获取NAT网关详细信息
     local nat_info
-    nat_info=$(call_aliyun_api vpc DescribeNatGateways \
-        --NatGatewayId "$nat_id" \
-        --RegionId "$region")
+    nat_info=$(call_aliyun_api vpc describe-nat-gateways --biz-region-id "${region:-}" --region "${region:-}" \
+        --nat-gateway-id "$nat_id")
 
     local nat_name
     nat_name=$(echo "$nat_info" | jq -r '.NatGateways.NatGateway[0].Name // "未知"')
@@ -272,22 +201,8 @@ nat_delete() {
 
     # 删除NAT网关
     echo "删除NAT网关："
-    local result
-    result=$(call_aliyun_api vpc DeleteNatGateway \
-        --RegionId "$region" \
-        --NatGatewayId "$nat_id")
-
-    local ret=$?
-    if [ $ret -eq 0 ]; then
-        echo "NAT网关删除成功。"
-        echo "$result" | jq '.'
-        log_delete_operation "${profile:-}" "$region" "nat" "$nat_id" "$nat_name" "成功"
-    else
-        echo "错误：NAT网关删除失败。" >&2
-        echo "$result" >&2
-        log_delete_operation "${profile:-}" "$region" "nat" "$nat_id" "$nat_name" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "nat" "delete" "$result"
+    call_api_del_logged "nat" "$nat_id" "$nat_name" "错误：NAT网关删除失败。" \
+        -- vpc delete-nat-gateway --biz-region-id "${region:-}" --region "${region:-}" \
+        --nat-gateway-id "$nat_id" || return 1
+    echo "NAT网关删除成功。"
 }

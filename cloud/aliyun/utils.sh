@@ -3,11 +3,31 @@
 
 # 通用工具函数
 
+# 比较语义化版本：$1 >= $2 时返回 0
+_version_ge() {
+    local left=$1
+    local right=$2
+    [[ "$(printf '%s\n' "$right" "$left" | sort -V | head -1)" == "$right" ]]
+}
+
 check_dependencies() {
     if ! command -v aliyun &>/dev/null; then
         echo "错误：未安装阿里云 CLI。请先安装阿里云 CLI。" >&2
         exit 1
     fi
+
+    local aliyun_version
+    aliyun_version=$(aliyun version 2>/dev/null | head -1 | tr -d '[:space:]')
+    if [ -z "$aliyun_version" ] || ! _version_ge "$aliyun_version" "3.4.0"; then
+        echo "错误：需要阿里云 CLI >= 3.4.0（当前：${aliyun_version:-未知}）。" >&2
+        echo "请执行 'aliyun upgrade' 或重新安装：https://help.aliyun.com/zh/cli/install-update-alibaba-cloud-cli" >&2
+        exit 1
+    fi
+
+    # CLI 3.4 的产品插件默认仍需要在非交互环境中显式开启自动安装。
+    export ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL=true
+    # 与 base.sh 中的 --auto-plugin-install-enable-pre 保持一致。
+    export ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE=true
 
     if ! aliyun configure list &>/dev/null; then
         echo "错误：未设置阿里云凭证。请先运行 'aliyun configure' 设置凭证。" >&2
@@ -28,7 +48,7 @@ show_help() {
     echo "  lbs      - 负载均衡服务"
     echo "  rds      - 关系型数据库服务"
     echo "  polardb  - 云数据库 PolarDB"
-    echo "  kvstore  - 键值存储服务(Redis)"
+    echo "  kvstore  - 云数据库 Redis(KVStore)"
     echo "  vpc      - 专有网络"
     echo "  nat      - NAT网关"
     echo "  eip      - 弹性公网IP"
@@ -56,7 +76,7 @@ save_data_file() {
     local data=$5
     local filename=$6
 
-    local data_dir="${SCRIPT_DATA:? ERR: SCRIPT_DATA empty}/${profile}/${region}/data/${service}"
+    local data_dir="${SCRIPT_DATA:? ERR: SCRIPT_DATA empty}/cache/${profile}/${region}/${service}"
     local data_file="${data_dir}/${filename}"
 
     mkdir -p "$data_dir"
@@ -72,7 +92,7 @@ log_result() {
     local result=$5
     local format=${6:-human}
 
-    local log_dir="${SCRIPT_DATA}/${profile}/${region}/logs"
+    local log_dir="${SCRIPT_DATA}/logs/aliyun/${profile}/${region}"
     local log_file="${log_dir}/${service}.log"
     local timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
@@ -83,7 +103,9 @@ log_result() {
     {
         echo -e "\n==== Execution: $timestamp - $unique_id - Operation: $operation ===="
         echo "Format: $format"
-        if [ "$format" = "json" ]; then
+        if [ -z "$result" ]; then
+            echo "(无返回内容)"
+        elif [ "$format" = "json" ]; then
             echo "$result" | jq '.' 2>/dev/null || echo "$result"
         elif [ "$service" = "oss" ] && [ "$operation" = "list" ]; then
             echo "$result"
@@ -103,331 +125,28 @@ log_delete_operation() {
     local resource_id=$4
     local resource_name=$5
     local status=$6
+    local result=${7:-}
     local timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    local unique_id
+    unique_id=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$(date +%s)-$$")
 
-    local log_dir="${SCRIPT_DATA}/${profile}/${region}/logs"
+    local log_dir="${SCRIPT_DATA}/logs/aliyun/${profile}/${region}"
     local log_file="${log_dir}/${service}.log"
 
     mkdir -p "$log_dir"
-    echo "$timestamp | $resource_id | $resource_name | $status" >>"$log_file"
+    {
+        echo -e "\n==== Execution: $timestamp - $unique_id - Operation: delete ===="
+        echo "Delete: $service | $resource_id | $resource_name | $status"
+        if [ -z "$result" ]; then
+            echo "(无返回内容)"
+        else
+            echo "$result" | jq '.' 2>/dev/null || echo "$result"
+        fi
+        echo -e "==== End of Execution: $timestamp - $unique_id - Operation: delete ====\n"
+    } >>"$log_file"
     echo "删除操作日志已保存到 $log_file"
 }
-
-validate_params() {
-    local service=$1
-    local operation=$2
-    shift 2
-    local params=("$@")
-
-    case "$service" in
-    ecs)
-        case "$operation" in
-        list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 ecs list" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -ge 3 ]] || {
-            echo "错误：缺少参数。用法：$0 ecs create <名称> <类型> <镜像ID>" >&2
-            return 1
-        } ;;
-        update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 ecs update <实例ID> <新名称>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 ecs delete <实例ID>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 ECS 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    dns)
-        case "$operation" in
-        list) [[ ${#params[@]} -le 1 ]] || {
-            echo "错误：参数错误。用法：$0 dns list [域名]" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -ge 4 ]] || {
-            echo "错误：缺少参数。用法：$0 dns create <域名> <主机记录> <类型> <值>" >&2
-            return 1
-        } ;;
-        update) [[ ${#params[@]} -ge 4 ]] || {
-            echo "错误：缺少参数。用法：$0 dns update <记录ID> <主机记录> <类型> <值>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 dns delete <记录ID>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 DNS 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    domain)
-        case "$operation" in
-        list) [[ ${#params[@]} -eq 0 ]] || {
-            echo "错误：list 操作不需要参数。用法：$0 domain list" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 Domain 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    oss)
-        case "$operation" in
-        list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 oss list" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 oss create <存储桶名称>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 oss delete <存储桶名称>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 OSS 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    cdn)
-        case "$operation" in
-        list) [[ ${#params[@]} -eq 0 ]] || {
-            echo "错误：list 操作不需要参数。用法：$0 cdn list" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -eq 3 ]] || {
-            echo "错误：缺少参数。用法：$0 cdn create <域名> <源站> <源站类型>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -eq 1 ]] || {
-            echo "错误：缺少参数。用法：$0 cdn delete <域名>" >&2
-            return 1
-        } ;;
-        update) [[ ${#params[@]} -eq 3 ]] || {
-            echo "错误：缺少参数。用法：$0 cdn update <域名> <源站> <源站类型>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 CDN 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    lbs)
-        case "$operation" in
-        list) [[ ${#params[@]} -le 1 ]] || {
-            echo "错误：参数错误。用法：$0 lbs list [type]" >&2
-            return 1
-        } ;;
-        create)
-            [[ ${#params[@]} -ge 2 ]] || {
-                echo "错误：缺少参数。用法：$0 lbs create <type> <名称> [其他参数...]" >&2
-                return 1
-            }
-            local lb_type=${params[0]}
-            case "$lb_type" in
-            slb) [[ ${#params[@]} -ge 4 ]] || {
-                echo "错误：缺少参数。用法：$0 lbs create slb <名称> <规格> <付费类型>" >&2
-                return 1
-            } ;;
-            nlb | alb) [[ ${#params[@]} -ge 4 ]] || {
-                echo "错误：缺少参数。用法：$0 lbs create $lb_type <名称> <VPC-ID> <交换机ID>" >&2
-                return 1
-            } ;;
-            *)
-                echo "错误：未知的负载均衡类型：$lb_type" >&2
-                return 1
-                ;;
-            esac
-            ;;
-        update) [[ ${#params[@]} -ge 3 ]] || {
-            echo "错误：缺少参数。用法：$0 lbs update <type> <实例ID> <新名称>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 lbs delete <type> <实例ID>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 LBS 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    rds)
-        case "$operation" in
-        list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 rds list" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -ge 4 ]] || {
-            echo "错误：缺少参数。用法：$0 rds create <名称> <引擎> <版本> <规格>" >&2
-            return 1
-        } ;;
-        update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 rds update <实例ID> <新名称>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 rds delete <实例ID>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 RDS 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    nlb)
-        case "$operation" in
-        list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 nlb list" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -ge 4 ]] || {
-            echo "错误：缺少参数。用法：$0 nlb create <名称> <VPC-ID> <交换机ID>" >&2
-            return 1
-        } ;;
-        update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 nlb update <实例ID> <新名称>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 nlb delete <实例ID>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 NLB 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    alb)
-        case "$operation" in
-        list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 alb list" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -ge 4 ]] || {
-            echo "错误：缺少参数。用法：$0 alb create <名称> <VPC-ID> <交换机ID>" >&2
-            return 1
-        } ;;
-        update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 alb update <实例ID> <新名称>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 alb delete <实例ID>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 ALB 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    eip)
-        case "$operation" in
-        list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 eip list" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 eip create <带宽>" >&2
-            return 1
-        } ;;
-        update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 eip update <EIP-ID> <新带宽>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 eip delete <EIP-ID>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 EIP 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    kvstore)
-        case "$operation" in
-        list) [[ ${#params[@]} -ge 0 ]] || {
-            echo "错误：参数错误。用法：$0 kvstore list" >&2
-            return 1
-        } ;;
-        create) [[ ${#params[@]} -ge 3 ]] || {
-            echo "错误：缺少参数。用法：$0 kvstore create <名称> <实例类型> <容量>" >&2
-            return 1
-        } ;;
-        update) [[ ${#params[@]} -ge 2 ]] || {
-            echo "错误：缺少参数。用法：$0 kvstore update <实例ID> <新名称>" >&2
-            return 1
-        } ;;
-        delete) [[ ${#params[@]} -ge 1 ]] || {
-            echo "错误：缺少参数。用法：$0 kvstore delete <实例ID>" >&2
-            return 1
-        } ;;
-        *)
-            echo "错误：未知的 KVStore 操作：$operation" >&2
-            return 1
-            ;;
-        esac
-        ;;
-    balance)
-        case "$operation" in
-        list)
-            [[ ${#params[@]} -le 1 ]] || {
-                echo "错误：参数错误。用法：$0 balance list [format]" >&2
-                return 1
-            }
-            ;;
-        check)
-            [[ ${#params[@]} -le 2 ]] || {
-                echo "错误：参数错误。用法：$0 balance check [余额阈值] [日消费阈值]" >&2
-                return 1
-            }
-            # 如果提供了参数，验证是否为数字
-            if [[ ${#params[@]} -ge 1 ]]; then
-                [[ ${params[0]} =~ ^[0-9]+$ ]] || {
-                    echo "错误：余额阈值必须为数字。" >&2
-                    return 1
-                }
-            fi
-            if [[ ${#params[@]} -eq 2 ]]; then
-                [[ ${params[1]} =~ ^[0-9]+$ ]] || {
-                    echo "错误：日消费阈值必须为数字。" >&2
-                    return 1
-                }
-            fi
-            ;;
-        *)
-            echo "错误：未知的 Balance 操作：$operation" >&2
-            show_balance_help
-            return 1
-            ;;
-        esac
-        ;;
-    *)
-        echo "错误：未知的服务：$service" >&2
-        return 1
-        ;;
-    esac
-}
-
-# 在 utils.sh 文件中添加以下函数
 
 check_fzf() {
     if ! command -v fzf &>/dev/null; then
@@ -574,24 +293,23 @@ query_account_balance() {
     local format=${1:-human}
 
     local result
-    result=$(aliyun --profile "${profile:-}" bssopenapi QueryAccountBalance --region "${region:-cn-hangzhou}")
-    return_code=$?
-    if [ $return_code -eq 0 ]; then
+    result=$(call_aliyun_api bssopenapi query-account-balance)
+    ret=$?
+    if [ $ret -eq 0 ]; then
         case "$format" in
         json)
             # JSON 格式不显示提示信息，直接输出结果
             echo "$result"
             ;;
         tsv)
-            echo "查询账户余额："
+            echo "查询账户余额tsv："
             echo -e "可用余额\t货币单位"
             echo "$result" | jq -r '[.Data.AvailableAmount, .Data.Currency] | @tsv'
             ;;
         human | *)
             echo "查询账户余额："
-            local available_amount
+            local available_amount currency
             available_amount=$(echo "$result" | jq -r '.Data.AvailableAmount')
-            local currency
             currency=$(echo "$result" | jq -r '.Data.Currency')
             echo "可用余额: $available_amount $currency"
             ;;
@@ -605,24 +323,24 @@ query_account_balance() {
 
 show_balance_help() {
     echo "账户余额操作："
-    echo "  list [format]            - 查询账户余额，format 可选 human/json/tsv"
-    echo "  check [3000] [150]      - 检查账户余额并在低于阈值时发出告警"
+    echo "  get [format]            - 查询账户余额，format 可选 human/json/tsv"
+    echo "  warn [daily 150] [balance 3000] - 检查账户余额并在低于阈值时发出告警"
     echo
     echo "示例："
-    echo "  $0 balance list          # 人类可读格式"
-    echo "  $0 balance list json     # JSON 格式"
-    echo "  $0 balance list tsv      # TSV 格式"
-    echo "  $0 balance check         # 检查余额并告警"
-    echo "  $0 balance check 3000 150 # 检查余额并告警，设置阈值"
+    echo "  $0 balance get          # 人类可读格式"
+    echo "  $0 balance get json     # JSON 格式"
+    echo "  $0 balance get tsv      # TSV 格式"
+    echo "  $0 balance warn           # 检查余额并告警"
+    echo "  $0 balance warn daily 150 balance 3000 # 检查余额并告警，设置阈值"
 }
 
 handle_balance_commands() {
-    local operation=${1:-list}
+    local operation=${1:-get}
     shift
 
     case "$operation" in
-    list) query_account_balance "$@" ;;
-    check) balance_check "$@" ;;
+    get) query_account_balance "$@" ;;
+    warn) balance_check "$@" ;;
     *)
         echo "错误：未知的余额操作：$operation" >&2
         show_balance_help
@@ -634,13 +352,31 @@ handle_balance_commands() {
 balance_check() {
     local current_balance alarm_balance alarm_daily yesterday current_month daily_spending msg_body
 
-    alarm_balance=${1:-${ALARM_ALIYUN_BALANCE:-3000}}
-    alarm_daily=${2:-${ALARM_ALIYUN_DAILY:-150}}
+    alarm_balance=${ALARM_ALIYUN_BALANCE:-3000}
+    alarm_daily=${ALARM_ALIYUN_DAILY:-150}
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        daily)
+            alarm_daily="$2"
+            shift 2
+            ;;
+        balance)
+            alarm_balance="$2"
+            shift 2
+            ;;
+        *)
+            echo "错误：未知的参数：$1" >&2
+            return 1
+            ;;
+        esac
+    done
+
     yesterday=$(date +%F -d yesterday)
     current_month=$(date +%Y-%m -d yesterday)
 
     # 检查当前余额
-    current_balance=$(aliyun -p "$profile" bssopenapi QueryAccountBalance 2>/dev/null |
+    current_balance=$(call_aliyun_api bssopenapi query-account-balance 2>/dev/null |
         jq -r '.Data.AvailableAmount | gsub(","; "")')
 
     if [[ -z "$current_balance" ]]; then
@@ -655,8 +391,7 @@ balance_check() {
     fi
 
     # 检查昨日消费
-    daily_spending=$(aliyun --profile "${profile:-}" bssopenapi QueryAccountBill \
-        --BillingCycle "$current_month" --BillingDate "$yesterday" --Granularity DAILY |
+    daily_spending=$(call_aliyun_api bssopenapi query-account-bill --api-version 2017-12-14 --billing-cycle "$current_month" --billing-date "$yesterday" --granularity DAILY |
         jq -r '.Data.Items.Item[].PretaxAmount | tostring | gsub(","; "")')
 
     if [[ -z "$daily_spending" ]]; then
@@ -676,75 +411,75 @@ list_all_services() {
     echo "================================"
 
     echo "账户余额："
-    handle_balance_commands list
+    handle_balance_commands get
 
     echo "================================"
     echo "ECS 实例："
-    handle_ecs_commands list
+    handle_ecs_commands get
 
     echo "================================"
     echo "VPC："
-    handle_vpc_commands list
+    handle_vpc_commands get
 
     echo "================================"
     echo "交换机（VSwitch）："
     local vpc_ids
-    vpc_ids=$(handle_vpc_commands list json | jq -r '.Vpcs.Vpc[].VpcId')
+    vpc_ids=$(handle_vpc_commands get json | jq -r '.Vpcs.Vpc[].VpcId')
     for vpc_id in $vpc_ids; do
         echo "VPC ID: $vpc_id 的交换机："
-        handle_vpc_commands vswitch-list "$vpc_id"
+        handle_vpc_commands get-vsw "$vpc_id"
     done
 
     echo "================================"
     echo "安全组（Security Group）："
     for vpc_id in $vpc_ids; do
         echo "VPC ID: $vpc_id 的安全组："
-        handle_vpc_commands sg-list "$vpc_id"
+        handle_vpc_commands get-sg "$vpc_id"
     done
 
     echo "================================"
     echo "DNS 记录："
-    handle_dns_commands list
+    handle_dns_commands get
 
     echo "================================"
     echo "OSS 存储桶："
-    handle_oss_commands list
+    handle_oss_commands get
 
     echo "================================"
     echo "CDN 域名："
-    handle_cdn_commands list
+    handle_cdn_commands get
 
     echo "================================"
     echo "负载均衡实例："
-    handle_lbs_commands list
+    handle_lbs_commands get
 
     echo "================================"
     echo "RDS 实例："
-    handle_rds_commands list
+    handle_rds_commands get
 
     echo "================================"
     echo "KVStore (Redis) 实例："
-    handle_kvstore_commands list
+    handle_kvstore_commands get
 
     echo "================================"
     echo "NAT 网关："
-    handle_nat_commands list
+    handle_nat_commands get
 
     echo "================================"
     echo "弹性公网 IP："
-    handle_eip_commands list
+    handle_eip_commands get
 
     echo "================================"
     echo "证书服务："
-    handle_cas_commands list
+    handle_cas_commands get
 
     echo "================================"
     echo "RAM 用户："
-    handle_ram_commands list
+    handle_ram_commands get
 
     echo "================================"
     echo "SSH 密钥："
-    handle_ecs_commands key-list
+    handle_ecs_commands get-key
 
     # 可以根据需要添加更多服务
 }
@@ -756,10 +491,9 @@ query_daily_cost() {
     local format=${2:-human}
 
     local result
-    result=$(aliyun --profile "${profile:-}" bssopenapi QueryAccountBill \
-        --BillingCycle "$current_month" \
-        --BillingDate "$query_date" \
-        --Granularity DAILY)
+    result=$(
+        call_aliyun_api bssopenapi query-account-bill --api-version 2017-12-14 --billing-cycle "$current_month" --billing-date "$query_date" --granularity DAILY
+    )
     return_code=$?
     if [ $return_code -eq 0 ]; then
         case "$format" in
@@ -774,9 +508,8 @@ query_daily_cost() {
             ;;
         human | *)
             echo "查询 $query_date 的消费总额："
-            local total_amount
+            local total_amount currency
             total_amount=$(echo "$result" | jq -r '.Data.Items.Item[0].PretaxAmount')
-            local currency
             currency=$(echo "$result" | jq -r '.Data.Items.Item[0].Currency')
             if [ -n "$total_amount" ] && [ "$total_amount" != "null" ]; then
                 echo "$query_date 消费总额: $total_amount $currency"

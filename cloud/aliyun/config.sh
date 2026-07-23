@@ -20,7 +20,7 @@ show_config_help() {
 read_config() {
     local profile=${1:-default}
     local result
-    result=$(aliyun configure get --profile "$profile" | jq -r '.region_id')
+    result=$(aliyun configure get region --profile "$profile" 2>/dev/null)
     if [ -z "$result" ]; then
         echo "错误：无法读取配置文件。请检查配置是否存在。" >&2
         return 1

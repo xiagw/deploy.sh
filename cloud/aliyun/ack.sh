@@ -6,7 +6,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 show_ack_help() {
     echo "ACK (容器服务 Kubernetes 版) 操作："
@@ -15,11 +15,12 @@ show_ack_help() {
     echo "  del [<集群ID>]                          - 删除集群（集群ID可选，可使用fzf选择）"
     echo "  set [<集群ID>] [<新名称>]               - 更新集群（集群ID和新名称都是可选的，可使用fzf选择）"
     echo "  detail [<集群ID>]                       - 获取集群详情（集群ID可选，可使用fzf选择）"
-    echo "  node-get [<集群ID>] [format]           - 列出集群节点（集群ID可选，可使用fzf选择）"
-    echo "  node-add [<集群ID>] [数量]              - 添加集群节点（集群ID可选，可使用fzf选择）"
-    echo "  node-del [<集群ID>] [<节点ID>]          - 移除集群节点（集群ID和节点ID可选，可使用fzf选择）"
+    echo "  get-node [<集群ID>] [format]           - 列出集群节点（集群ID可选，可使用fzf选择）"
+    echo "  add-node [<集群ID>] [数量]              - 添加集群节点（集群ID可选，可使用fzf选择）"
+    echo "  del-node [<集群ID>] [<节点ID>]          - 移除集群节点（集群ID和节点ID可选，可使用fzf选择）"
     echo "  config [<集群ID>]                       - 获取集群的 kubeconfig（集群ID可选，可使用fzf选择）"
     echo "  auto-scale <deployment> [namespace]     - 自动扩缩容指定部署"
+    echo "  balance [内存阈值]                       - 根据节点内存使用率自动 cordon/uncordon（默认阈值 94）"
     echo
     echo "示例："
     echo "  $0 ack get"
@@ -29,11 +30,13 @@ show_ack_help() {
     echo "  $0 ack del c-xxx"
     echo "  $0 ack set c-xxx new-name"
     echo "  $0 ack detail c-xxx"
-    echo "  $0 ack node-get c-xxx"
-    echo "  $0 ack node-add c-xxx 2"
-    echo "  $0 ack node-del c-xxx i-xxx"
+    echo "  $0 ack get-node c-xxx"
+    echo "  $0 ack add-node c-xxx 2"
+    echo "  $0 ack del-node c-xxx i-xxx"
     echo "  $0 ack config c-xxx"
     echo "  $0 ack auto-scale my-deployment default"
+    echo "  $0 ack balance"
+    echo "  $0 ack balance 95"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -48,11 +51,12 @@ handle_ack_commands() {
     del) ack_delete "$@" ;;
     set) ack_update "$@" ;;
     detail) ack_detail "$@" ;;
-    node-get) ack_node_list "$@" ;;
-    node-add) ack_node_add "$@" ;;
-    node-del) ack_node_remove "$@" ;;
+    get-node) ack_node_list "$@" ;;
+    add-node) ack_node_add "$@" ;;
+    del-node) ack_node_remove "$@" ;;
     config) ack_get_kubeconfig "$@" ;;
     auto-scale) ack_auto_scale "$@" >>"${SCRIPT_LOG:-/tmp/ack_auto_scale.log}" ;;
+    balance) balance_pod_on_node "$@" ;;
     help) show_ack_help ;;
     *)
         echo "错误：未知的 ACK 操作：$operation" >&2
@@ -62,6 +66,8 @@ handle_ack_commands() {
     esac
 }
 
+# ACK/CS 已切换到阿里云 CLI 新版 REST 参数格式；本文件统一使用
+# `cs <METHOD> <PATH> [--body ...]` 写法。
 # 使用新框架的列表函数
 ack_list() {
     local format=${1:-human}
@@ -71,7 +77,7 @@ ack_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-18s  %-8s  %-12s  %-7s  %-6s  %s\n", $1, $2, $3, $4, $5, $6, $7}'
 
     local result
-    result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
+    result=$(call_aliyun_api cs GET /clusters --region "${region:-}")
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
@@ -143,7 +149,7 @@ ack_create() {
         vpc_id=$(get_vpc_id)
     else
         local vpc_result
-        vpc_result=$(call_aliyun_api vpc DescribeVpcs --RegionId "$region" 2>/dev/null)
+        vpc_result=$(call_aliyun_api vpc describe-vpcs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
         vpc_id=$(echo "$vpc_result" | jq -r '.Vpcs.Vpc[0].VpcId // empty')
     fi
 
@@ -158,7 +164,7 @@ ack_create() {
         vswitch_id=$(vpc_vswitch_list "$vpc_id" json 2>/dev/null | jq -r '.[0].VSwitchId // .VSwitches.VSwitch[0].VSwitchId // empty')
     else
         local vswitch_result
-        vswitch_result=$(call_aliyun_api vpc DescribeVSwitches --VpcId "$vpc_id" --RegionId "$region" 2>/dev/null)
+        vswitch_result=$(call_aliyun_api vpc describe-vswitches --biz-region-id "${region:-cn-hangzhou}" --vpc-id "$vpc_id" 2>/dev/null)
         vswitch_id=$(echo "$vswitch_result" | jq -r '.VSwitches.VSwitch[0].VSwitchId // empty')
     fi
 
@@ -178,21 +184,33 @@ ack_create() {
     echo "交换机 ID: $vswitch_id"
 
     local result
-    result=$(call_aliyun_api cs CreateCluster \
+    result=$(call_aliyun_api cs POST /clusters \
         --region "$region" \
-        --name "$name" \
-        --cluster-type "ManagedKubernetes" \
-        --vpcid "$vpc_id" \
-        --vswitch-ids "[$vswitch_id]" \
-        --num-of-nodes "$node_count" \
-        --instance-type "$instance_type" \
-        --kubernetes-version "$kubernetes_version" \
-        --worker-system-disk-category "$worker_system_disk_category" \
-        --worker-system-disk-size "$worker_system_disk_size" \
-        --container-cidr "172.20.0.0/16" \
-        --service-cidr "172.21.0.0/20" \
-        --is-enterprise-security-group true \
-        --cloud-monitor-flags 1)
+        --body "$(jq -nc \
+            --arg name "$name" \
+            --arg cluster_type "ManagedKubernetes" \
+            --arg vpc_id "$vpc_id" \
+            --arg vswitch_id "$vswitch_id" \
+            --argjson node_count "$node_count" \
+            --arg instance_type "$instance_type" \
+            --arg kubernetes_version "$kubernetes_version" \
+            --arg worker_system_disk_category "$worker_system_disk_category" \
+            --argjson worker_system_disk_size "$worker_system_disk_size" \
+            '{
+                name: $name,
+                cluster_type: $cluster_type,
+                vpcid: $vpc_id,
+                vswitch_ids: [$vswitch_id],
+                num_of_nodes: $node_count,
+                instance_type: $instance_type,
+                kubernetes_version: $kubernetes_version,
+                worker_system_disk_category: $worker_system_disk_category,
+                worker_system_disk_size: $worker_system_disk_size,
+                container_cidr: "172.20.0.0/16",
+                service_cidr: "172.21.0.0/20",
+                is_enterprise_security_group: true,
+                cloud_monitor_flags: 1
+            }')")
 
     if [ $? -eq 0 ]; then
         echo "ACK 集群创建请求已提交："
@@ -218,8 +236,8 @@ ack_create() {
             fi
 
             local status
-            status=$(call_aliyun_api cs DescribeClusterDetail \
-                --ClusterId "$cluster_id" 2>/dev/null | jq -r '.state')
+            status=$(call_aliyun_api cs GET "/clusters/$cluster_id" \
+                --region "$region" 2>/dev/null | jq -r '.state')
 
             echo "集群状态: $status"
             if [ "$status" = "running" ]; then
@@ -240,51 +258,24 @@ ack_create() {
     fi
 }
 
+# 交互式解析 ACK 集群ID（REST-style cs GET /clusters）
+_ack_resolve_cluster_id() {
+    resolve_resource_id "$1" "${2:-选择 ACK 集群}" "错误：没有找到任何集群。" \
+        '.[] | "\(.cluster_id) (\(.name // "无名称")) [\(.state)]"' \
+        -- cs GET /clusters --region "${region:-}"
+}
+
 # 使用新框架的删除函数
 ack_delete() {
-    local cluster_id=$1
+    local cluster_id
 
-    # 如果没有提供集群ID，则使用 fzf 选择
-    if [ -z "$cluster_id" ]; then
-        local cluster_list
-        local result
-        result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cluster_list=$(echo "$result" | jq -r '.[] | "\(.cluster_id) (\(.name // "无名称")) [\(.state)]"')
-
-        if [ -z "$cluster_list" ]; then
-            echo "错误：没有找到任何集群。" >&2
-            return 1
-        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
-            echo "自动选择唯一的集群: $cluster_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cluster_id=$(select_with_fzf "选择要删除的 ACK 集群" "$cluster_list" | awk '{print $1}')
-                if [ -z "$cluster_id" ]; then
-                    echo "错误：未选择集群。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择集群，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查集群 ID 是否为空
-    if [ -z "$cluster_id" ]; then
-        echo "错误：集群ID不能为空。" >&2
-        return 1
-    fi
+    local raw
+    raw=$(_ack_resolve_cluster_id "$1" "选择要删除的 ACK 集群") || return 1
+    cluster_id=$(echo "$raw" | awk '{print $1}')
 
     # 获取集群详情
     local cluster_info
-    cluster_info=$(call_aliyun_api cs DescribeClusterDetail --ClusterId "$cluster_id" 2>/dev/null)
+    cluster_info=$(call_aliyun_api cs GET "/clusters/$cluster_id" --region "$region" 2>/dev/null)
     local cluster_name
     cluster_name=$(echo "$cluster_info" | jq -r '.name // "未知"')
 
@@ -293,65 +284,20 @@ ack_delete() {
     echo "  名称: $cluster_name"
     echo "  地域: $region"
 
-    if ! confirm_action "删除 ACK 集群：$cluster_id"; then
-        return 1
-    fi
+    confirm_action "删除 ACK 集群：$cluster_id" || return 1
 
     echo "删除 ACK 集群："
-    local result
-    result=$(call_aliyun_api cs DeleteCluster \
-        --ClusterId "$cluster_id" \
-        --retain-resources '[""]')
-
-    if [ $? -eq 0 ]; then
-        echo "ACK 集群删除请求已提交。"
-        log_delete_operation "${profile:-}" "$region" "ack" "$cluster_id" "ACK集群" "成功"
-    else
-        echo "ACK 集群删除请求失败。"
-        echo "$result"
-        log_delete_operation "${profile:-}" "$region" "ack" "$cluster_id" "ACK集群" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "ack" "delete" "$result"
+    call_api_del_logged "ack" "$cluster_id" "ACK集群" "错误：ACK 集群删除请求失败。" \
+        -- cs DELETE "/clusters/$cluster_id" --region "$region"
 }
 
 # 使用新框架的更新函数
 ack_update() {
-    local cluster_id=$1
-    local new_name=$2
+    local cluster_id new_name=$2
 
-    # 如果没有提供集群ID，则使用 fzf 选择
-    if [ -z "$cluster_id" ]; then
-        local cluster_list
-        local result
-        result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cluster_list=$(echo "$result" | jq -r '.[] | "\(.cluster_id) (\(.name // "无名称")) [\(.state)]"')
-
-        if [ -z "$cluster_list" ]; then
-            echo "错误：没有找到任何集群。" >&2
-            return 1
-        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
-            echo "自动选择唯一的集群: $cluster_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cluster_id=$(select_with_fzf "选择要更新的 ACK 集群" "$cluster_list" | awk '{print $1}')
-                if [ -z "$cluster_id" ]; then
-                    echo "错误：未选择集群。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择集群，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
+    local raw
+    raw=$(_ack_resolve_cluster_id "$1" "选择要更新的 ACK 集群") || return 1
+    cluster_id=$(echo "$raw" | awk '{print $1}')
 
     # 如果没有提供新名称，则提示输入
     if [ -z "$new_name" ]; then
@@ -368,56 +314,27 @@ ack_update() {
     fi
 
     echo "更新 ACK 集群："
-    local result
-    result=$(call_aliyun_api cs ModifyCluster \
-        --ClusterId "$cluster_id" \
-        --name "$new_name")
-
-    if [ $? -eq 0 ]; then
-        echo "集群更新成功："
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ack" "update" "$result"
-    else
-        echo "错误：集群更新失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "ack" "update" "错误：集群更新失败。" \
+        -- cs PUT "/clusters/$cluster_id" \
+        --region "$region" \
+        --body "$(jq -nc --arg name "$new_name" '{name: $name}')"
 }
 
 # 获取集群详情（使用框架函数）
 ack_detail() {
     local cluster_id=$1
+    local format=${2:-human}
+
+    if is_output_format "$cluster_id"; then
+        format=$cluster_id
+        cluster_id=""
+    fi
 
     # 如果没有提供集群ID，则使用 fzf 选择
     if [ -z "$cluster_id" ]; then
-        local cluster_list
-        local result
-        result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cluster_list=$(echo "$result" | jq -r '.[] | "\(.cluster_id) (\(.name // "无名称")) [\(.state)]"')
-
-        if [ -z "$cluster_list" ]; then
-            echo "错误：没有找到任何集群。" >&2
-            return 1
-        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
-            echo "自动选择唯一的集群: $cluster_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cluster_id=$(select_with_fzf "选择要查看详情的 ACK 集群" "$cluster_list" | awk '{print $1}')
-                if [ -z "$cluster_id" ]; then
-                    echo "错误：未选择集群。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择集群，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
+        local raw
+        raw=$(_ack_resolve_cluster_id "" "选择要查看详情的 ACK 集群") || return 1
+        cluster_id=$(echo "$raw" | awk '{print $1}')
     fi
 
     # 检查集群 ID 是否为空
@@ -426,12 +343,19 @@ ack_detail() {
         return 1
     fi
 
-    echo "获取集群详情："
     local result
-    result=$(call_aliyun_api cs DescribeClusterDetail --ClusterId "$cluster_id")
+    result=$(call_aliyun_api cs GET "/clusters/$cluster_id" --region "$region")
 
     if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
+        case "$format" in
+        json)
+            echo "$result"
+            ;;
+        *)
+            echo "获取集群详情："
+            echo "$result" | jq '.'
+            ;;
+        esac
         log_result "${profile:-}" "$region" "ack" "detail" "$result"
     else
         echo "错误：无法获取集群详情。"
@@ -445,36 +369,16 @@ ack_node_list() {
     local cluster_id=$1
     local format=${2:-human}
 
+    if is_output_format "$cluster_id"; then
+        format=$cluster_id
+        cluster_id=""
+    fi
+
     # 如果没有提供集群ID，则使用 fzf 选择
     if [ -z "$cluster_id" ]; then
-        local cluster_list
-        local result
-        result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cluster_list=$(echo "$result" | jq -r '.[] | "\(.cluster_id) (\(.name // "无名称")) [\(.state)]"')
-
-        if [ -z "$cluster_list" ]; then
-            echo "错误：没有找到任何集群。" >&2
-            return 1
-        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
-            echo "自动选择唯一的集群: $cluster_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cluster_id=$(select_with_fzf "选择要查看节点的 ACK 集群" "$cluster_list" | awk '{print $1}')
-                if [ -z "$cluster_id" ]; then
-                    echo "错误：未选择集群。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择集群，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
+        local raw
+        raw=$(_ack_resolve_cluster_id "" "选择要查看节点的 ACK 集群") || return 1
+        cluster_id=$(echo "$raw" | awk '{print $1}')
     fi
 
     # 检查集群 ID 是否为空
@@ -488,7 +392,7 @@ ack_node_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-18s  %-8s  %-15s  %s\n", $1, $2, $3, $4, $5}'
 
     local result
-    result=$(call_aliyun_api cs DescribeClusterNodes --ClusterId "$cluster_id")
+    result=$(call_aliyun_api cs GET "/clusters/$cluster_id/nodes" --region "$region")
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取节点列表。" >&2
@@ -514,34 +418,9 @@ ack_node_add() {
 
     # 如果没有提供集群ID，则使用 fzf 选择
     if [ -z "$cluster_id" ]; then
-        local cluster_list
-        local result
-        result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cluster_list=$(echo "$result" | jq -r '.[] | "\(.cluster_id) (\(.name // "无名称")) [\(.state)]"')
-
-        if [ -z "$cluster_list" ]; then
-            echo "错误：没有找到任何集群。" >&2
-            return 1
-        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
-            echo "自动选择唯一的集群: $cluster_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cluster_id=$(select_with_fzf "选择要添加节点的 ACK 集群" "$cluster_list" | awk '{print $1}')
-                if [ -z "$cluster_id" ]; then
-                    echo "错误：未选择集群。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择集群，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
+        local raw
+        raw=$(_ack_resolve_cluster_id "" "选择要添加节点的 ACK 集群") || return 1
+        cluster_id=$(echo "$raw" | awk '{print $1}')
     fi
 
     # 检查集群 ID 是否为空
@@ -552,14 +431,14 @@ ack_node_add() {
 
     echo "添加集群节点："
     local result
-    result=$(call_aliyun_api cs ScaleOutCluster \
-        --ClusterId "$cluster_id" \
-        --count "$count")
+    result=$(call_aliyun_api cs POST "/clusters/$cluster_id/nodes" \
+        --region "$region" \
+        --body "$(jq -nc --argjson count "$count" '{count: $count}')")
 
     if [ $? -eq 0 ]; then
         echo "节点添加请求已提交："
         echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "ack" "node-add" "$result"
+        log_result "${profile:-}" "$region" "ack" "add-node" "$result"
     else
         echo "错误：节点添加请求失败。"
         echo "$result"
@@ -574,66 +453,22 @@ ack_node_remove() {
 
     # 如果没有提供集群ID，则使用 fzf 选择
     if [ -z "$cluster_id" ]; then
-        local cluster_list
-        local result
-        result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cluster_list=$(echo "$result" | jq -r '.[] | "\(.cluster_id) (\(.name // "无名称")) [\(.state)]"')
-
-        if [ -z "$cluster_list" ]; then
-            echo "错误：没有找到任何集群。" >&2
-            return 1
-        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
-            echo "自动选择唯一的集群: $cluster_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cluster_id=$(select_with_fzf "选择要移除节点的 ACK 集群" "$cluster_list" | awk '{print $1}')
-                if [ -z "$cluster_id" ]; then
-                    echo "错误：未选择集群。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择集群，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
+        local raw
+        raw=$(_ack_resolve_cluster_id "" "选择要移除节点的 ACK 集群") || return 1
+        cluster_id=$(echo "$raw" | awk '{print $1}')
     fi
 
     # 如果没有提供节点ID，则使用 fzf 选择
     if [ -z "$node_id" ]; then
-        local node_list
-        local node_result
-        node_result=$(call_aliyun_api cs DescribeClusterNodes --ClusterId "$cluster_id" 2>/dev/null)
+        local node_result node_candidates raw_node
+        node_result=$(call_aliyun_api cs GET "/clusters/$cluster_id/nodes" --region "$region" 2>/dev/null)
         if [ $? -ne 0 ]; then
             echo "错误：无法获取节点列表。" >&2
             return 1
         fi
-
-        node_list=$(echo "$node_result" | jq -r '.nodes[] | "\(.instance_id) (\(.instance_name // "无名称")) [\(.state)]"')
-
-        if [ -z "$node_list" ]; then
-            echo "错误：没有找到任何节点。" >&2
-            return 1
-        elif [ "$(echo "$node_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            node_id=$(echo "$node_list" | awk '{print $1}')
-            echo "自动选择唯一的节点: $node_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                node_id=$(select_with_fzf "选择要移除的节点" "$node_list" | awk '{print $1}')
-                if [ -z "$node_id" ]; then
-                    echo "错误：未选择节点。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择节点，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
+        node_candidates=$(echo "$node_result" | jq -r '.nodes[] | "\(.instance_id) (\(.instance_name // "无名称")) [\(.state)]"')
+        raw_node=$(resolve_from_candidates "" "选择要移除的节点" "错误：没有找到任何节点。" "$node_candidates") || return 1
+        node_id=$(echo "$raw_node" | awk '{print $1}')
     fi
 
     if ! validate_required_params "$cluster_id" "$node_id" "错误：集群ID和节点ID不能为空。"; then
@@ -646,10 +481,9 @@ ack_node_remove() {
 
     echo "移除集群节点："
     local result
-    result=$(call_aliyun_api cs DeleteClusterNodes \
-        --ClusterId "$cluster_id" \
-        --nodes "[$node_id]" \
-        --release-node true)
+    result=$(call_aliyun_api cs DELETE "/clusters/$cluster_id/nodes" \
+        --region "$region" \
+        --body "$(jq -nc --arg node_id "$node_id" '{nodes: [$node_id], release_node: true}')")
 
     if [ $? -eq 0 ]; then
         echo "节点移除请求已提交："
@@ -667,49 +501,17 @@ ack_get_kubeconfig() {
     local cluster_id=$1
     local private=${2:-false}
 
-    # 如果没有提供集群ID，则使用 fzf 选择
     if [ -z "$cluster_id" ]; then
-        local cluster_list
-        local result
-        result=$(call_aliyun_api cs DescribeClusters --region "${region:-}")
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        cluster_list=$(echo "$result" | jq -r '.[] | "\(.cluster_id) (\(.name // "无名称")) [\(.state)]"')
-
-        if [ -z "$cluster_list" ]; then
-            echo "错误：没有找到任何集群。" >&2
-            return 1
-        elif [ "$(echo "$cluster_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            cluster_id=$(echo "$cluster_list" | awk '{print $1}')
-            echo "自动选择唯一的集群: $cluster_id"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                cluster_id=$(select_with_fzf "选择要获取 kubeconfig 的 ACK 集群" "$cluster_list" | awk '{print $1}')
-                if [ -z "$cluster_id" ]; then
-                    echo "错误：未选择集群。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择集群，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查集群 ID 是否为空
-    if [ -z "$cluster_id" ]; then
-        echo "错误：集群ID不能为空。" >&2
-        return 1
+        local raw
+        raw=$(_ack_resolve_cluster_id "" "选择要获取 kubeconfig 的 ACK 集群") || return 1
+        cluster_id=$(echo "$raw" | awk '{print $1}')
     fi
 
     echo "获取集群 kubeconfig："
     local result
-    result=$(call_aliyun_api cs DescribeClusterUserKubeconfig \
-        --ClusterId "$cluster_id" \
-        --PrivateIpAddress "$private")
+    result=$(call_aliyun_api cs GET "/k8s/$cluster_id/user_config" \
+        --region "$region" \
+        --private_ip_address "$private")
 
     if [ $? -eq 0 ]; then
         echo "$result" | jq -r '.config'
@@ -879,4 +681,22 @@ ack_auto_scale() {
             kubectl -n "$namespace" rollout restart deployment "$deployment"
         fi
     fi
+}
+
+## 根据node内存使用率，禁止调度到内存使用率最高的节点上
+# 参数：$1 - 内存使用率阈值（默认 94），达到或超过该值的节点将被 cordon
+balance_pod_on_node() {
+    local value_threshold=${1:-94}
+    local node mem_usage
+    while read -r node mem_usage; do
+        if ((mem_usage >= value_threshold)); then
+            # echo "[$(date '+%Y-%m-%d %H:%M:%S')], 节点 $node 内存使用率 $mem_usage%，达到阈值 $value_threshold%，将节点 $node cordon"
+            kubectl cordon "$node" >/dev/null || true
+        else
+            # echo "[$(date '+%Y-%m-%d %H:%M:%S')], 节点 $node 内存使用率 $mem_usage%，未达到阈值 $value_threshold%，将节点 $node 解除 cordon"
+            kubectl uncordon "$node" >/dev/null || true
+        fi
+    done < <(
+        kubectl top node --no-headers | grep -v "virtual" | sort --reverse --key 5 --numeric | awk '{print $1, int($5)}'
+    )
 }

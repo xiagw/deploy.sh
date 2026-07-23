@@ -5,7 +5,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 show_cdn_help() {
     echo "CDN (内容分发网络) 操作："
@@ -13,9 +13,10 @@ show_cdn_help() {
     echo "  add <域名> <源站> <源站类型>           - 添加 CDN 加速域名"
     echo "  del [<域名>]                           - 删除 CDN 加速域名（域名可选，可使用fzf选择）"
     echo "  set <域名> <源站> <源站类型>           - 修改 CDN 域名配置"
-    echo "  refresh <类型> <路径>                   - 刷新 CDN 目录或文件"
+    echo "  refresh <类型> <路径>                   - 刷新 CDN 目录、文件或正则（20h 冷却）"
+    echo "  trigger <触发文件> [类型]               - 根据触发文件批量刷新（每行一个URL）"
     echo "  prefetch <路径>                         - 预热 CDN 文件"
-    echo "  pay [show_message]                      - 购买 CDN 资源包（自动判断余量）"
+    echo "  pay                                     - 购买 CDN 资源包（自动判断余量）"
     echo
     echo "示例："
     echo "  $0 cdn get                                                  # 列出所有域名"
@@ -25,9 +26,10 @@ show_cdn_help() {
     echo "  $0 cdn set example.com new-origin.com ip                 # 更新域名配置"
     echo "  $0 cdn refresh directory https://example.com/dir         # 刷新目录"
     echo "  $0 cdn refresh file https://example.com/path/to/file.jpg # 刷新文件"
+    echo "  $0 cdn refresh regex 'https://example.com/[0-9]*.jpg'    # 正则刷新"
+    echo "  $0 cdn trigger /tmp/trigger.cdn.refresh                    # 批量刷新触发文件中的URL"
     echo "  $0 cdn prefetch https://example.com/path/to/file.jpg     # 预热文件"
-    echo "  $0 cdn pay                                                 # 静默购买资源包"
-    echo "  $0 cdn pay true                                           # 显示购买信息"
+    echo "  $0 cdn pay                                                 # 购买资源包"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -42,6 +44,7 @@ handle_cdn_commands() {
     del) cdn_delete "$@" ;;
     set) cdn_update "$@" ;;
     refresh) cdn_refresh "$@" ;;
+    trigger) cdn_refresh_trigger "$@" ;;
     prefetch) cdn_prefetch "$@" ;;
     pay) cdn_pay "$@" ;;
     help) show_cdn_help ;;
@@ -53,6 +56,13 @@ handle_cdn_commands() {
     esac
 }
 
+# 解析 CDN 域名（未提供时列表选择；cdn 无需区域旗标）
+_cdn_resolve_domain() {
+    resolve_resource_id "$1" "${2:-选择 CDN 域名}" "错误：没有找到 CDN 域名。" \
+        '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"' \
+        -- cdn describe-user-domains
+}
+
 # 使用新框架的列表函数
 cdn_list() {
     local format=${1:-human}
@@ -62,9 +72,10 @@ cdn_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-38s  %-6s  %s\n", $1, $2, $3, $4}'
 
     local result
-    result=$(call_aliyun_api cdn DescribeUserDomains)
+    result=$(call_aliyun_api cdn describe-user-domains)
+    ret=$?
 
-    if [ $? -ne 0 ]; then
+    if [ "$ret" -ne 0 ]; then
         echo "错误：无法获取 CDN 域名列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -131,121 +142,32 @@ oss_private"
     fi
 
     echo "添加 CDN 加速域名："
-    local result
-    result=$(call_aliyun_api cdn AddCdnDomain \
-        --DomainName "$domain_name" \
-        --Sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]" \
-        --CdnType web \
-        --Scope domestic)
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "cdn" "create" "$result"
-    else
-        echo "错误：CDN 域名创建失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "cdn" "create" "错误：CDN 域名创建失败。" \
+        -- cdn add-cdn-domain \
+        --domain-name "$domain_name" \
+        --sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]" \
+        --cdn-type web \
+        --scope domestic
 }
 
 # 使用新框架的删除函数
 cdn_delete() {
-    local domain_name=$1
-
-    # 如果没有提供域名，则使用 fzf 选择
-    if [ -z "$domain_name" ]; then
-        local domain_list
-        local result
-        result=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 CDN 域名列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        domain_list=$(echo "$result" | jq -r '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"')
-
-        if [ -z "$domain_list" ]; then
-            echo "错误：没有找到 CDN 域名。" >&2
-            return 1
-        elif [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            domain_name=$(echo "$domain_list" | awk '{print $1}')
-            echo "自动选择唯一的 CDN 域名: $domain_name"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                domain_name=$(select_with_fzf "选择要删除的 CDN 域名" "$domain_list" | awk '{print $1}')
-                if [ -z "$domain_name" ]; then
-                    echo "错误：未选择域名。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择域名，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 检查域名是否为空
-    if [ -z "$domain_name" ]; then
-        echo "错误：域名不能为空。" >&2
-        return 1
-    fi
+    local domain_name
+    domain_name=$(_cdn_resolve_domain "$1" "选择要删除的 CDN 域名") || return 1
 
     if ! confirm_action "删除 CDN 加速域名：$domain_name"; then
         return 1
     fi
 
     echo "删除 CDN 加速域名："
-    local result
-    result=$(call_aliyun_api cdn DeleteCdnDomain --DomainName "$domain_name")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_delete_operation "${profile:-}" "$region" "cdn" "$domain_name" "CDN域名" "成功"
-    else
-        echo "错误：CDN 域名删除失败。"
-        echo "$result"
-        log_delete_operation "${profile:-}" "$region" "cdn" "$domain_name" "CDN域名" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "cdn" "delete" "$result"
+    call_api_del_logged "cdn" "$domain_name" "CDN域名" "错误：CDN 域名删除失败。" \
+        -- cdn delete-cdn-domain --domain-name "$domain_name"
 }
 
 # 使用新框架的更新函数
 cdn_update() {
-    local domain_name=$1 sources=$2 source_type=$3
-
-    # 如果没有提供域名，则使用 fzf 选择
-    if [ -z "$domain_name" ]; then
-        local domain_list
-        local result
-        result=$(call_aliyun_api cdn DescribeUserDomains 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取 CDN 域名列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        domain_list=$(echo "$result" | jq -r '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"')
-
-        if [ -z "$domain_list" ]; then
-            echo "错误：没有找到 CDN 域名。" >&2
-            return 1
-        elif [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            domain_name=$(echo "$domain_list" | awk '{print $1}')
-            echo "自动选择唯一的 CDN 域名: $domain_name"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                domain_name=$(select_with_fzf "选择要更新的 CDN 域名" "$domain_list" | awk '{print $1}')
-                if [ -z "$domain_name" ]; then
-                    echo "错误：未选择域名。" >&2
-                    return 1
-                fi
-            else
-                echo "错误：需要选择域名，但未找到交互式选择工具。" >&2
-                return 1
-            fi
-        fi
-    fi
+    local domain_name sources=$2 source_type=$3
+    domain_name=$(_cdn_resolve_domain "$1" "选择要更新的 CDN 域名") || return 1
 
     # 如果没有提供源站地址或源站类型，则使用交互式输入
     if [ -z "$sources" ] || [ -z "$source_type" ]; then
@@ -284,19 +206,10 @@ oss_private"
     fi
 
     echo "修改 CDN 域名配置："
-    local result
-    result=$(call_aliyun_api cdn ModifyCdnDomain \
-        --DomainName "$domain_name" \
-        --Sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]")
-
-    if [ $? -eq 0 ]; then
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "cdn" "update" "$result"
-    else
-        echo "错误：CDN 域名更新失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "cdn" "update" "错误：CDN 域名更新失败。" \
+        -- cdn modify-cdn-domain \
+        --domain-name "$domain_name" \
+        --sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]"
 }
 
 # 刷新功能（保持原有实现，但使用框架函数并添加fzf选择）
@@ -304,10 +217,23 @@ cdn_refresh() {
     local type=$1
     local path=$2
 
+    local lock_file="/tmp/lock.cdn.refresh"
+    local lock_cooldown_hours=20
+
+    # 检查锁文件，防止短时间内重复刷新
+    if [ -f "$lock_file" ]; then
+        if [ "$(stat -c %Y "$lock_file")" -gt "$(date -d "${lock_cooldown_hours} hours ago" +%s)" ]; then
+            echo "刷新冷却中，距上次刷新未满 ${lock_cooldown_hours} 小时，请稍后再试。" >&2
+            return 1
+        fi
+        rm -f "$lock_file"
+    fi
+
     # 如果没有提供类型，则使用 fzf 选择
     if [ -z "$type" ]; then
         local type_list="file
-directory"
+directory
+regex"
         if type select_with_fzf >/dev/null 2>&1; then
             type=$(select_with_fzf "选择刷新类型" "$type_list")
             if [ -z "$type" ]; then
@@ -315,7 +241,7 @@ directory"
                 return 1
             fi
         else
-            read -r -p "请输入刷新类型 (file/directory): " type
+            read -r -p "请输入刷新类型 (file/directory/regex): " type
             if [ -z "$type" ]; then
                 echo "错误：刷新类型不能为空。" >&2
                 return 1
@@ -332,7 +258,7 @@ directory"
         fi
     fi
 
-    if ! validate_required_params "$type" "$path" "错误：刷新操作需要指定类型（directory 或 file）和路径。"; then
+    if ! validate_required_params "$type" "$path" "错误：刷新操作需要指定类型（directory/file/regex）和路径。"; then
         return 1
     fi
 
@@ -340,29 +266,63 @@ directory"
     case "$type" in
     directory) object_type="Directory" ;;
     file) object_type="File" ;;
+    regex) object_type="Regex" ;;
     *)
-        echo "错误：无效的刷新类型。请使用 'directory' 或 'file'。" >&2
+        echo "错误：无效的刷新类型。请使用 'directory'、'file' 或 'regex'。" >&2
         return 1
         ;;
     esac
 
-    echo "刷新 CDN $type ："
-    local result
-    result=$(call_aliyun_api cdn RefreshObjectCaches \
-        --region "$region" \
-        --Force true \
-        --ObjectPath "$path" \
-        --ObjectType "$object_type")
+    echo "刷新 CDN $type ：$path"
+    call_api_logged "cdn" "refresh" "错误：CDN $type 刷新请求失败。" \
+        -- cdn refresh-object-caches \
+        --biz-force true \
+        --object-path "$path" \
+        --object-type "$object_type" || return 1
+    echo "CDN $type 刷新请求已提交。"
+    touch "$lock_file"
+}
 
-    if [ $? -eq 0 ]; then
-        echo "CDN $type 刷新请求已提交："
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "cdn" "refresh" "$result"
-    else
-        echo "错误：CDN $type 刷新请求失败。"
-        echo "$result"
-        return 1
+# 根据触发文件批量刷新 CDN
+# 触发文件每行一个 URL，支持空行和 # 注释；执行后自动删除触发文件
+cdn_refresh_trigger() {
+    local trigger_file=${1:-/tmp/trigger.cdn.refresh}
+    local type=${2:-directory}
+
+    if [ ! -f "$trigger_file" ]; then
+        return 0
     fi
+
+    local object_type
+    case "$type" in
+    directory) object_type="Directory" ;;
+    file) object_type="File" ;;
+    regex) object_type="Regex" ;;
+    *)
+        echo "错误：无效的刷新类型。请使用 'directory'、'file' 或 'regex'。" >&2
+        return 1
+        ;;
+    esac
+
+    local count=0 path
+    while IFS= read -r path || [ -n "$path" ]; do
+        [[ -z "$path" || "$path" == \#* ]] && continue
+        echo "刷新 CDN $type ：$path"
+        call_api_logged "cdn" "refresh" "错误：CDN $type 刷新请求失败。" \
+            -- cdn refresh-object-caches \
+            --biz-force true \
+            --object-path "$path" \
+            --object-type "$object_type" || echo "警告：$path 刷新失败，继续处理下一行" >&2
+        ((count++))
+    done < "$trigger_file"
+
+    rm -f "$trigger_file"
+
+    if [ "$count" -eq 0 ]; then
+        echo "触发文件中没有有效的刷新路径。"
+        return 0
+    fi
+    echo "共刷新 $count 条记录。"
 }
 
 # 预热功能（保持原有实现，但使用框架函数并添加fzf选择）
@@ -379,26 +339,14 @@ cdn_prefetch() {
     fi
 
     echo "预热 CDN 文件："
-    local result
-    result=$(call_aliyun_api cdn PushObjectCache \
-        --region "$region" \
-        --ObjectPath "$path")
-
-    if [ $? -eq 0 ]; then
-        echo "CDN 文件预热请求已提交："
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "cdn" "prefetch" "$result"
-    else
-        echo "错误：CDN 文件预热请求失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "cdn" "prefetch" "错误：CDN 文件预热请求失败。" \
+        -- cdn push-object-cache \
+        --object-path "$path" || return 1
+    echo "CDN 文件预热请求已提交。"
 }
 
 # 购买资源包功能（保持原有实现，但使用框架函数）
 cdn_pay() {
-    set -e
-    local show_message="$1"
     local color_reset="\033[0m"
     local color_green="\033[0;32m"
     local color_red="\033[0;31m"
@@ -418,11 +366,11 @@ cdn_pay() {
     local remaining_https_request=0
 
     while true; do
-        query_result=$(call_aliyun_api bssopenapi QueryResourcePackageInstances \
-            --ProductCode dcdn \
-            --PageNum "$page_num" \
-            --PageSize 100 2>/dev/null) || {
-            [[ -n "$show_message" ]] && echo -e "[CDN] ${color_red}查询资源包失败${color_reset}"
+        query_result=$(call_aliyun_api bssopenapi query-resource-package-instances \
+            --product-code dcdn \
+            --page-num "$page_num" \
+            --page-size 100 2>/dev/null) || {
+            echo -e "[CDN] ${color_red}查询资源包失败${color_reset}"
             return 1
         }
 
@@ -446,13 +394,12 @@ cdn_pay() {
         ((page_num++))
     done
 
-    if [[ -n "$show_message" ]]; then
-        local https_color_code="${color_red}" # 默认红色
-        if ((remaining_https_request >= 20000000)); then
-            https_color_code="${color_green}" # 大于2000万次时显示绿色
-        fi
-        echo -e "[$(date +'%F %T')] 剩余HTTPS请求次数: ${https_color_code}$(
-            echo "$remaining_https_request" | awk '{
+    local https_color_code="${color_red}" # 默认红色
+    if ((remaining_https_request >= 20000000)); then
+        https_color_code="${color_green}" # 大于2000万次时显示绿色
+    fi
+    echo -e "[$(date +'%F %T')] 剩余HTTPS请求次数: ${https_color_code}$(
+        echo "$remaining_https_request" | awk '{
             if ($1 >= 100000000) {
                 printf "%.6f亿", $1/100000000
             } else if ($1 >= 10000000) {
@@ -463,36 +410,33 @@ cdn_pay() {
                 printf "%d", $1
             }
         }'
-        )次${color_reset}"
-    fi
+    )次${color_reset}"
 
     # 检查是否获取到有效的剩余容量值
     if [ "$remaining_amount" = "-1" ]; then
-        if [[ -n "$show_message" ]]; then
-            echo -e "[$(date +'%F %T')] ${color_red}无法获取资源包剩余容量信息${color_reset}"
-        fi
+        echo -e "[$(date +'%F %T')] ${color_red}无法获取资源包剩余容量信息${color_reset}"
         return 1
     fi
 
     # 显示剩余容量信息并判断是否需要购买
-    if [[ -n "$show_message" ]]; then
-        local traffic_color_code="${color_red}" # 默认红色
-        if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
-            traffic_color_code="${color_green}" # 充足时显示绿色
-        fi
-        echo -e "[$(date +'%F %T')] 剩余下行流量: ${traffic_color_code}${remaining_amount:-0}TB${color_reset}"
+    local traffic_color_code="${color_red}" # 默认红色
+    if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
+        traffic_color_code="${color_green}" # 充足时显示绿色
     fi
+    echo -e "[$(date +'%F %T')] 剩余下行流量: ${traffic_color_code}${remaining_amount:-0}TB${color_reset}"
 
     # 如果剩余容量充足，则跳过购买
     if (($(echo "$remaining_amount > $remaining_threshold" | bc -l))); then
+        echo -e "[$(date +'%F %T')] ${color_green}剩余流量充足，跳过购买资源包${color_reset}"
         return 0
     fi
 
     # 查询账户可用余额（处理逗号分隔的数字）
     local available_balance
     local balance_result
-    balance_result=$(call_aliyun_api bssopenapi QueryAccountBalance 2>/dev/null)
-    if [ $? -ne 0 ]; then
+    balance_result=$(call_aliyun_api bssopenapi query-account-balance)
+    ret=$?
+    if [ "$ret" -ne 0 ]; then
         echo "错误：无法查询账户余额。" >&2
         return 1
     fi
@@ -522,21 +466,13 @@ cdn_pay() {
     log_result "${profile:-}" "$region" "cdn" "pay" "当前剩余: ${remaining_amount:-0}TB，准备购买 $((package_size / package_unit_size))TB 资源包..."
     ## 特殊方式，修改为只买1TB时长1月的（1月的单价108¥，6-12月的单价126¥）
     echo -e "[$(date +'%F %T')] 购买 1TB 资源包..."
-    local result
-    result=$(call_aliyun_api bssopenapi CreateResourcePackage \
-        --ProductCode dcdn \
-        --PackageType FPT_dcdnpaybag_deadlineAcc_1541405199 \
-        --Duration 1 \
-        --PricingCycle Month \
-        --Specification "$package_unit_size")
-
-    if [ $? -eq 0 ]; then
-        echo "CDN 资源包购买成功："
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "cdn" "pay" "$result"
-    else
-        echo "错误：CDN 资源包购买失败。"
-        echo "$result"
-        return 1
-    fi
+    echo "CDN 资源包购买："
+    call_api_logged "cdn" "pay" "错误：CDN 资源包购买失败。" \
+        -- bssopenapi create-resource-package \
+        --product-code dcdn \
+        --package-type FPT_dcdnpaybag_deadlineAcc_1541405199 \
+        --duration 1 \
+        --pricing-cycle Month \
+        --specification "$package_unit_size" || return 1
+    echo "CDN 资源包购买成功。"
 }

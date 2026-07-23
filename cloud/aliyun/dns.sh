@@ -5,7 +5,7 @@
 
 # 加载基础框架
 # shellcheck source=/dev/null
-[ -f "${SCRIPT_DIR}/base_service.sh" ] && source "${SCRIPT_DIR}/base_service.sh"
+[ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
 show_dns_help() {
     echo "DNS 操作："
@@ -70,8 +70,15 @@ handle_domain_commands() {
 
 get_domain_list() {
     local result
-    result=$(call_aliyun_api alidns DescribeDomains)
+    result=$(call_aliyun_api alidns describe-domains --region "public" 2>/dev/null)
     echo "$result" | jq -r '.Domains.Domain[] | .DomainName'
+}
+
+# 解析域名（未提供时列表选择；alidns 为中心化服务，固定 --region public）
+_dns_resolve_domain() {
+    resolve_resource_id "$1" "${2:-选择域名}" "错误：没有找到域名。" \
+        '.Domains.Domain[] | "\(.DomainName) (\(.DomainId))"' \
+        -- alidns describe-domains --region public
 }
 
 # 使用新框架的 DNS 列表函数
@@ -79,62 +86,26 @@ dns_list() {
     local domain=$1
     local format=${2:-human}
 
-    if [ -z "$domain" ]; then
-        local domain_list
-        local result
-        result=$(call_aliyun_api alidns DescribeDomains 2>/dev/null)
-        if [ $? -ne 0 ]; then
-            echo "错误：无法获取域名列表。请检查您的凭证和权限。" >&2
-            return 1
-        fi
-
-        domain_list=$(echo "$result" | jq -r '.Domains.Domain[] | "\(.DomainName) (\(.DomainId))"')
-
-        if [ -z "$domain_list" ]; then
-            echo "错误：没有找到域名。" >&2
-            return 1
-        elif [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-            domain=$(echo "$domain_list" | awk '{print $1}')
-            echo "自动选择唯一的域名: $domain"
-        else
-            if type select_with_fzf >/dev/null 2>&1; then
-                domain=$(select_with_fzf "选择域名查看DNS记录" "$domain_list" | awk '{print $1}')
-                if [ -z "$domain" ]; then
-                    echo "错误：未选择域名。" >&2
-                    return 1
-                fi
-            else
-                echo "列出所有域名："
-                dns_domain_list "$format"
-                return
-            fi
-        fi
+    if is_output_format "$domain"; then
+        format=$domain
+        domain=""
     fi
+
+    domain=$(_dns_resolve_domain "$domain" "选择域名查看DNS记录") || return 1
 
     local table_header="RecordId\tRR\tType\tValue\tStatus"
     local jq_filter=".DomainRecords.Record[] | [.RecordId, .RR, .Type, .Value, .Status] | @tsv"
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-10s  %-6s  %-22s  %s\n", $1, $2, $3, $4, $5}'
 
     local result
-    result=$(call_aliyun_api alidns DescribeDomainRecords \
-        --DomainName "$domain" \
-        --PageSize 100)
-
-    if [ $? -ne 0 ]; then
+    result=$(call_aliyun_api alidns describe-domain-records --region "public" --domain-name "$domain" --page-size 100 2>/dev/null)
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取 DNS 记录列表。请检查您的凭证和权限。" >&2
         return 1
     fi
 
-    format_output \
-        "$result" \
-        "$format" \
-        "dns" \
-        "list" \
-        "$table_header" \
-        "$jq_filter" \
-        "$status_mapper" \
-        "没有找到 DNS 记录。" \
-        "列出 DNS 记录："
+    format_output "$result" "$format" "dns" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 DNS 记录。" "列出 DNS 记录："
 }
 
 # 使用新框架的创建函数
@@ -145,32 +116,9 @@ dns_create() {
     if [ -z "$domain" ] || [ -z "$rr" ] || [ -z "$type" ] || [ -z "$value" ]; then
         echo "使用交互式模式创建 DNS 记录"
 
-        # 选择/输入域名：优先使用 fzf，从已有域名中选择
+        # 选择域名：从已有域名中选择
         if [ -z "$domain" ]; then
-            local domain_list
-            local domain_result
-            domain_result=$(call_aliyun_api alidns DescribeDomains 2>/dev/null)
-            if [ $? -eq 0 ]; then
-                domain_list=$(echo "$domain_result" | jq -r '.Domains.Domain[]? | "\(.DomainName) (\(.DomainId))"')
-            fi
-
-            if [ -n "$domain_list" ]; then
-                if [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
-                    domain=$(echo "$domain_list" | awk '{print $1}')
-                    echo "自动选择唯一的域名: $domain"
-                elif type select_with_fzf >/dev/null 2>&1; then
-                    domain=$(select_with_fzf "选择域名" "$domain_list" | awk '{print $1}')
-                else
-                    read -r -p "请输入域名: " domain
-                fi
-            else
-                read -r -p "请输入域名: " domain
-            fi
-
-            if [ -z "$domain" ]; then
-                echo "错误：域名不能为空。" >&2
-                return 1
-            fi
+            domain=$(_dns_resolve_domain "" "选择域名") || return 1
         fi
 
         # 输入主机记录 - 必须用户明确输入
@@ -244,22 +192,12 @@ CAA"
     fi
 
     echo "创建 DNS 记录："
-    local result
-    result=$(call_aliyun_api alidns AddDomainRecord \
-        --DomainName "$domain" \
-        --RR "$rr" \
-        --Type "$type" \
-        --Value "$value")
-
-    if [ $? -eq 0 ]; then
-        echo "DNS 记录创建成功："
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "dns" "create" "$result"
-    else
-        echo "错误：DNS 记录创建失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "dns" "create" "错误：DNS 记录创建失败。" \
+        -- alidns add-domain-record --region public \
+        --domain-name "$domain" \
+        --rr "$rr" \
+        --type "$type" \
+        --value "$value"
 }
 
 # 使用新框架的更新函数
@@ -272,7 +210,7 @@ dns_update() {
         local result
         local domain_name=""
         local domain_list
-        domain_list=$(call_aliyun_api alidns DescribeDomains 2>/dev/null | jq -r '.Domains.Domain[] | "\(.DomainName) (\(.DomainId))"')
+        domain_list=$(call_aliyun_api alidns describe-domains --region public 2>/dev/null | jq -r '.Domains.Domain[] | "\(.DomainName) (\(.DomainId))"')
 
         if [ -z "$domain_list" ]; then
             echo "错误：没有找到任何域名。" >&2
@@ -282,12 +220,12 @@ dns_update() {
         if [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
             domain_name=$(echo "$domain_list" | awk '{print $1}')
             echo "自动选择唯一的域名: $domain_name"
-            result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+            result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
         else
             read -r -p "请输入域名以查找记录 (留空则查看所有域名): " domain_name
 
             if [ -n "$domain_name" ]; then
-                result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+                result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
             else
                 if type select_with_fzf >/dev/null 2>&1; then
                     domain_name=$(select_with_fzf "选择域名以查找要更新的记录" "$domain_list" | awk '{print $1}')
@@ -295,7 +233,7 @@ dns_update() {
                         echo "错误：未选择域名。" >&2
                         return 1
                     fi
-                    result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+                    result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
                 else
                     echo "请输入域名以查找要更新的记录。" >&2
                     return 1
@@ -336,7 +274,7 @@ dns_update() {
 
         # 获取当前记录信息
         local current_record_info
-        current_record_info=$(call_aliyun_api alidns DescribeDomainRecordInfo --RecordId "$record_id" 2>/dev/null)
+        current_record_info=$(call_aliyun_api alidns describe-domain-record-info --region public --record-id "$record_id" 2>/dev/null)
         if [ $? -eq 0 ]; then
             local current_rr current_type current_value
             current_rr=$(echo "$current_record_info" | jq -r '.RR')
@@ -421,22 +359,12 @@ CAA"
     fi
 
     echo "更新 DNS 记录："
-    local result
-    result=$(call_aliyun_api alidns UpdateDomainRecord \
-        --RecordId "$record_id" \
-        --RR "$rr" \
-        --Type "$type" \
-        --Value "$value")
-
-    if [ $? -eq 0 ]; then
-        echo "DNS 记录更新成功："
-        echo "$result" | jq '.'
-        log_result "${profile:-}" "$region" "dns" "update" "$result"
-    else
-        echo "错误：DNS 记录更新失败。"
-        echo "$result"
-        return 1
-    fi
+    call_api_logged "dns" "update" "错误：DNS 记录更新失败。" \
+        -- alidns update-domain-record --region public \
+        --record-id "$record_id" \
+        --rr "$rr" \
+        --type "$type" \
+        --value "$value"
 }
 
 # 使用新框架的删除函数
@@ -449,7 +377,7 @@ dns_delete() {
         local result
         local domain_name=""
         local domain_list
-        domain_list=$(call_aliyun_api alidns DescribeDomains 2>/dev/null | jq -r '.Domains.Domain[] | "\(.DomainName) (\(.DomainId))"')
+        domain_list=$(call_aliyun_api alidns describe-domains --region public 2>/dev/null | jq -r '.Domains.Domain[] | "\(.DomainName) (\(.DomainId))"')
 
         if [ -z "$domain_list" ]; then
             echo "错误：没有找到任何域名。" >&2
@@ -459,12 +387,12 @@ dns_delete() {
         if [ "$(echo "$domain_list" | grep -c '[^[:space:]]')" -eq 1 ]; then
             domain_name=$(echo "$domain_list" | awk '{print $1}')
             echo "自动选择唯一的域名: $domain_name"
-            result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+            result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
         else
             read -r -p "请输入域名以查找记录 (留空则查看所有域名): " domain_name
 
             if [ -n "$domain_name" ]; then
-                result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+                result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
             else
                 if type select_with_fzf >/dev/null 2>&1; then
                     domain_name=$(select_with_fzf "选择域名以查找要删除的记录" "$domain_list" | awk '{print $1}')
@@ -472,7 +400,7 @@ dns_delete() {
                         echo "错误：未选择域名。" >&2
                         return 1
                     fi
-                    result=$(call_aliyun_api alidns DescribeDomainRecords --DomainName "$domain_name" --PageSize 100 2>/dev/null)
+                    result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
                 else
                     echo "请输入域名以查找要删除的记录。" >&2
                     return 1
@@ -518,20 +446,9 @@ dns_delete() {
     fi
 
     echo "删除 DNS 记录："
-    local result
-    result=$(call_aliyun_api alidns DeleteDomainRecord --RecordId "$record_id")
-
-    if [ $? -eq 0 ]; then
-        echo "DNS 记录删除成功。"
-        log_delete_operation "${profile:-}" "$region" "dns" "$record_id" "DNS记录" "成功"
-    else
-        echo "DNS 记录删除失败。"
-        echo "$result"
-        log_delete_operation "${profile:-}" "$region" "dns" "$record_id" "DNS记录" "失败"
-        return 1
-    fi
-
-    log_result "${profile:-}" "$region" "dns" "delete" "$result"
+    call_api_del_logged "dns" "$record_id" "DNS记录" "错误：DNS 记录删除失败。" \
+        -- alidns delete-domain-record --region public --record-id "$record_id" || return 1
+    echo "DNS 记录删除成功。"
 }
 
 # 使用新框架的域名列表函数
@@ -543,7 +460,7 @@ dns_domain_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-20s  %-16s  %s\n", $1, $2, $3, $4}'
 
     local result
-    result=$(call_aliyun_api alidns DescribeDomains)
+    result=$(call_aliyun_api alidns describe-domains --region "public" 2>/dev/null)
 
     if [ $? -ne 0 ]; then
         echo "错误：无法获取域名列表。请检查您的凭证和权限。" >&2

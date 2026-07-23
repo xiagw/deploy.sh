@@ -60,10 +60,14 @@
 
 ## 安装要求
 
-1. 安装阿里云官方 CLI 工具
+1. 安装阿里云官方 CLI 工具（建议 `aliyun` >= `3.4.0`）
 2. 安装必要的依赖：
    - jq（JSON处理工具）
    - fzf（交互式选择工具）
+
+说明：本项目依赖阿里云 CLI 3.4 的产品插件机制，脚本会自动开启
+`--auto-plugin-install true` 和 `--auto-plugin-install-enable-pre true`
+以适配非交互执行场景。
 
 ## 配置说明
 
@@ -81,6 +85,19 @@
 ```bash
 ./main.sh [--profile <配置名>] [--region <地域>] <服务> <操作> [参数...]
 ```
+
+### Aliyun CLI 3.4 参数约定
+
+本项目当前按阿里云 CLI 3.4 的实际行为使用以下约定：
+
+- 配置读取：`aliyun configure get region --profile <name>`
+- RPC 风格产品：使用新版 CLI 参数名，例如 `--biz-region-id`（`--region-id` 已废弃）
+- REST 风格产品：优先沿用 CLI 3.4 已支持的元数据命令形式
+  - 例如 ACK 使用 `aliyun cs DescribeClusters --region <region>`
+  - 不强制改写为 `aliyun cs GET /clusters`
+- 所有资源 API 调用统一通过脚本内部 wrapper 自动附加：
+  - `--auto-plugin-install true`
+  - `--auto-plugin-install-enable-pre true`
 
 常用示例：
 
@@ -147,7 +164,7 @@
 
 ## 注意事项
 
-1. 删除操作需要输入"YES"进行确认
+1. 删除操作需要输入 y/Y/yes 进行确认
 2. 所有敏感操作都有日志记录
 3. 支持多配置文件和多地域管理
 4. 建议在执行重要操作前先查看帮助信息
