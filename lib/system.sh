@@ -428,6 +428,7 @@ system_cert_renew() {
         _msg warn "not found $reload_nginx, skip create giltab pipeline"
     fi
     _msg time "[cert] completed"
+    echo '================================================================'
 
     if ${GH_ACTION:-false}; then
         return 0
