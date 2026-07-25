@@ -281,7 +281,6 @@ system_cert_renew() {
     local acme_home="${HOME}/.acme.sh"
     local acme_cmd="${acme_home}/acme.sh"
     local acme_cert_dest="${acme_home}/dest"
-    local reload_nginx="$acme_home/reload.nginx"
 
     ## install acme.sh / 安装 acme.sh
     command -v crontab &>/dev/null || _install_packages "$IS_CHINA" cron
@@ -289,9 +288,11 @@ system_cert_renew() {
 
     [ -d "$acme_cert_dest" ] || mkdir -p "$acme_cert_dest"
 
-    run_touch_file="$acme_home/hook.sh"
-    echo "touch ${reload_nginx}" >"$run_touch_file"
-    chmod +x "$run_touch_file"
+    ## 生成 reload.nginx 文件，用于触发 gitlab CI/CD 或自定义部署脚本
+    local reload_nginx="$acme_home/reload.nginx"
+    run_hook="$acme_home/hook.sh"
+    echo "touch ${reload_nginx}" >"$run_hook"
+    chmod +x "$run_hook"
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     ## support multiple account.conf.* / 支持多账号
     ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
@@ -322,6 +323,12 @@ system_cert_renew() {
             ;;
         dns_cf)
             _msg yellow "dns type: cloudflare"
+            if [ -n "$SAVED_Ali_Key" ]; then
+                export Ali_Key=$SAVED_Ali_Key
+            fi
+            if [ -n "$SAVED_Ali_Secret" ]; then
+                export Ali_Secret=$SAVED_Ali_Secret
+            fi
             if [[ -n "$SAVED_CF_API_TOKEN" ]]; then
                 export CF_API_TOKEN="$SAVED_CF_API_TOKEN"
             elif [[ -n "$SAVED_CF_Token" && -n "$SAVED_CF_Account_ID" ]]; then
@@ -351,7 +358,7 @@ system_cert_renew() {
             export Ali_Secret=$SAVED_Ali_Secret
             domains="$(
                 aliyun --profile "${profile_name}" domain QueryDomainList --PageNum 1 --PageSize 100 |
-                jq -r '.Data.Domain[].DomainName' || true
+                    jq -r '.Data.Domain[].DomainName' || true
             )"
             ;;
         dns_tencent)
@@ -384,10 +391,10 @@ system_cert_renew() {
             _msg orange "Checking domain: $domain"
             if ${acme_cmd} --list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
-                ${acme_cmd} --renew -d "${domain}" --reloadcmd "$run_touch_file" || true
+                ${acme_cmd} --renew -d "${domain}" --reloadcmd "$run_hook" || true
             else
                 ## create cert / 创建证书
-                ${acme_cmd} --issue -d "${domain}" -d "*.${domain}" --dns "$dns_type" --renew-hook "$run_touch_file" || true
+                ${acme_cmd} --issue -d "${domain}" -d "*.${domain}" --dns "$dns_type" --renew-hook "$run_hook" || true
             fi
             ## install cert / 安装证书
             ${acme_cmd} --install-cert -d "${domain}" \
@@ -400,9 +407,9 @@ system_cert_renew() {
         done
     done
     ## deploy with acme_deploy / 自定义部署方式
-    if [[ -f "${acme_home}/acme_deploy.sh" ]]; then
-        _msg blue "Found ${acme_home}/acme_deploy.sh"
-        bash "${acme_home}/acme_deploy.sh"
+    if [[ -f "${acme_home}/custom_deploy.sh" ]]; then
+        _msg blue "Found ${acme_home}/custom_deploy.sh"
+        bash "${acme_home}/custom_deploy.sh"
     fi
     ## deploy with gitlab CI/CD / gitlab CI/CD 部署方式（项目名包含 nginx 的项目）
     if [ -f "$reload_nginx" ]; then
