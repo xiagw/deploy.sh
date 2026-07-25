@@ -2,8 +2,8 @@
 
 create_mysql_user() {
     # check if required ~/.my.cnf is exist
-    select mysql_conf in $HOME/.my.cnf $HOME/.my.*.cnf quit; do
-        cp -avf "$mysql_conf" "$HOME/.my.cnf"
+    select my_conf in $HOME/.my.cnf $HOME/.my.*.cnf $HOME?.my.cnf.* quit; do
+        cp -avf "$my_conf" "$HOME/.my.cnf"
         break
     done
     cmd=$(command -v mycli || command -v mysql || return 1)
@@ -19,7 +19,7 @@ create_mysql_user() {
         password_rand="$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c14)"
     # create user with the random password
     # mysql --defaults-extra-file=/path/to/${server}.cnf -e "CREATE USER '${user_name}'@'%' IDENTIFIED BY '${password_rand}'; GRANT ALL PRIVILEGES ON ${read_db_name}.* TO '${user_name}'@'%';"
-    if $cmd -e "show create user $user_name;" | grep "$user_name"; then
+    if $cmd -e "show create user $user_name;" | grep -w "$user_name"; then
         echo -e "\n!!!! User $user_name exist, give up !!!!"
     else
         $cmd -e "CREATE USER '${user_name}'@'%' IDENTIFIED BY '${password_rand}'; GRANT ALL PRIVILEGES ON ${user_name}.* TO '${user_name}'@'%';"

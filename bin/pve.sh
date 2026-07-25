@@ -3,18 +3,20 @@
 # set -x
 
 ## set mirror
-sed -i -e 's|^deb http://ftp.debian.org|deb https://mirrors.ustc.edu.cn|g' -e 's|^deb http://security.debian.org|deb https://mirrors.ustc.edu.cn/debian-security|g' /etc/apt/sources.list
+sed -i \
+    -e 's|^deb http://ftp.debian.org|deb https://mirrors.ustc.edu.cn|g' \
+    -e 's|^deb http://security.debian.org|deb https://mirrors.ustc.edu.cn/debian-security|g' \
+    /etc/apt/sources.list /etc/apt/sources.list.d/*.list
 
 ## 修改 Proxmox 的源
 source /etc/os-release
-echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pve $VERSION_CODENAME pve-no-subscription" | tee /etc/apt/sources.list.d/pve-no-subscription.list
+# echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pve $VERSION_CODENAME pve-no-subscription" | tee /etc/apt/sources.list.d/pve-no-subscription.list
 ## 修改 Proxmox Backup Server 和 Proxmox Mail Gateway
 # echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pbs $VERSION_CODENAME pbs-no-subscription" >/etc/apt/sources.list.d/pbs-no-subscription.list
 # echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/pmg $VERSION_CODENAME pmg-no-subscription" >/etc/apt/sources.list.d/pmg-no-subscription.list
 ## PVE 8 之后默认安装 ceph 仓库源文件 /etc/apt/sources.list.d/ceph.list，可以使用如下命令更换源：
 if [ -f /etc/apt/sources.list.d/ceph.list ]; then
     CEPH_CODENAME=$(ceph -v | grep ceph | awk '{print $(NF-1)}')
-    source /etc/os-release
     echo "deb https://mirrors.ustc.edu.cn/proxmox/debian/ceph-$CEPH_CODENAME $VERSION_CODENAME no-subscription" >/etc/apt/sources.list.d/ceph.list
 fi
 
