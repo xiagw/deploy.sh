@@ -1,16 +1,18 @@
 # Node 基础镜像，构建时安装 npm 依赖，运行由 run1.sh 执行 npm run start。
 # 示例：docker build -f conf/dockerfile/Dockerfile.base.node --build-arg IN_CHINA=true -t mynode:base .
 ARG MIRROR=
-ARG NODE_VERSION=20
+ARG IMAGE=node
+ARG TAG=20-slim
 
-FROM ${MIRROR}node:${NODE_VERSION}-slim
+ARG IN_CHINA=true
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+
+FROM ${MIRROR}${IMAGE}:${TAG}
 
 # 设置时区和语言
 # ENV TZ=Asia/Shanghai \
 #     LANG=C.UTF-8
 
-ARG IN_CHINA=true
-ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 
 # 设置工作目录
 WORKDIR /app
@@ -33,10 +35,10 @@ RUN --mount=type=bind,target=/src,rw \
     [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
     bash $BUILD_SH
 
-# ONBUILD 指令
-ONBUILD COPY --chown=1000:1000 . /app/
-ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi
-
 CMD ["bash", "/opt/run0.sh"]
 ## docker build -t registry-vpc.cn-hangzhou.aliyuncs.com/flyh5/flyh5:node-18-base \
 ## -f Dockerfile.node.base --progress=plain --build-arg IN_CHINA="true" .
+
+# ONBUILD 指令
+ONBUILD COPY --chown=1000:1000 . /app/
+ONBUILD RUN if [ -f /opt/onbuild.sh ]; then bash /opt/onbuild.sh; fi

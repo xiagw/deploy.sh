@@ -4,17 +4,19 @@
 # 示例：docker build -f conf/dockerfile/Dockerfile.base.java -t myapp:base .
 # =============================================================================
 ARG MIRROR=
-ARG JDK_VERSION=8
+ARG IMAGE=amazoncorretto
+ARG TAG=8
 
-FROM ${MIRROR}amazoncorretto:${JDK_VERSION}
+ARG IN_CHINA=false
+ARG MVN_PROFILE=main
+
+FROM ${MIRROR}${IMAGE}:${TAG}
 
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>" \
     org.opencontainers.image.authors="xiagw <fxiaxiaoyu@gmail.com>" \
     org.opencontainers.image.description="Java application base image" \
     org.opencontainers.image.licenses="MIT"
 
-ARG IN_CHINA=false
-ARG MVN_PROFILE=main
 ARG TZ=Asia/Shanghai
 ARG INSTALL_FONTS=false
 ARG INSTALL_FFMPEG=false

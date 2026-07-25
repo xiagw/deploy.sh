@@ -4,13 +4,15 @@
 # 示例：docker build -f conf/dockerfile/Dockerfile.base.nginx -t mynginx:base .
 # =============================================================================
 ARG MIRROR=
-ARG NGINX_VERSION=stable-alpine
+ARG IMAGE=nginx
+ARG TAG=stable-alpine
+
 ARG IN_CHINA=false
 ARG CHANGE_SOURCE=false
 ARG INSTALL_NGINX=true
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 
-FROM ${MIRROR}nginx:${NGINX_VERSION} AS builder
+FROM ${MIRROR}${IMAGE}:${TAG} AS builder
 
 ARG TZ=UTC
 RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
@@ -23,9 +25,14 @@ RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
 
 
 # 最终镜像（与官方 nginx 同结构，仅替换为带 GeoIP2 的二进制）
-FROM ${MIRROR}nginx:${NGINX_VERSION}
+FROM ${MIRROR}${IMAGE}:${TAG}
 
 LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
+
+ARG IN_CHINA
+ARG CHANGE_SOURCE
+ARG INSTALL_NGINX
+ARG BUILD_URL
 
 ARG TZ=UTC
 ENV TZ=${TZ}

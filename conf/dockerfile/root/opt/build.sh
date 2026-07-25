@@ -194,7 +194,7 @@ _build_nginx() {
 
     # 获取当前nginx版本号
     NGINX_VERSION=$(nginx -v 2>&1 | sed 's/.*\///;s/ .*//')
-    NGINX_VERSION="${NGINX_VERSION:-1.26.3}" # 设置默认稳定版本
+    NGINX_VERSION="${NGINX_VERSION:-1.30.4}" # 设置默认稳定版本
 
     # 下载并解压nginx源码
     if ! curl -fL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" | tar -xz; then

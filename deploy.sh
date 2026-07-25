@@ -325,39 +325,39 @@ config_build_env() {
         ## 支持的Java版本: 7, 8, 11, 17, 21, 23
         case "${lang}" in
         java:1.7 | java:1.7:* | java:7:*)
-            MVN_VERSION="3.6-jdk-7"
-            JDK_VERSION="7"
+            BUILD_TAG="3.6-jdk-7"
+            RUN_TAG="7"
             ;;
         java:11 | java:11:*)
-            MVN_VERSION="3.9-amazoncorretto-11"
-            JDK_VERSION="11-base"
+            BUILD_TAG="3.9-amazoncorretto-11"
+            RUN_TAG="11-base"
             ;;
         java:17 | java:17:*)
-            MVN_VERSION="3.9-amazoncorretto-17"
-            JDK_VERSION="17-base"
+            BUILD_TAG="3.9-amazoncorretto-17"
+            RUN_TAG="17-base"
             ;;
         java:21 | java:21:*)
-            MVN_VERSION="3.9-amazoncorretto-21"
-            JDK_VERSION="21-base"
+            BUILD_TAG="3.9-amazoncorretto-21"
+            RUN_TAG="21-base"
             ;;
         java:25 | java:25:*)
-            MVN_VERSION="3.9-amazoncorretto-25"
-            JDK_VERSION="25-base"
+            BUILD_TAG="3.9-amazoncorretto-25"
+            RUN_TAG="25-base"
             ;;
         java:26 | java:26:*)
-            MVN_VERSION="3.9-amazoncorretto-26"
-            JDK_VERSION="26-base"
+            BUILD_TAG="3.9-amazoncorretto-26"
+            RUN_TAG="26-base"
             ;;
         *)
             ## 默认使用Java 8
-            MVN_VERSION="3.8-amazoncorretto-8"
-            JDK_VERSION="8-base"
+            BUILD_TAG="3.8-amazoncorretto-8"
+            RUN_TAG="8-base"
             ;;
         esac
 
         ## 添加Maven和JDK版本构建参数
-        G_ARGS+=" --build-arg MVN_VERSION=${MVN_VERSION}"
-        G_ARGS+=" --build-arg JDK_VERSION=${JDK_VERSION}"
+        G_ARGS+=" --build-arg BUILD_TAG=${BUILD_TAG}"
+        G_ARGS+=" --build-arg RUN_TAG=${RUN_TAG}"
 
         ## 检查README文件中是否指定了额外的安装需求
         ## 支持的选项: INSTALL_FFMPEG, INSTALL_FONTS, INSTALL_LIBREOFFICE
