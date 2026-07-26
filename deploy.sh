@@ -519,6 +519,10 @@ main() {
     ## 从 deploy.env 文件加载所有以 ENV_ 开头的环境变量
     ## 注意: 此步骤位置不要随意变动，因为后续步骤依赖这些环境变量
     ## ========================================================================
+    if [ ! -f "$G_ENV" ]; then
+        _msg warn "Environment file $G_ENV not found. Create it based on the template."
+        cp -v "$G_DATA/deploy.env" "$G_ENV"
+    fi
     source "$G_ENV"
 
     ## ========================================================================
