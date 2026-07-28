@@ -12,18 +12,22 @@ ARG BUILD_TAG=3.9-amazoncorretto-17
 ARG RUN_IMAGE=amazoncorretto
 ARG RUN_TAG=17
 
+# 国内环境时设为 true，使用 Maven/NPM 等镜像
 ARG IN_CHINA=false
 # Maven profile，如 develop / main
 ARG MVN_PROFILE=main
+# 设为 true 可显示 Maven 详细日志
+ARG MVN_DEBUG=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 ARG BUILD_OUTPUT_DIR=/build_output
 
 #### 阶段 1：Maven 编译 ####
 FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
-## 构建参数 IN_CHINA 必须在 FROM 后面
-# 国内环境时设为 true，使用 Maven/NPM 等镜像
-# 设为 true 可显示 Maven 详细日志
-ARG MVN_DEBUG=false
+ARG IN_CHINA
+ARG MVN_PROFILE
+ARG MVN_DEBUG
+ARG BUILD_URL
+ARG BUILD_OUTPUT_DIR
 
 WORKDIR /src
 # 使用缓存加速 Maven 依赖；需在构建时 mount 源码到 /src
@@ -41,6 +45,8 @@ RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
 ARG IN_CHINA
 ARG MVN_PROFILE
+ARG MVN_DEBUG
+ARG BUILD_URL
 ARG BUILD_OUTPUT_DIR
 
 ARG TZ=Asia/Shanghai
@@ -50,7 +56,6 @@ ARG INSTALL_FONTS=false
 ARG INSTALL_FFMPEG=false
 # 是否安装 LibreOffice
 ARG INSTALL_LIBREOFFICE=false
-ARG BUILD_URL
 
 ENV TZ=$TZ
 # 应用目录，JAR 与配置放于此
