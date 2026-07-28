@@ -8,7 +8,7 @@ ARG RUN_IMAGE=redis
 ARG RUN_TAG=latest
 
 ARG IN_CHINA=false
-ARG INSTALL_NGINX=true
+ARG INSTALL_NGINX=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 
 # FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
@@ -27,11 +27,18 @@ ARG TZ=UTC
 
 ENV TZ=${TZ}
 
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
 VOLUME /data
 
 EXPOSE 6379
+WORKDIR /data
+
+RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
+    --mount=type=bind,target=/src,rw \
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    bash $BUILD_SH
 
 # COPY ./root/ /
 # CMD ["redis-server", "/usr/local/etc/redis/redis.conf"]

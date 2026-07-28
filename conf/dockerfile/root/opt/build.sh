@@ -642,6 +642,9 @@ EOF
 
 _build_redis() {
     echo "build redis ..."
+    if [ -n "$TZ" ]; then
+        ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" >/etc/timezone
+    fi
     if [ -f /etc/redis.conf ] && [ -n "${REDIS_PASSWORD}" ]; then
         sed -i -e "s/.*requirepass foobared/requirepass ${REDIS_PASSWORD}/" /etc/redis.conf
     fi
@@ -649,7 +652,7 @@ _build_redis() {
     cat >>/root/.bashrc <<'EOF'
 export REDISPASS_AUTH=${REDIS_PASSWORD}
 EOF
-    mkdir /run
+    mkdir -p /run/redis
     install -m 0755 -o redis -g redis -d /run/redis
 }
 
