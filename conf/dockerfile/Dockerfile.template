@@ -32,15 +32,24 @@ ARG APP_UID=1000
 ARG APP_GID=1000
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 ARG BUILD_OUTPUT_DIR=/build_output
+# 设为 true 可输出 Maven 详细日志
+ARG MVN_DEBUG=false
+ARG MVN_PROFILE=main
 
 ################################################################################
 # --- Example multi-stage build (if BUILD_IMAGE provided) -----------------------
 FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
-
 ARG IN_CHINA
+ARG MVN_DEBUG
+ARG MVN_PROFILE
+ARG APP_WORKDIR
+ARG APP_PORT
+ARG APP_USER
+ARG APP_UID
+ARG APP_GID
+ARG BUILD_OUTPUT_DIR
 ARG BUILD_URL
-# 设为 true 可输出 Maven 详细日志
-ARG MVN_DEBUG=false
+
 WORKDIR /src
 
 # Typical build step: mount source at /src and use caches for deps
@@ -56,11 +65,10 @@ RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
 
 ################################################################################
 # --- Runtime image -----------------------------------------------------------
-FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
-
+FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
 ARG IN_CHINA
+ARG MVN_DEBUG
 ARG MVN_PROFILE
-ARG TZ=Asia/Shanghai
 ARG APP_WORKDIR
 ARG APP_PORT
 ARG APP_USER
@@ -69,6 +77,7 @@ ARG APP_GID
 ARG BUILD_OUTPUT_DIR
 ARG BUILD_URL
 
+ARG TZ=Asia/Shanghai
 # 是否安装中文字体（报表/导出等）
 ARG INSTALL_FONTS=false
 # 是否安装 ffmpeg

@@ -284,17 +284,13 @@ EOF
 # Build base Docker images for the project
 # @param $1 image_tag The tag of the base image to build
 build_base_image() {
-  local image_tag="$1" registry proxy_url file_ext docker_bake_file
+  local image_tag="$1" registry proxy_url file_ext docker_bake_file tag_left tag_right
   registry="$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")"
+  [ -n "$registry" ] && registry="${registry%/}/"
   proxy_url="$(awk -F= '/^ENV_HTTP_PROXY=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")"
-  case "$image_tag" in
-  amazoncorretto:*)
-    file_ext=java
-    ;;
-  *)
-    file_ext="${image_tag%:*}"
-    ;;
-  esac
+  tag_left="${image_tag%:*}"
+  tag_right="${image_tag#*:}"
+  file_ext="${tag_left/amazoncorretto/java}" # Replace amazoncorretto with java for file extension
 
   docker_bake_file="${G_PATH}/conf/dockerfile/base-bake.hcl"
   cat >"${docker_bake_file}" <<EOF
@@ -307,18 +303,18 @@ target "default" {
     args = {
         IN_CHINA = "${IN_CHINA:-true}"
         CHANGE_SOURCE = "${CHANGE_SOURCE:-true}"
-        MIRROR = "${registry%/}/"
-        # BUILD_IMAGE = "${image_tag%:*}"
-        BUILD_TAG = "${image_tag#*:}"
+        MIRROR = "${registry}"
+        # BUILD_IMAGE = "${tag_left}"
+        BUILD_TAG = "${tag_right}"
         # RUN_IMAGE = "${RUN_IMAGE}"
-        RUN_TAG = "${image_tag#*:}"
+        RUN_TAG = "${tag_right}"
         HTTP_PROXY = "${proxy_url:-}"
         HTTPS_PROXY = "${proxy_url:-}"
         MVN_PROFILE = "base"
         MVN_DEBUG = "${MVN_DEBUG:-false}"
-        NODE_VERSION = "${image_tag#*:}"
-        PHP_VERSION = "${image_tag#*:}"
-        MYSQL_VERSION = "${image_tag#*:}"
+        NODE_VERSION = "${tag_right}"
+        PHP_VERSION = "${tag_right}"
+        MYSQL_VERSION = "${tag_right}"
     }
     tags = ["${registry%/}/${image_tag}-base"]
     output = ["type=image,push=true"]

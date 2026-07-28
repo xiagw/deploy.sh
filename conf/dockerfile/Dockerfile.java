@@ -4,7 +4,7 @@
 # =============================================================================
 
 #### 阶段 1：Maven 构建 ####
-# 基础镜像仓库前缀，如国内镜像
+# 国内环境时设为镜像地址 official/base/custom image
 ARG MIRROR=
 ARG BUILD_IMAGE=maven
 ARG BUILD_TAG=3.9-amazoncorretto-17
@@ -20,6 +20,12 @@ ARG MVN_PROFILE=main
 ARG MVN_DEBUG=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 ARG BUILD_OUTPUT_DIR=/build_output
+# 是否安装中文字体（报表/导出等）
+ARG INSTALL_FONTS=false
+# 是否安装 ffmpeg
+ARG INSTALL_FFMPEG=false
+# 是否安装 LibreOffice
+ARG INSTALL_LIBREOFFICE=false
 
 #### 阶段 1：Maven 编译 ####
 FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
@@ -48,14 +54,11 @@ ARG MVN_PROFILE
 ARG MVN_DEBUG
 ARG BUILD_URL
 ARG BUILD_OUTPUT_DIR
+ARG INSTALL_FONTS
+ARG INSTALL_FFMPEG
+ARG INSTALL_LIBREOFFICE
 
 ARG TZ=Asia/Shanghai
-# 是否安装中文字体（报表/导出等）
-ARG INSTALL_FONTS=false
-# 是否安装 ffmpeg
-ARG INSTALL_FFMPEG=false
-# 是否安装 LibreOffice
-ARG INSTALL_LIBREOFFICE=false
 
 ENV TZ=$TZ
 # 应用目录，JAR 与配置放于此
