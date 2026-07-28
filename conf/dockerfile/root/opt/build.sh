@@ -710,7 +710,7 @@ main() {
             command -v node ||
             command -v mysql ||
             command -v python ||
-            command -v redis ||
+            command -v redis-server ||
             command -v catalina.sh ||
             command -v memcached ||
             command -v rabbitmq
@@ -723,7 +723,7 @@ main() {
     */node) _build_node ;;
     */mysql) _build_mysql ;;
     */python) command -v mysqld >/dev/null || _build_python ;;
-    */redis) _build_redis ;;
+    */redis-server) _build_redis ;;
     */catalina.sh) _build_tomcat ;;
     */memcached) _build_memcached ;;
     */rabbitmq) _build_rabbitmq ;;
