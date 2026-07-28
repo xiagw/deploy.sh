@@ -90,7 +90,7 @@ config_deploy_vars() {
     ##   2. ENV_DOCKER_RANDOM=true:  $ENV_DOCKER_REGISTRY/$RANDOM_CHARS:$G_IMAGE_TAG
     if [[ "${ENV_DOCKER_RANDOM:-false}" = true ]]; then
         local chars
-        chars=({a..o})  # 字符集: a到o（共15个字符）
+        chars=({a..o}) # 字符集: a到o（共15个字符）
         ## 随机选取两个字符组合（可组合总数: 15*15=225个）
         G_IMAGE_NAME="${chars[$((RANDOM % ${#chars[@]}))]}${chars[$((RANDOM % ${#chars[@]}))]}"
     fi
@@ -192,7 +192,10 @@ parse_command_args() {
         -b | --git-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build operations
-        -x | --build-base) arg_flags["build_base"]=1 ;;
+        -x | --build-base)
+            arg_flags["build_base"]=1
+            [ -n "$2" ] && export dry_run="dry_run" && shift
+            ;;
         -B | --build)
             arg_flags["build_all"]=1
             image_retain="${2:-remove}"

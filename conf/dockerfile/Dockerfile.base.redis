@@ -7,8 +7,19 @@ ARG BUILD_TAG=latest
 ARG RUN_IMAGE=redis
 ARG RUN_TAG=latest
 
-# FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG}
-FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
+ARG IN_CHINA=false
+ARG INSTALL_NGINX=true
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+
+# FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
+# ARG IN_CHINA
+# ARG INSTALL_NGINX
+# ARG BUILD_URL
+
+FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
+ARG IN_CHINA
+ARG INSTALL_NGINX
+ARG BUILD_URL
 
 LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
 

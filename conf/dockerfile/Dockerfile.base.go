@@ -4,14 +4,13 @@
 ARG MIRROR=
 ARG BUILD_IMAGE=golang
 ARG BUILD_TAG=1.26
-
 ARG RUN_IMAGE=nginx
 ARG RUN_TAG=stable-alpine
 
 FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
 
-LABEL maintainer="DevOps Team"
-LABEL description="Go application build stage"
+LABEL maintainer="DevOps Team" \
+      description="Go application build stage"
 
 WORKDIR /src
 ENV CGO_ENABLED=0 \

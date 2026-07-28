@@ -302,7 +302,6 @@ target "default" {
     # platforms = ["linux/amd64"]
     args = {
         IN_CHINA = "${IN_CHINA:-true}"
-        CHANGE_SOURCE = "${CHANGE_SOURCE:-true}"
         MIRROR = "${registry}"
         # BUILD_IMAGE = "${tag_left}"
         BUILD_TAG = "${tag_right}"
@@ -321,12 +320,17 @@ target "default" {
     pull = true
 }
 EOF
+
+  if [ "${dry_run:-}" = dry_run ]; then
+    docker buildx bake --file "${docker_bake_file}" --progress=quiet --print
+    return
+  fi
+
   # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
   if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
     docker run --privileged --rm tonistiigi/binfmt --install all
   fi
 
-  # docker buildx bake --file "${docker_bake_file}" --progress=quiet --print
   docker buildx bake --file "${docker_bake_file}" --progress=plain
 }
 
@@ -338,7 +342,7 @@ select_image_tags() {
   all_tags=(
     "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4" "php:8.5"
     "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
-    "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:23"
+    "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:25" "amazoncorretto:26"
     "node:18" "node:20" "node:21" "node:22" "node:23" "node:24"
     "redis:latest"
     "nginx:stable-alpine"

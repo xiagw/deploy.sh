@@ -20,6 +20,7 @@ variable "MIRROR" { default = "" }
 variable "BUILD_IMAGE" { default = "maven" }
 variable "BUILD_TAG" { default = "3.9-amazoncorretto-17" }
 variable "BUILD_OUTPUT_DIR" { default = "/build_output" }
+variable "BUILD_MVN_DEBUG" { default = "false" }
 variable "BUILD_MVN_PROFILE" { default = "main" }
 variable "BUILD_INSTALL_FONTS" { default = "false" }
 variable "BUILD_INSTALL_FFMPEG" { default = "false" }
@@ -32,17 +33,14 @@ variable "IMAGE_REGISTRY" { default = "registry.cn-hangzhou.aliyuncs.com" }
 variable "IMAGE_NAME" { default = "flyh6/aa" }
 variable "IMAGE_TAG" { default = "1785066590202" }
 
-variable "PLATFORMS" { default = "linux/amd64" }
-
 variable "CONTEXT_PATH" { default = "." }
 variable "DOCKER_FILE" { default = "Dockerfile.template" }
 
 target "default" {
     context = "${CONTEXT_PATH}"
     dockerfile = "${DOCKER_FILE}"
-    platforms = ["${PLATFORMS}"]
-    # platforms = ["linux/amd64", "linux/arm64"]
-    platforms = ["linux/amd64"]
+    platforms = ["linux/amd64", "linux/arm64"]
+    # platforms = ["linux/amd64"]
     args = {
         IN_CHINA = "${IN_CHINA}"
         MIRROR = "${MIRROR}"
@@ -51,19 +49,23 @@ target "default" {
         RUN_IMAGE = "${RUN_IMAGE}"
         RUN_TAG = "${RUN_TAG}"
         BUILD_OUTPUT_DIR = "${BUILD_OUTPUT_DIR}"
+        BUILD_MVN_DEBUG = "${BUILD_MVN_DEBUG}"
         BUILD_MVN_PROFILE = "${BUILD_MVN_PROFILE}"
         BUILD_INSTALL_FONTS = "${BUILD_INSTALL_FONTS}"
         BUILD_INSTALL_FFMPEG = "${BUILD_INSTALL_FFMPEG}"
         BUILD_INSTALL_LIBREOFFICE = "${BUILD_INSTALL_LIBREOFFICE}"
     }
     tags = ["${IMAGE_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"]
+    output = ["type=image,push=true"]
+    pull = true
 }
 
 // Common specialized targets. Callers may override vars via --set or env vars.
 target "java" {
     inherits = ["default"]
     args = {
-        MVN_PROFILE = main
+        BUILD_MVN_DEBUG = "${BUILD_MVN_DEBUG}"
+        BUILD_MVN_PROFILE = "${BUILD_MVN_PROFILE}"
     }
 }
 

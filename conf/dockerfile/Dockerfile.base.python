@@ -6,8 +6,19 @@ ARG BUILD_TAG=3.12-slim
 ARG RUN_IMAGE=python
 ARG RUN_TAG=3.12-slim
 
-# FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG}
-FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
+ARG IN_CHINA=false
+ARG INSTALL_NGINX=true
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+
+# FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
+# ARG IN_CHINA
+# ARG INSTALL_NGINX
+# ARG BUILD_URL
+
+FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
+ARG IN_CHINA
+ARG INSTALL_NGINX
+ARG BUILD_URL
 
 # Set Timezone
 ARG TZ=UTC
