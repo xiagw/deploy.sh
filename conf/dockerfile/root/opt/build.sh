@@ -52,9 +52,9 @@ _set_mirror() {
     fi
 
     if [ "$(id -u)" -eq 0 ]; then
-        sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list* /etc/apt/sources.list.d/*.sources
+        sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list* /etc/apt/sources.list.d/*.sources || true
         # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
-        sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories*
+        sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories* || true
     fi
 
     case "$(command -v mvn || command -v composer || command -v node || command -v python || command -v python3)" in
