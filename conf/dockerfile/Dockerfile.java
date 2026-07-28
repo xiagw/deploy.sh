@@ -41,6 +41,8 @@ RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
 ARG IN_CHINA
 ARG MVN_PROFILE
+ARG BUILD_OUTPUT_DIR
+
 ARG TZ=Asia/Shanghai
 # 是否安装中文字体（报表/导出等）
 ARG INSTALL_FONTS=false
