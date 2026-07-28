@@ -284,80 +284,54 @@ EOF
 # Build base Docker images for the project
 # @param $1 image_tag The tag of the base image to build
 build_base_image() {
-  local tag="$1" registry base_tag cmd
-  registry=$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")
-  base_tag="${registry}/${tag}-base"
-  cmd=$(command -v docker || command -v podman || echo docker)
-  if [ -z "${HTTP_PROXY:-}" ]; then
-    HTTP_PROXY=$(awk -F= '/^ENV_HTTP_PROXY=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")
-    HTTPS_PROXY="${HTTP_PROXY}"
-  fi
-  cmd_opt=(
-    "$cmd"
-    build
-    --pull
-    --push
-    --progress=plain
-    --platform "linux/amd64,linux/arm64"
-    --build-arg CHANGE_SOURCE=true
-    --build-arg IN_CHINA=true
-    --build-arg HTTP_PROXY="${HTTP_PROXY:-}"
-    --build-arg HTTPS_PROXY="${HTTPS_PROXY:-}"
-  )
-
-  case "$tag" in
-  php:*)
-    cmd_opt+=(
-      --build-arg PHP_VERSION="${tag#*:}"
-      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-    )
-    ;;
-  redis:*)
-    cmd_opt+=(
-      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-    )
-    ;;
-  nginx:*)
-    cmd_opt+=(
-      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-    )
-    ;;
-  mysql:5*)
-    cmd_opt+=(
-      --build-arg MIRROR="${registry}/"
-      --build-arg MYSQL_VERSION="${tag#*:}"
-      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-    )
-    ;;
-  mysql:*)
-    cmd_opt+=(
-      --build-arg MYSQL_VERSION="${tag#*:}"
-      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-    )
-    ;;
+  local image_tag="$1" registry proxy_url file_ext docker_bake_file
+  registry="$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")"
+  proxy_url="$(awk -F= '/^ENV_HTTP_PROXY=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")"
+  case "$image_tag" in
   amazoncorretto:*)
-    cmd_opt+=(
-      --build-arg MVN_PROFILE="base"
-      --build-arg TAG="${tag#*:}"
-      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.java"
-    )
+    file_ext=java
     ;;
-  node:*)
-    cmd_opt+=(
-      --build-arg NODE_VERSION="${tag#*:}"
-      -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${tag%:*}"
-    )
+  *)
+    file_ext="${image_tag%:*}"
     ;;
   esac
-  cmd_opt+=(--tag "${base_tag}")
 
+  docker_bake_file="${G_PATH}/conf/dockerfile/base-bake.hcl"
+  cat >"${docker_bake_file}" <<EOF
+version = "0.1"
+target "default" {
+    context = "${G_PATH}/conf/dockerfile"
+    dockerfile = "${G_PATH}/conf/dockerfile/Dockerfile.base.${file_ext}"
+    platforms = ["linux/amd64", "linux/arm64"]
+    # platforms = ["linux/amd64"]
+    args = {
+        IN_CHINA = "${IN_CHINA:-true}"
+        CHANGE_SOURCE = "${CHANGE_SOURCE:-true}"
+        MIRROR = "${registry%/}/"
+        # BUILD_IMAGE = "${image_tag%:*}"
+        BUILD_TAG = "${image_tag#*:}"
+        # RUN_IMAGE = "${RUN_IMAGE}"
+        RUN_TAG = "${image_tag#*:}"
+        HTTP_PROXY = "${proxy_url:-}"
+        HTTPS_PROXY = "${proxy_url:-}"
+        MVN_PROFILE = "base"
+        MVN_DEBUG = "${MVN_DEBUG:-false}"
+        NODE_VERSION = "${image_tag#*:}"
+        PHP_VERSION = "${image_tag#*:}"
+        MYSQL_VERSION = "${image_tag#*:}"
+    }
+    tags = ["${registry%/}/${image_tag}-base"]
+    output = ["type=image,push=true"]
+    pull = true
+}
+EOF
   # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
   if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
-    ${cmd} run --privileged --rm tonistiigi/binfmt --install all
+    docker run --privileged --rm tonistiigi/binfmt --install all
   fi
 
-  cmd_opt+=("${G_PATH}/conf/dockerfile/")
-  "${cmd_opt[@]}"
+  # docker buildx bake --file "${docker_bake_file}" --progress=quiet --print
+  docker buildx bake --file "${docker_bake_file}" --progress=plain
 }
 
 # Build selected base images

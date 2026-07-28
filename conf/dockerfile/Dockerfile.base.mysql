@@ -1,10 +1,13 @@
 # MySQL 基础镜像，可选主从/双主复制；内置 mbk.sh 定时备份到 /backup。
 # 示例：docker build -f conf/dockerfile/Dockerfile.base.mysql -t mysql:base . && docker run -e MYSQL_ROOT_PASSWORD=xxx mysql:base
 ARG MIRROR=
-ARG IMAGE=mysql
-ARG TAG=8.0
+ARG BUILD_IMAGE=mysql
+ARG BUILD_TAG=8.0
+ARG RUN_IMAGE=mysql
+ARG RUN_TAG=8.0
 
-FROM ${MIRROR}${IMAGE}:${TAG}
+# FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG}
+FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
 
 LABEL MAINTAINER="xiagw <fxiaxiaoyu@gmail.com>"
 

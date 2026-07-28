@@ -87,13 +87,12 @@ config_deploy_vars() {
     ## 如果启用 ENV_DOCKER_RANDOM=true，会在仓库路径中添加随机字符前缀
     ## 格式说明:
     ##   1. ENV_DOCKER_RANDOM=false: $ENV_DOCKER_REGISTRY/$G_REPO_NAME:$G_IMAGE_TAG
-    ##   2. ENV_DOCKER_RANDOM=true:  $ENV_DOCKER_REGISTRY/$RANDOM_CHARS/$G_REPO_NAME:$G_IMAGE_TAG
+    ##   2. ENV_DOCKER_RANDOM=true:  $ENV_DOCKER_REGISTRY/$RANDOM_CHARS:$G_IMAGE_TAG
     if [[ "${ENV_DOCKER_RANDOM:-false}" = true ]]; then
-        local chars chars_rand
+        local chars
         chars=({a..o})  # 字符集: a到o（共15个字符）
         ## 随机选取两个字符组合（可组合总数: 15*15=225个）
-        chars_rand="${chars[$((RANDOM % ${#chars[@]}))]}${chars[$((RANDOM % ${#chars[@]}))]}"
-        ENV_DOCKER_REGISTRY="${ENV_DOCKER_REGISTRY}/${chars_rand}"
+        G_IMAGE_NAME="${chars[$((RANDOM % ${#chars[@]}))]}${chars[$((RANDOM % ${#chars[@]}))]}"
     fi
 
     ## 处理定时任务执行
@@ -236,7 +235,13 @@ parse_command_args() {
     done
 
     ## 设置Docker构建的静默模式（非调试模式下启用）
-    ${DEBUG_ON:-false} || export G_QUIET='--quiet'
+    if ${DEBUG_ON:-false}; then
+        export G_QUIET=''
+        export G_PROGRESS='--progress=plain'
+    else
+        export G_QUIET='--quiet'
+        export G_PROGRESS='--progress=quiet'
+    fi
 
     ## 检查是否有任何功能标志被启用
     ## 如果所有标志都为0，表示用户没有指定任何参数，将启用自动模式（所有任务）
@@ -300,7 +305,7 @@ config_build_env() {
     ## 调试模式配置
     ## 在调试模式下显示详细的构建进度信息
     if ${DEBUG_ON:-false}; then
-        G_ARGS+=" --progress plain"
+        G_ARGS+=" ${G_PROGRESS}"
     fi
 
     ## 配置Docker镜像镜像源（如果指定）
@@ -318,7 +323,7 @@ config_build_env() {
 
         ## 调试模式下启用Maven调试输出
         if ${DEBUG_ON:-false}; then
-            G_ARGS+=" --build-arg MVN_DEBUG=on"
+            G_ARGS+=" --build-arg MVN_DEBUG=true"
         fi
 
         ## 根据Java版本设置Maven和JDK版本
@@ -369,11 +374,12 @@ config_build_env() {
         ;;
     node:*)
         ## Node.js项目配置
-        ## 从语言标识中提取Node版本号（格式: node:20:dockerfile）
+        ## 从语言标识中提取Node版本号（格式: node:20:docker）
         local ver="${lang#*:}" # 移除 "node:" 前缀
-        ver="${ver%:*}"        # 移除 ":dockerfile" 后缀
-        ## 默认使用Node 20（如果未指定版本）
-        G_ARGS+=" --build-arg NODE_VERSION=${ver:-20}"
+        ver="${ver%:*}"        # 移除 ":docker" 后缀
+        ## 默认使用Node 22（如果未指定版本）
+        G_ARGS+=" --build-arg RUN_TAG=${ver:-22}"
+        RUN_TAG="${ver:-22}"
         ;;
     esac
 

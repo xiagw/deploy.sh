@@ -440,7 +440,7 @@ repo_language_detect_and_build() {
     esac
 
     # Build using buildpack
-    pack build "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
+    pack build "${ENV_DOCKER_REGISTRY%/}/${G_IMAE_NAME}:${G_IMAGE_TAG}" \
         --builder "$builder" \
         --path "$target_dir"
 }

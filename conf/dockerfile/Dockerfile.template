@@ -1,0 +1,112 @@
+# Generic Dockerfile template for projects that use build-time mounts and ARGs.
+#
+# Usage examples:
+#  docker build -f conf/dockerfile/Dockerfile.template \
+#    --build-arg MIRROR=registry.cn-hangzhou.aliyuncs.com/flyh5/ \
+#    --build-arg IMAGE_TYPE=java \
+#    --build-arg IN_CHINA=true \
+#    -t myapp:latest .
+#
+# This template covers two common flows:
+#  - BUILD stage: use `--mount=type=bind,target=/src` and cache mounts for dependencies
+#  - RUNTIME stage: parameterized base image, ports, volumes and an overridable CMD
+#
+# Notes:
+#  - Intended as a starting point. Specialized service images (MySQL/Redis), or
+#    tooling-only images (composer/phpcs/easyswoole) may still keep small custom Dockerfiles.
+#  - The template uses `ARG` and shell-time conditionals to enable/disable features.
+
+################################################################################
+# Common build args (customize per-invocation) registry.cn-hangzhou.aliyuncs.com/flyh5/
+ARG MIRROR=
+ARG IN_CHINA=false
+ARG IMAGE_TYPE=java
+ARG BUILD_IMAGE=maven
+ARG BUILD_TAG=3.9-amazoncorretto-17
+ARG RUN_IMAGE=amazoncorretto
+ARG RUN_TAG=17-base
+ARG APP_PORT=8080
+ARG APP_WORKDIR=/app
+ARG APP_USER=1000
+ARG APP_UID=1000
+ARG APP_GID=1000
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG BUILD_OUTPUT_DIR=/build_output
+
+################################################################################
+# --- Example multi-stage build (if BUILD_IMAGE provided) -----------------------
+FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
+
+ARG IN_CHINA
+ARG BUILD_URL
+# 设为 true 可输出 Maven 详细日志
+ARG MVN_DEBUG=false
+WORKDIR /src
+
+# Typical build step: mount source at /src and use caches for deps
+RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
+    --mount=type=bind,target=/src,rw \
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    bash $BUILD_SH
+    ## 假如此处中断，表明 maven build 失败，请检查代码
+
+
+################################################################################
+# --- Runtime image -----------------------------------------------------------
+FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
+
+ARG IN_CHINA
+ARG MVN_PROFILE
+ARG TZ=Asia/Shanghai
+ARG APP_WORKDIR
+ARG APP_PORT
+ARG APP_USER
+ARG APP_UID
+ARG APP_GID
+ARG BUILD_OUTPUT_DIR
+ARG BUILD_URL
+
+# 是否安装中文字体（报表/导出等）
+ARG INSTALL_FONTS=false
+# 是否安装 ffmpeg
+ARG INSTALL_FFMPEG=false
+# 是否安装 LibreOffice
+ARG INSTALL_LIBREOFFICE=false
+
+ENV TZ=$TZ
+WORKDIR ${APP_WORKDIR}
+EXPOSE ${APP_PORT}
+VOLUME ["${APP_WORKDIR}"]
+
+# If a build script exists in the source mount, run it here (reuse same build steps)
+RUN --mount=type=cache,target=/var/lib/apt/lists,id=apt_cache,sharing=shared  \
+    --mount=type=cache,target=/var/cache/yum,id=yum_cache,sharing=shared  \
+    --mount=type=bind,target=/src,rw \
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    bash $BUILD_SH
+
+# 从构建阶段拷贝已打包的 JAR（build.sh 会输出到 /build_output/）
+COPY --from=builder /build_output/ .
+
+# Default startup: overridable by setting the environment variable `START_CMD`
+CMD ["bash","-c","/opt/run0.sh"]
+
+################################################################################
+# Helper notes (keep in repo README or next to template):
+# - To specialize for Java: call with --build-arg BUILD_IMAGE=maven --build-arg BUILD_TAG=3.8-amazoncorretto-8 \
+#     --build-arg RUN_IMAGE=amazoncorretto --build-arg RUN_TAG=8 --build-arg BUILD_OUTPUT_DIR=/build_output
+# - To specialize for Go: BUILD_IMAGE=golang, BUILD_OUTPUT_DIR=/bin
+# - For Node: BUILD_IMAGE=node, and BUILD_SH should implement `npm ci && npm run build` writing to /dist
+# - If you only need a runtime image (no builder), omit BUILD_IMAGE/BUILD_TAG and use RUN_IMAGE/RUN_TAG only.
+# - Example build command (Java):
+#   docker build -f conf/dockerfile/Dockerfile.template \
+#     --build-arg BUILD_IMAGE=maven --build-arg BUILD_TAG=3.8-amazoncorretto-8 \
+#     --build-arg RUN_IMAGE=amazoncorretto --build-arg RUN_TAG=8 \
+#     --build-arg IMAGE_TYPE=java --build-arg IN_CHINA=true \
+#     -t myapp:java .

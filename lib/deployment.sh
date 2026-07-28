@@ -81,7 +81,7 @@ deploy_to_kubernetes() {
         --hide-notes
         --timeout 120s
         --set "image.pullPolicy='Always'"
-        --set "image.repository=${ENV_DOCKER_REGISTRY},image.tag=${G_IMAGE_TAG}"
+        --set "image.repository=${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME},image.tag=${G_IMAGE_TAG}"
     )
     if [ "${G_NAMESPACE}" != main ]; then
         helm_args+=("--set" "replicaCount=1")
@@ -109,7 +109,7 @@ deploy_to_kubernetes() {
     # Record current image info / 记录当前镜像信息
     [ -d "${G_DATA}/image_logs" ] || mkdir -p "${G_DATA}/image_logs"
     local image_record_file="${G_DATA}/image_logs/${release_name}-${G_NAMESPACE}-last-tag"
-    local current_image="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
+    local current_image="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
     # Read and delete previous image if exists / 如果存在则读取并删除上一个镜像
     if [[ -f "${image_record_file}" && "${deploy_result:-0}" -eq 0 ]]; then
         previous_image=$(cat "${image_record_file}")
@@ -167,7 +167,7 @@ deploy_aliyun_functions() {
     functions_conf_tmpl="$G_DATA/aliyun.functions.${lang}.json"
     functions_conf="$G_DATA/aliyun.functions.json"
     if [ -f "$functions_conf_tmpl" ]; then
-        TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_TAG=${G_IMAGE_TAG} envsubst <"$functions_conf_tmpl" >"$functions_conf"
+        TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_NAME=${G_IMAGE_NAME} TEMPLATE_TAG=${G_IMAGE_TAG} envsubst <"$functions_conf_tmpl" >"$functions_conf"
     else
         functions_conf="$(mktemp)"
         cat >"$functions_conf" <<EOF
@@ -181,7 +181,7 @@ deploy_aliyun_functions() {
     "handler": "index.handler",
     "instanceConcurrency": 200,
     "customContainerConfig": {
-        "image": "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}",
+        "image": "${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}",
         "port": 8080,
         "healthCheckConfig": {
             "initialDelaySeconds": 5
@@ -193,7 +193,7 @@ EOF
 
     if aliyun -p "${ENV_ALIYUN_PROFILE-}" fc GET /2023-03-30/functions --prefix "${release_name:0:3}" --limit 100 --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "${release_name}$"; then
         _msg time "Updating function: $release_name"
-        aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}\"}}"
+        aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}\"}}"
     else
         _msg time "Creating new function: $release_name"
         aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"

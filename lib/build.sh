@@ -82,7 +82,7 @@ build_image() {
 
     base_file="${G_REPO_DIR}/Dockerfile.base"
     if [[ -f "${base_file}" ]]; then
-        base_tag="${ENV_DOCKER_REGISTRY%/*}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
+        base_tag="${ENV_DOCKER_REGISTRY%/}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
         echo "Found ${base_file}, building base image:"
         echo "  ${base_tag}"
         echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
@@ -96,8 +96,36 @@ build_image() {
         fi
     fi
 
-    repo_tag="${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}"
-    # echo "$G_DOCK build $G_ARGS --tag ${repo_tag} ${push_flag} ${G_REPO_DIR}"  && exit
+    repo_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
+
+    docker_bake_file="${G_REPO_DIR}/docker-bake.hcl"
+    cat >"${docker_bake_file}" <<EOF
+version = "0.1"
+target "default" {
+    context = "${G_REPO_DIR}"
+    dockerfile = "${G_REPO_DIR}/Dockerfile"
+    platforms = ["linux/amd64"]
+    args = {
+        IN_CHINA = "${ENV_IN_CHINA}"
+        MIRROR = "${ENV_DOCKER_MIRROR%/}/"
+        # BUILD_IMAGE = "${BUILD_IMAGE}"
+        BUILD_TAG = "${BUILD_TAG}"
+        # RUN_IMAGE = "${RUN_IMAGE}"
+        RUN_TAG = "${RUN_TAG}"
+        MVN_PROFILE = "${G_REPO_BRANCH}"
+        MVN_DEBUG = "${MVN_DEBUG}"
+        BUILD_OUTPUT_DIR = "/build_output"
+        INSTALL_FONTS = "${INSTALL_FONTS:-false}"
+        INSTALL_FFMPEG = "${INSTALL_FFMPEG:-false}"
+        INSTALL_LIBREOFFICE = "${INSTALL_LIBREOFFICE:-false}"
+    }
+    tags = ["${repo_tag}"]
+}
+EOF
+    # echo "$G_DOCK build $G_ARGS --tag ${repo_tag} ${push_flag} ${G_REPO_DIR}"
+    $G_DOCK buildx bake --file "${docker_bake_file}" --print ${G_PROGRESS} # && exit || exit
+    # $G_DOCK buildx bake --file "${docker_bake_file}" ${push_flag} ${G_PROGRESS} 2>&1 | grep -v 'error reading preface from client dummy'
+
     $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | grep -v 'error reading preface from client dummy'
     _msg time "[build] Image build completed"
 
@@ -119,7 +147,7 @@ build_image() {
 
     # 根据参数决定是否保留镜像
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
-        $G_DOCK rmi "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" >/dev/null &
+        $G_DOCK rmi "${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}" >/dev/null &
         _msg time "Image removed on $G_DOCK"
     else
         _msg time "Image keeped on $G_DOCK"
@@ -625,7 +653,7 @@ EOF
     esac
 
     # 使用buildpack构建镜像
-    pack build "${ENV_DOCKER_REGISTRY}:${G_IMAGE_TAG}" \
+    pack build "${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}" \
         --builder "$builder" \
         --env BP_INCLUDE_FILES="project.toml" \
         --path "$target_dir"

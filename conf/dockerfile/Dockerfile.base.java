@@ -4,13 +4,16 @@
 # 示例：docker build -f conf/dockerfile/Dockerfile.base.java -t myapp:base .
 # =============================================================================
 ARG MIRROR=
-ARG IMAGE=amazoncorretto
-ARG TAG=8
+ARG BUILD_IMAGE=amazoncorretto
+ARG BUILD_TAG=17
+ARG RUN_IMAGE=amazoncorretto
+ARG RUN_TAG=17
 
 ARG IN_CHINA=false
-ARG MVN_PROFILE=main
+ARG MVN_PROFILE=base
 
-FROM ${MIRROR}${IMAGE}:${TAG}
+# FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG}
+FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
 
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>" \
     org.opencontainers.image.authors="xiagw <fxiaxiaoyu@gmail.com>" \

@@ -66,7 +66,7 @@ repo_inject_file() {
                         echo "Copying Dockerfile.base.${lang}..."
                         cp -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${lang}" "${G_REPO_DIR}/Dockerfile.base"
                     fi
-                    base_tag="${ENV_DOCKER_REGISTRY%/*}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
+                    base_tag="${ENV_DOCKER_REGISTRY%/}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
                     echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
                 fi
                 ;;

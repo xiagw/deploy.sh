@@ -43,7 +43,7 @@ _set_mirror() {
 
     if _is_china; then
         url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
-        url_laradock_raw=https://gitee.com/xiagw/laradock/raw/in-china
+        url_laradock_raw=https://gitee.com/xiagw/laradock/raw/china
     else
         url_deploy_raw=https://github.com/xiagw/deploy.sh/raw/main
         # shellcheck disable=SC2034
@@ -52,17 +52,9 @@ _set_mirror() {
     fi
 
     if [ "$(id -u)" -eq 0 ]; then
-        ## OS ubuntu:22.04 php
-        if [ -f /etc/apt/sources.list ]; then
-            sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-        ## OS Debian
-        elif [ -f /etc/apt/sources.list.d/debian.sources ]; then
-            sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
-        ## OS alpine, nginx:alpine
-        elif [ -f /etc/apk/repositories ]; then
-            # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
-            sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
-        fi
+        sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list* /etc/apt/sources.list.d/*.sources
+        # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
+        sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories*
     fi
 
     case "$(command -v mvn || command -v composer || command -v node || command -v python || command -v python3)" in
@@ -222,9 +214,11 @@ _build_nginx() {
 }
 
 _build_php() {
+    build_output=/build_output
+    mkdir -p $build_output
     if [ "${1}" = swoole ]; then
         ext_dir="$(php -r 'echo ini_get("extension_dir");')"
-        cp "$ext_dir"/swoole.so /
+        cp "$ext_dir"/swoole.so $build_output/
         return
     fi
 
@@ -294,11 +288,11 @@ _build_php() {
         ;;
     esac
 
-    if [ -f /swoole.so ]; then
+    if [ -f "$build_output/swoole.so" ]; then
         $cmd_pkg_opt libpq-dev
         ext_dir="$(php -r 'echo ini_get("extension_dir");')"
-        mv /swoole.so "$ext_dir"/
-        echo "extension=swoole.so" >/etc/php/"${PHP_VERSION}"/mods-available/swoole.ini
+        mv "$build_output/swoole.so" "$ext_dir"/
+        echo "extension=swoole.so" >"/etc/php/${PHP_VERSION}/mods-available/swoole.ini"
         phpenmod swoole
     fi
     # apt-get update && apt-get install -y libpq-dev # php"${PHP_VERSION}"-dev
@@ -376,18 +370,19 @@ _build_node() {
 _build_maven() {
     # Set up Maven options with standard parameters
     mvn_opts="mvn -T 1C --batch-mode --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package"
-    [ "$MVN_DEBUG" = off ] && mvn_opts+=" --quiet"
+    [ "$MVN_DEBUG" = false ] && mvn_opts+=" --quiet"
     [ -f "$HOME/.m2/settings.xml" ] && mvn_opts+=" --settings=$HOME/.m2/settings.xml"
 
     # Run Maven build
     $mvn_opts
 
-    # Copy artifacts to /jars directory: only runnable modules (with spring-boot-maven-plugin)
+    # Copy artifacts to /build_output directory: only runnable modules (with spring-boot-maven-plugin)
     # to avoid copying library module jars (e.g. ruoyi-core, ruoyi-common) that are not deployed.
-    mkdir -p /jars
+    build_output=/build_output
+    mkdir -p $build_output
     _copy_app_jars() {
         find "$@" -not -iname '*-sources.jar' -not -iname '*-javadoc.jar' \
-            -not -iname '*-tests.jar' -not -iname '*-original.jar' -exec cp -v {} /jars/ \;
+            -not -iname '*-tests.jar' -not -iname '*-original.jar' -exec cp -v {} $build_output/ \;
     }
     app_poms=$(find . -name 'pom.xml' -exec grep -l 'spring-boot-maven-plugin' {} \; 2>/dev/null)
     if [ -n "$app_poms" ]; then
@@ -401,9 +396,9 @@ _build_maven() {
     fi
 
     # Copy config files if needed
-    [ -f /src/.jvm.options ] && cp -v /src/.jvm.options /jars/
-    [ -f /src/jvm.options ] && cp -v /src/jvm.options /jars/
-    [ -d /src/cert ] && cp -rv /src/cert /jars/
+    [ -f /src/.jvm.options ] && cp -v /src/.jvm.options $build_output/
+    [ -f /src/jvm.options ] && cp -v /src/jvm.options $build_output/
+    [ -d /src/cert ] && cp -rv /src/cert $build_output/
 
     local i=0
     while IFS= read -r file; do
@@ -411,7 +406,7 @@ _build_maven() {
         # Get only the first directory level using awk, handling all path cases
         first_dir=$(echo "$file" | awk -F/ '{for(i=1;i<=NF;i++) if($i!="." && $i!="") {print $i; exit}}')
         # Copy file with first directory as prefix
-        cp -v "$file" "/jars/${first_dir}_$(basename "$file")"
+        cp -v "$file" "$build_output/${first_dir}_$(basename "$file")"
     done < <(
         find . -type f -path "*/src/*/resources/*" \( -iname "*${MVN_PROFILE:-main}*.yml" -o -iname "*${MVN_PROFILE:-main}*.yaml" \)
     )
@@ -489,9 +484,6 @@ _build_jdk_runtime() {
 }
 
 _build_jmeter() {
-    if [ "$CHANGE_SOURCE" = true ] || [ "$IN_CHINA" = true ]; then
-        sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-    fi
     apt-get update
     apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip
     curl -fL "https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz" | tar -C /opt/ -xz
@@ -687,18 +679,18 @@ main() {
 
     echo "build log file: $me_log"
 
-    if [ "$1" = swoole ]; then
-        _build_php swoole
-        return
-    fi
-
     _set_mirror
 
-    # 单独处理 PHP_VERSION
-    if [ -n "$PHP_VERSION" ]; then
-        _build_php
+    case "$1" in
+    swoole)
+        _build_php swoole
         return
-    fi
+        ;;
+    php)
+        _build_php php
+        return
+        ;;
+    esac
 
     case "$(
         command -v nginx ||

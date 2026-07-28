@@ -1,18 +1,37 @@
 # Node 基础镜像，构建时安装 npm 依赖，运行由 run1.sh 执行 npm run start。
 # 示例：docker build -f conf/dockerfile/Dockerfile.base.node --build-arg IN_CHINA=true -t mynode:base .
+
 ARG MIRROR=
-ARG IMAGE=node
-ARG TAG=20-slim
-
-ARG IN_CHINA=true
+ARG IN_CHINA=false
+ARG IMAGE_TYPE=node
+ARG BUILD_IMAGE=node
+ARG BUILD_TAG=22-slim
+ARG RUN_IMAGE=node
+ARG RUN_TAG=22-slim
+ARG APP_PORT=8080
+ARG APP_WORKDIR=/app
+ARG APP_USER=1000
+ARG APP_UID=1000
+ARG APP_GID=1000
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG BUILD_OUTPUT_DIR=/build_output
 
-FROM ${MIRROR}${IMAGE}:${TAG}
+## 阶段 1
+# FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
+# WORKDIR /app
+# 只复制 package.json 和锁文件（利用缓存的关键）
+# COPY package.json package-lock.json* ./
+# 安装依赖（如果 package.json 没变，这一步和上面那步都会直接走缓存）
+# RUN npm ci
 
+## 阶段 2
+FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
 # 设置时区和语言
 # ENV TZ=Asia/Shanghai \
 #     LANG=C.UTF-8
 
+ARG BUILD_URL
+ARG BUILD_OUTPUT_DIR
 
 # 设置工作目录
 WORKDIR /app
