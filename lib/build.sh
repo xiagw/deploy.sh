@@ -106,14 +106,16 @@ target "default" {
     dockerfile = "${G_REPO_DIR}/Dockerfile"
     platforms = ["linux/amd64"]
     args = {
-        IN_CHINA = "${ENV_IN_CHINA}"
-        MIRROR = "${ENV_DOCKER_MIRROR%/}/"
-        # BUILD_IMAGE = "${BUILD_IMAGE}"
+        IN_CHINA = ENV_IN_CHINA == "" ? null : ENV_IN_CHINA
+        MIRROR = "${ENV_DOCKER_MIRROR}"
+        BUILD_IMAGE = BUILD_IMAGE == "" ? null : BUILD_IMAGE
         BUILD_TAG = "${BUILD_TAG}"
-        # RUN_IMAGE = "${RUN_IMAGE}"
+        RUN_IMAGE = RUN_IMAGE == "" ? null : RUN_IMAGE
         RUN_TAG = "${RUN_TAG}"
         MVN_PROFILE = "${G_REPO_BRANCH}"
-        MVN_DEBUG = "${MVN_DEBUG:-false}"
+        MVN_DEBUG = MVN_DEBUG == "" ? null : MVN_DEBUG
+        MVN_COPY_YAML = MVN_COPY_YAML == "" ? null : MVN_COPY_YAML
+        MVN_SKIP_TESTS = MVN_SKIP_TESTS == "" ? null : MVN_SKIP_TESTS
         BUILD_OUTPUT_DIR = "/build_output"
         INSTALL_FONTS = "${INSTALL_FONTS:-false}"
         INSTALL_FFMPEG = "${INSTALL_FFMPEG:-false}"
