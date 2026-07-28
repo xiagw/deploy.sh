@@ -122,10 +122,10 @@ target "default" {
     tags = ["${repo_tag}"]
 }
 EOF
-    # echo "$G_DOCK build $G_ARGS --tag ${repo_tag} ${push_flag} ${G_REPO_DIR}"
-    $G_DOCK buildx bake --file "${docker_bake_file}" --print ${G_PROGRESS} # && exit || exit
+    # $G_DOCK buildx bake --file "${docker_bake_file}" --print ${G_PROGRESS}
     # $G_DOCK buildx bake --file "${docker_bake_file}" ${push_flag} ${G_PROGRESS} 2>&1 | grep -v 'error reading preface from client dummy'
 
+    # echo "$G_DOCK build $G_ARGS --tag ${repo_tag} ${push_flag} ${G_REPO_DIR}"
     $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | grep -v 'error reading preface from client dummy'
     _msg time "[build] Image build completed"
 
