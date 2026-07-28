@@ -113,7 +113,7 @@ target "default" {
         # RUN_IMAGE = "${RUN_IMAGE}"
         RUN_TAG = "${RUN_TAG}"
         MVN_PROFILE = "${G_REPO_BRANCH}"
-        MVN_DEBUG = "${MVN_DEBUG}"
+        MVN_DEBUG = "${MVN_DEBUG:-false}"
         BUILD_OUTPUT_DIR = "/build_output"
         INSTALL_FONTS = "${INSTALL_FONTS:-false}"
         INSTALL_FFMPEG = "${INSTALL_FFMPEG:-false}"

@@ -370,7 +370,7 @@ _build_node() {
 _build_maven() {
     # Set up Maven options with standard parameters
     mvn_opts="mvn -T 1C --batch-mode --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package"
-    [ "$MVN_DEBUG" = false ] && mvn_opts+=" --quiet"
+    [ "${MVN_DEBUG:-false}" = false ] && mvn_opts+=" --quiet"
     [ -f "$HOME/.m2/settings.xml" ] && mvn_opts+=" --settings=$HOME/.m2/settings.xml"
 
     # Run Maven build
