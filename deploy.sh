@@ -311,7 +311,7 @@ config_build_env() {
     ## 配置Docker镜像镜像源（如果指定）
     ## 用于加速镜像拉取（特别是在中国地区）
     if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-        G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR}/"
+        G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR%/}/"
     fi
 
     ## 根据项目语言类型配置特定的构建参数
