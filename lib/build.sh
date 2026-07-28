@@ -97,6 +97,7 @@ build_image() {
     fi
 
     repo_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
+    [ -n "$ENV_DOCKER_MIRROR" ] && ENV_DOCKER_MIRROR="${ENV_DOCKER_MIRROR%/}/"
 
     docker_bake_file="${G_REPO_DIR}/docker-bake.hcl"
     cat >"${docker_bake_file}" <<EOF
@@ -104,18 +105,17 @@ version = "0.1"
 target "default" {
     context = "${G_REPO_DIR}"
     dockerfile = "${G_REPO_DIR}/Dockerfile"
+    # platforms = ["linux/amd64", "linux/arm64"]
     platforms = ["linux/amd64"]
     args = {
-        IN_CHINA = ENV_IN_CHINA == "" ? null : ENV_IN_CHINA
+        IN_CHINA = "${ENV_IN_CHINA}"
         MIRROR = "${ENV_DOCKER_MIRROR}"
-        BUILD_IMAGE = BUILD_IMAGE == "" ? null : BUILD_IMAGE
+        # BUILD_IMAGE = "${BUILD_IMAGE}"
         BUILD_TAG = "${BUILD_TAG}"
-        RUN_IMAGE = RUN_IMAGE == "" ? null : RUN_IMAGE
+        # RUN_IMAGE = "${RUN_IMAGE}"
         RUN_TAG = "${RUN_TAG}"
         MVN_PROFILE = "${G_REPO_BRANCH}"
-        MVN_DEBUG = MVN_DEBUG == "" ? null : MVN_DEBUG
-        MVN_COPY_YAML = MVN_COPY_YAML == "" ? null : MVN_COPY_YAML
-        MVN_SKIP_TESTS = MVN_SKIP_TESTS == "" ? null : MVN_SKIP_TESTS
+        MVN_DEBUG = "${MVN_DEBUG:-false}"
         BUILD_OUTPUT_DIR = "/build_output"
         INSTALL_FONTS = "${INSTALL_FONTS:-false}"
         INSTALL_FFMPEG = "${INSTALL_FFMPEG:-false}"
