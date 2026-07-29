@@ -217,14 +217,19 @@ _build_nginx() {
     if /usr/sbin/nginx -V 2>&1 | grep -q 'with-http_geoip2_module'; then
         echo "GeoIP2 module successfully installed."
     fi
+
+    ## 产物按最终根文件系统布局暂存，final 阶段 COPY ${BUILD_OUTPUT_DIR}/ /
+    mkdir -p "${BUILD_OUTPUT_DIR:-/build_output}/usr/sbin"
+    cp -f /usr/sbin/nginx "${BUILD_OUTPUT_DIR:-/build_output}/usr/sbin/"
 }
 
 _build_php() {
-    build_output=/build_output
-    mkdir -p $build_output
+    build_output="${BUILD_OUTPUT_DIR:-/build_output}"
     if [ "${1}" = swoole ]; then
+        ## 产物暂存到 ${BUILD_OUTPUT_DIR}/tmp，final 阶段 COPY 后位于 /tmp/swoole.so
+        mkdir -p "$build_output/tmp"
         ext_dir="$(php -r 'echo ini_get("extension_dir");')"
-        cp "$ext_dir"/swoole.so $build_output/
+        cp "$ext_dir"/swoole.so "$build_output/tmp/"
         return
     fi
 
@@ -294,10 +299,12 @@ _build_php() {
         ;;
     esac
 
-    if [ -f "$build_output/swoole.so" ]; then
+    swoole_so=/tmp/swoole.so
+    [ -f "$swoole_so" ] || swoole_so="$build_output/swoole.so"
+    if [ -f "$swoole_so" ]; then
         $cmd_pkg_opt libpq-dev
         ext_dir="$(php -r 'echo ini_get("extension_dir");')"
-        mv "$build_output/swoole.so" "$ext_dir"/
+        mv "$swoole_so" "$ext_dir"/
         echo "extension=swoole.so" >"/etc/php/${PHP_VERSION}/mods-available/swoole.ini"
         phpenmod swoole
     fi
@@ -381,23 +388,38 @@ _build_maven() {
     # Run Maven build
     $mvn_opts
 
-    # Copy artifacts to /build_output directory: only runnable modules (with spring-boot-maven-plugin)
+    # Copy artifacts: only runnable modules (with spring-boot-maven-plugin)
     # to avoid copying library module jars (e.g. ruoyi-core, ruoyi-common) that are not deployed.
-    build_output=/build_output
-    mkdir -p $build_output
+    ## 产物按最终根文件系统布局暂存（jar → /app），final 阶段 COPY ${BUILD_OUTPUT_DIR}/ /
+    build_output="${BUILD_OUTPUT_DIR:-/build_output}/app"
+    mkdir -p "$build_output"
     _copy_app_jars() {
-        find "$@" -not -iname '*-sources.jar' -not -iname '*-javadoc.jar' \
-            -not -iname '*-tests.jar' -not -iname '*-original.jar' -exec cp -v {} $build_output/ \;
+        local f
+        for f in "$@"/*.jar; do
+            [ -f "$f" ] || continue
+            case "$(basename "$f")" in
+            *-sources.jar | *-javadoc.jar | *-tests.jar | *-original.jar) continue ;;
+            esac
+            cp -v "$f" "$build_output/"
+        done
     }
-    app_poms=$(find . -name 'pom.xml' -exec grep -l 'spring-boot-maven-plugin' {} \; 2>/dev/null)
+    ## bash globstar 替代 find（精简镜像可能没有 findutils）
+    shopt -s globstar nullglob extglob nocasematch 2>/dev/null
+    app_poms=""
+    for pom in ./**/pom.xml; do
+        grep -q 'spring-boot-maven-plugin' "$pom" && app_poms+="$pom"$'\n'
+    done
+    if [ -z "$app_poms" ] && [ -f ./pom.xml ]; then
+        grep -q 'spring-boot-maven-plugin' ./pom.xml && app_poms="./pom.xml"$'\n'
+    fi
     if [ -n "$app_poms" ]; then
         for pom in $app_poms; do
             dir=$(dirname "$pom")
-            [ -d "$dir/target" ] && _copy_app_jars "$dir/target" -maxdepth 1 -type f -name '*.jar'
+            [ -d "$dir/target" ] && _copy_app_jars "$dir/target"
         done
     else
         # Fallback: no Spring Boot app module found, copy all non-auxiliary jars (e.g. plain Maven project)
-        _copy_app_jars . -type f -path "*/target/*.jar"
+        _copy_app_jars ./**/target
     fi
 
     # Copy config files if needed
@@ -405,16 +427,24 @@ _build_maven() {
     [ -f /src/jvm.options ] && cp -v /src/jvm.options $build_output/
     [ -d /src/cert ] && cp -rv /src/cert $build_output/
 
-    local i=0
-    while IFS= read -r file; do
-        ((++i))
-        # Get only the first directory level using awk, handling all path cases
-        first_dir=$(echo "$file" | awk -F/ '{for(i=1;i<=NF;i++) if($i!="." && $i!="") {print $i; exit}}')
-        # Copy file with first directory as prefix
+    for file in ./**/src/*/resources/*${MVN_PROFILE:-main}*.yml ./**/src/*/resources/*${MVN_PROFILE:-main}*.yaml; do
+        [ -f "$file" ] || continue
+        first_dir="${file#./}"
+        first_dir="${first_dir%%/*}"
         cp -v "$file" "$build_output/${first_dir}_$(basename "$file")"
-    done < <(
-        find . -type f -path "*/src/*/resources/*" \( -iname "*${MVN_PROFILE:-main}*.yml" -o -iname "*${MVN_PROFILE:-main}*.yaml" \)
-    )
+    done
+}
+
+_build_go() {
+    echo "Building go application..."
+    ## 产物按最终根文件系统布局暂存（二进制 → /app/server），final 阶段 COPY ${BUILD_OUTPUT_DIR}/ /
+    build_output="${BUILD_OUTPUT_DIR:-/build_output}/app"
+    mkdir -p "$build_output"
+    export CGO_ENABLED=0
+    _is_china && export GOPROXY=https://goproxy.cn,direct
+    cd /src || exit 1
+    go mod download
+    go build -ldflags='-s -w' -o "$build_output/server" .
 }
 
 _build_jdk_runtime() {
@@ -475,10 +505,22 @@ _build_jdk_runtime() {
     id spring || useradd -u 1000 -s /bin/bash -m spring
 
     # Create profile file if no yml/yaml files exist
-    if ! find /app -maxdepth 2 -type f \( -iname "*.yml" -o -iname "*.yaml" \) | grep -q .; then
-        if [ "${MVN_PROFILE}" != base ]; then
-            touch "/app/profile.${MVN_PROFILE:-main}"
-        fi
+    _has_yml=false
+    if ! command -v find >/dev/null 2>&1; then
+        ${update_cache:-false} && $cmd_pkg update -yqq
+        $cmd_pkg install -y findutils 2>/dev/null || true
+    fi
+    if command -v find >/dev/null 2>&1; then
+        find /app -maxdepth 2 -type f \( -iname "*.yml" -o -iname "*.yaml" \) | grep -q . && _has_yml=true
+    else
+        # Fallback to bash builtin compgen when find is unavailable
+        for _pattern in "/app/*.yml" "/app/*.yaml" "/app/*.YML" "/app/*.YAML" \
+                        "/app/*/*.yml" "/app/*/*.yaml" "/app/*/*.YML" "/app/*/*.YAML"; do
+            compgen -G "$_pattern" >/dev/null 2>&1 && { _has_yml=true; break; }
+        done
+    fi
+    if ! $_has_yml && [ "${MVN_PROFILE}" != base ]; then
+        touch "/app/profile.${MVN_PROFILE:-main}"
     fi
 
     # Clean up if yum is available
@@ -704,6 +746,7 @@ main() {
         command -v nginx ||
             command -v composer ||
             command -v mvn ||
+            command -v go ||
             command -v jmeter ||
             command -v java ||
             command -v node ||
@@ -717,6 +760,7 @@ main() {
     */nginx) _build_nginx "$@" ;;
     */composer) _build_composer ;;
     */mvn) _build_maven ;;
+    */go) _build_go ;;
     */jmeter) _build_jmeter ;;
     */java) _build_jdk_runtime ;;
     */node) _build_node ;;

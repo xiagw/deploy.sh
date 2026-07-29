@@ -20,7 +20,7 @@
     "deploy": {
         "method": "auto",
         "prefer_k8s": true,
-        "description": "部署方式配置: auto=自动检测, k8s=强制k8s, docker=强制docker-compose, rsync=强制rsync+ssh"
+        "description": "部署方式配置: auto=自动检测, k8s=强制k8s, docker=强制docker-compose, rsync=强制rsync+ssh, fc=强制阿里云函数计算, ftp=强制FTP"
     },
     "branches": [
         {

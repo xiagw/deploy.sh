@@ -11,7 +11,7 @@
 # PHP Style Check
 check_php_style() {
     _msg step '[style] Running PHP Code Sniffer (PSR12)'
-    [[ "${GH_ACTION:-0}" -eq 1 ]] && return 0
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
     if ! ${G_DOCK} images | grep -q 'deploy/phpcs'; then
         local run="${G_DOCK} build ${G_ARGS}"

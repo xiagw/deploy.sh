@@ -14,7 +14,10 @@
 # Docker
 .dockerignore
 Dockerfile*
+docker-bake.hcl
 docker-compose.*
+compose.yml
+compose.yaml
 
 # 文档与测试（通常不需要打进运行镜像）
 *.md
@@ -22,39 +25,71 @@ doc/
 docs/
 LICENSE
 tests/
+test/
 
 # 系统与编辑器
 # macOS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 
 ## vim swp
-.swp
+*.swp
+*.swo
 
-# Visual Studio Code (optional)
+# Visual Studio Code
 .vscode
 
-# Hugo
-# /public/
-# /resources/_gen/
-
-# Directory-based project format
+# JetBrains IDE
 .idea
-
-# File-based (Legacy) project format
 *.ipr
 *.iml
 *.iws
+
+# 临时文件
+*.tmp
+*.bak
+*.orig
+tmp/
+temp/
+
+# CI/CD
+.travis.yml
+.circleci/
+Jenkinsfile
+.drone.yml
+
+# Java / Maven / Gradle
+target/
+*.class
+*.jar
+!app.jar
+.gradle/
+build/
+
+# Node
+*.log*
+*.log
+package-lock.json
+yarn.lock
+logs/
+# 若构建时需安装依赖，可不忽略 node_modules
+# node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Go
+vendor/
 
 # Laravel
 bootstrap/cache/*
 storage/framework/*
 storage/logs/*
 # vendor/
-
-## Node
-*.log*
-*.log
-package-lock.json
-logs
-# 若构建时需安装依赖，可不忽略 node_modules
-# node_modules/

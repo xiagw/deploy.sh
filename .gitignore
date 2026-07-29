@@ -21,3 +21,4 @@ data/**
 ## custome folder
 tmp/
 .cursor/
+.qoderignore

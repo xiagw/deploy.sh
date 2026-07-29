@@ -1,0 +1,66 @@
+# =============================================================================
+# 通用单阶段模板（运行时镜像：java-base/node/python/mysql/redis 等）
+# 约定：
+#   - 统一执行 build.sh ${RUN_SCRIPT_ARG}（留空自动探测 java/node/mysql/redis...）
+#   - CMD 通过 APP_CMD 变量在运行时展开（ARG→ENV→shell 形式 CMD）；
+#     mysql/redis 用 "docker-entrypoint.sh mysqld" 之类重新进入官方入口以保留初始化
+#   - ONBUILD：复用 base image 时把子项目文件带入镜像（node 覆盖为 COPY . /app/）
+# 各语言默认参数见 docker-bake.hcl，示例：
+#   docker buildx bake -f conf/dockerfile/docker-bake.hcl mysql
+# =============================================================================
+ARG MIRROR=
+ARG RUN_IMAGE=alpine
+ARG RUN_TAG=latest
+
+FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
+ARG IN_CHINA=false
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG RUN_SCRIPT_ARG=
+ARG TZ=UTC
+ARG APP_WORKDIR=/app
+ARG APP_PORTS="8080 8081"
+ARG APP_VOLUME=/app
+ARG APP_CMD="/opt/run0.sh"
+ARG ONBUILD_CHOWN=0:0
+ARG ONBUILD_COPY_SRC=./root/
+ARG ONBUILD_COPY_DEST=/
+ARG MVN_DEBUG=false
+ARG MVN_PROFILE=base
+ARG PHP_VERSION=
+ARG MYSQL_REPLICATION=single
+ARG INSTALL_FONTS=false
+ARG INSTALL_FFMPEG=false
+ARG INSTALL_LIBREOFFICE=false
+ARG INSTALL_NGINX=false
+
+LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>" \
+    org.opencontainers.image.authors="xiagw <fxiaxiaoyu@gmail.com>" \
+    org.opencontainers.image.licenses="MIT"
+
+ENV TZ=${TZ} \
+    ONBUILD_CHOWN=${ONBUILD_CHOWN} \
+    ONBUILD_COPY_SRC=${ONBUILD_COPY_SRC} \
+    ONBUILD_COPY_DEST=${ONBUILD_COPY_DEST}
+
+WORKDIR ${APP_WORKDIR}
+EXPOSE ${APP_PORTS}
+
+RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,id=apt_lists,sharing=locked \
+    --mount=type=cache,target=/var/cache/apt,id=apt_cache,sharing=locked \
+    --mount=type=cache,target=/var/cache/yum,id=yum_cache,sharing=shared \
+    --mount=type=bind,target=/src,rw \
+    set -xe; \
+    BUILD_SH=/src/root/opt/build.sh; \
+    [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
+    [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
+    if command -v bash >/dev/null 2>&1; then bash $BUILD_SH ${RUN_SCRIPT_ARG}; else sh $BUILD_SH ${RUN_SCRIPT_ARG}; fi
+
+VOLUME ${APP_VOLUME}
+
+CMD ["/bin/bash", "-c", "${APP_CMD:-/opt/run0.sh}"]
+
+ONBUILD COPY --chown=${ONBUILD_CHOWN} ${ONBUILD_COPY_SRC} ${ONBUILD_COPY_DEST}
+ONBUILD RUN if [ -f /opt/onbuild.sh ]; then \
+        if command -v bash >/dev/null 2>&1; then bash /opt/onbuild.sh; else sh /opt/onbuild.sh; fi; \
+    fi

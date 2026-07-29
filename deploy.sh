@@ -28,11 +28,18 @@
 ################################################################################
 config_deploy_vars() {
     ## 设置仓库目录路径
-    ## 优先级: CI_PROJECT_DIR (GitLab CI) > PWD (当前工作目录)
-    G_REPO_DIR=${CI_PROJECT_DIR:-$PWD}
+    ## 优先级: -w/--workspace (用户指定) > CI_PROJECT_DIR (GitLab CI) > PWD (当前工作目录)
+    G_REPO_DIR="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
+
+    ## 切换到仓库目录，确保后续 git 命令在正确目录执行
+    [[ -d "$G_REPO_DIR" ]] || {
+        _msg error "Workspace directory not found: $G_REPO_DIR"
+        return 1
+    }
+    cd "$G_REPO_DIR" || return 1
 
     ## 提取仓库名称
-    ## 优先级: GITHUB_REPOSITORY (GitHub/Gitea Actions) > CI_PROJECT_NAME (GitLab CI) > 目录名
+    ## 优先级: GITHUB_REPOSITORY (GitHub/Gitea Actions) > CI_PROJECT_NAME (GitLab CI) > 当前目录名
     ## GITHUB_REPOSITORY 格式: owner/repo，取最后一部分作为仓库名
     if [[ -n "${GITHUB_REPOSITORY}" ]]; then
         G_REPO_NAME=${GITHUB_REPOSITORY##*/}
@@ -77,24 +84,32 @@ config_deploy_vars() {
     *) G_NAMESPACE="${G_REPO_BRANCH}" ;;
     esac
 
+    ## 设置Docker构建的进度显示模式
+    ## 构建输出统一写入日志文件，始终使用 --progress=plain 保证日志完整性
+    export G_PROGRESS='--progress=plain'
+
     ## 生成Docker镜像标签
     ## 格式: Unix时间戳（毫秒级）
     ## 注意: 之前支持包含Git提交哈希的格式，现已简化为仅时间戳
     # G_IMAGE_TAG="${G_REPO_SHORT_SHA}-$(date +%s%3N)"  # 旧格式（已注释）
-    G_IMAGE_TAG="$(date +%s%3N)"
+    G_IMAGE_TAG="t$(date +%s%3N)"
 
     ## Docker镜像仓库路径配置
     ## 如果启用 ENV_DOCKER_IMAGE_RANDOM=true，会在仓库路径中添加随机字符前缀
     ## 格式说明:
     ##   1. ENV_DOCKER_IMAGE_RANDOM=false: $ENV_DOCKER_REGISTRY/$G_REPO_NAME:$G_IMAGE_TAG
     ##   2. ENV_DOCKER_IMAGE_RANDOM=true:  $ENV_DOCKER_REGISTRY/$RANDOM_CHARS:$G_IMAGE_TAG
-    if [[ "${ENV_DOCKER_IMAGE_RANDOM:-false}" = true ]]; then
+    if [[ "${ENV_DOCKER_IMAGE_RANDOM:-${ENV_DOCKER_RANDOM:-false}}" = true ]]; then
         local chars
         chars=({a..o}) # 字符集: a到o（共15个字符）
         ## 随机选取两个字符组合（可组合总数: 15*15=225个）
         G_IMAGE_NAME="${chars[$((RANDOM % ${#chars[@]}))]}${chars[$((RANDOM % ${#chars[@]}))]}"
+    else
+        G_IMAGE_NAME="${G_REPO_NAME}"
+        G_IMAGE_NAME="${G_REPO_NAME//-/}"
+        G_IMAGE_NAME="${G_IMAGE_NAME//_/}"
+        G_IMAGE_NAME="${G_IMAGE_NAME:0:10}"
     fi
-
     ## 处理定时任务执行
     ## 如果通过 crontab 执行，检查是否应该跳过本次执行（避免重复执行）
     if ${run_with_crontab:-false}; then
@@ -116,18 +131,18 @@ Parameters:
     -h, --help               Show this help message.
     -v, --version            Show version info.
     -d, --debug              Run in debug mode.
-    --cron                   Run as a cron job.
-    --github-action          Run as a GitHub Action.
-    --in-china               Set ENV_IN_CHINA to true.
+    -l, --loop                 Run as a cron job.
+    --dry                    Preview mode: generate config and exit without executing.
 
     # Repository operations
+    -w, --workspace DIR        Specify workspace directory (default: current directory).
     -g, --git-clone URL          Clone git repo URL to builds/REPO_NAME.
     -b, --git-branch NAME  Specify git branch (default: main).
     -s, --svn-checkout URL       Checkout SVN repository.
 
     # Build operations
     -B, --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
-    -x, --build-base [args]       Execute function build_base_image with optional arguments.
+    -x, --build-base [--dry]     Execute function build_base_image; add --dry to preview without building.
 
     # Deployment
     -k, --deploy-k8s             Deploy to Kubernetes.
@@ -184,17 +199,17 @@ parse_command_args() {
         -h | --help) _usage && exit 0 ;;
         -v | --version) echo "Version: 5.0.0" && exit 0 ;;
         -d | --debug) DEBUG_ON=true && set -x ;;
-        --cron | --loop) run_with_crontab=true ;;
-        --github-action) DEBUG_ON=true && export GH_ACTION=true ;;
-        --in-china) arg_in_china=true ;;
+        -l | --cron | --loop) run_with_crontab=true ;;
+        --dry) export DRY_RUN=true ;;
         # Repository operations
+        -w | --workspace) arg_workspace="${2:?empty workspace dir}" && shift ;;
         -g | --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
         -b | --git-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build operations
         -x | --build-base)
             arg_flags["build_base"]=1
-            [ -n "$2" ] && export dry_run="dry_run" && shift
+            [[ "${2:-}" == --dry ]] && export DRY_RUN=true && shift
             ;;
         -B | --build)
             arg_flags["build_all"]=1
@@ -237,10 +252,6 @@ parse_command_args() {
         shift
     done
 
-    ## 设置Docker构建的进度显示模式
-    ## 构建输出统一写入日志文件，始终使用 --progress=plain 保证日志完整性
-    export G_PROGRESS='--progress=plain'
-
     ## 检查是否有任何功能标志被启用
     ## 如果所有标志都为0，表示用户没有指定任何参数，将启用自动模式（所有任务）
     all_zero=true
@@ -262,26 +273,30 @@ parse_command_args() {
 
 ################################################################################
 # 函数: config_build_env
-# 描述: 配置Docker/Podman构建环境，根据项目语言设置相应的构建参数
-# 参数:
-#   $1 - lang: 项目语言标识，格式为 "lang:version:docker" (例如: "java:17:dockerfile")
-# 返回: 无（设置全局变量 G_DOCK, G_RUN, G_ARGS）
+# 描述: 配置Docker/Podman构建环境
+# 参数: 无
+# 返回: 无（设置全局变量 G_DOCK, G_RUN）
 # 全局变量:
 #   - G_DOCK: Docker或Podman命令路径
 #   - G_RUN: Docker/Podman运行命令的基础参数
-#   - G_ARGS: Docker/Podman构建参数
+#   - G_PROGRESS: buildx bake --progress 参数（plain/quiet）
 #   - ENV_ADD_HOST: 需要添加到容器中的主机映射数组
-#   - ENV_IN_CHINA: 是否在中国地区（影响镜像源选择）
-#   - ENV_DOCKER_MIRROR: Docker镜像镜像源地址
-#   - DEBUG_ON: 调试模式标志
 ################################################################################
 config_build_env() {
-    local lang="$1"
-
+    if grep -q 'ENV_IN_CHINA.*true' "$G_ENV" || ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
+        export IS_CHINA=true
+    else
+        export IS_CHINA=false
+    fi
     ## 选择容器构建工具
     ## 优先级: Podman > Docker > docker (默认)
     ## 如果系统安装了Podman则优先使用，否则使用Docker
-    G_DOCK=$(command -v podman || command -v docker || echo docker)
+    if command -v podman &>/dev/null; then
+        G_DOCK=$(command -v podman)
+    else
+        _install_docker
+        G_DOCK=$(command -v docker || echo docker)
+    fi
 
     ## 设置Docker/Podman运行命令的基础参数
     ## --interactive: 保持标准输入打开
@@ -289,92 +304,13 @@ config_build_env() {
     G_RUN="${G_DOCK} run --interactive --rm"
 
     ## 添加主机映射参数（用于容器内访问外部服务）
-    ## ENV_ADD_HOST 数组中的每个条目都会添加到 --add-host 参数中
+    ## ENV_ADD_HOST 数组中的每个条目都会添加到 G_RUN 中
     for host in "${ENV_ADD_HOST[@]}"; do
         G_RUN+=" --add-host=${host}"
-        G_ARGS+=" --add-host=${host}"
     done
 
-    ## 基础构建参数配置
-    ## IN_CHINA: 是否在中国地区（影响构建时的镜像源选择）
-    G_ARGS+=" --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
-
-    ## 构建进度配置
-    ## 使用 --progress=plain 保证完整构建输出，日志文件记录全部详情
-    G_ARGS+=" ${G_PROGRESS}"
-
-    ## 配置Docker镜像镜像源（如果指定）
-    ## 用于加速镜像拉取（特别是在中国地区）
-    if [ -n "${ENV_DOCKER_MIRROR}" ]; then
-        G_ARGS+=" --build-arg MIRROR=${ENV_DOCKER_MIRROR%/}/"
-    fi
-
-    ## 根据项目语言类型配置特定的构建参数
-    case "${lang}" in
-    java:*)
-        ## Java项目配置
-        ## MVN_PROFILE: Maven构建配置文件，使用当前分支名
-        G_ARGS+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
-
-        ## 根据Java版本设置Maven和JDK版本
-        ## 支持的Java版本: 7, 8, 11, 17, 21, 23
-        case "${lang}" in
-        java:1.7 | java:1.7:* | java:7:*)
-            BUILD_TAG="3.6-jdk-7"
-            RUN_TAG="7"
-            ;;
-        java:11 | java:11:*)
-            BUILD_TAG="3.9-amazoncorretto-11"
-            RUN_TAG="11-base"
-            ;;
-        java:17 | java:17:*)
-            BUILD_TAG="3.9-amazoncorretto-17"
-            RUN_TAG="17-base"
-            ;;
-        java:21 | java:21:*)
-            BUILD_TAG="3.9-amazoncorretto-21"
-            RUN_TAG="21-base"
-            ;;
-        java:25 | java:25:*)
-            BUILD_TAG="3.9-amazoncorretto-25"
-            RUN_TAG="25-base"
-            ;;
-        java:26 | java:26:*)
-            BUILD_TAG="3.9-amazoncorretto-26"
-            RUN_TAG="26-base"
-            ;;
-        *)
-            ## 默认使用Java 8
-            BUILD_TAG="3.8-amazoncorretto-8"
-            RUN_TAG="8-base"
-            ;;
-        esac
-
-        ## 添加Maven和JDK版本构建参数
-        G_ARGS+=" --build-arg BUILD_TAG=${BUILD_TAG}"
-        G_ARGS+=" --build-arg RUN_TAG=${RUN_TAG}"
-
-        ## 检查README文件中是否指定了额外的安装需求
-        ## 支持的选项: INSTALL_FFMPEG, INSTALL_FONTS, INSTALL_LIBREOFFICE
-        for install in FFMPEG FONTS LIBREOFFICE; do
-            if grep -qi "INSTALL_${install}=true" "${G_REPO_DIR}"/{README,readme}* 2>/dev/null; then
-                G_ARGS+=" --build-arg INSTALL_${install}=true"
-            fi
-        done
-        ;;
-    node:*)
-        ## Node.js项目配置
-        ## 从语言标识中提取Node版本号（格式: node:20:docker）
-        local ver="${lang#*:}" # 移除 "node:" 前缀
-        ver="${ver%:*}"        # 移除 ":docker" 后缀
-        ## 默认使用Node 22（如果未指定版本）
-        G_ARGS+=" --build-arg RUN_TAG=${ver:-22}"
-        RUN_TAG="${ver:-22}"
-        ;;
-    esac
-
     ## 导出构建环境变量供其他函数使用
-    export G_DOCK G_RUN G_ARGS
+    export G_DOCK G_RUN
 }
 
 ################################################################################
@@ -421,7 +357,7 @@ main() {
     G_DATA="${G_PATH}/data"                                  # 数据目录（配置文件、日志等）
 
     ## 日志和配置文件路径
-    G_LOG="${G_DATA}/${G_NAME}.log" # 日志文件路径
+    G_LOG="${G_DATA}/logs/${G_NAME}.log" # 日志文件路径
     ## 配置文件路径（由 find_project_config 函数设置）
     G_CONF=""                    # 部署配置文件（JSON格式，在 find_project_config 中设置）
     G_ENV="${G_DATA}/deploy.env" # 环境变量配置文件
@@ -484,11 +420,14 @@ main() {
     _msg time "BEGIN"
 
     ## ========================================================================
-    ## 配置文件初始化
-    ## 复制示例配置文件到data目录（如果不存在）
-    ## 添加必要的二进制文件目录到PATH环境变量
+    ## 配置文件初始化 + 加载环境变量
+    ## 1. 复制示例配置文件到 data 目录（如果不存在）
+    ## 2. 添加必要的二进制文件目录到 PATH 环境变量
+    ## 3. 从 deploy.env 加载所有 ENV_* 环境变量
     ## ========================================================================
-    config_deploy_depend file
+    config_deploy_init
+
+    source "$G_ENV"
 
     ## ========================================================================
     ## 独立功能: 构建基础镜像
@@ -509,17 +448,6 @@ main() {
     else
         system_check
     fi
-
-    ## ========================================================================
-    ## 加载环境变量配置
-    ## 从 deploy.env 文件加载所有以 ENV_ 开头的环境变量
-    ## 注意: 此步骤位置不要随意变动，因为后续步骤依赖这些环境变量
-    ## ========================================================================
-    if [ ! -f "$G_ENV" ]; then
-        _msg warn "Environment file $G_ENV not found. Create it based on the template."
-        cp -v "$G_DATA/deploy.env" "$G_ENV"
-    fi
-    source "$G_ENV"
 
     ## ========================================================================
     ## 仓库操作: Git仓库克隆
@@ -558,13 +486,6 @@ main() {
 
     ## ========================================================================
     ## 中国地区特殊配置
-    ## 如果指定了 --in-china 参数，更新环境配置文件中的 ENV_IN_CHINA 为 true
-    ## 这将影响后续的镜像源选择、代理配置等
-    if ${arg_in_china:-false}; then
-        sed -i -e '/ENV_IN_CHINA=/s/false/true/' "$G_ENV"
-        ENV_IN_CHINA=true
-    fi
-
     ## 如果处于中国区环境，启用 deploy.env 中的代理设置
     if [[ "${ENV_IN_CHINA:-false}" == true ]]; then
         system_proxy on
@@ -583,7 +504,7 @@ main() {
     ## 如果未指定目标registry，则使用环境配置中的镜像源地址
     ## ========================================================================
     if [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_src}" ]]; then
-        [ -z "$arg_target" ] && arg_target="$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d "'")"
+        [ -z "$arg_target" ] && arg_target="${ENV_DOCKER_MIRROR:-}"
         [ -z "$arg_target" ] && return 1
         copy_docker_image "${arg_src}" "${arg_target}" "${arg_keep_tag:-true}"
         return
@@ -628,7 +549,7 @@ main() {
     ## 设置SSH配置、acme.sh、AWS、Kubernetes、阿里云、python-gitlab、
     ## Cloudflare、rsync等工具的配置文件
     ## ========================================================================
-    config_deploy_depend env >/dev/null
+    config_deploy_setup >/dev/null
 
     ## ========================================================================
     ## 独立功能: 更新SSL证书
@@ -651,7 +572,8 @@ main() {
     ## ========================================================================
     ## 项目语言探测
     ## 自动探测项目的编程语言、版本和Dockerfile信息
-    ## 返回格式: "lang:version:dockerfile" (例如: "java:17:Dockerfile")
+    ## 返回固定三段式: "lang:ver:docker_flag"，字段缺失时留空
+    ## (例如: "java:17:docker", "node::docker", "unknown::")
     ## ========================================================================
     _msg step "[lang] Probe program language"
     get_lang=$(repo_language_detect) # 完整语言标识: lang:ver:docker
@@ -662,7 +584,7 @@ main() {
     ## 构建环境配置
     ## 根据项目语言配置Docker/Podman构建参数
     ## ========================================================================
-    config_build_env "${get_lang}"
+    config_build_env
 
     ## ========================================================================
     ## 配置文件注入
@@ -735,7 +657,7 @@ main() {
     fi
 
     ## ========================================================================
-    ## 部署阶段
+    ## 阶段 5: 部署
     ## 执行条件:
     ##   - 自动模式 (all_zero=true): 总是执行部署
     ##   - 指定模式: 如果设置了任何部署相关的标志 (deploy_*)，则执行部署
@@ -781,19 +703,18 @@ main() {
     _msg time "END."
 
     ## 返回部署结果状态码
+    ## Exit codes:
+    ## - 0: Deployment successful
+    ## - 1: Deployment failed
     return "${deploy_result:-0}"
 }
 
 main "$@"
 
-## Exit codes:
-## - 0: Deployment successful
-## - 1: Deployment failed
-
 ## Configure external service dependencies:
 ## - Authentication: .ssh/config
 ## - SSL: acme.sh
-## - Cloud Providers: aws, aliyun
+## - Cloud Providers: aliyun, huawei, tencent, aws, gcp
 ## - Container Orchestration: kubernetes
 ## - Version Control: GitLab, python-gitlab
 ## - DNS: Aliyun, cloudflare

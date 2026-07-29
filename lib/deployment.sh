@@ -7,7 +7,7 @@
 
 format_release_name() {
     local release_name
-    if ${ENV_REMOVE_PROJ_PREFIX:-false}; then
+    if ${ENV_REMOVE_HELM_PREFIX:-false}; then
         release_name=${G_REPO_NAME#*-}
     else
         release_name=${G_REPO_NAME}
@@ -37,8 +37,11 @@ format_release_name() {
 # Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
     _msg step "[deploy] Deploy to Kubernetes with Helm"
-    is_demo_mode "deploy_k8s" && return 0
-    local release_name previous_image rs0 bad_pod revision
+    ${DRY_RUN:-false} && {
+        _msg purple "[dry-run] deploy_k8s skipped"
+        return 0
+    }
+    local release_name previous_image rs0 bad_pod
     release_name="$(format_release_name)"
 
     # Ensure PVC exists before proceeding with deployment
@@ -68,12 +71,13 @@ deploy_to_kubernetes() {
     fi
 
     # Convert HELM_OPT into array
-    read -ra helm_opt_array <<< "${HELM_OPT:-}"
+    read -ra helm_opt_array <<<"${HELM_OPT:-}"
+
     local helm_args=(
         "${helm_opt_array[@]}"
         upgrade
         "${release_name:?release_name parameter is required}"
-        "${helm_dir:?helm_dir parameter is required}"
+        "$helm_dir"
         --install
         --namespace "${G_NAMESPACE:?namespace parameter is required}"
         --create-namespace
@@ -87,23 +91,25 @@ deploy_to_kubernetes() {
         helm_args+=("--set" "replicaCount=1")
     fi
     echo "${helm_args[@]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
-    ${GH_ACTION:-false} && return 0
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
     ## helm install / helm 安装  --atomic
     "${helm_args[@]}" >/dev/null || return 1
 
-    # 检查是否在忽略列表中（不探测发布结果）
-    if echo "${ENV_IGNORE_DEPLOY_CHECK[*]}" | grep -qw "${G_REPO_NAME}"; then
-        _msg purple "Skipping deployment check for ${G_REPO_NAME} as it's in the ignore list"
-    else
-        _msg time "Monitoring [${release_name}] in [${G_NAMESPACE}] (timeout: 120s)"
-        if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
-            deploy_result=1
-            _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
-            _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
-            revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" | awk 'END {print $1}')"
-            echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))" | tee -a "$G_LOG"
-        fi
+    # Pod health check / Pod 健康检查
+    _msg time "Monitoring [${release_name}] in [${G_NAMESPACE}] (timeout: 120s)"
+    if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout 120s >/dev/null; then
+        deploy_result=1
+        _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
+        _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
+        revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" | awk 'END {print $1}')"
+        echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))" | tee -a "$G_LOG"
+    fi
+    # Rollback on failure / 部署失败时回滚
+    if [[ "${deploy_result:-0}" -eq 1 ]]; then
+        _msg red "Rolling back deployment ${release_name}"
+        $KUBECTL_OPT -n "${G_NAMESPACE}" rollout undo deployment/"${release_name}" 2>/dev/null || true
+        return 1
     fi
 
     # Record current image info / 记录当前镜像信息
@@ -146,20 +152,12 @@ deploy_to_kubernetes() {
 # Deploy to Aliyun Functions
 # @param $1 lang The programming language of the project
 deploy_aliyun_functions() {
-    if "${ENV_DISABLE_K8S:-false}"; then
-        _msg time "Kubernetes deployment is disabled"
-        return
-    fi
+    _install_aliyun_cli
     local release_name lang functions_conf_tmpl functions_conf
     lang="${1:?'lang parameter is required'}"
-    _install_aliyun_cli
     release_name="$(format_release_name)"
 
-    ${GH_ACTION:-false} && return 0
-    ${ENV_ENABLE_FUNC:-false} || {
-        _msg time "Aliyun Functions deployment is disabled"
-        return 0
-    }
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
     [ "${G_NAMESPACE}" != main ] && release_name="${release_name}-${G_NAMESPACE}"
 
     ## create FC
@@ -191,14 +189,14 @@ deploy_aliyun_functions() {
 EOF
     fi
 
-    if aliyun -p "${ENV_ALIYUN_PROFILE-}" fc GET /2023-03-30/functions --prefix "${release_name:0:3}" --limit 100 --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "${release_name}$"; then
+    if aliyun -p "${ENV_ALIYUN_CLI_PROFILE-}" fc GET /2023-03-30/functions --prefix "${release_name:0:3}" --limit 100 --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "${release_name}$"; then
         _msg time "Updating function: $release_name"
-        aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}\"}}"
+        aliyun -p "${ENV_ALIYUN_CLI_PROFILE-}" --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}\"}}"
     else
         _msg time "Creating new function: $release_name"
-        aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"
+        aliyun -p "${ENV_ALIYUN_CLI_PROFILE-}" --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"
         _msg time "Creating HTTP trigger for function: $release_name"
-        aliyun -p "${ENV_ALIYUN_PROFILE-}" --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
+        aliyun -p "${ENV_ALIYUN_CLI_PROFILE-}" --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     fi
     rm -f "$functions_conf"
 
@@ -297,7 +295,8 @@ deploy_via_rsync_ssh() {
         fi
 
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
-            if is_demo_mode "deploy_aliyun_oss"; then
+            if ${DRY_RUN:-false}; then
+                _msg purple "[dry-run] deploy_aliyun_oss:"
                 _msg purple "  Source: ${rsync_src}"
                 _msg purple "  Destination: ${rsync_dest}"
                 continue
@@ -307,7 +306,8 @@ deploy_via_rsync_ssh() {
         fi
 
         echo "Destination: ${ssh_host}:${rsync_dest}"
-        if is_demo_mode "deploy_rsync_ssh"; then
+        if ${DRY_RUN:-false}; then
+            _msg purple "[dry-run] deploy_rsync_ssh:"
             _msg purple "  $ssh_opt -n \"$ssh_host\" \"mkdir -p $rsync_dest\""
             _msg purple "  ${rsync_opt} -e \"$ssh_opt\" \"$rsync_src\" \"${ssh_host}:${rsync_dest}\""
             continue
@@ -427,6 +427,11 @@ determine_deployment_method() {
         ftp)
             _msg info "Using configured deployment method: deploy_ftp" >&2
             echo "deploy_ftp"
+            return 0
+            ;;
+        fc)
+            _msg info "Using configured deployment method: deploy_aliyun_func" >&2
+            echo "deploy_aliyun_func"
             return 0
             ;;
         esac

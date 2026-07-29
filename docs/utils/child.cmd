@@ -13,6 +13,7 @@ set "DEBUG_FILE=%BASE_PATH%_debug.txt"
 set "PLAY_FILE=%BASE_PATH%_play.txt"
 set "REST_FILE=%BASE_PATH%_rest.txt"
 set "DISABLE_FILE=%BASE_PATH%_disable.txt"
+set "BYPASS_WORKDAY_FILE=%BASE_PATH%_bypass_workday.txt"
 set "PLAY_MINUTES=50"
 set "REST_MINUTES=90"
 set "DELAY_SECONDS=40"
@@ -25,6 +26,7 @@ echo.%1| findstr /i "^upgrade$ ^u$" >nul && goto :UPGRADE
 echo.%1| findstr /i "^install$ ^i$" >nul && goto :INSTALL_TASK
 echo.%1| findstr /i "^server$ ^s$" >nul && goto :START_SERVER
 echo.%1| findstr /i "^disable$ ^x$" >nul && goto :DISABLE
+echo.%1| findstr /i "^bypassworkday$ ^bw$" >nul && goto :BYPASS_WORKDAY_CMD
 
 if exist "%DISABLE_FILE%" ( exit /b 0 )
 
@@ -104,6 +106,12 @@ if !ERRORLEVEL! EQU 0 (
     goto :BYPASS_WORKDAY
 )
 
+:: 检查是否跳过工作日限制
+if exist "%BYPASS_WORKDAY_FILE%" (
+    call :LOG "检测到跳过工作日限制文件，跳过工作日检查"
+    goto :BYPASS_WORKDAY
+)
+
 if !##weekday! LSS 5 (
     if !##curr_hour! GEQ 12 (
         call :DO_SHUTDOWN "工作日不允许使用电脑"
@@ -134,9 +142,14 @@ echo %DATE:~0,10% %TIME% > "%DISABLE_FILE%"
 call :LOG "已禁用定时关机功能"
 exit /b 0
 
+:BYPASS_WORKDAY_CMD
+echo %DATE:~0,10% %TIME% > "%BYPASS_WORKDAY_FILE%"
+call :LOG "已设置跳过工作日限制"
+exit /b 0
+
 :RESET
 shutdown /a
-del /Q /F "%PLAY_FILE%" "%REST_FILE%" "%DISABLE_FILE%"
+del /Q /F "%PLAY_FILE%" "%REST_FILE%" "%DISABLE_FILE%" "%BYPASS_WORKDAY_FILE%"
 goto :END
 
 :INSTALL_TASK

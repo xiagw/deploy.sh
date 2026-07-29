@@ -51,24 +51,25 @@ create_helm_chart() {
   # 从 Dockerfile 读取端口配置
   dockerfile="${G_REPO_DIR}/Dockerfile"
   if [ -f "${dockerfile}" ]; then
-    read -ra ports <<<"$(grep -i "^EXPOSE" "${dockerfile}" | cut -d' ' -f2-)"
-    if [ "${#ports[@]}" -ge 1 ]; then
-      port="${ports[0]}"
-      port2="${ports[1]}"
+    ## EXPOSE 行含 $ 变量时跳过（构建时才展开，源文件无法读取实际端口）
+    local expose_line
+    expose_line="$(grep -i "^EXPOSE" "${dockerfile}" | cut -d' ' -f2- || true)"
+    if [[ -n "$expose_line" && "$expose_line" != *'$'* ]]; then
+      read -ra ports <<<"$expose_line"
+      if [ "${#ports[@]}" -ge 1 ]; then
+        port="${ports[0]}"
+        port2="${ports[1]}"
+      fi
     fi
-    # while IFS= read -r vol; do
-    #   mount_path="$(echo "$vol" | tr '/' '-' | sed 's/^-//')"
-    # done < <(grep -i "^VOLUME" "${dockerfile}" | tr -d '[]"' | cut -d' ' -f2-)
   fi
-  pvc_name="${ENV_HELM_VALUES_CNFS:-pvc-www}"
-  mount_path="${ENV_HELM_VALUES_MOUNT_PATH:-/app2}"
+  pvc_name="${ENV_HELM_VALUES_PVC:-pvc-www}"
+  mount_path="${ENV_HELM_PVC_MOUNT_PATH:-/app2}"
   protocol="${protocol:-tcp}"
   port="${port:-8080}"
   port2="${port2:-8081}"
 
   # Create helm chart
   helm create "$helm_chart_path"
-  _msg "helm create $helm_chart_path" >>"$G_LOG"
 
   # Configuration files to modify
   local file_values="$helm_chart_path/values.yaml"
@@ -282,55 +283,112 @@ EOF
 }
 
 # Build base Docker images for the project
-# @param $1 image_tag The tag of the base image to build
+# @param $1 image_tag The tag of the base image to build (e.g. mysql:8.0, amazoncorretto:17)
 build_base_image() {
-  local image_tag="$1" registry proxy_url file_ext docker_bake_file tag_left tag_right
-  registry="$(awk -F= '/^ENV_DOCKER_MIRROR=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")"
-  [ -n "$registry" ] && registry="${registry%/}/"
-  proxy_url="$(awk -F= '/^ENV_HTTP_PROXY=/ {print $2}' "${G_ENV}" | tr -d '"' | tr -d "'")"
+  local image_tag="$1" mirror registry proxy_url bake_target tag_left tag_right
+  local bake_file="${G_DATA}/base-bake.hcl"
+  mirror="${ENV_DOCKER_MIRROR:+${ENV_DOCKER_MIRROR%/}/}"
+  registry="${ENV_DOCKER_REGISTRY:+${ENV_DOCKER_REGISTRY%/}/}"
+  proxy_url="${ENV_HTTP_PROXY:-}"
   tag_left="${image_tag%:*}"
   tag_right="${image_tag#*:}"
-  file_ext="${tag_left/amazoncorretto/java}" # Replace amazoncorretto with java for file extension
+  bake_target="${tag_left/amazoncorretto/java}"
 
-  docker_bake_file="${G_PATH}/conf/dockerfile/base-bake.hcl"
-  cat >"${docker_bake_file}" <<EOF
-version = "0.1"
+  ## 按语言生成完整 args，与 docker-bake.hcl 各 target 保持一致
+  local extra_args=""
+  case "${bake_target}" in
+  java)
+    extra_args="
+        RUN_IMAGE = \"amazoncorretto\"
+        RUN_TAG = \"${tag_right}\"
+        MVN_PROFILE = \"base\"
+        MVN_DEBUG = \"${MVN_DEBUG:-false}\"
+        APP_PORTS = \"8080 8081\""
+    ;;
+  php)
+    extra_args="
+        RUN_IMAGE = \"ubuntu\"
+        RUN_TAG = \"24.04\"
+        PHP_VERSION = \"${tag_right}\"
+        APP_PORTS = \"80 9000\""
+    ;;
+  node)
+    extra_args="
+        RUN_IMAGE = \"node\"
+        RUN_TAG = \"${tag_right}-slim\"
+        ONBUILD_CHOWN = \"1000:1000\"
+        ONBUILD_COPY_SRC = \".\"
+        ONBUILD_COPY_DEST = \"/app/\""
+    ;;
+  python)
+    extra_args="
+        RUN_IMAGE = \"python\"
+        RUN_TAG = \"${tag_right}-slim\"
+        APP_CMD = \"\""
+    ;;
+  mysql)
+    extra_args="
+        RUN_IMAGE = \"mysql\"
+        RUN_TAG = \"${tag_right}\"
+        APP_WORKDIR = \"/\"
+        APP_PORTS = \"3306\"
+        APP_VOLUME = \"/var/lib/mysql\"
+        APP_CMD = \"\"
+        MYSQL_REPLICATION = \"single\""
+    ;;
+  redis)
+    extra_args="
+        RUN_IMAGE = \"redis\"
+        RUN_TAG = \"${tag_right}\"
+        APP_WORKDIR = \"/data\"
+        APP_PORTS = \"6379\"
+        APP_VOLUME = \"/data\"
+        APP_CMD = \"\""
+    ;;
+  nginx)
+    extra_args="
+        RUN_IMAGE = \"nginx\"
+        RUN_TAG = \"${tag_right}\"
+        APP_PORTS = \"80 443\"
+        APP_CMD = \"\""
+    ;;
+  *)
+    extra_args="
+        RUN_TAG = \"${tag_right}\""
+    ;;
+  esac
+  if [ -n "${proxy_url}" ]; then
+    extra_args+="
+        HTTP_PROXY = \"${proxy_url}\"
+        HTTPS_PROXY = \"${proxy_url}\""
+  fi
+
+  cat >"${bake_file}" <<EOF
 target "default" {
     context = "${G_PATH}/conf/dockerfile"
-    dockerfile = "${G_PATH}/conf/dockerfile/Dockerfile.base.${file_ext}"
+    dockerfile = "Dockerfile.single"
     platforms = ["linux/amd64", "linux/arm64"]
-    # platforms = ["linux/amd64"]
     args = {
         IN_CHINA = "${IN_CHINA:-true}"
-        MIRROR = "${registry}"
-        # BUILD_IMAGE = "${tag_left}"
-        BUILD_TAG = "${tag_right}"
-        # RUN_IMAGE = "${RUN_IMAGE}"
-        RUN_TAG = "${tag_right}"
-        HTTP_PROXY = "${proxy_url:-}"
-        HTTPS_PROXY = "${proxy_url:-}"
-        MVN_PROFILE = "base"
-        NODE_VERSION = "${tag_right}"
-        PHP_VERSION = "${tag_right}"
-        MYSQL_VERSION = "${tag_right}"
+        MIRROR = "${mirror}"${extra_args}
     }
-    tags = ["${registry%/}/${image_tag}-base"]
+    tags = ["${registry}${image_tag}-base"]
     output = ["type=image,push=true"]
-    pull = true
 }
 EOF
 
-  if [ "${dry_run:-}" = dry_run ]; then
-    docker buildx bake --file "${docker_bake_file}" --progress=quiet --print
+  if ${DRY_RUN:-false}; then
+    echo "## base-bake.hcl: ${bake_file}"
+    docker buildx bake --file "${bake_file}" --progress=quiet --print
     return
   fi
 
   # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
-  if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64; then
-    docker run --privileged --rm tonistiigi/binfmt --install all
+  if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64 >/dev/null 2>&1; then
+    docker run --privileged --rm tonistiigi/binfmt --install all || return 1
   fi
 
-  docker buildx bake --file "${docker_bake_file}" --progress=plain
+  docker buildx bake --file "${bake_file}" --progress=plain
 }
 
 # Build selected base images

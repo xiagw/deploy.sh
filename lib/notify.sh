@@ -28,6 +28,7 @@ notify_telegram() {
 # Send notification to Element
 notify_element() {
     local script_path="$1" server="$2" userid="$3" password="$4" roomid="$5" message="$6"
+    _install_python_element ""
 
     [ -z "$script_path" ] || [ -z "$server" ] || [ -z "$userid" ] || [ -z "$password" ] || [ -z "$roomid" ] && return 1
 
@@ -76,7 +77,7 @@ notify_feishu() {
 # Main notification function that handles all channels
 handle_notify() {
     # Skip notification in GitHub Actions
-    ${GH_ACTION:-false} && deploy_result=0 && return 0
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && deploy_result=0 && return 0
 
     _msg step "[notify] deployment result notification"
     echo "PP_NOTIFY: ${PP_NOTIFY:-false}"

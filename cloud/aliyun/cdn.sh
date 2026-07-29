@@ -535,5 +535,5 @@ print(urllib.parse.quote(sig, safe=''))
     _sig_enc=$(echo "$_sign_result" | tail -1)
 
     # 发起请求
-    curl -s "https://business.aliyuncs.com/?${_qs}&Signature=${_sig_enc}" 2>&1
+    curl -s "https://business.aliyuncs.com/?${_qs}&Signature=${_sig_enc}" 2>&1 | jq '.'
 }

@@ -6,9 +6,9 @@
 # @param $1 G_DATA Directory containing data files
 # @return 0 on success, non-zero on failure
 repo_inject_file() {
-    local lang="$1" arg_disable_inject="${2:-false}"
+    local lang="${1%%:*}" arg_disable_inject="${2:-false}"
 
-    command -v rsync >/dev/null || _install_packages "$IS_CHINA" rsync
+    command -v rsync >/dev/null || _install_packages rsync
 
     _msg step "[inject] Initializing file injection..."
 
@@ -29,78 +29,74 @@ repo_inject_file() {
         rsync -a "$inject_code_path/" "${G_REPO_DIR}/"
     fi
 
-    ${arg_disable_inject:-false} && ENV_INJECT=keep
+    ## arg_disable_inject 参数可强制跳过 Dockerfile 和 root/ 注入
+    ${arg_disable_inject:-false} && {
+        echo "Inject disabled by argument."
+        return 0
+    }
 
-    ## 根据 ENV_INJECT 变量值（默认为 keep）控制配置文件注入行为：
-    ## - keep: 保持现有配置不变
-    ## - overwrite: 注入 Dockerfile 和 root 目录结构（优先使用 data/dockerfile/，其次是 conf/dockerfile/）
-    ## - remove: 移除 Dockerfile
-    ## - create: 创建 docker-compose.yml
-    echo "ENV_INJECT: ${ENV_INJECT:-keep}"
-    case ${ENV_INJECT:-keep} in
-    keep)
-        echo "Keeping existing configuration, no files will be overwritten."
+    ## 1. Dockerfile 注入
+    ## Dockerfile.template：多阶段编译型（java/go/php/nginx）
+    ## Dockerfile.single：单阶段运行时型（python/mysql/redis）
+    ## node：特殊处理，Dockerfile.single 作为 base，生成只含 FROM 的 Dockerfile
+    ## 存在 dockerfile 则跳过
+    ## 不存在 dockerfile， 按照lang不同分开处理
+    if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
+        echo "Existing Dockerfile found, skipping injection."
+        return 0
+    fi
+    local _single="${G_PATH}/conf/dockerfile/Dockerfile.single"
+    local _template="${G_PATH}/conf/dockerfile/Dockerfile.template"
+    echo "Inject Dockerfile.base or Dockerfile..."
+    case "$lang" in
+    node)
+        ## node：
+        ## 先判断 package.json 文件是否变动，有则生成 dockerfile.base（生成 base image 提高效率）
+        ## 用 Dockerfile.single 作为 base image，再生成只含 FROM 的 Dockerfile
+        echo "Checking package.json hash..."
+        hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
+        mkdir -p "${G_DATA}/hash_saved"
+        hash_saved="$(cat "${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
+        if [[ "$hash_now" != "$hash_saved" ]]; then
+            echo "Copying Dockerfile.single as Dockerfile.base..."
+            cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
+        else
+            rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
+        fi
+        base_tag="${ENV_DOCKER_REGISTRY%/}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
+        echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
         ;;
-    overwrite)
-        ## 1. Dockerfile 注入
-        ## 按优先级查找对应语言的 Dockerfile 模板
-        if [[ -f "${G_DATA}/dockerfile/Dockerfile.${lang}" ]]; then
-            cp -f "${G_DATA}/dockerfile/Dockerfile.${lang}" "${G_REPO_DIR}/Dockerfile"
-        elif [[ -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang}" ]]; then
-            cp -f "${G_PATH}/conf/dockerfile/Dockerfile.${lang}" "${G_REPO_DIR}/Dockerfile"
-        fi
-        ## 特殊语言处理逻辑（如果 Dockerfile 不存在，则注入基础 Dockerfile 并设置基础镜像）
-        if [[ -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${lang}" ]]; then
-            case "$lang" in
-            node)
-                if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
-                    echo "Node.js project with existing Dockerfile, skipping base injection."
-                else
-                    echo "Checking package.json hash..."
-                    hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
-                    mkdir -p "${G_DATA}/hash_saved"
-                    hash_saved="$(cat "${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" || echo 0)"
-                    if [[ "$hash_now" = "$hash_saved" ]]; then
-                        rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
-                    else
-                        echo "Copying Dockerfile.base.${lang}..."
-                        cp -f "${G_PATH}/conf/dockerfile/Dockerfile.base.${lang}" "${G_REPO_DIR}/Dockerfile.base"
-                    fi
-                    base_tag="${ENV_DOCKER_REGISTRY%/}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
-                    echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
-                fi
-                ;;
-            esac
-        fi
-
-        ## 同时注入 .dockerignore（如果不存在）
-        [[ -f "${G_REPO_DIR}/Dockerfile" && ! -f "${G_REPO_DIR}/.dockerignore" ]] &&
-            cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
-
-        ## 2. Dockerfile 所需 root/ 目录结构注入
-        local conf_root="${G_PATH}/conf/dockerfile/root" repo_root="${G_REPO_DIR}/root"
-        local rsync_opts="rsync -r --exclude=*.cnf"
-        ## 创建 root/ 目录（如果不存在）
-        mkdir -p "${repo_root}"
-        ## 优先级1：从 conf/dockerfile/root/ 注入基础目录结构（如果不存在 root/opt）
-        if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
-            ${rsync_opts} "${conf_root}/" "${repo_root}/"
-        fi
-        ## 优先级2：从 data/dockerfile/root/ 注入自定义目录结构
-        if [[ -d "${G_DATA}/dockerfile/root" ]]; then
-            ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
-        fi
+    java | go | golang | php | nginx)
+        [[ -f "${_template}" ]] && {
+            echo "Copying Dockerfile.template..."
+            cp -f "${_template}" "${G_REPO_DIR}/Dockerfile"
+        }
         ;;
-    remove)
-        echo 'Removing Dockerfile (disable docker build)'
-        rm -f "${G_REPO_DIR}/Dockerfile"
-        ;;
-    create)
-        ## TODO
-        echo "Generating docker-compose.yml (enable deploy docker-compose)"
-        echo '## deploy with docker-compose' >>"${G_REPO_DIR}/docker-compose.yml"
+    *)
+        [[ -f "${_single}" ]] && {
+            echo "Copying Dockerfile.single..."
+            cp -f "${_single}" "${G_REPO_DIR}/Dockerfile"
+        }
         ;;
     esac
+
+    ## 同时注入 .dockerignore（如果不存在）
+    [[ ! -f "${G_REPO_DIR}/.dockerignore" ]] &&
+        cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
+
+    ## 2. Dockerfile 所需 root/ 目录结构注入
+    local conf_root="${G_PATH}/conf/dockerfile/root" repo_root="${G_REPO_DIR}/root"
+    local rsync_opts="rsync -r --exclude=*.cnf"
+    ## 创建 root/ 目录（如果不存在）
+    mkdir -p "${repo_root}"
+    ## 优先级1：从 conf/dockerfile/root/ 注入基础目录结构（如果不存在 root/opt）
+    if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
+        ${rsync_opts} "${conf_root}/" "${repo_root}/"
+    fi
+    ## 优先级2：从 data/dockerfile/root/ 注入自定义目录结构
+    if [[ -d "${G_DATA}/dockerfile/root" ]]; then
+        ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
+    fi
 }
 
 # Detect the programming language of the project
@@ -182,7 +178,10 @@ repo_language_detect() {
             ;;
         package.json)
             lang_type="node"
-            version=$(jq -r '.engines.node // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
+            local _node_ver
+            _node_ver=$(jq -r '.engines.node // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
+            ## engines.node 通常是约束表达式（>=8.9），提取第一个纯数字主版本
+            version=$(echo "${_node_ver}" | grep -oE '[0-9]+' | head -1)
             ;;
         requirements.txt | setup.py | Pipfile)
             lang_type="python"
@@ -238,17 +237,17 @@ repo_language_detect() {
     fi
 
     lang_type=${lang_type:-unknown}
-    # 如果检测到版本信息，将其附加到语言类型后
-    lang_type+=":${version}"
-    # 如果检测到 Dockerfile，附加 docker 类型
+    ## 固定三段式输出 lang:ver:docker_flag，字段缺失时留空
+    ## 例如 java:17:docker / java:8: / node::docker / unknown::
+    local docker_flag=""
     for file in "${G_REPO_DIR}"/Dockerfile "${G_REPO_DIR}"/Dockerfile.*; do
         [[ -f "${file}" ]] && {
-            lang_type+=":docker"
+            docker_flag="docker"
             break
         }
     done
 
-    echo "${lang_type}"
+    echo "${lang_type}:${version}:${docker_flag}"
 }
 
 # Export the function
@@ -286,7 +285,7 @@ repo_language_detect_docker() {
 # Git related functions
 setup_git_repo() {
     local is_gitea="${1:-false}" git_repo_url="$2" git_repo_branch="${3:-main}" git_repo_group git_repo_name git_repo_dir
-    command -v git >/dev/null || _install_packages "$IS_CHINA" git
+    command -v git >/dev/null || _install_packages git
 
     # Handle Gitea parameter
     if ${is_gitea}; then
@@ -364,7 +363,7 @@ setup_git_repo() {
 }
 
 get_git_branch() {
-    command -v git >/dev/null || _install_packages "$IS_CHINA" git
+    command -v git >/dev/null || _install_packages git
     local branch="${CI_COMMIT_REF_NAME:-}"
 
     # Try to determine branch name from different sources
@@ -379,7 +378,7 @@ get_git_branch() {
 }
 
 get_git_commit_sha() {
-    command -v git >/dev/null || _install_packages "$IS_CHINA" git
+    command -v git >/dev/null || _install_packages git
     local sha=""
 
     # Try to get commit SHA from different sources
@@ -394,7 +393,7 @@ get_git_commit_sha() {
 }
 
 get_git_last_commit_message() {
-    command -v git >/dev/null || _install_packages "$IS_CHINA" git
+    command -v git >/dev/null || _install_packages git
     if git rev-parse --git-dir >/dev/null 2>&1; then
         git --no-pager log --no-merges --oneline -1
     else
@@ -408,7 +407,7 @@ setup_svn_repo() {
     local svn_repo_url="${1:-}" svn_repo_name svn_repo_dir="${G_PATH}/builds/${svn_repo_name}"
     svn_repo_name=$(basename "$svn_repo_url")
 
-    command -v svn >/dev/null || _install_packages "$IS_CHINA" subversion
+    command -v svn >/dev/null || _install_packages subversion
     if [ -d "$svn_repo_dir/.svn" ]; then
         _msg step "[repo] Updating existing repo: $svn_repo_dir"
         (cd "$svn_repo_dir" && svn update) || {

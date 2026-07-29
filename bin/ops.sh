@@ -143,7 +143,7 @@ find_and_sync_files() {
 
 # Project management functions 00-文档库/03研发/所有研发人员-ssh-public-key.txt
 sync_ssh_keys() {
-    local source_keys_file="$1" oss_bucket_and_path="$2" temp_keys_file="${G_DIR}/temp_ssh_keys.txt"
+    local source_keys_file="$1" oss_bucket_and_path="$2" temp_keys_file="${G_DATA}/temp_ssh_keys.txt" port
 
     # Validate required parameters
     if [[ -z "$source_keys_file" || -z "$oss_bucket_and_path" ]]; then
@@ -158,7 +158,16 @@ sync_ssh_keys() {
     fi
 
     grep -vE '^#|^$|^[[:space:]]*$' "$source_keys_file" | tr -d '\r' | tee "$temp_keys_file"
+
+    ## 上传到OSS
     $CMD_OSS cp "$temp_keys_file" "oss://${oss_bucket_and_path}" -f
+
+    ## 给fzf 选择单个key，提示输入服务器 USER@IP:PORT，scp 到服务器
+    single_key="$(cat "$temp_keys_file" | fzf)"
+    read -rp "输入服务器 USER@IP:PORT : " target_server
+    port="${target_server#*:}"
+    echo "$single_key" | ssh -p "${port:-22}" "${target_server%:*}" "cat >>~/.ssh/authorized_keys"
+
     rm -f "$temp_keys_file"
 }
 
@@ -352,7 +361,7 @@ main() {
         CMD_CAT="$CMD_CAT --paging=never --color=always --style=full --theme=Dracula --wrap=auto --tabs=2"
     fi
     command -v fzf >/dev/null 2>&1 || { echo "Error: fzf is required" >&2 && exit 1; }
-    CMD_OSS=$(command -v ossutil || command -v ossutil64 || (command -v aliyun >/dev/null 2>&1 && echo "aliyun oss"))
+    CMD_OSS=$(command -v ossutil || command -v ossutil64 || (command -v aliyun >/dev/null 2>&1 && echo "aliyun ossutil"))
 
     # 加载环境变量文件
     [ -f "$G_ENV" ] || { echo "Error: Environment file $G_ENV not found" >&2 && exit 1; }

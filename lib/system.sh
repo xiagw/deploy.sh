@@ -12,7 +12,7 @@
 check_crontab_execution() {
     local script_data="$1" repo_id="$2" commit_sha="$3"
     ## Install crontab if not exists
-    command -v crontab &>/dev/null || _install_packages "$IS_CHINA" cron
+    command -v crontab &>/dev/null || _install_packages cron
     [[ -z "$script_data" || -z "$repo_id" || -z "$commit_sha" ]] && {
         _msg error "Missing required parameters for check_crontab_execution"
         return 1
@@ -58,9 +58,9 @@ system_clean_disk() {
         _msg warning "Disk usage is critically high. Using aggressive cleaning."
     fi
 
-    # Show cleanup plan in demo mode
-    if is_demo_mode "system_clean_disk"; then
-        _msg purple "1. Docker cleanup:"
+    # Show cleanup plan in dry-run mode
+    if ${DRY_RUN:-false}; then
+        _msg purple "[dry-run] system_clean_disk:"
         _msg purple "   - docker image prune -f"
         _msg purple "   - docker builder prune -f"
         _msg purple "   - Remove images from ${ENV_DOCKER_REGISTRY}"
@@ -183,7 +183,7 @@ system_check() {
             if [ "${lsb_dist:-}" = amzn ]; then
                 ${use_sudo:-} amazon-linux-extras install -y epel >/dev/null
             else
-                _install_packages "$IS_CHINA" epel-release >/dev/null
+                _install_packages epel-release >/dev/null
             fi
         }
         command -v git >/dev/null || pkgs+=(git2u)
@@ -215,7 +215,7 @@ system_check() {
     esac
 
     if [ ${#pkgs[@]} -gt 0 ]; then
-        _install_packages "$IS_CHINA" "${pkgs[@]}" >/dev/null
+        _install_packages "${pkgs[@]}" >/dev/null
     fi
 }
 
@@ -271,7 +271,7 @@ system_proxy() {
 # This function handles the actual certificate renewal process
 system_cert_renew() {
     # Check if certificate renewal is needed
-    if [[ "${GH_ACTION:-false}" = true ]]; then
+    if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
         return 0
     fi
 
@@ -283,7 +283,7 @@ system_cert_renew() {
     local acme_cert_dest="${acme_home}/dest"
 
     ## install acme.sh / 安装 acme.sh
-    command -v crontab &>/dev/null || _install_packages "$IS_CHINA" cron
+    command -v crontab &>/dev/null || _install_packages cron
     _install_acme_official
 
     [ -d "$acme_cert_dest" ] || mkdir -p "$acme_cert_dest"
@@ -415,9 +415,9 @@ system_cert_renew() {
     if [ -f "$reload_nginx" ]; then
         rm -f "$reload_nginx"
         _msg green "found $reload_nginx"
+        _install_python_gitlab ""
         ## 如果定义了变量数组 ENV_NGINX_PROJECT_ID
         if [[ -n "${ENV_NGINX_PROJECT_ID}" ]]; then
-            _msg "nginx project id in gitlab is ${ENV_NGINX_PROJECT_ID[*]}"
             for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
                 _msg "create gitlab pipeline, project id is $id"
                 gitlab project-pipeline create --ref main --project-id "$id" || true
@@ -437,7 +437,7 @@ system_cert_renew() {
     _msg time "[cert] completed"
     echo '================================================================'
 
-    if ${GH_ACTION:-false}; then
+    if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
         return 0
     fi
     if ${exec_single_job:-false}; then
@@ -445,65 +445,29 @@ system_cert_renew() {
     fi
 }
 
-# Install required tools based on environment variables
+# Install base tools (jq) unconditionally.
+# In CI (GITHUB_ACTIONS=true), install all dependencies for validation
+# (jmeter/docker skipped since CI runs inside a container).
+# Other tools are installed on-demand via _install_* at point of use
+# (each _install_* function is idempotent — skips if already present).
 # Returns:
 #   0 if all installations were successful
 #   1 if any installation failed
 system_install_tools() {
-    local install_result=0
-
     ## 基础工具安装
-    if ! command -v jq &>/dev/null; then
-        _check_sudo
-        _install_packages "$IS_CHINA" jq || ((install_result++))
+    system_proxy on
+    command -v jq || _install_packages jq
+
+    ## CI 测试：安装所有依赖组件（容器内跳过 jmeter/docker）
+    if ${GITHUB_ACTIONS:-false}; then
+        _install_aws
+        _install_aliyun_cli
+        _install_terraform
+        _install_kubectl
+        _install_helm
+        _install_python_element "$@"
+        _install_python_gitlab "$@"
     fi
-    if ! command -v yq &>/dev/null; then
-        _check_sudo
-        case "$(uname -s)" in
-        Linux)
-            if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64; then
-                $use_sudo install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
-            else
-                ((install_result++))
-            fi
-            ;;
-        Darwin)
-            if command -v brew &>/dev/null; then
-                brew install yq || ((install_result++))
-            else
-                if curl -fLo /tmp/yq https://github.com/mikefarah/yq/releases/latest/download/yq_darwin_amd64; then
-                    $use_sudo install -m 0755 /tmp/yq /usr/local/bin/yq || ((install_result++))
-                else
-                    ((install_result++))
-                fi
-            fi
-            ;;
-        *)
-            _msg error "Unsupported operating system for yq installation"
-            ((install_result++))
-            ;;
-        esac
-    fi
-
-    ## 云服务工具安装
-    ([ "${ENV_DOCKER_LOGIN_TYPE:-}" = aws ] || ${ENV_INSTALL_AWS:-false}) && _install_aws
-    ${ENV_INSTALL_ALIYUN:-false} && _install_aliyun_cli
-
-    ## 基础设施工具安装
-    ${ENV_INSTALL_TERRAFORM:-false} && _install_terraform
-    ${ENV_INSTALL_KUBECTL:-false} && _install_kubectl
-    ${ENV_INSTALL_HELM:-false} && _install_helm
-
-    ## 集成工具安装
-    ${ENV_INSTALL_PYTHON_ELEMENT:-false} && _install_python_element "$@" "$IS_CHINA"
-    ${ENV_INSTALL_PYTHON_GITLAB:-false} && _install_python_gitlab "$@" "$IS_CHINA"
-    ${ENV_INSTALL_JMETER:-false} && _install_jmeter
-
-    ## 容器工具安装
-    ${ENV_INSTALL_DOCKER:-false} && _install_docker "$([[ "$IS_CHINA" == "true" ]] && echo "--mirror Aliyun" || echo "")"
-    ${ENV_INSTALL_PODMAN:-false} && _install_podman
-
-    return "$install_result"
 }
 
 ################################################################################

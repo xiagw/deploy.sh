@@ -29,6 +29,7 @@ ARG INSTALL_LIBREOFFICE=false
 ################################################################################
 #### 阶段 1：Maven 编译 ####
 FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
+## FROM之前的全局变量必须重新定义
 ARG IN_CHINA
 ARG APP_WORKDIR
 ARG APP_PORT

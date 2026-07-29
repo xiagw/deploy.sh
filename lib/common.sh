@@ -130,10 +130,26 @@ _msg() {
 }
 
 _check_root() {
+    ${already_check_root:-false} && return 0
     case "$(id -u)" in
-    0) unset use_sudo && return 0 ;;
-    *) use_sudo=sudo && return 1 ;;
+    0)
+        unset use_sudo && return 0
+        ;;
+    *)
+        if sudo -l -U "$USER" &>/dev/null; then
+            use_sudo=sudo
+            echo "Not root but has sudo privileges."
+        else
+            _msg error "Permission denied: $USER lacks sudo privileges"
+            echo "Action required: Configure sudo access via visudo"
+            return 1
+        fi
+        ;;
     esac
+
+    if _set_package_manager; then
+        already_check_root=true
+    fi
 }
 
 _check_distribution() {
@@ -165,7 +181,7 @@ _check_cmd() {
         local updated=0
         for c in "$@"; do
             if ! command -v "$c" &>/dev/null; then
-                _check_sudo
+                _check_root
                 if [[ $updated -eq 0 && "${apt_update:-0}" -eq 1 ]]; then
                     ${cmd_pkg-} update -yqq
                     updated=1
@@ -214,12 +230,9 @@ _set_package_manager() {
 }
 
 _install_packages() {
-    local use_china_mirror="${1:-false}"
-    shift
     [ "$#" -eq 0 ] && return 0
-    _check_sudo >/dev/null || true
-    $use_china_mirror && _set_mirror os
-
+    _check_root >/dev/null || true
+    _set_mirror os
     # Set non-interactive installation environment variables
     if [[ "${cmd_pkg}" == *"apt-get"* ]]; then
         export DEBIAN_FRONTEND=noninteractive
@@ -231,24 +244,6 @@ _install_packages() {
         apt_update=0
     fi
     $cmd_pkg_install "${@}"
-}
-
-_check_sudo() {
-    ${already_check_sudo:-false} && return 0
-    if ! _check_root; then
-        if ! sudo -l -U "$USER" &>/dev/null; then
-            _msg error "Permission denied: $USER lacks sudo privileges"
-            echo "Action required: Configure sudo access via visudo"
-            return 1
-        fi
-        _msg success "Sudo privileges confirmed for $USER"
-    fi
-
-    if _set_package_manager; then
-        already_check_sudo=true
-        return 0
-    fi
-    return 1
 }
 
 _check_timezone() {
@@ -440,9 +435,9 @@ _install_aliyun_cli() {
     arch=$(uname -m)
     local arch_name
     case "$arch" in
-        x86_64|amd64) arch_name="amd64" ;;
-        aarch64|arm64) arch_name="arm64" ;;
-        *) arch_name="amd64" ;;
+    x86_64 | amd64) arch_name="amd64" ;;
+    aarch64 | arm64) arch_name="arm64" ;;
+    *) arch_name="amd64" ;;
     esac
 
     local url_down
@@ -581,12 +576,12 @@ _install_helm() {
 }
 
 _install_tencent_cli() {
-    local flag="$1" use_china_mirror=${2:-false}
+    local flag="$1"
     if [ "$flag" != "upgrade" ] && command -v tccli >/dev/null; then
         return
     fi
     _msg green "install tencent cli..."
-    $use_china_mirror && _set_mirror python
+    _set_mirror python
     python3 -m pip install tccli
     _msg green "Showing version"
     if ! command -v tccli >/dev/null; then
@@ -636,7 +631,7 @@ _install_aws() {
 }
 
 _install_python_gitlab() {
-    local flag="$1" use_china_mirror=${2:-false}
+    local flag="$1"
     if [ "$flag" = "upgrade" ]; then
         echo "Upgrade python-gitlab..."
     else
@@ -649,7 +644,7 @@ _install_python_gitlab() {
         fi
     fi
     _msg green "Installing python3 gitlab api..."
-    $use_china_mirror && _set_mirror python
+    _set_mirror python
     if command -v pipx >/dev/null 2>&1; then
         if pipx install python-gitlab; then
             _msg green "python-gitlab is installed successfully via pipx"
@@ -668,13 +663,13 @@ _install_python_gitlab() {
 }
 
 _install_python_element() {
-    local flag="$1" use_china_mirror=${2:-false}
+    local flag="$1"
     # matrix-nio 是一个库，不提供命令行工具，所以只需要检查包是否安装
     if [ "$flag" != "upgrade" ] && python3 -m pip show --quiet matrix-nio >/dev/null 2>&1; then
         return
     fi
     _msg green "Installing python3 element api..."
-    $use_china_mirror && _set_mirror python
+    _set_mirror python
     if python3 -m pip install --user --upgrade matrix-nio; then
         _msg green "matrix-nio is installed successfully"
     else
@@ -691,7 +686,12 @@ _install_docker() {
     local temp_file
     temp_file=$(mktemp)
     curl -fsSLo "$temp_file" https://get.docker.com
-    $use_sudo bash "$temp_file" "$@"
+    if [[ "${IS_CHINA:-}" == "true" ]]; then
+        $use_sudo bash "$temp_file" --mirror Aliyun
+    else
+        $use_sudo bash "$temp_file"
+    fi
+
     _msg green "Showing version"
     docker --version
     rm -f "$temp_file"
@@ -718,38 +718,38 @@ _notify_wecom() {
 }
 
 _set_mirror() {
+    if [[ "${IS_CHINA:-}" == "true" ]]; then
+        echo "Running in China, setting mirrors for $1"
+    else
+        return
+    fi
+    _check_root || return
+    local mirror_url f
     case ${1:-none} in
     os)
-        ## OS ubuntu:22.04 php
-        if [ -f /etc/apt/sources.list ]; then
-            $use_sudo sed -i -e 's/deb.debian.org/mirrors.ustc.edu.cn/g' \
-                -e 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-        ## OS Debian
-        elif [ -f /etc/apt/sources.list.d/debian.sources ]; then
-            $use_sudo sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
-        ## OS alpine, nginx:alpine
-        elif [ -f /etc/apk/repositories ]; then
-            # sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories
-            $use_sudo sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
-        fi
+        mirror_url="https://mirrors.ustc.edu.cn"
+        for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apk/repositories; do
+            [ -f "$f" ] || continue
+            $use_sudo sed -i -e "s/deb.debian.org/${mirror_url}/g" -e "s/archive.ubuntu.com/${mirror_url}/g" -e "s/dl-cdn.alpinelinux.org/${mirror_url}/g" "$f"
+        done
         ;;
     composer)
-        _check_root || return
-        composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
+        mirror_url="https://mirrors.aliyun.com/composer/"
+        composer config -g repo.packagist composer "$mirror_url"
         mkdir -p /var/www/.composer /.composer
         chown -R 1000:1000 /var/www/.composer /.composer /tmp/cache /tmp/config.json /tmp/auth.json
         ;;
     node)
-        # npm_mirror=https://mirrors.ustc.edu.cn/node/
-        # npm_mirror=http://mirrors.cloud.tencent.com/npm/
-        # npm_mirror=https://mirrors.huaweicloud.com/repository/npm/
-        npm_mirror=https://registry.npmmirror.com/
-        yarn config set registry $npm_mirror
-        npm config set registry $npm_mirror
+        # mirror_url=https://mirrors.ustc.edu.cn/node/
+        # mirror_url=http://mirrors.cloud.tencent.com/npm/
+        # mirror_url=https://mirrors.huaweicloud.com/repository/npm/
+        mirror_url=https://registry.npmmirror.com/
+        yarn config set registry $mirror_url
+        npm config set registry $mirror_url
         ;;
     python)
-        pip_mirror=https://pypi.tuna.tsinghua.edu.cn/simple
-        python3 -m pip config set global.index-url $pip_mirror
+        mirror_url=https://pypi.tuna.tsinghua.edu.cn/simple
+        python3 -m pip config set global.index-url $mirror_url
         ;;
     *)
         echo "Nothing to do."
@@ -1099,7 +1099,7 @@ _compress_document() {
     # 检查必要的命令
     if ! _check_commands gs libreoffice; then
         echo "Installing required packages..."
-        _install_packages "$use_china_mirror" ghostscript libreoffice
+        _install_packages ghostscript libreoffice
     fi
 
     # 获取文件扩展名

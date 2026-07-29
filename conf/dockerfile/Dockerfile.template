@@ -1,19 +1,20 @@
-
-## 全局变量
-ARG IN_CHINA=false
+# =============================================================================
+# 通用多阶段模板（编译型镜像：java/maven、go、php/swoole、nginx/geo 等）
+# 约定：
+#   - builder 阶段执行 build.sh ${BUILD_SCRIPT_ARG}，产物按"最终根文件系统布局"
+#     输出到 ${BUILD_OUTPUT_DIR}（如 jar→/build_output/app/、nginx→/build_output/usr/sbin/）
+#   - final 阶段先 COPY 产物到 /，再执行 build.sh ${RUN_SCRIPT_ARG} 安装运行时依赖
+#   - CMD 通过 APP_CMD 变量在运行时展开（ARG→ENV→shell 形式 CMD）
+# 各语言默认参数见 docker-bake.hcl，示例：
+#   docker buildx bake -f conf/dockerfile/docker-bake.hcl nginx
+# =============================================================================
 ARG MIRROR=
 ARG BUILD_IMAGE=maven
 ARG BUILD_TAG=3.9-amazoncorretto-17
 ARG RUN_IMAGE=amazoncorretto
 ARG RUN_TAG=17
 
-ARG IMAGE_TYPE=java
-ARG APP_PORT=8080
-ARG APP_WORKDIR=/app
-ARG APP_USER=1000
-ARG APP_UID=1000
-ARG APP_GID=1000
-
+ARG IN_CHINA=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 ARG BUILD_OUTPUT_DIR=/build_output
 
@@ -29,66 +30,84 @@ ARG INSTALL_LIBREOFFICE=false
 ################################################################################
 #### 阶段 1：Maven 编译 ####
 FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
+## FROM之前的全局变量必须重新定义
 ARG IN_CHINA
-ARG APP_WORKDIR
-ARG APP_PORT
-ARG APP_USER
-ARG APP_UID
-ARG APP_GID
 ARG MVN_PROFILE
 ARG BUILD_OUTPUT_DIR
 ARG BUILD_URL
+ARG BUILD_SCRIPT_ARG=
 
 WORKDIR /src
-# 使用缓存加速 Maven 依赖；需在构建时 mount 源码到 /src
+# 依赖缓存（maven/go），源码由构建时 bind mount 到 /src
 RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
+    --mount=type=cache,target=/go/pkg/mod,id=go_mod_cache,sharing=shared \
     --mount=type=bind,target=/src,rw \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
     [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
-    bash $BUILD_SH
-    ## 假如此处中断，表明 maven build 失败，请检查代码
-
+    if command -v bash >/dev/null 2>&1; then bash $BUILD_SH ${BUILD_SCRIPT_ARG}; else sh $BUILD_SH ${BUILD_SCRIPT_ARG}; fi
+    ## 假如此处中断，表明编译失败，请检查代码
 
 ################################################################################
-#### 阶段 2：仅 JDK 运行 ####
+#### 阶段 2：运行时 ####
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
+## FROM之前的全局变量必须重新定义
 ARG IN_CHINA
-ARG APP_WORKDIR
-ARG APP_PORT
+ARG APP_WORKDIR=/app
+ARG APP_PORTS="8080 8081"
+ARG APP_VOLUME=/app
+ARG APP_CMD="/opt/run0.sh"
 ARG APP_USER
 ARG APP_UID
 ARG APP_GID
 ARG MVN_PROFILE
 ARG BUILD_OUTPUT_DIR
 ARG BUILD_URL
+ARG ONBUILD_CHOWN=0:0
+ARG ONBUILD_COPY_SRC=./root/
+ARG ONBUILD_COPY_DEST=/
+ARG PHP_VERSION=
+ARG RUN_SCRIPT_ARG=
+
+ARG TZ=Asia/Shanghai
+# 是否安装中文字体（报表/导出等）
 ARG INSTALL_FONTS
 ARG INSTALL_FFMPEG
 ARG INSTALL_LIBREOFFICE
 
-ARG TZ=Asia/Shanghai
-# 是否安装中文字体（报表/导出等）
-ARG INSTALL_FONTS=false
-# 是否安装 ffmpeg
-ARG INSTALL_FFMPEG=false
-# 是否安装 LibreOffice
-ARG INSTALL_LIBREOFFICE=false
+LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>" \
+    org.opencontainers.image.authors="xiagw <fxiaxiaoyu@gmail.com>" \
+    org.opencontainers.image.licenses="MIT"
 
-ENV TZ=$TZ
+ENV TZ=${TZ} \
+    PHP_VERSION=${PHP_VERSION} \
+    ONBUILD_CHOWN=${ONBUILD_CHOWN} \
+    ONBUILD_COPY_SRC=${ONBUILD_COPY_SRC} \
+    ONBUILD_COPY_DEST=${ONBUILD_COPY_DEST}
+
 WORKDIR ${APP_WORKDIR}
-EXPOSE 8080 8081
-VOLUME ["${APP_WORKDIR}"]
-# 入口：初始化后由 run1.sh 启动 JAR
-CMD ["bash", "-c", "/opt/run0.sh"]
-RUN --mount=type=cache,target=/var/lib/apt/lists,id=apt_cache,sharing=shared  \
-    --mount=type=cache,target=/var/cache/yum,id=yum_cache,sharing=shared  \
+EXPOSE ${APP_PORTS}
+
+# builder 产物按根文件系统布局放入 /
+COPY --from=builder ${BUILD_OUTPUT_DIR}/ /
+
+RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,id=apt_lists,sharing=locked \
+    --mount=type=cache,target=/var/cache/apt,id=apt_cache,sharing=locked \
+    --mount=type=cache,target=/var/cache/yum,id=yum_cache,sharing=shared \
     --mount=type=bind,target=/src,rw \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
     [ -f $BUILD_SH ] || BUILD_SH=build.sh; \
     [ -f $BUILD_SH ] || curl -fLo $BUILD_SH $BUILD_URL; \
-    bash $BUILD_SH
+    if command -v bash >/dev/null 2>&1; then bash $BUILD_SH ${RUN_SCRIPT_ARG}; else sh $BUILD_SH ${RUN_SCRIPT_ARG}; fi
 
-# 从构建阶段拷贝已打包的 JAR（build.sh 会输出到 /build_output/）
-COPY --from=builder $BUILD_OUTPUT_DIR/ .
+VOLUME ${APP_VOLUME}
+
+CMD ["/bin/bash", "-c", "exec ${APP_CMD:-/opt/run0.sh}"]
+
+ONBUILD COPY --chown=${ONBUILD_CHOWN} ${ONBUILD_COPY_SRC} ${ONBUILD_COPY_DEST}
+ONBUILD RUN if [ -f /opt/onbuild.sh ]; then \
+        if command -v bash >/dev/null 2>&1; then bash /opt/onbuild.sh; else sh /opt/onbuild.sh; fi; \
+    fi

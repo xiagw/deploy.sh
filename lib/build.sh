@@ -7,55 +7,131 @@
 # License: GNU/GPL
 ################################################################################
 
-get_docker_context() {
-    ## ENV_DOCKER_CONTEXT: local/remote/both
-    ## In debug mode, use local Docker only and skip context switching.
+# 在 k8s 中创建 buildx builder
+# docker buildx create --driver kubernetes --name deploy-builder --driver-opt namespace=buildkit,replicas=1,rootless=false --driver-opt image=docker.m.daocloud.io/moby/buildkit:buildx-stable-1 --bootstrap
+ensure_buildx_builder() {
     [[ ${DEBUG_ON:-false} == true ]] && return
-    [[ ${ENV_DOCKER_CONTEXT:-local} == local ]] && return
+    [[ -z "${ENV_BUILDX_REMOTE_HOSTS[*]:-}" ]] && return
 
-    local docker_contexts docker_endpoints selected_context response
-    # 获取context列表
-    response="$(docker context ls --format json)"
-    read -ra docker_endpoints <<<"$(echo "$response" | jq -r '.DockerEndpoint' | tr '\n' ' ')"
-    # 创建缺失的远程上下文
-    local c=0 context_created=false
-    for dk_host in "${ENV_DOCKER_CONTEXT_HOSTS[@]}"; do
-        ((++c))
-        if [[ ! " ${docker_endpoints[*]} " =~ ${dk_host} ]]; then
-            docker context create "remote$c" --docker "host=${dk_host}" || _msg error "创建Docker上下文remote$c失败: ${dk_host}"
-            context_created=true
-        fi
-    done
-
-    # 如果创建了新context则刷新列表
-    [[ "$context_created" = true ]] && response="$(docker context ls --format json)"
-    if [[ ${ENV_DOCKER_CONTEXT:-local} == remote ]]; then
-        read -ra docker_contexts <<<"$(echo "$response" | jq -r '.Name' | grep -v '^default$' | tr '\n' ' ')"
-    else
-        read -ra docker_contexts <<<"$(echo "$response" | jq -r '.Name' | tr '\n' ' ')"
+    local builder_name="deploy-builder"
+    if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
+        local c=0 append_flag=()
+        for dk_host in "${ENV_BUILDX_REMOTE_HOSTS[@]}"; do
+            ((++c))
+            docker buildx create --name "$builder_name" "${append_flag[@]}" \
+                --node "node$c" --driver docker-container "$dk_host" ||
+                _msg error "创建buildx节点node$c失败: ${dk_host}"
+            append_flag=(--append)
+        done
     fi
-    # 选择上下文
-    case ${ENV_DOCKER_CONTEXT_ALGO:-rr} in
-    rand)
-        ## random algorithm / 随机算法
-        selected_context="${docker_contexts[RANDOM%${#docker_contexts[@]}]}"
+    export G_BUILDER="--builder $builder_name"
+}
+
+# 根据 lang（固定三段式 lang:ver:docker_flag，字段可为空）生成 docker-bake.hcl
+# $1 lang, $2 bake 文件路径, $3 应用镜像 tag, $4 可选 base 镜像 tag（存在 Dockerfile.base 时）
+generate_bake_file() {
+    local lang="${1:?lang required}" bake_file="${2:?bake file required}"
+    local repo_tag="${3:?repo tag required}" base_tag="${4:-}"
+    local lang_type ver docker_flag lang_args="" extra_args="" mirror="${ENV_DOCKER_MIRROR:+${ENV_DOCKER_MIRROR%/}/}"
+    IFS=: read -r lang_type ver docker_flag <<<"${lang}"
+    lang_type="${lang_type:-unknown}"
+
+    ## lang[:ver] → "BUILD_IMAGE BUILD_TAG RUN_IMAGE RUN_TAG"
+    ## Dockerfile 全变量化（ARG 默认值是 java），必须四项全量注入
+    ## 精确 key 未命中时回退到 lang key（默认版本）
+    declare -A LANG_IMAGE_MAP=(
+        ["java"]="maven 3.8-amazoncorretto-8 amazoncorretto 8-base"
+        ["java:1.7"]="maven 3.6-jdk-7 amazoncorretto 7"
+        ["java:7"]="maven 3.6-jdk-7 amazoncorretto 7"
+        ["java:11"]="maven 3.9-amazoncorretto-11 amazoncorretto 11-base"
+        ["java:17"]="maven 3.9-amazoncorretto-17 amazoncorretto 17-base"
+        ["java:21"]="maven 3.9-amazoncorretto-21 amazoncorretto 21-base"
+        ["java:25"]="maven 3.9-amazoncorretto-25 amazoncorretto 25-base"
+        ["java:26"]="maven 3.9-amazoncorretto-26 amazoncorretto 26-base"
+        ["node"]="node 22-slim node 22-slim"
+        ["go"]="golang 1.26 alpine latest"
+        ["golang"]="golang 1.26 alpine latest"
+        ["python"]="python 3.12-slim python 3.12-slim"
+        ["php"]="phpswoole/swoole 6.1-php8.4 ubuntu 24.04"
+    )
+
+    local map_val="${LANG_IMAGE_MAP[${lang_type}:${ver}]:-${LANG_IMAGE_MAP[${lang_type}]:-}}"
+    if [[ -n "${map_val}" ]]; then
+        local build_image build_tag run_image run_tag
+        read -r build_image build_tag run_image run_tag <<<"${map_val}"
+        ## node/python 等 tag 直接跟随版本号；go 仅编译镜像跟随版本
+        case "${lang_type}" in
+        node) [[ -n "${ver}" ]] && { build_tag="${ver}-slim"; run_tag="${ver}-slim"; } ;;
+        python) [[ -n "${ver}" ]] && { build_tag="${ver}-slim"; run_tag="${ver}-slim"; } ;;
+        go | golang) [[ -n "${ver}" ]] && build_tag="${ver}" ;;
+        esac
+        ## node 最低版本限制 18
+        if [[ "${lang_type}" == node ]]; then
+            local _node_num="${run_tag%%-*}"
+            [[ -n "${_node_num}" && "${_node_num}" -lt 18 ]] 2>/dev/null && { build_tag="18-slim"; run_tag="18-slim"; }
+        fi
+        lang_args+="
+        BUILD_IMAGE = \"${build_image}\"
+        BUILD_TAG = \"${build_tag}\"
+        RUN_IMAGE = \"${run_image}\"
+        RUN_TAG = \"${run_tag}\""
+    fi
+
+    ## 语言特有的附加参数
+    case "${lang_type}" in
+    java)
+        lang_args+="
+        MVN_PROFILE = \"${G_REPO_BRANCH}\"
+        MVN_DEBUG = \"${DEBUG_ON:-false}\""
+
         ;;
-    rr)
-        ## round-robin algorithm / 轮询算法
-        position_file="${G_DATA:-.}/.docker_context_history"
-        [[ -f "$position_file" ]] || echo 0 >"$position_file"
-        # Read current position / 读取当前轮询位置
-        position=$(<"$position_file")
-        # Select context / 输出当前位置的值
-        selected_context="${docker_contexts[position]}"
-        # Update position / 更新轮询位置
-        echo $((++position % ${#docker_contexts[@]})) >"$position_file"
+    node)
+        lang_args+="
+        ONBUILD_CHOWN = \"1000:1000\"
+        ONBUILD_COPY_SRC = \".\"
+        ONBUILD_COPY_DEST = \"/app/\""
         ;;
     esac
+    ## README 文件中声明的额外安装需求(变量名转为全大写变量值为 true 小写)
+    local f
+    for f in "${G_REPO_DIR}"/{README,readme}*; do
+        [ -f "$f" ] || continue
+        if ! grep -qi '^install_.*=.*true' "$f"; then
+            continue
+        fi
+        lang_args+="
+        $(grep -ih '^install_.*=.*true' "$f" | tr '[:lower:]' '[:upper:]' | sed 's/TRUE/"true"/g')"
+    done
 
-    G_DOCK="${G_DOCK:+"$G_DOCK "}--context $selected_context"
-    # echo "  $G_DOCK"
-    export G_DOCK
+    ## BUILD_SCRIPT_ARG 和 RUN_SCRIPT_ARG 仅在非空时注入（避免覆盖 Dockerfile 默认值）
+    [[ -n "${ENV_BUILD_SCRIPT_ARG:-}" ]] && extra_args+="
+        BUILD_SCRIPT_ARG = \"${ENV_BUILD_SCRIPT_ARG}\""
+    [[ -n "${ENV_RUN_SCRIPT_ARG:-}" ]] && extra_args+="
+        RUN_SCRIPT_ARG = \"${ENV_RUN_SCRIPT_ARG}\""
+
+
+    cat >"${bake_file}" <<EOF
+target "default" {
+    context = "${G_REPO_DIR}"
+    dockerfile = "Dockerfile"
+    platforms = ["linux/amd64"]
+    args = {
+        IN_CHINA = "${ENV_IN_CHINA:-false}"
+        MIRROR = "${mirror}"
+        BUILD_OUTPUT_DIR = "/build_output"${lang_args}${extra_args}
+    }
+    tags = ["${repo_tag}"]
+}
+EOF
+    if [ -n "${base_tag}" ]; then
+        cat >>"${bake_file}" <<EOF
+target "base" {
+    inherits = ["default"]
+    dockerfile = "Dockerfile.base"
+    tags = ["${base_tag}"]
+}
+EOF
+    fi
 }
 
 run_command_with_log() {
@@ -78,10 +154,10 @@ run_command_with_log() {
 }
 
 build_image() {
-    [ "${GH_ACTION:-false}" = "true" ] && return 0
-    local keep_image="${1}" chars chars_rand base_file push_flag image_uuid
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
+    local keep_image="${1}" lang="${2:-}" base_file push_flag image_uuid repo_tag base_tag docker_bake_file
 
-    get_docker_context
+    ensure_buildx_builder
 
     ## build from build.base.sh or Dockerfile.base
     local build_sh="${G_REPO_DIR}/build.base.sh"
@@ -97,64 +173,61 @@ build_image() {
     if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
         docker_login
         push_flag="--push"
+    else
+        push_flag="--load"
     fi
+
+    repo_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
+    docker_bake_file="${G_REPO_DIR}/docker-bake.hcl"
 
     base_file="${G_REPO_DIR}/Dockerfile.base"
     if [[ -f "${base_file}" ]]; then
         base_tag="${ENV_DOCKER_REGISTRY%/}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
+        echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
+    fi
+
+    generate_bake_file "${lang}" "${docker_bake_file}" "${repo_tag}" "${base_tag:-}"
+
+    if ${DRY_RUN:-false}; then
+        echo "## DEBUG: generated ${docker_bake_file}"
+        if [[ -f "${base_file}" ]]; then
+            $G_DOCK buildx bake ${G_BUILDER:-} --progress=quiet base --print
+            echo "$G_DOCK buildx bake ${G_BUILDER:-} ${G_PROGRESS} base"
+        fi
+        $G_DOCK buildx bake ${G_BUILDER:-} --progress=quiet --print
+        echo "$G_DOCK buildx bake ${G_BUILDER:-} ${G_PROGRESS}"
+        export EXIT_MAIN=true
+        return 0
+    fi
+
+    if [[ -f "${base_file}" ]]; then
         echo "Found ${base_file}, building base image:"
         echo "  ${base_tag}"
         echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
         local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build.log"
+        echo "log file: $base_build_log"
         mkdir -p "$(dirname "$base_build_log")"
-        if ! run_command_with_log "$base_build_log" $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}"; then
-            ret=$?
+        $G_DOCK buildx bake ${G_BUILDER:-} --file "${docker_bake_file}" ${push_flag} ${G_PROGRESS} base 2>&1 | tee "$base_build_log" >/dev/null
+        ret="${PIPESTATUS[0]}"
+        if [ "$ret" -ne 0 ]; then
             echo "============================================================"
             _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
             echo "============================================================"
             tail -100 "$base_build_log"
             _msg error "Full build log: $base_build_log"
             return 1
-        else
-            echo "${hash_now}" >"${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5"
         fi
     fi
 
     repo_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
     [ -n "$ENV_DOCKER_MIRROR" ] && ENV_DOCKER_MIRROR="${ENV_DOCKER_MIRROR%/}/"
 
-    docker_bake_file="${G_REPO_DIR}/docker-bake.hcl"
-    cat >"${docker_bake_file}" <<EOF
-version = "0.1"
-target "default" {
-    context = "${G_REPO_DIR}"
-    dockerfile = "${G_REPO_DIR}/Dockerfile"
-    # platforms = ["linux/amd64", "linux/arm64"]
-    platforms = ["linux/amd64"]
-    args = {
-        IN_CHINA = "${ENV_IN_CHINA}"
-        MIRROR = "${ENV_DOCKER_MIRROR}"
-        # BUILD_IMAGE = "${BUILD_IMAGE}"
-        BUILD_TAG = "${BUILD_TAG}"
-        # RUN_IMAGE = "${RUN_IMAGE}"
-        RUN_TAG = "${RUN_TAG}"
-        MVN_PROFILE = "${G_REPO_BRANCH}"
-        BUILD_OUTPUT_DIR = "/build_output"
-        INSTALL_FONTS = "${INSTALL_FONTS:-false}"
-        INSTALL_FFMPEG = "${INSTALL_FFMPEG:-false}"
-        INSTALL_LIBREOFFICE = "${INSTALL_LIBREOFFICE:-false}"
-    }
-    tags = ["${repo_tag}"]
-}
-EOF
-    # $G_DOCK buildx bake --file "${docker_bake_file}" --print ${G_PROGRESS}
-    # $G_DOCK buildx bake --file "${docker_bake_file}" ${push_flag} ${G_PROGRESS} 2>&1 | grep -v 'error reading preface from client dummy'
-
     # Docker build 输出到日志文件，默认不显示构建详情
     # 构建失败时显示最后100行日志便于排查
     local build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-build.log"
+    echo "log file: $build_log"
     mkdir -p "$(dirname "$build_log")"
-    if ! run_command_with_log "$build_log" $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}"; then
+    if ! run_command_with_log "$build_log" $G_DOCK buildx bake ${G_BUILDER:-} --file "${docker_bake_file}" ${push_flag} ${G_PROGRESS}; then
         ret=$?
         echo "============================================================"
         _msg error "Image build failed (exit code: $ret), showing last 100 lines of build log:"
@@ -163,7 +236,7 @@ EOF
         _msg error "Full build log: $build_log"
         return 1
     fi
-    _msg time "[build] Image build completed (log: $build_log)"
+    _msg time "[build] Image build completed"
 
     ## push to ttl.sh
     if [[ "${PP_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
@@ -209,7 +282,7 @@ build_all() {
         docker)
             if check_docker_available; then
                 _msg info "Using configured build method: docker"
-                build_image "${keep_image}"
+                build_image "${keep_image}" "${lang}"
                 return $?
             else
                 _msg error "Configured build method 'docker' but Docker is not available"
@@ -239,7 +312,7 @@ build_all() {
             # Check if lang already has :docker suffix, if not, try Docker build first
             if [[ "$lang" != *:docker ]]; then
                 # Try Docker build with fallback
-                if build_image "${keep_image}"; then
+                if build_image "${keep_image}" "${lang}"; then
                     _msg green "Docker build completed successfully"
                     return 0
                 else
@@ -248,7 +321,7 @@ build_all() {
                 fi
             else
                 # Lang already marked as docker, use Docker build directly
-                build_image "${keep_image}"
+                build_image "${keep_image}" "${lang}"
                 return $?
             fi
         else
@@ -369,7 +442,7 @@ build_node() {
     [ ! -d "${G_REPO_DIR}/node_modules" ] && yarn_install=true
 
     _msg time "[build] Running yarn install"
-    ${GH_ACTION:-false} && return 0
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
     # Custom build check
     if [ -f "$G_REPO_DIR/build.custom.sh" ]; then
@@ -517,7 +590,7 @@ build_shell() {
 # Handles Docker login, context management, image building and pushing
 
 docker_login() {
-    ${GH_ACTION:-false} && return 0
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
     local lock_login_registry="$G_DATA/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
     local time_last
 
@@ -538,7 +611,7 @@ docker_login() {
         fi
         ;;
     *)
-        is_demo_mode "docker_login" && return 0
+        ${DRY_RUN:-false} && return 0
 
         if [[ -f "$lock_login_registry" ]]; then
             return 0
