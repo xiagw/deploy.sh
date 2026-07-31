@@ -84,11 +84,11 @@ config_deploy_vars() {
     G_IMAGE_TAG="$(date +%s%3N)"
 
     ## Docker镜像仓库路径配置
-    ## 如果启用 ENV_DOCKER_RANDOM=true，会在仓库路径中添加随机字符前缀
+    ## 如果启用 ENV_DOCKER_IMAGE_RANDOM=true，会在仓库路径中添加随机字符前缀
     ## 格式说明:
-    ##   1. ENV_DOCKER_RANDOM=false: $ENV_DOCKER_REGISTRY/$G_REPO_NAME:$G_IMAGE_TAG
-    ##   2. ENV_DOCKER_RANDOM=true:  $ENV_DOCKER_REGISTRY/$RANDOM_CHARS:$G_IMAGE_TAG
-    if [[ "${ENV_DOCKER_RANDOM:-false}" = true ]]; then
+    ##   1. ENV_DOCKER_IMAGE_RANDOM=false: $ENV_DOCKER_REGISTRY/$G_REPO_NAME:$G_IMAGE_TAG
+    ##   2. ENV_DOCKER_IMAGE_RANDOM=true:  $ENV_DOCKER_REGISTRY/$RANDOM_CHARS:$G_IMAGE_TAG
+    if [[ "${ENV_DOCKER_IMAGE_RANDOM:-false}" = true ]]; then
         local chars
         chars=({a..o}) # 字符集: a到o（共15个字符）
         ## 随机选取两个字符组合（可组合总数: 15*15=225个）
