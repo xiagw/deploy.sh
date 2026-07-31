@@ -237,12 +237,10 @@ parse_command_args() {
         shift
     done
 
-    ## 设置Docker构建的静默模式（非调试模式下启用）
+    ## 设置Docker构建的进度显示模式（非调试模式下使用精简输出）
     if ${DEBUG_ON:-false}; then
-        export G_QUIET=''
         export G_PROGRESS='--progress=plain'
     else
-        export G_QUIET='--quiet'
         export G_PROGRESS='--progress=quiet'
     fi
 
@@ -301,15 +299,13 @@ config_build_env() {
     done
 
     ## 基础构建参数配置
-    ## G_QUIET: 静默模式（非调试模式下启用）
     ## IN_CHINA: 是否在中国地区（影响构建时的镜像源选择）
-    G_ARGS+=" ${G_QUIET} --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
+    G_ARGS+=" --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
 
-    ## 调试模式配置
-    ## 在调试模式下显示详细的构建进度信息
-    if ${DEBUG_ON:-false}; then
-        G_ARGS+=" ${G_PROGRESS}"
-    fi
+    ## 构建进度配置
+    ## 调试模式: --progress=plain 显示完整构建输出
+    ## 正常模式: --progress=quiet 精简输出（构建详情记录到日志文件）
+    G_ARGS+=" ${G_PROGRESS}"
 
     ## 配置Docker镜像镜像源（如果指定）
     ## 用于加速镜像拉取（特别是在中国地区）

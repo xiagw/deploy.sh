@@ -86,10 +86,16 @@ build_image() {
         echo "Found ${base_file}, building base image:"
         echo "  ${base_tag}"
         echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
-        $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}"
-        ret="$?"
+        local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build.log"
+        mkdir -p "$(dirname "$base_build_log")"
+        $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}" 2>&1 | tee "$base_build_log" >/dev/null
+        ret="${PIPESTATUS[0]}"
         if [ "$ret" -ne 0 ]; then
-            _msg error "Base image build failed, exiting."
+            echo "============================================================"
+            _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
+            echo "============================================================"
+            tail -100 "$base_build_log"
+            _msg error "Full build log: $base_build_log"
             return 1
         else
             echo "${hash_now}" >"${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5"
@@ -127,9 +133,21 @@ EOF
     # $G_DOCK buildx bake --file "${docker_bake_file}" --print ${G_PROGRESS}
     # $G_DOCK buildx bake --file "${docker_bake_file}" ${push_flag} ${G_PROGRESS} 2>&1 | grep -v 'error reading preface from client dummy'
 
-    # echo "$G_DOCK build $G_ARGS --tag ${repo_tag} ${push_flag} ${G_REPO_DIR}"
-    $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | grep -v 'error reading preface from client dummy'
-    _msg time "[build] Image build completed"
+    # Docker build 输出到日志文件，默认不显示构建详情
+    # 构建失败时显示最后100行日志便于排查
+    local build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-build.log"
+    mkdir -p "$(dirname "$build_log")"
+    $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | tee "$build_log" >/dev/null
+    ret="${PIPESTATUS[0]}"
+    if [ "$ret" -ne 0 ]; then
+        echo "============================================================"
+        _msg error "Image build failed (exit code: $ret), showing last 100 lines of build log:"
+        echo "============================================================"
+        tail -100 "$build_log"
+        _msg error "Full build log: $build_log"
+        return 1
+    fi
+    _msg time "[build] Image build completed (log: $build_log)"
 
     ## push to ttl.sh
     if [[ "${PP_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
