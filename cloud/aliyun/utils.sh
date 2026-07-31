@@ -21,6 +21,7 @@ check_dependencies() {
     if [ -z "$aliyun_version" ] || ! _version_ge "$aliyun_version" "3.4.0"; then
         echo "错误：需要阿里云 CLI >= 3.4.0（当前：${aliyun_version:-未知}）。" >&2
         echo "请执行 'aliyun upgrade' 或重新安装：https://help.aliyun.com/zh/cli/install-update-alibaba-cloud-cli" >&2
+        echo "curl -fsSL https://aliyuncli.alicdn.com/install.sh | sudo bash" >&2
         exit 1
     fi
 
