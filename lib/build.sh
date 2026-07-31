@@ -121,7 +121,6 @@ target "default" {
         # RUN_IMAGE = "${RUN_IMAGE}"
         RUN_TAG = "${RUN_TAG}"
         MVN_PROFILE = "${G_REPO_BRANCH}"
-        MVN_DEBUG = "${MVN_DEBUG:-false}"
         BUILD_OUTPUT_DIR = "/build_output"
         INSTALL_FONTS = "${INSTALL_FONTS:-false}"
         INSTALL_FFMPEG = "${INSTALL_FFMPEG:-false}"
@@ -274,10 +273,10 @@ build_java() {
     else
         _msg time "[build] Building with maven"
         local maven_settings=""
-        local maven_quiet=""
+        local maven_debug=""
 
         [[ -f $G_REPO_DIR/settings.xml ]] && maven_settings="--settings settings.xml"
-        ${DEBUG_ON:-false} || maven_quiet='--quiet'
+        ${DEBUG_ON:-false} && maven_debug='-X'
 
         ## Create maven cache
         if ! $G_DOCK volume ls | grep -q maven-repo; then
@@ -290,7 +289,7 @@ build_java() {
             -v maven-repo:/var/maven/.m2:rw \
             -v "$G_REPO_DIR":/src:rw -w /src \
             maven:"${ENV_MAVEN_VER:-3.8-jdk-8}" \
-            mvn -T 1C clean $maven_quiet \
+            mvn -T 1C clean $maven_debug \
             --update-snapshots package \
             --define skipTests \
             --define user.home=/var/maven \

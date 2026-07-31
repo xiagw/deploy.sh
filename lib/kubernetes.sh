@@ -310,7 +310,6 @@ target "default" {
         HTTP_PROXY = "${proxy_url:-}"
         HTTPS_PROXY = "${proxy_url:-}"
         MVN_PROFILE = "base"
-        MVN_DEBUG = "${MVN_DEBUG:-false}"
         NODE_VERSION = "${tag_right}"
         PHP_VERSION = "${tag_right}"
         MYSQL_VERSION = "${tag_right}"

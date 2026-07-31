@@ -10,13 +10,11 @@ ARG RUN_IMAGE=amazoncorretto
 ARG RUN_TAG=17
 
 ARG IN_CHINA=false
-ARG MVN_DEBUG=false
 ARG MVN_PROFILE=base
 
 # FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG}
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
 ARG IN_CHINA
-ARG MVN_DEBUG
 ARG MVN_PROFILE
 
 LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>" \

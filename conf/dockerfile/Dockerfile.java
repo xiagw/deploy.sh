@@ -17,8 +17,6 @@ ARG APP_GID=1000
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
 ARG BUILD_OUTPUT_DIR=/build_output
 
-# 设为 true 可显示 Maven 详细日志
-ARG MVN_DEBUG=false
 # Maven profile，如 develop / main
 ARG MVN_PROFILE=main
 # 是否安装中文字体（报表/导出等）
@@ -37,7 +35,6 @@ ARG APP_PORT
 ARG APP_USER
 ARG APP_UID
 ARG APP_GID
-ARG MVN_DEBUG
 ARG MVN_PROFILE
 ARG BUILD_OUTPUT_DIR
 ARG BUILD_URL
@@ -63,7 +60,6 @@ ARG APP_PORT
 ARG APP_USER
 ARG APP_UID
 ARG APP_GID
-ARG MVN_DEBUG
 ARG MVN_PROFILE
 ARG BUILD_OUTPUT_DIR
 ARG BUILD_URL

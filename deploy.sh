@@ -237,12 +237,9 @@ parse_command_args() {
         shift
     done
 
-    ## 设置Docker构建的进度显示模式（非调试模式下使用精简输出）
-    if ${DEBUG_ON:-false}; then
-        export G_PROGRESS='--progress=plain'
-    else
-        export G_PROGRESS='--progress=quiet'
-    fi
+    ## 设置Docker构建的进度显示模式
+    ## 构建输出统一写入日志文件，始终使用 --progress=plain 保证日志完整性
+    export G_PROGRESS='--progress=plain'
 
     ## 检查是否有任何功能标志被启用
     ## 如果所有标志都为0，表示用户没有指定任何参数，将启用自动模式（所有任务）
@@ -303,8 +300,7 @@ config_build_env() {
     G_ARGS+=" --build-arg IN_CHINA=${ENV_IN_CHINA:-false}"
 
     ## 构建进度配置
-    ## 调试模式: --progress=plain 显示完整构建输出
-    ## 正常模式: --progress=quiet 精简输出（构建详情记录到日志文件）
+    ## 使用 --progress=plain 保证完整构建输出，日志文件记录全部详情
     G_ARGS+=" ${G_PROGRESS}"
 
     ## 配置Docker镜像镜像源（如果指定）
@@ -319,11 +315,6 @@ config_build_env() {
         ## Java项目配置
         ## MVN_PROFILE: Maven构建配置文件，使用当前分支名
         G_ARGS+=" --build-arg MVN_PROFILE=${G_REPO_BRANCH}"
-
-        ## 调试模式下启用Maven调试输出
-        if ${DEBUG_ON:-false}; then
-            G_ARGS+=" --build-arg MVN_DEBUG=true"
-        fi
 
         ## 根据Java版本设置Maven和JDK版本
         ## 支持的Java版本: 7, 8, 11, 17, 21, 23

@@ -20,7 +20,6 @@ variable "MIRROR" { default = "" }
 variable "BUILD_IMAGE" { default = "maven" }
 variable "BUILD_TAG" { default = "3.9-amazoncorretto-17" }
 variable "BUILD_OUTPUT_DIR" { default = "/build_output" }
-variable "BUILD_MVN_DEBUG" { default = "false" }
 variable "BUILD_MVN_PROFILE" { default = "main" }
 variable "BUILD_INSTALL_FONTS" { default = "false" }
 variable "BUILD_INSTALL_FFMPEG" { default = "false" }
@@ -49,7 +48,6 @@ target "default" {
         RUN_IMAGE = "${RUN_IMAGE}"
         RUN_TAG = "${RUN_TAG}"
         BUILD_OUTPUT_DIR = "${BUILD_OUTPUT_DIR}"
-        BUILD_MVN_DEBUG = "${BUILD_MVN_DEBUG}"
         BUILD_MVN_PROFILE = "${BUILD_MVN_PROFILE}"
         BUILD_INSTALL_FONTS = "${BUILD_INSTALL_FONTS}"
         BUILD_INSTALL_FFMPEG = "${BUILD_INSTALL_FFMPEG}"
@@ -64,7 +62,6 @@ target "default" {
 target "java" {
     inherits = ["default"]
     args = {
-        BUILD_MVN_DEBUG = "${BUILD_MVN_DEBUG}"
         BUILD_MVN_PROFILE = "${BUILD_MVN_PROFILE}"
     }
 }
