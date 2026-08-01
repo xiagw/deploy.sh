@@ -469,6 +469,7 @@ cdn_pay() {
     echo "CDN 资源包购买："
     call_api_logged "cdn" "pay" "错误：CDN 资源包购买失败。" \
         -- bssopenapi create-resource-package \
+        --api-version 2017-12-14 \
         --product-code dcdn \
         --package-type FPT_dcdnpaybag_deadlineAcc_1541405199 \
         --duration 1 \
