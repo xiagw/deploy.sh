@@ -467,13 +467,97 @@ cdn_pay() {
     ## 特殊方式，修改为只买1TB时长1月的（1月的单价108¥，6-12月的单价126¥）
     echo -e "[$(date +'%F %T')] 购买 1TB 资源包..."
     echo "CDN 资源包购买："
-    call_api_logged "cdn" "pay" "错误：CDN 资源包购买失败。" \
+
+    # 优先使用 CLI 插件方式
+    local _result
+    _result=$(call_api_logged "cdn" "pay" "错误：CDN 资源包购买失败。" \
         -- bssopenapi create-resource-package \
         --api-version 2017-12-14 \
         --product-code dcdn \
         --package-type FPT_dcdnpaybag_deadlineAcc_1541405199 \
         --duration 1 \
         --pricing-cycle Month \
-        --specification "$package_unit_size" || return 1
-    echo "CDN 资源包购买成功。"
+        --specification "$package_unit_size" 2>&1) && {
+        echo "$_result"
+        echo "CDN 资源包购买成功。"
+        return 0
+    }
+
+    # CLI 插件未实现此子命令时，fallback 到 curl 直调 RPC API
+    if echo "$_result" | grep -q "unknown command"; then
+        echo "CLI 插件暂不支持 create-resource-package，切换到 curl 直调..."
+    else
+        echo "$_result" >&2
+        return 1
+    fi
+
+    # 从 aliyun 配置读取凭证
+    local _prof_name="${profile:-$(jq -r '.current' ~/.aliyun/config.json 2>/dev/null)}"
+    local _ak_id _ak_secret
+    _ak_id=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_id' ~/.aliyun/config.json)
+    _ak_secret=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_secret' ~/.aliyun/config.json)
+    if [ -z "$_ak_id" ] || [ -z "$_ak_secret" ]; then
+        echo "错误：无法从配置中获取凭证（profile: ${_prof_name}）" >&2
+        return 1
+    fi
+
+    # 构建 RPC 请求参数
+    local _nonce _timestamp
+    _nonce=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null)
+    _timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    local -a _rp=()
+    _rp+=(Action CreateResourcePackage)
+    _rp+=(Version 2017-12-14)
+    _rp+=(Format JSON)
+    _rp+=(AccessKeyId "$_ak_id")
+    _rp+=(SignatureMethod HMAC-SHA1)
+    _rp+=(SignatureVersion 1.0)
+    _rp+=(SignatureNonce "$_nonce")
+    _rp+=(Timestamp "$_timestamp")
+    _rp+=(ProductCode dcdn)
+    _rp+=(PackageType FPT_dcdnpaybag_deadlineAcc_1541405199)
+    _rp+=(Duration 1)
+    _rp+=(PricingCycle Month)
+    _rp+=(Specification "$package_unit_size")
+
+    # 构造规范化查询字符串、计算 HMAC-SHA1 签名（一次 Python 调用）
+    local _sign_result _qs _sig_enc
+    _sign_result=$(python3 -c "
+import urllib.parse, hmac, hashlib, base64, sys
+params = sys.argv[1:]
+pairs = sorted((urllib.parse.quote(k, safe=''), urllib.parse.quote(v, safe=''))
+               for k, v in zip(params[::2], params[1::2]))
+qs = '&'.join(k+'='+v for k, v in pairs)
+sts = 'GET&' + urllib.parse.quote('/', safe='') + '&' + urllib.parse.quote(qs, safe='')
+sig = base64.b64encode(hmac.new(
+    (sys.argv[-1]+'&').encode(), sts.encode(), hashlib.sha1).digest()).decode()
+print(qs)
+print(urllib.parse.quote(sig, safe=''))
+" "${_rp[@]}" "$_ak_secret")
+    _qs=$(echo "$_sign_result" | head -1)
+    _sig_enc=$(echo "$_sign_result" | tail -1)
+
+    # 发起请求
+    _result=$(curl -s "https://business.aliyuncs.com/?${_qs}&Signature=${_sig_enc}" 2>&1) || {
+        echo "错误：CDN 资源包购买失败。" >&2
+        echo "$_result" >&2
+        return 1
+    }
+
+    # 检查 API 错误响应
+    local _err_code
+    _err_code=$(echo "$_result" | jq -r '.Code // empty' 2>/dev/null)
+    if [ -n "$_err_code" ]; then
+        echo "错误：CDN 资源包购买失败（${_err_code}）。" >&2
+        echo "$_result" | jq '.' 2>/dev/null || echo "$_result" >&2
+        return 1
+    fi
+
+    local _order_id _instance_id
+    _order_id=$(echo "$_result" | jq -r '.OrderId // empty' 2>/dev/null)
+    _instance_id=$(echo "$_result" | jq -r '.InstanceId // empty' 2>/dev/null)
+    echo "$_result" | jq '.' 2>/dev/null || echo "$_result"
+    log_result "${profile:-}" "${region:-}" "cdn" "pay" "$_result"
+    echo "CDN 资源包购买成功（订单: ${_order_id:-未知}，实例: ${_instance_id:-未知}）。"
 }
