@@ -681,12 +681,18 @@ _install_python_element() {
     fi
     _msg green "Installing python3 element api..."
     _set_mirror python
-    if python3 -m pip install --user --upgrade matrix-nio; then
-        _msg green "matrix-nio is installed successfully"
-    else
-        _msg error "failed to install matrix-nio"
-        return 1
+    if command -v pipx >/dev/null 2>&1; then
+        if pipx install --force --python python3 matrix-nio; then
+            _msg green "matrix-nio is installed successfully via pipx"
+            return 0
+        fi
     fi
+    if python3 -m pip install --user --upgrade matrix-nio; then
+        _msg green "matrix-nio is installed successfully via pip"
+        return 0
+    fi
+    _msg error "failed to install matrix-nio"
+    return 1
 }
 
 _install_docker() {

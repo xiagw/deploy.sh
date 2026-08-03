@@ -155,7 +155,7 @@ _check_run_sh() {
             if [ -f "$runsh" ]; then
                 install -m 0755 "$runsh" "$i"
             else
-                curl -fLo "$i" "$url_deploy_raw/conf/dockerfile/root$i"
+                curl -fLo "$i" "$url_deploy_raw/conf/root$i"
             fi
         fi
         chmod +x "$i"
@@ -668,7 +668,7 @@ EOF
     if [ -f /src/root/opt/mbk.sh ]; then
         install -m 0755 /src/root/opt/mbk.sh /opt/mbk.sh
     else
-        mysql_bak="$url_deploy_raw/conf/dockerfile/root/opt/mbk.sh"
+        mysql_bak="$url_deploy_raw/conf/root/opt/mbk.sh"
         curl -fLo /opt/mbk.sh "$mysql_bak"
     fi
     chmod +x /opt/mbk.sh

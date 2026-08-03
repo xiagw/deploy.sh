@@ -14,8 +14,7 @@ check_php_style() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
     if ! ${G_DOCK} images | grep -q 'deploy/phpcs'; then
-        local run="${G_DOCK} build ${G_ARGS}"
-        $run -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null
+        ${G_DOCK} build ${G_ARGS} -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null
     fi
 
     local phpcs_result=0
@@ -24,7 +23,7 @@ check_php_style() {
             echo_warn "$G_REPO_DIR/$i not exists."
             continue
         fi
-        if ! $docker_run -v "$G_REPO_DIR":/project deploy/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcs_report:-full}" "/project/$i"; then
+        if ! ${G_RUN} -v "$G_REPO_DIR":/project deploy/phpcs phpcs -n --standard=PSR12 --colors --report="${phpcs_report:-full}" "/project/$i"; then
             phpcs_result=$((phpcs_result + 1))
         fi
     done

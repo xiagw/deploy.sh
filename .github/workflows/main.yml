@@ -27,8 +27,8 @@ jobs:
 
       - name: Build the Docker image
         run: |
-          cp ./docs/.dockerignore ./
-          docker build --tag xiagw/deploy -f ./docs/Dockerfile .
+          cp ./conf/.dockerignore.self ./.dockerignore
+          docker build --tag xiagw/deploy -f ./conf/Dockerfile.self .
           # docker push xiagw/deploy
 
       # - name: Run the Anchore scan action itself with GitHub Advanced Security code scanning integration enabled

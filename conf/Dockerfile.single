@@ -6,7 +6,7 @@
 #     mysql/redis 用 "docker-entrypoint.sh mysqld" 之类重新进入官方入口以保留初始化
 #   - ONBUILD：复用 base image 时把子项目文件带入镜像（node 覆盖为 COPY . /app/）
 # 各语言默认参数见 docker-bake.hcl，示例：
-#   docker buildx bake -f conf/dockerfile/docker-bake.hcl mysql
+#   docker buildx bake -f conf/docker-bake.hcl mysql
 # =============================================================================
 ARG MIRROR=
 ARG RUN_IMAGE=alpine
@@ -14,7 +14,7 @@ ARG RUN_TAG=latest
 
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
 ARG IN_CHINA=false
-ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/root/opt/build.sh
 ARG RUN_SCRIPT_ARG=
 ARG TZ=UTC
 ARG APP_WORKDIR=/app

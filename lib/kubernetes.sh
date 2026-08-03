@@ -365,7 +365,7 @@ build_base_image() {
 
   cat >"${bake_file}" <<EOF
 target "default" {
-    context = "${G_PATH}/conf/dockerfile"
+    context = "${G_PATH}/conf"
     dockerfile = "Dockerfile.single"
     platforms = ["linux/amd64", "linux/arm64"]
     args = {

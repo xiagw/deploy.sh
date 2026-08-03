@@ -14,7 +14,7 @@ ARG APP_USER=1000
 ARG APP_UID=1000
 ARG APP_GID=1000
 
-ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/root/opt/build.sh
 ARG BUILD_OUTPUT_DIR=/build_output
 
 # Maven profile，如 develop / main

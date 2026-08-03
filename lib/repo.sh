@@ -54,8 +54,8 @@ repo_inject_file() {
         _msg info "Found existing Dockerfile, skipping injection."
         return 0
     fi
-    local _single="${G_PATH}/conf/dockerfile/Dockerfile.single"
-    local _template="${G_PATH}/conf/dockerfile/Dockerfile.template"
+    local _single="${G_PATH}/conf/Dockerfile.single"
+    local _template="${G_PATH}/conf/Dockerfile.template"
     echo "Inject Dockerfile.base or Dockerfile..."
     case "$lang" in
     node)
@@ -91,14 +91,14 @@ repo_inject_file() {
 
     ## 同时注入 .dockerignore（如果不存在）
     [[ ! -f "${G_REPO_DIR}/.dockerignore" ]] &&
-        cp -f "${G_PATH}/conf/dockerfile/.dockerignore" "${G_REPO_DIR}/"
+        cp -f "${G_PATH}/conf/.dockerignore" "${G_REPO_DIR}/"
 
     ## 2. Dockerfile 所需 root/ 目录结构注入
-    local conf_root="${G_PATH}/conf/dockerfile/root" repo_root="${G_REPO_DIR}/root"
+    local conf_root="${G_PATH}/conf/root" repo_root="${G_REPO_DIR}/root"
     local rsync_opts="rsync -r --exclude=*.cnf"
     ## 创建 root/ 目录（如果不存在）
     mkdir -p "${repo_root}"
-    ## 优先级1：从 conf/dockerfile/root/ 注入基础目录结构（如果不存在 root/opt）
+    ## 优先级1：从 conf/root/ 注入基础目录结构（如果不存在 root/opt）
     if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
         ${rsync_opts} "${conf_root}/" "${repo_root}/"
     fi

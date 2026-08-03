@@ -1,0 +1,10 @@
+.git/
+.github/
+.dockerignore
+.gitattributes
+.gitignore
+.gitlab-ci.yml
+ansible/
+data/
+docs/
+Dockerfile*

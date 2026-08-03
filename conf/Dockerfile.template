@@ -6,7 +6,7 @@
 #   - final 阶段先 COPY 产物到 /，再执行 build.sh ${RUN_SCRIPT_ARG} 安装运行时依赖
 #   - CMD 通过 APP_CMD 变量在运行时展开（ARG→ENV→shell 形式 CMD）
 # 各语言默认参数见 docker-bake.hcl，示例：
-#   docker buildx bake -f conf/dockerfile/docker-bake.hcl nginx
+#   docker buildx bake -f conf/docker-bake.hcl nginx
 # =============================================================================
 ARG MIRROR=
 ARG BUILD_IMAGE=maven
@@ -15,7 +15,7 @@ ARG RUN_IMAGE=amazoncorretto
 ARG RUN_TAG=17
 
 ARG IN_CHINA=false
-ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/dockerfile/root/opt/build.sh
+ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/root/opt/build.sh
 ARG BUILD_OUTPUT_DIR=/build_output
 
 # Maven profile，如 develop / main
