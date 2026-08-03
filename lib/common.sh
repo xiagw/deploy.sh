@@ -721,7 +721,7 @@ _set_mirror() {
     if [[ "${IS_CHINA:-}" == "true" ]]; then
         echo "Running in China, setting mirrors for $1"
     else
-        return
+        return 0
     fi
     _check_root || return
     local mirror_url f
