@@ -86,16 +86,14 @@ deploy_to_kubernetes() {
     if [ "${G_NAMESPACE}" != main ]; then
         helm_args+=("--set" "replicaCount=1")
     fi
-    if [[ "$DRY_RUN" == "true" ]]; then
+    if [[ "$DRY_RUN" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
         _msg warn "[dry-run] skip helm upgrade/install, showing command only"
-    fi
-    echo "${helm_args[@]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
-
-    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "${helm_args[@]}"
         export EXIT_MAIN=true
         return 0
     fi
-    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
+
+    echo "${helm_args[@]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
 
     ## helm install / helm 安装  --atomic
     "${helm_args[@]}" >/dev/null || return 1
@@ -300,7 +298,7 @@ deploy_via_rsync_ssh() {
         fi
 
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then
-            if ${DRY_RUN:-false}; then
+            if ${DRY_RUN:-false} || [[ "${GITHUB_ACTIONS}" == "true" ]]; then
                 _msg purple "[dry-run] deploy_aliyun_oss:"
                 _msg purple "  Source: ${rsync_src}"
                 _msg purple "  Destination: ${rsync_dest}"
@@ -311,7 +309,7 @@ deploy_via_rsync_ssh() {
         fi
 
         echo "Destination: ${ssh_host}:${rsync_dest}"
-        if ${DRY_RUN:-false}; then
+        if ${DRY_RUN:-false} || [[ "${GITHUB_ACTIONS}" == "true" ]]; then
             _msg purple "[dry-run] deploy_rsync_ssh:"
             _msg purple "  $ssh_opt -n \"$ssh_host\" \"mkdir -p $rsync_dest\""
             _msg purple "  ${rsync_opt} -e \"$ssh_opt\" \"$rsync_src\" \"${ssh_host}:${rsync_dest}\""
