@@ -133,7 +133,7 @@ _check_root() {
     ${already_check_root:-false} && return 0
     case "$(id -u)" in
     0)
-        unset use_sudo && return 0
+        unset use_sudo
         ;;
     *)
         if sudo -l -U "$USER" &>/dev/null; then
@@ -149,7 +149,11 @@ _check_root() {
 
     if _set_package_manager; then
         already_check_root=true
+        return 0
     fi
+
+    _msg error "Failed to detect package manager."
+    return 1
 }
 
 _check_distribution() {
@@ -231,10 +235,13 @@ _set_package_manager() {
 
 _install_packages() {
     [ "$#" -eq 0 ] && return 0
-    _check_root >/dev/null || true
+    if ! _check_root >/dev/null; then
+        _msg error "_install_packages: package manager initialization failed."
+        return 1
+    fi
     _set_mirror os
     # Set non-interactive installation environment variables
-    if [[ "${cmd_pkg}" == *"apt-get"* ]]; then
+    if [[ "${cmd_pkg:-}" == *"apt-get"* ]]; then
         export DEBIAN_FRONTEND=noninteractive
         export DEBCONF_NONINTERACTIVE_SEEN=true
     fi
@@ -242,6 +249,10 @@ _install_packages() {
     if [[ "${apt_update:-0}" -eq 1 ]]; then
         $cmd_pkg update -yqq
         apt_update=0
+    fi
+    if [[ -z "${cmd_pkg_install:-}" ]]; then
+        _msg error "_install_packages: cmd_pkg_install is not set."
+        return 1
     fi
     $cmd_pkg_install "${@}"
 }
