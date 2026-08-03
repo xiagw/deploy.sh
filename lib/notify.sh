@@ -91,7 +91,7 @@ handle_notify() {
     [ -z "$type" ] && return 0
 
     # Disable notifications for specific branches (e.g. develop, testing branches)
-    [[ "${ENV_DISABLE_NOTIFY_BRANCH}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false
+    [[ "${ENV_DISABLE_NOTIFY_BRANCH:-develop|testing}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false
     # Manual override: if PP_DISABLE_NOTIFY is true, force enable notification regardless of other settings
     ${PP_DISABLE_NOTIFY:-false} && exec_deploy_notify=true
 

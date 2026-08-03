@@ -6,7 +6,16 @@
 # @param $1 G_DATA Directory containing data files
 # @return 0 on success, non-zero on failure
 repo_inject_file() {
-    local lang="${1%%:*}" arg_disable_inject="${2:-false}"
+    local lang arg_disable_inject="${1:-false}"
+
+    ## ========================================================================
+    ## 项目语言探测
+    ## 自动探测项目的编程语言、版本和Dockerfile信息
+    ## 返回固定三段式: "lang:ver:docker_flag"，字段缺失时留空
+    ## (例如: "java:17:docker", "node::docker", "unknown::")
+    ## ========================================================================
+    get_lang=$(repo_language_detect) # 完整语言标识: lang:ver:docker
+    lang=${get_lang%%:*}        # 仅语言类型: lang
 
     command -v rsync >/dev/null || _install_packages rsync
 
@@ -42,7 +51,7 @@ repo_inject_file() {
     ## 存在 dockerfile 则跳过
     ## 不存在 dockerfile， 按照lang不同分开处理
     if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
-        echo "Existing Dockerfile found, skipping injection."
+        _msg info "Found existing Dockerfile, skipping injection."
         return 0
     fi
     local _single="${G_PATH}/conf/dockerfile/Dockerfile.single"

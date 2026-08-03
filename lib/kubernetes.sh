@@ -63,7 +63,7 @@ create_helm_chart() {
     fi
   fi
   pvc_name="${ENV_HELM_VALUES_PVC:-pvc-www}"
-  mount_path="${ENV_HELM_PVC_MOUNT_PATH:-/app2}"
+  mount_path="${ENV_HELM_PVC_MOUNT_PATH:-/data}"
   protocol="${protocol:-tcp}"
   port="${port:-8080}"
   port2="${port2:-8081}"

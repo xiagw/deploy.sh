@@ -147,9 +147,12 @@ update_nginx_geoip_db() {
         fi
     }
 
-    for ip in "${ENV_NGINX_IPS[@]}"; do
-        _update_server "$ip" &
-    done
+    if [ -n "${ENV_NGINX_IPS[*]:-}" ]; then
+        _msg info "Updating GeoIP database on Nginx servers: ${ENV_NGINX_IPS[*]}"
+        for ip in "${ENV_NGINX_IPS[@]}"; do
+            _update_server "$ip" &
+        done
+    fi
 
     wait
 
@@ -305,7 +308,7 @@ system_cert_renew() {
         fi
         dns_type=${file##*.}
         source "$file"
-        system_proxy on
+
         case "${dns_type}" in
         dns_gd)
             _msg yellow "dns type: Goddady"
@@ -416,8 +419,8 @@ system_cert_renew() {
         rm -f "$reload_nginx"
         _msg green "found $reload_nginx"
         _install_python_gitlab ""
-        ## 如果定义了变量数组 ENV_NGINX_PROJECT_ID
-        if [[ -n "${ENV_NGINX_PROJECT_ID}" ]]; then
+        ## 如果定义了变量数组 ENV_NGINX_PROJECT_ID，则使用该数组中的项目 ID 创建 GitLab pipeline
+        if [[ -n "${ENV_NGINX_PROJECT_ID[*]:-}" ]]; then
             for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
                 _msg "create gitlab pipeline, project id is $id"
                 gitlab project-pipeline create --ref main --project-id "$id" || true
@@ -455,8 +458,7 @@ system_cert_renew() {
 #   1 if any installation failed
 system_install_tools() {
     ## 基础工具安装
-    system_proxy on
-    command -v jq || _install_packages jq
+    command -v jq >/dev/null || _install_packages jq
 
     ## CI 测试：安装所有依赖组件（容器内跳过 jmeter/docker）
     if ${GITHUB_ACTIONS:-false}; then

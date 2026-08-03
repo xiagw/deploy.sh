@@ -84,7 +84,7 @@ find_project_config() {
 ################################################################################
 config_deploy_init() {
     ## 初始化环境变量配置文件
-    [[ ! -f "${G_ENV}" ]] && cp -v "${G_PATH}/conf/templates/deploy.env" "${G_ENV}"
+    [[ -f "${G_ENV}" ]] || cp -v "${G_PATH}/conf/templates/deploy.env" "${G_ENV}"
 
     ## ========================================================================
     ## PATH 环境变量配置
@@ -202,3 +202,114 @@ config_deploy_setup() {
     _msg green "Deployment environment setup completed"
 }
 
+################################################################################
+# 函数: config_deploy_depend
+# 描述: 配置部署依赖，包括文件配置和环境配置
+# 参数:
+#   $1 - type: 配置类型 ("file" 或 "env")
+# 返回: 无
+# 说明:
+#   - type="file": 初始化配置文件
+#   - type="env": 设置部署环境（SSH、工具配置等）
+#   - 同时设置 IS_CHINA 环境变量（用于判断是否在中国地区）
+################################################################################
+config_deploy_depend() {
+    local type="$1"
+    shift
+
+    ## 检查是否在中国地区
+    ## 判断优先级:
+    ##   1. deploy.env 文件中的 ENV_IN_CHINA=true
+    ##   2. 环境变量 ENV_IN_CHINA=true
+    ##   3. 环境变量 CHANGE_SOURCE=true（兼容旧配置）
+    if grep -q 'ENV_IN_CHINA=true' "$G_ENV" || ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
+        export IS_CHINA=true
+    else
+        export IS_CHINA=false
+    fi
+
+    ## 根据类型执行相应的配置函数
+    case "$type" in
+    file) config_deploy_file ;;
+    env) config_deploy_env ;;
+    esac
+}
+
+################################################################################
+# 函数: env_file_set
+# 描述: 在 deploy.env 文件中设置环境变量，支持新增、更新、取消注释
+# 参数:
+#   $1 - KEY=VALUE 格式的键值对（VALUE 为原始值，不自动添加引号）
+# 返回: 0=成功, 1=格式错误
+# 说明:
+#   - 如果 KEY 已存在（未注释），更新其值
+#   - 如果 KEY 已存在但被注释，取消注释并更新值
+#   - 如果 KEY 不存在，追加到文件末尾
+#   - 含空格的值请自行加引号: deploy.sh set "ENV_FOO='bar baz'"
+################################################################################
+env_file_set() {
+    local input="$1"
+    local key="${input%%=*}"
+    local value="${input#*=}"
+
+    if [[ "$key" == "$input" || -z "$key" ]]; then
+        _msg error "Invalid format. Use: $0 set KEY=VALUE"
+        return 1
+    fi
+
+    local tmp_file found=false
+    tmp_file=$(mktemp)
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if ! $found && { [[ "$line" =~ ^${key}= ]] || [[ "$line" =~ ^#[[:space:]]*${key}= ]]; }; then
+            echo "${key}=${value}"
+            found=true
+        else
+            echo "$line"
+        fi
+    done < "$G_ENV" > "$tmp_file"
+
+    if ! $found; then
+        echo "${key}=${value}" >> "$tmp_file"
+    fi
+
+    mv "$tmp_file" "$G_ENV"
+    _msg green "Set ${key}=${value}"
+}
+
+################################################################################
+# 函数: env_file_get
+# 描述: 获取环境变量的值（优先从已 source 的 shell 环境读取）
+# 参数:
+#   $1 - KEY: 变量名
+# 返回: 0=成功（输出值到 stdout）, 1=变量不存在
+################################################################################
+env_file_get() {
+    local key="$1"
+
+    if [[ -z "$key" ]]; then
+        _msg error "Key name required. Use: $0 get KEY"
+        return 1
+    fi
+
+    local value="${!key:-}"
+
+    if [[ -n "$value" ]]; then
+        echo "$value"
+    elif grep -q "^${key}=" "$G_ENV"; then
+        echo ""
+    else
+        _msg error "Variable ${key} not found"
+        return 1
+    fi
+}
+
+################################################################################
+# 函数: env_file_list
+# 描述: 列出 deploy.env 中所有已启用的 ENV_ 变量
+# 参数: 无
+# 返回: 无（输出到标准输出）
+################################################################################
+env_file_list() {
+    grep '^ENV_' "$G_ENV"
+}

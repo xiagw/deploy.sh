@@ -10,7 +10,7 @@
 # 在 k8s 中创建 buildx builder
 # docker buildx create --driver kubernetes --name deploy-builder --driver-opt namespace=buildkit,replicas=1,rootless=false --driver-opt image=docker.m.daocloud.io/moby/buildkit:buildx-stable-1 --bootstrap
 ensure_buildx_builder() {
-    [[ ${DEBUG_ON:-false} == true ]] && return
+    [[ "${G_DEBUG_ON:-false}" == true ]] && return
     [[ -z "${ENV_BUILDX_REMOTE_HOSTS[*]:-}" ]] && return
 
     local builder_name="deploy-builder"
@@ -82,7 +82,7 @@ generate_bake_file() {
     java)
         lang_args+="
         MVN_PROFILE = \"${G_REPO_BRANCH}\"
-        MVN_DEBUG = \"${DEBUG_ON:-false}\""
+        MVN_DEBUG = \"${G_DEBUG_ON:-false}\""
 
         ;;
     node)
@@ -163,7 +163,7 @@ build_image() {
     local build_sh="${G_REPO_DIR}/build.base.sh"
     if [[ -f "${build_sh}" ]]; then
         echo "Found ${build_sh}, running it..."
-        ${DEBUG_ON:-false} && debug_flag="-x"
+        [[ "${G_DEBUG_ON:-false}" == true ]] && debug_flag="-x"
         bash "${build_sh}" $debug_flag
         export EXIT_MAIN=true
         return
@@ -189,13 +189,13 @@ build_image() {
     generate_bake_file "${lang}" "${docker_bake_file}" "${repo_tag}" "${base_tag:-}"
 
     if ${DRY_RUN:-false}; then
-        echo "## DEBUG: generated ${docker_bake_file}"
+        _msg warn "[dry-run] skip docker buildx bake, showing build plan only"
         if [[ -f "${base_file}" ]]; then
-            $G_DOCK buildx bake ${G_BUILDER:-} --progress=quiet base --print
             echo "$G_DOCK buildx bake ${G_BUILDER:-} ${G_PROGRESS} base"
+            $G_DOCK buildx bake ${G_BUILDER:-} --progress=quiet base --print
         fi
-        $G_DOCK buildx bake ${G_BUILDER:-} --progress=quiet --print
         echo "$G_DOCK buildx bake ${G_BUILDER:-} ${G_PROGRESS}"
+        $G_DOCK buildx bake ${G_BUILDER:-} --progress=quiet --print
         export EXIT_MAIN=true
         return 0
     fi
@@ -308,7 +308,7 @@ build_all() {
     # Priority 1: Try Docker build if Dockerfile exists and Docker is available
     if [[ "$has_dockerfile" == true ]]; then
         if check_docker_available; then
-            _msg info "Dockerfile found and Docker is available → attempting Docker build"
+            _msg info "Found Dockerfile and dockerd is available → attempting Docker build"
             # Check if lang already has :docker suffix, if not, try Docker build first
             if [[ "$lang" != *:docker ]]; then
                 # Try Docker build with fallback
@@ -325,7 +325,7 @@ build_all() {
                 return $?
             fi
         else
-            _msg warn "Dockerfile found but Docker is not available, using system command build"
+            _msg warn "Found Dockerfile but Docker is not available, using system command build"
         fi
     fi
 
@@ -366,7 +366,7 @@ build_java() {
         local maven_debug=""
 
         [[ -f $G_REPO_DIR/settings.xml ]] && maven_settings="--settings settings.xml"
-        ${DEBUG_ON:-false} && maven_debug='-X'
+        [[ "${G_DEBUG_ON:-false}" == true ]] && maven_debug='-X'
 
         ## Create maven cache
         if ! $G_DOCK volume ls | grep -q maven-repo; then
@@ -564,7 +564,7 @@ build_php() {
 # Shell Build
 build_shell() {
     _msg time "[build] Running shell build"
-    ${DEBUG_ON} && return 0
+    [[ "${G_DEBUG_ON:-false}" == true ]] && return 0
     local exit_code=0 script s=0
     command -v shellcheck >/dev/null 2>&1 && sc=true
     command -v shfmt >/dev/null 2>&1 && sf=true
@@ -591,17 +591,17 @@ build_shell() {
 
 docker_login() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
-    local lock_login_registry="$G_DATA/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-none}.lock"
+    local lock_login_registry="$G_DATA/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-aliyun}.lock"
     local time_last
 
-    case "${ENV_DOCKER_LOGIN_TYPE:-none}" in
+    case "${ENV_DOCKER_LOGIN_TYPE:-aliyun}" in
     aws)
         time_last="$(stat -t -c %Y "$lock_login_registry" 2>/dev/null || echo 0)"
         ## Compare the last login time, login again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
         if [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]]; then
             return 0
         fi
-        _msg time "[login] aws ecr login [${ENV_DOCKER_LOGIN_TYPE:-none}]..."
+        _msg time "[login] aws ecr login [${ENV_DOCKER_LOGIN_TYPE:-aliyun}]..."
         if aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" |
             $G_DOCK login --username AWS --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" >/dev/null; then
             touch "$lock_login_registry"

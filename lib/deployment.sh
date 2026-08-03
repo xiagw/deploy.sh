@@ -37,10 +37,6 @@ format_release_name() {
 # Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
     _msg step "[deploy] Deploy to Kubernetes with Helm"
-    ${DRY_RUN:-false} && {
-        _msg purple "[dry-run] deploy_k8s skipped"
-        return 0
-    }
     local release_name previous_image rs0 bad_pod
     release_name="$(format_release_name)"
 
@@ -90,7 +86,15 @@ deploy_to_kubernetes() {
     if [ "${G_NAMESPACE}" != main ]; then
         helm_args+=("--set" "replicaCount=1")
     fi
+    if [[ "$DRY_RUN" == "true" ]]; then
+        _msg warn "[dry-run] skip helm upgrade/install, showing command only"
+    fi
     echo "${helm_args[@]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        export EXIT_MAIN=true
+        return 0
+    fi
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
     ## helm install / helm 安装  --atomic
@@ -109,6 +113,7 @@ deploy_to_kubernetes() {
     if [[ "${deploy_result:-0}" -eq 1 ]]; then
         _msg red "Rolling back deployment ${release_name}"
         $KUBECTL_OPT -n "${G_NAMESPACE}" rollout undo deployment/"${release_name}" 2>/dev/null || true
+        echo "$KUBECTL_OPT -n ${G_NAMESPACE} scale deployment/${release_name} --replicas=0"
         return 1
     fi
 
@@ -189,14 +194,14 @@ deploy_aliyun_functions() {
 EOF
     fi
 
-    if aliyun -p "${ENV_ALIYUN_CLI_PROFILE-}" fc GET /2023-03-30/functions --prefix "${release_name:0:3}" --limit 100 --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "${release_name}$"; then
+    if aliyun -p "${ENV_ALIYUN_CLI_PROFILE:-default}" fc GET /2023-03-30/functions --prefix "${release_name:0:3}" --limit 100 --header "Content-Type=application/json;" | jq -r '.functions[].functionName' | grep -qw "${release_name}$"; then
         _msg time "Updating function: $release_name"
-        aliyun -p "${ENV_ALIYUN_CLI_PROFILE-}" --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}\"}}"
+        aliyun -p "${ENV_ALIYUN_CLI_PROFILE:-default}" --quiet fc PUT /2023-03-30/functions/"$release_name" --header "Content-Type=application/json;" --body "{\"tracingConfig\":{},\"customContainerConfig\":{\"image\":\"${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}\"}}"
     else
         _msg time "Creating new function: $release_name"
-        aliyun -p "${ENV_ALIYUN_CLI_PROFILE-}" --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"
+        aliyun -p "${ENV_ALIYUN_CLI_PROFILE:-default}" --quiet fc POST /2023-03-30/functions --header "Content-Type=application/json;" --body "$(cat "$functions_conf")"
         _msg time "Creating HTTP trigger for function: $release_name"
-        aliyun -p "${ENV_ALIYUN_CLI_PROFILE-}" --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
+        aliyun -p "${ENV_ALIYUN_CLI_PROFILE:-default}" --quiet fc POST /2023-03-30/functions/"$release_name"/triggers --header "Content-Type=application/json;" --body "{\"triggerType\":\"http\",\"triggerName\":\"defaultTrigger\",\"triggerConfig\":\"{\\\"methods\\\":[\\\"GET\\\",\\\"POST\\\",\\\"PUT\\\",\\\"DELETE\\\",\\\"OPTIONS\\\"],\\\"authType\\\":\\\"anonymous\\\",\\\"disableURLInternet\\\":false}\"}"
     fi
     rm -f "$functions_conf"
 
@@ -291,7 +296,7 @@ deploy_via_rsync_ssh() {
         [[ "$lang" == "node" ]] && rsync_opt+=" --delete"
 
         if [[ "$rsync_dest" == "none" || -z "$rsync_dest" ]]; then
-            rsync_dest="${ENV_PATH_DEST_PRE}/${G_NAMESPACE}_${G_REPO_NAME}/"
+            rsync_dest="${ENV_PATH_DEST_PRE:-/var/www}/${G_NAMESPACE}_${G_REPO_NAME}/"
         fi
 
         if [[ "${rsync_dest}" =~ 'oss://' ]]; then

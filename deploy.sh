@@ -99,6 +99,7 @@ config_deploy_vars() {
     ## 格式说明:
     ##   1. ENV_DOCKER_IMAGE_RANDOM=false: $ENV_DOCKER_REGISTRY/$G_REPO_NAME:$G_IMAGE_TAG
     ##   2. ENV_DOCKER_IMAGE_RANDOM=true:  $ENV_DOCKER_REGISTRY/$RANDOM_CHARS:$G_IMAGE_TAG
+    [ -z "$ENV_DOCKER_REGISTRY" ] && ENV_DOCKER_REGISTRY="${ENV_DOCKER_REGISTRY:-example.com/myrepo}"
     if [[ "${ENV_DOCKER_IMAGE_RANDOM:-${ENV_DOCKER_RANDOM:-false}}" = true ]]; then
         local chars
         chars=({a..o}) # 字符集: a到o（共15个字符）
@@ -142,7 +143,7 @@ Parameters:
 
     # Build operations
     -B, --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
-    -x, --build-base [--dry]     Execute function build_base_image; add --dry to preview without building.
+    -x, --build-base              Execute function build_base_image; append --dry for preview mode.
 
     # Deployment
     -k, --deploy-k8s             Deploy to Kubernetes.
@@ -177,6 +178,13 @@ Parameters:
                             Examples:
                               -c nginx:latest registry.example.com/ns
                               -c nginx:latest registry.example.com/ns false
+
+    # Environment configuration
+    set KEY=VALUE [KEY2=VALUE2 ...]  Set variable(s) in deploy.env.
+                                     Updates existing, uncomments commented, or appends new.
+                                     Values with spaces need quotes: set "ENV_FOO='bar baz'"
+    get KEY                          Get variable value from deploy.env.
+    env                              List all active ENV_ variables in deploy.env.
 EOF
 }
 
@@ -187,7 +195,7 @@ EOF
 # 返回: 无（设置全局变量 arg_flags 和相关变量）
 # 全局变量:
 #   - arg_flags: 关联数组，存储各个功能的启用标志（0=禁用, 1=启用）
-#   - DEBUG_ON: 调试模式标志
+#   - G_DEBUG_ON: 调试模式标志
 #   - run_with_crontab: 定时任务执行标志
 #   - arg_*: 各种命令行参数的值
 #   - all_zero: 如果所有标志都为0，则设置为true（表示自动模式）
@@ -198,7 +206,7 @@ parse_command_args() {
         # Basic options
         -h | --help) _usage && exit 0 ;;
         -v | --version) echo "Version: 5.0.0" && exit 0 ;;
-        -d | --debug) DEBUG_ON=true && set -x ;;
+        -d | --debug) G_DEBUG_ON=true && set -x ;;
         -l | --cron | --loop) run_with_crontab=true ;;
         --dry) export DRY_RUN=true ;;
         # Repository operations
@@ -207,10 +215,7 @@ parse_command_args() {
         -b | --git-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
         -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build operations
-        -x | --build-base)
-            arg_flags["build_base"]=1
-            [[ "${2:-}" == --dry ]] && export DRY_RUN=true && shift
-            ;;
+        -x | --build-base) arg_flags["build_base"]=1 ;;
         -B | --build)
             arg_flags["build_all"]=1
             image_retain="${2:-remove}"
@@ -247,6 +252,14 @@ parse_command_args() {
         -D | --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
         --clean-tags) arg_clean_tags="${2:?ERROR: repository parameter is required}" && shift ;;
+        # Environment configuration
+        set)
+            shift
+            arg_env_set=("$@")
+            break
+            ;;
+        get) arg_env_get="${2:?ERROR: key name required}" && shift ;;
+        env | list) arg_env_list=true ;;
         *) _usage && exit 1 ;;
         esac
         shift
@@ -261,6 +274,11 @@ parse_command_args() {
             break
         fi
     done
+
+    ## 环境变量操作 (set/get/env) 不属于 CI/CD 任务，不触发自动模式
+    if [[ ${#arg_env_set[@]} -gt 0 || -n "${arg_env_get:-}" || "${arg_env_list:-false}" == true ]]; then
+        all_zero=false
+    fi
 
     ## 自动模式: 如果没有任何参数，则启用所有功能标志
     ## 这样用户可以直接运行 ./deploy.sh 执行完整的CI/CD流程
@@ -305,9 +323,11 @@ config_build_env() {
 
     ## 添加主机映射参数（用于容器内访问外部服务）
     ## ENV_ADD_HOST 数组中的每个条目都会添加到 G_RUN 中
-    for host in "${ENV_ADD_HOST[@]}"; do
-        G_RUN+=" --add-host=${host}"
-    done
+    if [ -n "${ENV_ADD_HOST[*]:-}" ]; then
+        for host in "${ENV_ADD_HOST[@]}"; do
+            G_RUN+=" --add-host=${host}"
+        done
+    fi
 
     ## 导出构建环境变量供其他函数使用
     export G_DOCK G_RUN
@@ -332,14 +352,15 @@ main() {
     ## 设置错误处理: 遇到错误立即退出，管道中任何命令失败都会导致脚本退出
     set -Eeo pipefail
 
-    ## 如果CI环境启用了调试跟踪，则启用详细输出
-    if [[ ${CI_DEBUG_TRACE:-false} == true ]]; then
-        set -x
-        DEBUG_ON=true
-    fi
-
     ## 记录脚本开始执行的时间（用于计算总执行时间）
     SECONDS=0
+
+    ## 如果 GitLab CI 环境启用了调试跟踪，则启用详细输出
+    if [[ ${CI_DEBUG_TRACE:-false} == true ]]; then
+        set -x
+        G_DEBUG_ON=true
+        echo "Debug mode enabled: CI_DEBUG_TRACE is $G_DEBUG_ON"
+    fi
 
     ## ========================================================================
     ## 全局变量初始化
@@ -347,7 +368,7 @@ main() {
     ##   G_* : 全局变量，在多个函数间共享使用
     ##   ENV_*: 环境配置变量，从 deploy.env 文件加载
     ##   arg_*: 命令行参数变量
-    ##   CI_*: CI/CD平台提供的环境变量
+    ##   CI_*: GitLab CI/CD平台提供的环境变量
     ## ========================================================================
 
     ## 脚本基本信息
@@ -355,12 +376,11 @@ main() {
     G_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" # 脚本所在目录的绝对路径
     G_LIB="${G_PATH}/lib"                                    # 功能模块库目录
     G_DATA="${G_PATH}/data"                                  # 数据目录（配置文件、日志等）
-
+    ## 配置文件路径（JSON格式，由 find_project_config 函数设置）
+    G_CONF="" # 部署配置文件
     ## 日志和配置文件路径
+    G_ENV="${G_DATA}/deploy.env"         # 环境变量配置文件
     G_LOG="${G_DATA}/logs/${G_NAME}.log" # 日志文件路径
-    ## 配置文件路径（由 find_project_config 函数设置）
-    G_CONF=""                    # 部署配置文件（JSON格式，在 find_project_config 中设置）
-    G_ENV="${G_DATA}/deploy.env" # 环境变量配置文件
 
     ## ========================================================================
     ## 功能标志数组初始化
@@ -428,6 +448,25 @@ main() {
     config_deploy_init
 
     source "$G_ENV"
+
+    ## ========================================================================
+    ## 环境变量配置操作 (set/get/env)
+    ## 这些是独立操作，执行完成后直接返回，不继续 CI/CD 流程
+    ## ========================================================================
+    if [[ ${#arg_env_set[@]} -gt 0 ]]; then
+        for kv in "${arg_env_set[@]}"; do
+            env_file_set "$kv"
+        done
+        return 0
+    fi
+    if [[ -n "${arg_env_get:-}" ]]; then
+        env_file_get "${arg_env_get}"
+        return $?
+    fi
+    if [[ "${arg_env_list:-false}" == true ]]; then
+        env_file_list
+        return 0
+    fi
 
     ## ========================================================================
     ## 独立功能: 构建基础镜像
@@ -511,16 +550,16 @@ main() {
     fi
 
     ## ========================================================================
-    ## 系统工具安装
-    ## 根据项目需求安装所需的系统工具和依赖
-    ## ========================================================================
-    system_install_tools "$@"
-
-    ## ========================================================================
     ## 磁盘空间清理
     ## 如果磁盘空间不足，自动清理临时文件、旧镜像等
     ## ========================================================================
     system_clean_disk
+
+    ## ========================================================================
+    ## 系统工具安装
+    ## 根据项目需求安装所需的系统工具和依赖
+    ## ========================================================================
+    system_install_tools "$@"
 
     ## ========================================================================
     ## 独立功能: 使用Terraform创建Kubernetes集群
@@ -570,17 +609,6 @@ main() {
     fi
 
     ## ========================================================================
-    ## 项目语言探测
-    ## 自动探测项目的编程语言、版本和Dockerfile信息
-    ## 返回固定三段式: "lang:ver:docker_flag"，字段缺失时留空
-    ## (例如: "java:17:docker", "node::docker", "unknown::")
-    ## ========================================================================
-    _msg step "[lang] Probe program language"
-    get_lang=$(repo_language_detect) # 完整语言标识: lang:ver:docker
-    repo_lang=${get_lang%%:*}        # 仅语言类型: lang
-    echo "${get_lang}"
-
-    ## ========================================================================
     ## 构建环境配置
     ## 根据项目语言配置Docker/Podman构建参数
     ## ========================================================================
@@ -592,7 +620,7 @@ main() {
     ## 例如: 根据环境替换数据库连接字符串、API端点等
     ## arg_disable_inject: 如果为true，则跳过文件注入
     ## ========================================================================
-    repo_inject_file "${repo_lang}" "${arg_disable_inject:-false}"
+    repo_inject_file "${arg_disable_inject:-false}"
 
     ## 重新探测语言（注入文件后可能需要重新检测）
     get_lang=$(repo_language_detect)
@@ -626,11 +654,13 @@ main() {
         done
     fi
 
+    unset EXIT_MAIN
+
     ## ========================================================================
     ## 阶段 1: 代码质量检查
     ## ========================================================================
     [[ ${arg_flags["code_quality"]} -eq 1 ]] && analysis_sonarqube
-    [[ ${arg_flags["code_style"]} -eq 1 ]] && style_check "$repo_lang"
+    [[ ${arg_flags["code_style"]} -eq 1 ]] && style_check
 
     ## ========================================================================
     ## 阶段 2: 单元测试
@@ -646,14 +676,11 @@ main() {
     ## 阶段 4: 构建
     ## ========================================================================
     if [[ ${arg_flags["build_all"]} -eq 1 ]]; then
-        unset EXIT_MAIN
         ## image_retain: 镜像保留策略
         ##   - push: 推送到镜像仓库
         ##   - keep: 本地保留
         ##   - remove: 构建后删除（默认）
         build_all "$get_lang" "${image_retain}"
-        ## 如果构建失败并设置了 EXIT_MAIN=true，则提前退出
-        [[ "${EXIT_MAIN:-false}" == "true" ]] && return 0
     fi
 
     ## ========================================================================
@@ -674,8 +701,11 @@ main() {
         fi
     done
     if [[ $deploy_sum -gt 0 ]] || $all_zero; then
-        handle_deploy "${deploy_method:-}" "$repo_lang" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG" "$G_IMAGE_TAG"
+        handle_deploy "${deploy_method:-}" "${get_lang%%:*}" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG" "$G_IMAGE_TAG"
     fi
+
+    ## 如果构建失败并设置了 EXIT_MAIN=true，则提前退出
+    [[ "${EXIT_MAIN:-false}" == "true" ]] && return 0
 
     ## ========================================================================
     ## 阶段 6: 功能测试（部署后验证）

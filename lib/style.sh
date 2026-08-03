@@ -164,7 +164,8 @@ parallel_style_check() {
 
 # Main style check function that determines which specific checker to run
 style_check() {
-    local lang="$1"
+    local lang
+    lang="$(repo_language_detect | cut -d':' -f1)" # 获取语言类型
 
     ## 在 gitlab 的 pipeline 配置环境变量 PP_CODE_STYLE ，true 启用，false 禁用[default]
     _msg step "[style] Running code style checks"
