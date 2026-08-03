@@ -602,6 +602,42 @@ _install_tencent_cli() {
     tccli --version
 }
 
+_install_pipx() {
+    local flag="${1:-}"
+    if [ "$flag" != "upgrade" ]; then
+        command -v pipx >/dev/null 2>&1 && return
+        if python3 -m pip show --quiet pipx >/dev/null 2>&1; then
+            return
+        fi
+    fi
+
+    _msg green "Installing pipx..."
+    _set_mirror python
+
+    if python3 -m pip install --user --upgrade pipx; then
+        if [ -x "$HOME/.local/bin/pipx" ]; then
+            PATH="$HOME/.local/bin:$PATH"
+            export PATH
+        fi
+        if command -v pipx >/dev/null 2>&1; then
+            _msg green "pipx is installed successfully"
+            return 0
+        fi
+    fi
+
+    if _check_root >/dev/null && [[ "${cmd_pkg:-}" == *"apt-get"* ]]; then
+        _msg green "Installing pipx via apt-get..."
+        $cmd_pkg update -yqq
+        if $cmd_pkg_install pipx; then
+            _msg green "pipx is installed successfully via apt-get"
+            return 0
+        fi
+    fi
+
+    _msg error "failed to install pipx"
+    return 1
+}
+
 _install_terraform() {
     if [ "$1" != "upgrade" ] && command -v terraform >/dev/null; then
         return
@@ -643,11 +679,9 @@ _install_aws() {
 
 _install_python_gitlab() {
     local flag="$1"
-    if [ "$flag" = "upgrade" ]; then
-        echo "Upgrade python-gitlab..."
-    else
+    if [ "$flag" != "upgrade" ]; then
         command -v gitlab >/dev/null && return
-        if pipx list 2>/dev/null | grep -q "package python-gitlab"; then
+        if command -v pipx >/dev/null 2>&1 && pipx list 2>/dev/null | grep -q "package python-gitlab"; then
             return
         fi
         if python3 -m pip show --quiet python-gitlab >/dev/null 2>&1; then
@@ -656,21 +690,13 @@ _install_python_gitlab() {
     fi
     _msg green "Installing python3 gitlab api..."
     _set_mirror python
-    if command -v pipx >/dev/null 2>&1; then
-        if pipx install python-gitlab; then
-            _msg green "python-gitlab is installed successfully via pipx"
-        else
-            _msg error "failed to install python-gitlab via pipx"
-            return 1
-        fi
-    else
-        if python3 -m pip install --user --upgrade python-gitlab; then
-            _msg green "python-gitlab is installed successfully via pip"
-        else
-            _msg error "failed to install python-gitlab via pip"
-            return 1
-        fi
+    _install_pipx
+    if pipx install --force --python python3 --include-deps python-gitlab; then
+        _msg green "python-gitlab is installed successfully via pipx"
+        return 0
     fi
+    _msg error "failed to install python-gitlab"
+    return 1
 }
 
 _install_python_element() {
@@ -681,14 +707,9 @@ _install_python_element() {
     fi
     _msg green "Installing python3 element api..."
     _set_mirror python
-    if command -v pipx >/dev/null 2>&1; then
-        if pipx install --force --python python3 matrix-nio; then
-            _msg green "matrix-nio is installed successfully via pipx"
-            return 0
-        fi
-    fi
-    if python3 -m pip install --user --upgrade matrix-nio; then
-        _msg green "matrix-nio is installed successfully via pip"
+    _install_pipx
+    if pipx install --force --python python3 --include-deps matrix-nio; then
+        _msg green "matrix-nio is installed successfully via pipx"
         return 0
     fi
     _msg error "failed to install matrix-nio"

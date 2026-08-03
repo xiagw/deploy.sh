@@ -54,9 +54,9 @@ find_project_config() {
         jq --arg project_path "${project_path}" '.project = $project_path' \
             "${template_file}" >"${project_conf}"
 
-        _msg info "Created default project config: ${project_conf}"
-        _msg warning "Note: This is a template configuration. Modify it if you need rsync/ftp deployment."
         G_CONF="${project_conf}"
+        _msg info "Created default project config: ${G_CONF}"
+        _msg warning "Note: This is a template configuration. Modify it if you need rsync/ftp deployment."
         ## 读取构建和部署配置覆盖（如果存在）
         _load_project_build_deploy_config "${project_conf}"
         return

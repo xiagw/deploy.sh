@@ -10,10 +10,6 @@
 builds/
 cache/
 
-## deploy.sh conf/
-conf/deploy.*
-!conf/templates/*
-
 ## data/
 data/**
 !data/README.md
@@ -22,3 +18,4 @@ data/**
 tmp/
 .cursor/
 .qoderignore
+.dockerignore

@@ -64,8 +64,8 @@ repo_inject_file() {
         ## 用 Dockerfile.single 作为 base image，再生成只含 FROM 的 Dockerfile
         echo "Checking package.json hash..."
         hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
-        mkdir -p "${G_DATA}/hash_saved"
-        hash_saved="$(cat "${G_DATA}/hash_saved/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
+        mkdir -p "${G_DATA}/hash_cache"
+        hash_saved="$(cat "${G_DATA}/hash_cache/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
         if [[ "$hash_now" != "$hash_saved" ]]; then
             echo "Copying Dockerfile.single as Dockerfile.base..."
             cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
