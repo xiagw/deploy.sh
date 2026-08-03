@@ -56,7 +56,6 @@ repo_inject_file() {
     fi
     local _single="${G_PATH}/conf/Dockerfile.single"
     local _template="${G_PATH}/conf/Dockerfile.template"
-    echo "Inject Dockerfile.base or Dockerfile..."
     case "$lang" in
     node)
         ## node：
@@ -90,8 +89,10 @@ repo_inject_file() {
     esac
 
     ## 同时注入 .dockerignore（如果不存在）
-    [[ ! -f "${G_REPO_DIR}/.dockerignore" ]] &&
+    if [[ ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
+        echo "Copying .dockerignore..."
         cp -f "${G_PATH}/conf/.dockerignore" "${G_REPO_DIR}/"
+    fi
 
     ## 2. Dockerfile 所需 root/ 目录结构注入
     local conf_root="${G_PATH}/conf/root" repo_root="${G_REPO_DIR}/root"
@@ -100,10 +101,12 @@ repo_inject_file() {
     mkdir -p "${repo_root}"
     ## 优先级1：从 conf/root/ 注入基础目录结构（如果不存在 root/opt）
     if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
+        echo "Injecting root/ directory structure from ${conf_root}..."
         ${rsync_opts} "${conf_root}/" "${repo_root}/"
     fi
     ## 优先级2：从 data/dockerfile/root/ 注入自定义目录结构
     if [[ -d "${G_DATA}/dockerfile/root" ]]; then
+        echo "Injecting root/ directory structure from ${G_DATA}/dockerfile/root..."
         ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
     fi
 }
