@@ -314,7 +314,7 @@ cdn_refresh_trigger() {
             --object-path "$path" \
             --object-type "$object_type" || echo "警告：$path 刷新失败，继续处理下一行" >&2
         ((count++))
-    done < "$trigger_file"
+    done <"$trigger_file"
 
     rm -f "$trigger_file"
 
@@ -463,7 +463,7 @@ cdn_pay() {
     done
 
     # 执行购买操作
-    log_result "${profile:-}" "$region" "cdn" "pay" "当前剩余: ${remaining_amount:-0}TB，准备购买 $((package_size / package_unit_size))TB 资源包..."
+    log_result "${profile:-}" "${region:-}" "cdn" "pay" "当前剩余: ${remaining_amount:-0}TB，准备购买 $((package_size / package_unit_size))TB 资源包..."
     ## 特殊方式，修改为只买1TB时长1月的（1月的单价108¥，6-12月的单价126¥）
     echo -e "[$(date +'%F %T')] 购买 1TB 资源包..."
     echo "CDN 资源包购买："
@@ -477,25 +477,21 @@ cdn_pay() {
         --package-type FPT_dcdnpaybag_deadlineAcc_1541405199 \
         --duration 1 \
         --pricing-cycle Month \
-        --specification "$package_unit_size" 2>&1) && {
-        echo "$_result"
-        echo "CDN 资源包购买成功。"
-        return 0
-    }
+        --specification "$package_unit_size" 2>&1)
 
     # CLI 插件未实现此子命令时，fallback 到 curl 直调 RPC API
     if echo "$_result" | grep -q "unknown command"; then
         echo "CLI 插件暂不支持 create-resource-package，切换到 curl 直调..."
     else
         echo "$_result" >&2
-        return 1
+        return
     fi
 
     # 从 aliyun 配置读取凭证
-    local _prof_name="${profile:-$(jq -r '.current' ~/.aliyun/config.json 2>/dev/null)}"
+    local _prof_name="${profile:-$(jq -r '.current' $HOME/.aliyun/config.json 2>/dev/null)}"
     local _ak_id _ak_secret
-    _ak_id=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_id' ~/.aliyun/config.json)
-    _ak_secret=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_secret' ~/.aliyun/config.json)
+    _ak_id=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_id' $HOME/.aliyun/config.json)
+    _ak_secret=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_secret' $HOME/.aliyun/config.json)
     if [ -z "$_ak_id" ] || [ -z "$_ak_secret" ]; then
         echo "错误：无法从配置中获取凭证（profile: ${_prof_name}）" >&2
         return 1
@@ -539,25 +535,5 @@ print(urllib.parse.quote(sig, safe=''))
     _sig_enc=$(echo "$_sign_result" | tail -1)
 
     # 发起请求
-    _result=$(curl -s "https://business.aliyuncs.com/?${_qs}&Signature=${_sig_enc}" 2>&1) || {
-        echo "错误：CDN 资源包购买失败。" >&2
-        echo "$_result" >&2
-        return 1
-    }
-
-    # 检查 API 错误响应
-    local _err_code
-    _err_code=$(echo "$_result" | jq -r '.Code // empty' 2>/dev/null)
-    if [ -n "$_err_code" ]; then
-        echo "错误：CDN 资源包购买失败（${_err_code}）。" >&2
-        echo "$_result" | jq '.' 2>/dev/null || echo "$_result" >&2
-        return 1
-    fi
-
-    local _order_id _instance_id
-    _order_id=$(echo "$_result" | jq -r '.OrderId // empty' 2>/dev/null)
-    _instance_id=$(echo "$_result" | jq -r '.InstanceId // empty' 2>/dev/null)
-    echo "$_result" | jq '.' 2>/dev/null || echo "$_result"
-    log_result "${profile:-}" "${region:-}" "cdn" "pay" "$_result"
-    echo "CDN 资源包购买成功（订单: ${_order_id:-未知}，实例: ${_instance_id:-未知}）。"
+    curl -s "https://business.aliyuncs.com/?${_qs}&Signature=${_sig_enc}" 2>&1
 }
