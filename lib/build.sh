@@ -58,6 +58,25 @@ get_docker_context() {
     export G_DOCK
 }
 
+run_command_with_log() {
+    local log_file="$1"
+    shift
+
+    local old_pipefail
+    if (set -o | grep -q '^pipefail[[:space:]]*on$'); then
+        old_pipefail=on
+    else
+        old_pipefail=off
+    fi
+    set +o pipefail
+
+    "$@" 2>&1 | tee "$log_file" >/dev/null
+    local ret=${PIPESTATUS[0]}
+
+    [[ "$old_pipefail" = on ]] && set -o pipefail
+    return "$ret"
+}
+
 build_image() {
     [ "${GH_ACTION:-false}" = "true" ] && return 0
     local keep_image="${1}" chars chars_rand base_file push_flag image_uuid
@@ -88,9 +107,8 @@ build_image() {
         echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
         local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build.log"
         mkdir -p "$(dirname "$base_build_log")"
-        $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}" 2>&1 | tee "$base_build_log" >/dev/null
-        ret="${PIPESTATUS[0]}"
-        if [ "$ret" -ne 0 ]; then
+        if ! run_command_with_log "$base_build_log" $G_DOCK build $G_ARGS --tag "${base_tag}" ${push_flag} -f "${base_file}" "${G_REPO_DIR}"; then
+            ret=$?
             echo "============================================================"
             _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
             echo "============================================================"
@@ -136,9 +154,8 @@ EOF
     # 构建失败时显示最后100行日志便于排查
     local build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-build.log"
     mkdir -p "$(dirname "$build_log")"
-    $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}" 2>&1 | tee "$build_log" >/dev/null
-    ret="${PIPESTATUS[0]}"
-    if [ "$ret" -ne 0 ]; then
+    if ! run_command_with_log "$build_log" $G_DOCK build $G_ARGS --tag "${repo_tag}" ${push_flag} "${G_REPO_DIR}"; then
+        ret=$?
         echo "============================================================"
         _msg error "Image build failed (exit code: $ret), showing last 100 lines of build log:"
         echo "============================================================"

@@ -453,7 +453,6 @@ system_install_tools() {
     local install_result=0
 
     ## 基础工具安装
-    system_proxy on
     if ! command -v jq &>/dev/null; then
         _check_sudo
         _install_packages "$IS_CHINA" jq || ((install_result++))
