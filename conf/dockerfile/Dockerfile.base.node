@@ -2,12 +2,12 @@
 # 示例：docker build -f conf/dockerfile/Dockerfile.base.node --build-arg IN_CHINA=true -t mynode:base .
 
 ARG MIRROR=
-ARG IN_CHINA=false
 ARG IMAGE_TYPE=node
 ARG BUILD_IMAGE=node
 ARG BUILD_TAG=22-slim
 ARG RUN_IMAGE=node
 ARG RUN_TAG=22-slim
+ARG IN_CHINA=false
 ARG APP_PORT=8080
 ARG APP_WORKDIR=/app
 ARG APP_USER=1000
@@ -26,12 +26,17 @@ ARG BUILD_OUTPUT_DIR=/build_output
 
 ## 阶段 2
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
+ARG IN_CHINA
+ARG BUILD_URL
+ARG BUILD_OUTPUT_DIR
+ARG APP_PORT
+ARG APP_WORKDIR
+ARG APP_USER
+
 # 设置时区和语言
 # ENV TZ=Asia/Shanghai \
 #     LANG=C.UTF-8
 
-ARG BUILD_URL
-ARG BUILD_OUTPUT_DIR
 
 # 设置工作目录
 WORKDIR /app
