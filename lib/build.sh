@@ -157,42 +157,47 @@ run_command_with_log() {
 
 build_image() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
-    local keep_image="${1}" lang="${2:-}" base_file push_flag image_uuid repo_tag base_tag docker_bake_file
+    local retention_mode="${1}" lang="${2:-}"
+    local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror
 
+    ## Ensure buildx builder is available
     ensure_buildx_builder
 
-    ## build from build.base.sh or Dockerfile.base
-    local build_sh="${G_REPO_DIR}/build.base.sh"
-    if [[ -f "${build_sh}" ]]; then
-        echo "Found ${build_sh}, running it..."
+    ## If build.base.sh exists, run it and preserve its exit status
+    custom_build_script="${G_REPO_DIR}/build.base.sh"
+    if [[ -f "${custom_build_script}" ]]; then
+        echo "Found ${custom_build_script}, running it..."
         [[ "${G_DEBUG_ON:-false}" == true ]] && debug_flag="-x"
-        bash "${build_sh}" $debug_flag
+        bash "${custom_build_script}" $debug_flag
+        local custom_build_ret=$?
         export EXIT_MAIN=true
-        return
+        return "${custom_build_ret}"
     fi
 
-    # 根据参数决定是否需要push
-    if [[ -z "${keep_image}" || "${keep_image}" = 'push' ]]; then
+    # 根据参数决定是否需要 push 镜像。默认 push，除非指定保留镜像模式
+    if [[ -z "${retention_mode}" || "${retention_mode}" = 'push' ]]; then
         docker_login
-        push_flag="--push"
+        buildx_push_option="--push"
     else
-        push_flag="--load"
+        buildx_push_option="--load"
     fi
 
-    repo_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
-    docker_bake_file="${G_REPO_DIR}/docker-bake.hcl"
-
-    base_file="${G_REPO_DIR}/Dockerfile.base"
-    if [[ -f "${base_file}" ]]; then
-        base_tag="${ENV_DOCKER_REGISTRY%/}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
-        echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
+    ## 如果存在 Dockerfile.base，则生成 base 镜像的 tag
+    dockerfile_base_path="${G_REPO_DIR}/Dockerfile.base"
+    dockerfile_path="${G_REPO_DIR}/Dockerfile"
+    if [[ -f "${dockerfile_base_path}" ]]; then
+        base_image_tag="${ENV_DOCKER_REGISTRY%/}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
+        echo "FROM ${base_image_tag}" >"${dockerfile_path}"
     fi
 
-    generate_bake_file "${lang}" "${docker_bake_file}" "${repo_tag}" "${base_tag:-}"
-
+    ## 生成 docker-bake.hcl 文件
+    target_image_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
+    bake_file_path="${G_REPO_DIR}/docker-bake.hcl"
+    generate_bake_file "${lang}" "${bake_file_path}" "${target_image_tag}" "${base_image_tag:-}"
+    ## 如果是 dry-run 模式，则仅显示构建计划，不实际执行构建
     if ${DRY_RUN:-false}; then
         _msg warn "[dry-run] skip docker buildx bake, showing build plan only"
-        if [[ -f "${base_file}" ]]; then
+        if [[ -f "${dockerfile_base_path}" ]]; then
             echo "$G_DOCK buildx bake ${G_BUILDER:-} ${G_PROGRESS} base"
             $G_DOCK buildx bake ${G_BUILDER:-} --progress=quiet base --print
         fi
@@ -201,15 +206,14 @@ build_image() {
         export EXIT_MAIN=true
         return 0
     fi
-
-    if [[ -f "${base_file}" ]]; then
-        echo "Found ${base_file}, building base image:"
-        echo "  ${base_tag}"
-        echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
+    ## 如果存在 Dockerfile.base，则先构建 base 镜像
+    if [[ -f "${dockerfile_base_path}" ]]; then
+        echo "Found ${dockerfile_base_path}, building base image:"
+        echo "  ${base_image_tag}"
         local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build.log"
         echo "log file: $base_build_log"
         mkdir -p "$(dirname "$base_build_log")"
-        $G_DOCK buildx bake ${G_BUILDER:-} --file "${docker_bake_file}" ${push_flag} ${G_PROGRESS} base 2>&1 | tee "$base_build_log" >/dev/null
+        $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} base 2>&1 | tee "$base_build_log" >/dev/null
         ret="${PIPESTATUS[0]}"
         if [ "$ret" -ne 0 ]; then
             echo "============================================================"
@@ -221,15 +225,12 @@ build_image() {
         fi
     fi
 
-    repo_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
-    [ -n "$ENV_DOCKER_MIRROR" ] && ENV_DOCKER_MIRROR="${ENV_DOCKER_MIRROR%/}/"
-
     # Docker build 输出到日志文件，默认不显示构建详情
     # 构建失败时显示最后100行日志便于排查
     local build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-build.log"
     echo "log file: $build_log"
     mkdir -p "$(dirname "$build_log")"
-    if ! run_command_with_log "$build_log" $G_DOCK buildx bake ${G_BUILDER:-} --file "${docker_bake_file}" ${push_flag} ${G_PROGRESS}; then
+    if ! run_command_with_log "$build_log" $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS}; then
         ret=$?
         echo "============================================================"
         _msg error "Image build failed (exit code: $ret), showing last 100 lines of build log:"
@@ -240,11 +241,11 @@ build_image() {
     fi
     _msg time "[build] Image build completed"
 
-    ## push to ttl.sh
-    if [[ "${PP_TTL_SH:-false}" == true ]] || ${ENV_IMAGE_TTL:-false}; then
+    ## 不包含敏感信息的镜像可以推送到公开仓库 push to ttl.sh
+    if [[ "${PP_TTL_SH:-false}" == "true" || "${ENV_IMAGE_TTL:-false}" == "true" ]]; then
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "Temporary image tag: $image_uuid"
-        $G_DOCK tag ${repo_tag} ${image_uuid}
+        $G_DOCK tag ${target_image_tag} ${image_uuid}
         $G_DOCK push $image_uuid
         echo "## Then execute the following commands on REMOTE SERVER."
         echo "  $G_DOCK pull $image_uuid"
@@ -256,7 +257,7 @@ build_image() {
     # arg build keep:       push=0, keep=1, keep_image=keep
     # arg build push:       push=1, keep=0, keep_image=push
 
-    # 根据参数决定是否保留镜像
+    # 根据参数决定是否保留当前镜像
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
         $G_DOCK rmi "${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}" >/dev/null &
         _msg time "Image removed on $G_DOCK"
