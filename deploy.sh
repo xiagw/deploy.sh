@@ -306,7 +306,7 @@ parse_command_args() {
 #   - ENV_ADD_HOST: 需要添加到容器中的主机映射数组
 ################################################################################
 config_build_env() {
-    if grep -q 'ENV_IN_CHINA.*true' "$G_ENV" || ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
+    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
         export IS_CHINA=true
     else
         export IS_CHINA=false
@@ -538,7 +538,7 @@ main() {
     ## ========================================================================
     ## 中国地区特殊配置
     ## 如果处于中国区环境，启用 deploy.env 中的代理设置
-    if [[ "${ENV_IN_CHINA:-false}" == true && -n "${ENV_HTTP_PROXY:-}" ]]; then
+    if [[ "${IS_CHINA}" && -n "${ENV_HTTP_PROXY:-}" ]]; then
         system_proxy on
     fi
 

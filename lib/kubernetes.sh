@@ -385,7 +385,7 @@ EOF
 
   # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
   local image
-  if [[ "${ENV_IN_CHINA:-false}" == true ]]; then
+  if "${IS_CHINA}"; then
     image="docker.m.daocloud.io/tonistiigi/binfmt:latest"
   else
     image="tonistiigi/binfmt:latest"

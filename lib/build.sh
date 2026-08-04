@@ -162,7 +162,7 @@ target "default" {
     dockerfile = "Dockerfile"
     platforms = ["linux/amd64"]
     args = {
-        IN_CHINA = "${ENV_IN_CHINA:-false}"
+        IN_CHINA = "${IS_CHINA}"
         MIRROR = "${mirror}"
         BUILD_OUTPUT_DIR = "/build_output"${lang_args}${extra_args}
     }
@@ -303,10 +303,10 @@ build_image() {
 
     # 根据参数决定是否保留当前镜像
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
-        $G_DOCK rmi "${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}" >/dev/null &
-        _msg time "Image removed on $G_DOCK"
+        $G_DOCK rmi "${target_image_tag}" >/dev/null &
+        _msg time "Remove image: ${target_image_tag}"
     else
-        _msg time "Image keeped on $G_DOCK"
+        _msg time "Keep image: ${target_image_tag}"
     fi
 }
 

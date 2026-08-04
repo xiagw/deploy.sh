@@ -204,39 +204,6 @@ config_deploy_setup() {
 }
 
 ################################################################################
-# 函数: config_deploy_depend
-# 描述: 配置部署依赖，包括文件配置和环境配置
-# 参数:
-#   $1 - type: 配置类型 ("file" 或 "env")
-# 返回: 无
-# 说明:
-#   - type="file": 初始化配置文件
-#   - type="env": 设置部署环境（SSH、工具配置等）
-#   - 同时设置 IS_CHINA 环境变量（用于判断是否在中国地区）
-################################################################################
-config_deploy_depend() {
-    local type="$1"
-    shift
-
-    ## 检查是否在中国地区
-    ## 判断优先级:
-    ##   1. deploy.env 文件中的 ENV_IN_CHINA=true
-    ##   2. 环境变量 ENV_IN_CHINA=true
-    ##   3. 环境变量 CHANGE_SOURCE=true（兼容旧配置）
-    if grep -q 'ENV_IN_CHINA=true' "$G_ENV" || ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
-        export IS_CHINA=true
-    else
-        export IS_CHINA=false
-    fi
-
-    ## 根据类型执行相应的配置函数
-    case "$type" in
-    file) config_deploy_file ;;
-    env) config_deploy_env ;;
-    esac
-}
-
-################################################################################
 # 函数: env_file_set
 # 描述: 在 deploy.env 文件中设置环境变量，支持新增、更新、取消注释
 # 参数:
