@@ -16,10 +16,12 @@ ensure_buildx_builder() {
     local builder_name="deploy-builder"
     if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
         local c=0 append_flag=()
+        local buildkit_image="${ENV_BUILDX_IMAGE:-docker.m.daocloud.io/moby/buildkit:buildx-stable-1}"
         for dk_host in "${ENV_BUILDX_REMOTE_HOSTS[@]}"; do
             ((++c))
             docker buildx create --name "$builder_name" "${append_flag[@]}" \
-                --node "node$c" --driver docker-container "$dk_host" ||
+                --node "node$c" --driver docker-container \
+                --driver-opt image="${buildkit_image}" "$dk_host" ||
                 _msg error "创建buildx节点node$c失败: ${dk_host}"
             append_flag=(--append)
         done
