@@ -92,7 +92,8 @@ deploy_to_kubernetes() {
         export EXIT_MAIN=true
         return 0
     fi
-
+    ## 显示可复用命令
+    echo "helm upgrade/install command (reusable):"
     echo "${helm_args[@]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
 
     ## helm install / helm 安装  --atomic
@@ -104,13 +105,18 @@ deploy_to_kubernetes() {
         deploy_result=1
         _msg red "Deployment probe timed out. Please check container status and logs in Kubernetes"
         _msg red "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
-        revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" | awk 'END {print $1}')"
-        echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))" | tee -a "$G_LOG"
     fi
     # Rollback on failure / 部署失败时回滚
     if [[ "${deploy_result:-0}" -eq 1 ]]; then
         _msg red "Rolling back deployment ${release_name}"
+        revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" | awk 'END {print $1}')"
+        ## helm rollback to previous revision / 回滚到上一个版本
+        echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))"
+        ## kubectl rollback to previous revision / 回滚到上一个版本
         $KUBECTL_OPT -n "${G_NAMESPACE}" rollout undo deployment/"${release_name}" 2>/dev/null || true
+        ## 显示回滚命令 / Show rollback command
+        echo "$KUBECTL_OPT -n ${G_NAMESPACE} rollout undo deployment/${release_name}"
+        ## Scale down deployment to 0 replicas / 将部署缩减为 0 个副本
         echo "$KUBECTL_OPT -n ${G_NAMESPACE} scale deployment/${release_name} --replicas=0"
         return 1
     fi
