@@ -384,8 +384,14 @@ EOF
   fi
 
   # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
+  local image
+  if [[ "${ENV_IN_CHINA:-false}" == true ]]; then
+    image="docker.m.daocloud.io/tonistiigi/binfmt:latest"
+  else
+    image="tonistiigi/binfmt:latest"
+  fi
   if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64 >/dev/null 2>&1; then
-    docker run --privileged --rm tonistiigi/binfmt --install all || return 1
+    docker run --privileged --rm "${image}" --install all || return 1
   fi
 
   docker buildx bake --file "${bake_file}" --progress=plain
