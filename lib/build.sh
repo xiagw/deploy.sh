@@ -29,6 +29,72 @@ ensure_buildx_builder() {
     export G_BUILDER="--builder $builder_name"
 }
 
+# Alternative remote buildx modes.
+# These helpers are defined and ready for manual switching by changing the call in build_image().
+
+ensure_buildx_builder_context() {
+    [[ "${G_DEBUG_ON:-false}" == true ]] && return
+    [[ -z "${ENV_BUILDX_REMOTE_HOSTS[*]:-}" ]] && return
+
+    local builder_name="deploy-builder"
+    if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
+        local idx=$((RANDOM % ${#ENV_BUILDX_REMOTE_HOSTS[@]}))
+        local target_host="${ENV_BUILDX_REMOTE_HOSTS[$idx]}"
+        local buildkit_image="${ENV_BUILDX_IMAGE:-docker.m.daocloud.io/moby/buildkit:buildx-stable-1}"
+        docker buildx create --name "$builder_name" --driver docker-container \
+            --driver-opt image="${buildkit_image}" \
+            "$target_host" || _msg error "创建 buildx builder on $target_host 失败"
+    fi
+    export G_BUILDER="--builder $builder_name"
+}
+
+ensure_buildx_builder_kubernetes() {
+    [[ "${G_DEBUG_ON:-false}" == true ]] && return
+    [[ -z "${ENV_BUILDX_KUBERNETES_NAMESPACE:-}" ]] && return
+
+    local builder_name="deploy-builder-k8s"
+    if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
+        local buildkit_image="${ENV_BUILDX_IMAGE:-docker.m.daocloud.io/moby/buildkit:buildx-stable-1}"
+        docker buildx create --driver kubernetes --name "$builder_name" \
+            --driver-opt namespace="${ENV_BUILDX_KUBERNETES_NAMESPACE:-buildkit}" \
+            --driver-opt replicas="${ENV_BUILDX_KUBERNETES_REPLICAS:-1}" \
+            --driver-opt rootless=false \
+            --driver-opt image="${buildkit_image}" \
+            --bootstrap || _msg error "创建 kubernetes buildx builder 失败"
+    fi
+    export G_BUILDER="--builder $builder_name"
+}
+
+enable_buildx_mode() {
+    local mode="${ENV_BUILDX_MODE:-remote}"
+    mode="${mode,,}"
+
+    case "${mode}" in
+    auto)
+        if [[ -n "${ENV_BUILDX_KUBERNETES_NAMESPACE:-}" ]]; then
+            ensure_buildx_builder_kubernetes
+        elif [[ -n "${ENV_BUILDX_REMOTE_HOSTS[*]:-}" ]]; then
+            ensure_buildx_builder
+        else
+            _msg warn "ENV_BUILDX_MODE=auto but no buildx host or kubernetes namespace configured"
+        fi
+        ;;
+    kubernetes)
+        ensure_buildx_builder_kubernetes
+        ;;
+    context)
+        ensure_buildx_builder_context
+        ;;
+    remote | "")
+        ensure_buildx_builder
+        ;;
+    *)
+        _msg warn "Unknown ENV_BUILDX_MODE=${mode}, falling back to remote"
+        ensure_buildx_builder
+        ;;
+    esac
+}
+
 # 根据 lang（固定三段式 lang:ver:docker_flag，字段可为空）生成 docker-bake.hcl
 # $1 lang, $2 bake 文件路径, $3 应用镜像 tag, $4 可选 base 镜像 tag（存在 Dockerfile.base 时）
 generate_bake_file() {
@@ -161,7 +227,7 @@ build_image() {
     local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror
 
     ## Ensure buildx builder is available
-    ensure_buildx_builder
+    enable_buildx_mode
 
     ## If build.base.sh exists, run it and preserve its exit status
     custom_build_script="${G_REPO_DIR}/build.base.sh"

@@ -93,15 +93,15 @@ config_deploy_init() {
     ## ========================================================================
     mkdir -p "${G_DATA}/bin"
     local -a paths_append=(
-        "/usr/local/sbin"                          # 系统管理员命令
-        "/snap/bin"                                # Snap 包二进制文件
-        "${G_PATH}/bin"                            # 项目脚本目录
-        "${G_DATA}/bin"                            # 数据目录下的二进制文件
-        "${G_DATA}/.acme.sh"                       # acme.sh 脚本目录
-        "$HOME/.local/bin"                         # 用户本地二进制文件
-        "$HOME/.acme.sh"                           # 用户 acme.sh 目录
-        "$HOME/.config/composer/vendor/bin"        # Composer 全局包二进制文件
-        "/home/linuxbrew/.linuxbrew/bin"           # Linuxbrew 二进制文件
+        "/usr/local/sbin"                   # 系统管理员命令
+        "/snap/bin"                         # Snap 包二进制文件
+        "${G_PATH}/bin"                     # 项目脚本目录
+        "${G_DATA}/bin"                     # 数据目录下的二进制文件
+        "${G_DATA}/.acme.sh"                # acme.sh 脚本目录
+        "$HOME/.local/bin"                  # 用户本地二进制文件
+        "$HOME/.acme.sh"                    # 用户 acme.sh 目录
+        "$HOME/.config/composer/vendor/bin" # Composer 全局包二进制文件
+        "/home/linuxbrew/.linuxbrew/bin"    # Linuxbrew 二进制文件
     )
     for p in "${paths_append[@]}"; do
         if [[ -d "$p" && ! ":$PATH:" =~ :$p: ]]; then
@@ -185,7 +185,7 @@ config_deploy_setup() {
     for file in "$ssh_dir"/*; do
         [[ -f "$HOME/.ssh/$(basename "${file}")" ]] && continue
         echo "Link $file to $HOME/.ssh/"
-        chmod 600 "${file}"  # 设置适当的权限
+        chmod 600 "${file}" # 设置适当的权限
         ln -s "${file}" "$HOME/.ssh/"
     done
 
@@ -261,17 +261,58 @@ env_file_set() {
     local tmp_file found=false
     tmp_file=$(mktemp)
 
+    local skip_array=false
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if ! $found && { [[ "$line" =~ ^${key}= ]] || [[ "$line" =~ ^#[[:space:]]*${key}= ]]; }; then
-            echo "${key}=${value}"
-            found=true
-        else
-            echo "$line"
+        if $skip_array; then
+            if [[ "$line" =~ ^[[:space:]]*\) ]]; then
+                skip_array=false
+            fi
+            continue
         fi
-    done < "$G_ENV" > "$tmp_file"
 
-    if ! $found; then
-        echo "${key}=${value}" >> "$tmp_file"
+        if ! $found && { [[ "$line" =~ ^${key}= ]] || [[ "$line" =~ ^#[[:space:]]*${key}= ]]; }; then
+            # 写入新的键值（保持用户传入的原始 value，不自动添加或删除引号）
+            echo "${key}=${value}" >>"$tmp_file"
+            found=true
+            # 如果原文件中该行是数组的开始（以 "=(" 结尾），则跳过后续直到 ")"
+            if [[ "$line" =~ =\($ ]]; then
+                skip_array=true
+            fi
+        else
+            echo "$line" >>"$tmp_file"
+        fi
+    done <"$G_ENV" > /dev/null 2>&1 || true
+
+    # The above redirection consumed input; rewrite properly by reading again to tmp_file
+    if [[ -f "$G_ENV" ]]; then
+        tmp_file=$(mktemp)
+        skip_array=false
+        found=false
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if $skip_array; then
+                if [[ "$line" =~ ^[[:space:]]*\) ]]; then
+                    skip_array=false
+                fi
+                continue
+            fi
+
+            if ! $found && { [[ "$line" =~ ^${key}= ]] || [[ "$line" =~ ^#[[:space:]]*${key}= ]]; }; then
+                echo "${key}=${value}" >>"$tmp_file"
+                found=true
+                if [[ "$line" =~ =\($ ]]; then
+                    skip_array=true
+                fi
+            else
+                echo "$line" >>"$tmp_file"
+            fi
+        done <"$G_ENV"
+        if ! $found; then
+            echo "${key}=${value}" >>"$tmp_file"
+        fi
+    else
+        # If G_ENV doesn't exist, just create it with the key
+        tmp_file=$(mktemp)
+        echo "${key}=${value}" >"$tmp_file"
     fi
 
     mv "$tmp_file" "$G_ENV"
@@ -297,12 +338,43 @@ env_file_get() {
 
     if [[ -n "$value" ]]; then
         echo "$value"
-    elif grep -q "^${key}=" "$G_ENV"; then
-        echo ""
-    else
-        _msg error "Variable ${key} not found"
-        return 1
+        return 0
     fi
+
+    if [[ -f "$G_ENV" ]]; then
+        # shellcheck disable=SC1090
+        source "$G_ENV"
+    fi
+
+    # 如果变量以数组形式存在，输出数组表示
+    if declare -p "$key" &>/dev/null; then
+        if declare -p "$key" 2>/dev/null | grep -q 'declare -a'; then
+            eval "arr=(\"\${${key}[@]}\")"
+            local first=true
+            printf '('
+            for item in "${arr[@]}"; do
+                if [[ "$first" == true ]]; then
+                    first=false
+                else
+                    printf ' '
+                fi
+                printf '%q' "$item"
+            done
+            printf ')\n'
+            return 0
+        else
+            echo "${!key}"
+            return 0
+        fi
+    fi
+
+    if grep -q "^${key}=" "$G_ENV"; then
+        echo ""
+        return 0
+    fi
+
+    _msg error "Variable ${key} not found"
+    return 1
 }
 
 ################################################################################
@@ -312,5 +384,54 @@ env_file_get() {
 # 返回: 无（输出到标准输出）
 ################################################################################
 env_file_list() {
-    grep '^ENV_' "$G_ENV"
+    local line var in_array=false
+    local -a arr
+
+    if [[ -f "$G_ENV" ]]; then
+        # shellcheck disable=SC1090
+        source "$G_ENV"
+    fi
+
+    echo "Listing enabled ENV_ variables from $G_ENV:"
+    echo ""
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$in_array" == true ]]; then
+            if [[ "$line" =~ ^[[:space:]]*\) ]]; then
+                in_array=false
+            fi
+            continue
+        fi
+
+        if [[ "$line" =~ ^ENV_[A-Za-z_][A-Za-z0-9_]*= ]]; then
+            var="${line%%=*}"
+            if declare -p "$var" &>/dev/null; then
+                # 数组类型处理
+                if declare -p "$var" 2>/dev/null | grep -q 'declare -a'; then
+                    # 将命名变量的数组内容读取到本地数组 arr
+                    eval "arr=(\"\${${var}[@]}\")"
+                    printf '%s=(' "$var"
+                    local first=true
+                    for item in "${arr[@]}"; do
+                        if [[ "$first" == true ]]; then
+                            first=false
+                        else
+                            printf ' '
+                        fi
+                        printf '%q' "$item"
+                    done
+                    printf ')\n'
+                    # 如果原文件中是以声明数组开始的行，进入 in_array 模式以跳过后续行
+                    if [[ "$line" =~ ^ENV_[A-Za-z_][A-Za-z0-9_]*=\($ ]]; then
+                        in_array=true
+                    fi
+                    continue
+                fi
+                printf '%s=%s\n' "$var" "${!var}"
+                continue
+            fi
+        fi
+        echo "$line"
+    done < <(
+        grep -vE '^[[:space:]]*#' "$G_ENV" | grep -vE '^[[:space:]]*$'
+    )
 }

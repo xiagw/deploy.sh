@@ -143,6 +143,7 @@ Parameters:
 
     # Build operations
     -B, --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
+    --buildx-mode MODE            Select buildx builder mode: remote|context|kubernetes|auto.
     -x, --build-base              Execute function build_base_image; append --dry for preview mode.
 
     # Deployment
@@ -220,6 +221,10 @@ parse_command_args() {
             arg_flags["build_all"]=1
             image_retain="${2:-remove}"
             [[ -z "$2" ]] || shift
+            ;;
+        --buildx-mode)
+            arg_buildx_mode="${2:?empty buildx mode}"
+            shift
             ;;
         # Deployment
         -k | --deploy-k8s) arg_flags["deploy_k8s"]=1 deploy_method=deploy_k8s ;;
@@ -452,6 +457,9 @@ main() {
     config_deploy_init
 
     source "$G_ENV"
+
+    ## 如果命令行指定了 buildx 模式，则覆盖 deploy.env 中的配置
+    [[ -n "${arg_buildx_mode:-}" ]] && export ENV_BUILDX_MODE="${arg_buildx_mode}"
 
     ## ========================================================================
     ## 环境变量配置操作 (set/get/env)
