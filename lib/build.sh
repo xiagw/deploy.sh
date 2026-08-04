@@ -7,20 +7,20 @@
 # License: GNU/GPL
 ################################################################################
 
-# 在 k8s 中创建 buildx builder
-# docker buildx create --driver kubernetes --name deploy-builder --driver-opt namespace=buildkit,replicas=1,rootless=false --driver-opt image=docker.m.daocloud.io/moby/buildkit:buildx-stable-1 --bootstrap
+## 在中国区环境下启用 buildx builder
 ensure_buildx_builder() {
     [[ "${G_DEBUG_ON:-false}" == true ]] && return
     [[ -z "${ENV_BUILDX_REMOTE_HOSTS[*]:-}" ]] && return
 
     local builder_name="deploy-builder"
+    local host_cache_path="/var/cache/buildkit"
     if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
         local c=0 append_flag=()
         local buildkit_image="${ENV_BUILDX_IMAGE:-docker.m.daocloud.io/moby/buildkit:buildx-stable-1}"
         for dk_host in "${ENV_BUILDX_REMOTE_HOSTS[@]}"; do
             ((++c))
             docker buildx create --name "$builder_name" "${append_flag[@]}" \
-                --node "node$c" --driver docker-container \
+                --node "node$c" --driver docker-container --bootstrap \
                 --driver-opt image="${buildkit_image}" "$dk_host" ||
                 _msg error "创建buildx节点node$c失败: ${dk_host}"
             append_flag=(--append)
@@ -29,6 +29,8 @@ ensure_buildx_builder() {
     export G_BUILDER="--builder $builder_name"
 }
 
+# 在 k8s 中创建 buildx builder
+# docker buildx create --driver kubernetes --name deploy-builder --driver-opt namespace=buildkit,replicas=1 --driver-opt image=docker.m.daocloud.io/moby/buildkit:buildx-stable-1 --bootstrap
 ensure_buildx_builder_kubernetes() {
     [[ "${G_DEBUG_ON:-false}" == true ]] && return
     [[ -z "${ENV_BUILDX_KUBERNETES_NAMESPACE:-}" ]] && return
@@ -39,7 +41,6 @@ ensure_buildx_builder_kubernetes() {
         docker buildx create --driver kubernetes --name "$builder_name" \
             --driver-opt namespace="${ENV_BUILDX_KUBERNETES_NAMESPACE:-buildkit}" \
             --driver-opt replicas="${ENV_BUILDX_KUBERNETES_REPLICAS:-1}" \
-            --driver-opt rootless=false \
             --driver-opt image="${buildkit_image}" \
             --bootstrap || _msg error "创建 kubernetes buildx builder 失败"
     fi
@@ -301,10 +302,14 @@ build_image() {
     # arg build keep:       push=0, keep=1, keep_image=keep
     # arg build push:       push=1, keep=0, keep_image=push
 
-    # 根据参数决定是否保留当前镜像
+    # 根据参数决定是否保留当前镜像，区分本地和远程仓库
     if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
-        $G_DOCK rmi "${target_image_tag}" >/dev/null &
-        _msg time "Remove image: ${target_image_tag}"
+        if $G_DOCK image inspect "${target_image_tag}" >/dev/null 2>&1; then
+            $G_DOCK rmi "${target_image_tag}" >/dev/null &
+            _msg time "Remove image: ${target_image_tag}"
+        else
+            _msg time "Local image not found, skip rmi: ${target_image_tag}"
+        fi
     else
         _msg time "Keep image: ${target_image_tag}"
     fi
