@@ -27,6 +27,8 @@
 #   - G_IMAGE_TAG: Docker镜像标签（时间戳格式）
 ################################################################################
 config_deploy_vars() {
+    unset G_REPO_DIR G_REPO_NAME G_REPO_NS G_REPO_GROUP_PATH G_REPO_GROUP_PATH_SLUG G_REPO_BRANCH G_REPO_SHORT_SHA G_NAMESPACE G_IMAGE_TAG  G_DOCK G_RUN
+    unset EXIT_MAIN IS_CHINA G_DEBUG_ON run_with_crontab
     ## 设置仓库目录路径
     ## 优先级: -w/--workspace (用户指定) > CI_PROJECT_DIR (GitLab CI) > PWD (当前工作目录)
     G_REPO_DIR="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
@@ -526,7 +528,7 @@ main() {
     ## ========================================================================
     ## 中国地区特殊配置
     ## 如果处于中国区环境，启用 deploy.env 中的代理设置
-    if [[ "${ENV_IN_CHINA:-false}" == true ]]; then
+    if [[ "${ENV_IN_CHINA:-false}" == true && -n "${ENV_HTTP_PROXY:-}" ]]; then
         system_proxy on
     fi
 
@@ -653,8 +655,6 @@ main() {
             [[ ${arg_flags[$key]} -eq 1 ]] && echo "  - ${key}"
         done
     fi
-
-    unset EXIT_MAIN
 
     ## ========================================================================
     ## 阶段 1: 代码质量检查
