@@ -27,8 +27,6 @@
 #   - G_IMAGE_TAG: Docker镜像标签（时间戳格式）
 ################################################################################
 config_deploy_vars() {
-    unset G_REPO_DIR G_REPO_NAME G_REPO_NS G_REPO_GROUP_PATH G_REPO_GROUP_PATH_SLUG G_REPO_BRANCH G_REPO_SHORT_SHA G_NAMESPACE G_IMAGE_TAG  G_DOCK G_RUN
-    unset EXIT_MAIN IS_CHINA G_DEBUG_ON run_with_crontab
     ## 设置仓库目录路径
     ## 优先级: -w/--workspace (用户指定) > CI_PROJECT_DIR (GitLab CI) > PWD (当前工作目录)
     G_REPO_DIR="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
@@ -356,6 +354,10 @@ main() {
 
     ## 记录脚本开始执行的时间（用于计算总执行时间）
     SECONDS=0
+
+    unset G_REPO_DIR G_REPO_NAME G_REPO_NS G_REPO_GROUP_PATH G_REPO_GROUP_PATH_SLUG G_REPO_BRANCH
+    unset G_REPO_SHORT_SHA G_NAMESPACE G_IMAGE_TAG  G_DOCK G_RUN
+    unset EXIT_MAIN IS_CHINA G_DEBUG_ON run_with_crontab
 
     ## 如果 GitLab CI 环境启用了调试跟踪，则启用详细输出
     if [[ ${CI_DEBUG_TRACE:-false} == true ]]; then

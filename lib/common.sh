@@ -716,24 +716,10 @@ _install_pipx() {
     local flag="${1:-}"
     if [ "$flag" != "upgrade" ]; then
         command -v pipx >/dev/null 2>&1 && return
-        if python3 -m pip show --quiet pipx >/dev/null 2>&1; then
-            return
-        fi
     fi
 
     _msg green "Installing pipx..."
     _set_mirror python
-
-    if python3 -m pip install --user --upgrade pipx; then
-        if [ -x "$HOME/.local/bin/pipx" ]; then
-            PATH="$HOME/.local/bin:$PATH"
-            export PATH
-        fi
-        if command -v pipx >/dev/null 2>&1; then
-            _msg green "pipx is installed successfully"
-            return 0
-        fi
-    fi
 
     if _check_root >/dev/null && [[ "${cmd_pkg:-}" == *"apt-get"* ]]; then
         _msg green "Installing pipx via apt-get..."
