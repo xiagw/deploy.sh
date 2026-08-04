@@ -34,6 +34,53 @@ format_release_name() {
     echo "${release_name}"
 }
 
+# Execute optional project-level custom deployment hook.
+# The hook is sourced so it can access deployment variables like
+# G_NAMESPACE, release_name, and other environment state.
+# If the hook is absent, this is a no-op.
+execute_custom_deploy_hook() {
+    local custom_script="${G_REPO_DIR}/deploy.custom.sh"
+    if [[ -f "${custom_script}" ]]; then
+        _msg time "Executing custom deployment script: ${custom_script}"
+        source "${custom_script}"
+    fi
+}
+
+# Record the currently deployed image reference for this release/namespace,
+# and optionally delete the previous image if the deployment succeeded.
+record_deployed_image() {
+    local release_name="${1:?release_name is required}"
+    local deploy_result="${2:-0}"
+    local image_record_dir="${G_DATA}/image_records"
+    local current_image="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
+    local image_record_file="${image_record_dir}/${release_name}-${G_NAMESPACE}.current"
+
+    mkdir -p "${image_record_dir}"
+
+    if [[ -f "${image_record_file}" && "${deploy_result}" -eq 0 ]]; then
+        local previous_image
+        previous_image=$(<"${image_record_file}")
+        if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
+            _msg time "Deleting previous image: ${previous_image}"
+            skopeo delete "docker://${previous_image}" &
+        fi
+    fi
+
+    printf '%s\n' "${current_image}" >"${image_record_file}"
+}
+
+# Clean up Evicted pods in the given namespace.
+cleanup_evicted_pods() {
+    local namespace="${1:-${G_NAMESPACE}}"
+    {
+        while read -r bad_pod; do
+            $KUBECTL_OPT -n "${namespace}" delete pod "${bad_pod}" &>/dev/null || true
+        done < <(
+            $KUBECTL_OPT -n "${namespace}" get pod | awk '/Evicted/ {print $1}'
+        )
+    } &
+}
+
 # Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
     _msg step "[deploy] Deploy to Kubernetes with Helm"
@@ -121,38 +168,13 @@ deploy_to_kubernetes() {
         return 1
     fi
 
-    # Record current image info / 记录当前镜像信息
-    [ -d "${G_DATA}/image_logs" ] || mkdir -p "${G_DATA}/image_logs"
-    local image_record_file="${G_DATA}/image_logs/${release_name}-${G_NAMESPACE}-last-tag"
-    local current_image="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
-    # Read and delete previous image if exists / 如果存在则读取并删除上一个镜像
-    if [[ -f "${image_record_file}" && "${deploy_result:-0}" -eq 0 ]]; then
-        previous_image=$(cat "${image_record_file}")
-        if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
-            _msg time "Deleting: ${previous_image}"
-            skopeo delete "docker://${previous_image}" &
-        fi
-    fi
+    record_deployed_image "${release_name}" "${deploy_result:-0}"
 
-    # Save current image info / 保存当前镜像信息
-    echo "${current_image}" >"${image_record_file}"
+    # Clean up only evicted pods in this namespace.
+    # Do not delete ReplicaSets globally; Helm/k8s already manage old RS history.
+    cleanup_evicted_pods "${G_NAMESPACE}"
 
-    ## Clean up rs 0 0 / 清理 rs 0 0
-    {
-        while read -r rs0; do
-            $KUBECTL_OPT -n "${G_NAMESPACE}" delete rs "${rs0}" &>/dev/null || true
-        done < <($KUBECTL_OPT -n "${G_NAMESPACE}" get rs | awk '$2=="0" && $3=="0" && $4=="0" {print $1}')
-        while read -r bad_pod; do
-            $KUBECTL_OPT -n "${G_NAMESPACE}" delete pod "${bad_pod}" &>/dev/null || true
-        done < <(
-            $KUBECTL_OPT -n "${G_NAMESPACE}" get pod | awk '/Evicted/ {print $1}'
-        )
-    } &
-
-    if [ -f "$G_REPO_DIR/deploy.custom.sh" ]; then
-        _msg time "Executing custom deployment script"
-        source "$G_REPO_DIR/deploy.custom.sh"
-    fi
+    execute_custom_deploy_hook
 
     _msg time "Kubernetes deployment completed"
     return "${deploy_result:-0}"
