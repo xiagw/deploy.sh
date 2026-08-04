@@ -570,6 +570,116 @@ _install_kubectl() {
     fi
 }
 
+_install_shellcheck() {
+    local flag="$1"
+    if [ "$flag" != "upgrade" ] && command -v shellcheck >/dev/null; then
+        return
+    fi
+    _msg green "Installing shellcheck..."
+    if command -v brew >/dev/null; then
+        brew install shellcheck
+        return
+    fi
+
+    if _check_root >/dev/null; then
+        case "${cmd_pkg:-}" in
+        *apt-get*)
+            $cmd_pkg update -yqq
+            $cmd_pkg_install shellcheck && return 0
+            ;;
+        *yum* | *dnf* | *microdnf*)
+            $cmd_pkg install -y shellcheck && return 0
+            ;;
+        *pacman*)
+            $cmd_pkg_install shellcheck && return 0
+            ;;
+        *apk*)
+            $cmd_pkg_install shellcheck && return 0
+            ;;
+        esac
+    fi
+
+    _msg green "Installing shellcheck from GitHub release..."
+    local temp_file download_url os arch release_info tar_dir
+    temp_file=$(mktemp)
+    os=$(uname | tr '[:upper:]' '[:lower:]')
+    arch=$(uname -m)
+    case "$arch" in
+    x86_64 | amd64) arch="x86_64" ;;
+    aarch64 | arm64) arch="aarch64" ;;
+    *) arch="x86_64" ;;
+    esac
+    release_info=$(curl -fsSL https://api.github.com/repos/koalaman/shellcheck/releases/latest)
+    download_url=$(printf '%s' "$release_info" | grep -Eo "https://[^\"]+shellcheck-[0-9.]+\.${os}\.${arch}\.tar\.xz" | head -n 1)
+    if [ -z "$download_url" ]; then
+        _msg error "Failed to determine shellcheck download URL"
+        rm -f "$temp_file"
+        return 1
+    fi
+    curl -fsSL -o "$temp_file" "$download_url"
+    tar_dir=$(mktemp -d)
+    tar -xJf "$temp_file" -C "$tar_dir"
+    $use_sudo install -m 0755 "$tar_dir"/*/shellcheck /usr/local/bin/shellcheck
+    rm -rf "$temp_file" "$tar_dir"
+    _msg green "Showing version"
+    shellcheck --version
+}
+
+_install_shfmt() {
+    local flag="$1"
+    if [ "$flag" != "upgrade" ] && command -v shfmt >/dev/null; then
+        return
+    fi
+    _msg green "Installing shfmt..."
+    if command -v brew >/dev/null; then
+        brew install shfmt
+        return
+    fi
+
+    if _check_root >/dev/null; then
+        case "${cmd_pkg:-}" in
+        *apt-get*)
+            $cmd_pkg update -yqq
+            $cmd_pkg_install shfmt && return 0
+            ;;
+        *yum* | *dnf* | *microdnf*)
+            $cmd_pkg install -y shfmt && return 0
+            ;;
+        *pacman*)
+            $cmd_pkg_install shfmt && return 0
+            ;;
+        *apk*)
+            $cmd_pkg_install shfmt && return 0
+            ;;
+        esac
+    fi
+
+    _msg green "Installing shfmt from GitHub release..."
+    local temp_file download_url os arch release_info tar_dir
+    temp_file=$(mktemp)
+    os=$(uname | tr '[:upper:]' '[:lower:]')
+    arch=$(uname -m)
+    case "$arch" in
+    x86_64 | amd64) arch="amd64" ;;
+    aarch64 | arm64) arch="arm64" ;;
+    *) arch="amd64" ;;
+    esac
+    release_info=$(curl -fsSL https://api.github.com/repos/mvdan/sh/releases/latest)
+    download_url=$(printf '%s' "$release_info" | grep -Eo 'https://[^\"]+shfmt_[0-9.]+_${os}_${arch}\.tar\.gz' | head -n 1)
+    if [ -z "$download_url" ]; then
+        _msg error "Failed to determine shfmt download URL"
+        rm -f "$temp_file"
+        return 1
+    fi
+    curl -fsSL -o "$temp_file" "$download_url"
+    tar_dir=$(mktemp -d)
+    tar -xzf "$temp_file" -C "$tar_dir"
+    $use_sudo install -m 0755 "$tar_dir"/shfmt /usr/local/bin/shfmt
+    rm -rf "$temp_file" "$tar_dir"
+    _msg green "Showing version"
+    shfmt --version
+}
+
 _install_helm() {
     if [ "$1" != "upgrade" ] && command -v helm >/dev/null; then
         return

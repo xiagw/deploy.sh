@@ -565,6 +565,8 @@ build_php() {
 build_shell() {
     _msg time "[build] Running shell build"
     [[ "${G_DEBUG_ON:-false}" == true ]] && return 0
+    _install_shellcheck
+    _install_shfmt
     local exit_code=0 script s=0
     command -v shellcheck >/dev/null 2>&1 && sc=true
     command -v shfmt >/dev/null 2>&1 && sf=true
