@@ -29,25 +29,6 @@ ensure_buildx_builder() {
     export G_BUILDER="--builder $builder_name"
 }
 
-# Alternative remote buildx modes.
-# These helpers are defined and ready for manual switching by changing the call in build_image().
-
-ensure_buildx_builder_context() {
-    [[ "${G_DEBUG_ON:-false}" == true ]] && return
-    [[ -z "${ENV_BUILDX_REMOTE_HOSTS[*]:-}" ]] && return
-
-    local builder_name="deploy-builder"
-    if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
-        local idx=$((RANDOM % ${#ENV_BUILDX_REMOTE_HOSTS[@]}))
-        local target_host="${ENV_BUILDX_REMOTE_HOSTS[$idx]}"
-        local buildkit_image="${ENV_BUILDX_IMAGE:-docker.m.daocloud.io/moby/buildkit:buildx-stable-1}"
-        docker buildx create --name "$builder_name" --driver docker-container \
-            --driver-opt image="${buildkit_image}" \
-            "$target_host" || _msg error "创建 buildx builder on $target_host 失败"
-    fi
-    export G_BUILDER="--builder $builder_name"
-}
-
 ensure_buildx_builder_kubernetes() {
     [[ "${G_DEBUG_ON:-false}" == true ]] && return
     [[ -z "${ENV_BUILDX_KUBERNETES_NAMESPACE:-}" ]] && return
@@ -81,9 +62,6 @@ enable_buildx_mode() {
         ;;
     kubernetes)
         ensure_buildx_builder_kubernetes
-        ;;
-    context)
-        ensure_buildx_builder_context
         ;;
     remote | "")
         ensure_buildx_builder
