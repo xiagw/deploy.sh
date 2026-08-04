@@ -62,7 +62,31 @@ record_deployed_image() {
         previous_image=$(<"${image_record_file}")
         if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
             _msg time "Deleting previous image: ${previous_image}"
-            skopeo delete "docker://${previous_image}" &
+            if command -v skopeo >/dev/null 2>&1; then
+                skopeo delete "docker://${previous_image}" &
+            elif command -v aliyun >/dev/null 2>&1; then
+                # Try aliyun CLI for ACR deletion when registry matches
+                # previous_image format: <registry>/<repo_path>:<tag>
+                local registry_prefix="${ENV_DOCKER_REGISTRY%/}"
+                if [[ "${previous_image}" == "${registry_prefix}"* ]]; then
+                    local rest repo_and_tag image_repo image_tag repo_ns repo_name
+                    rest="${previous_image#${registry_prefix}/}"
+                    repo_and_tag="${rest}"
+                    image_repo="${repo_and_tag%:*}"
+                    image_tag="${repo_and_tag#*:}"
+                    if [[ "${image_repo}" == "${image_tag}" ]]; then
+                        image_tag="latest"
+                    fi
+                    repo_ns="${image_repo%/*}"
+                    repo_name="${image_repo##*/}"
+                    _msg time "Deleting ACR image via aliyun CLI: ${repo_ns}/${repo_name}:${image_tag}"
+                    aliyun -p "${ENV_ALIYUN_CLI_PROFILE:-default}" cr DeleteImage --RepoNamespace "${repo_ns}" --RepoName "${repo_name}" --ImageTag "${image_tag}" >/dev/null &
+                else
+                    _msg warn "Previous image registry does not match ENV_DOCKER_REGISTRY, skipping aliyun delete"
+                fi
+            else
+                _msg warn "Neither skopeo nor aliyun CLI found; skip remote delete of ${previous_image}"
+            fi
         fi
     fi
 
@@ -84,7 +108,7 @@ cleanup_evicted_pods() {
 # Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
     _msg step "[deploy] Deploy to Kubernetes with Helm"
-    local release_name previous_image rs0 bad_pod
+    local release_name previous_image bad_pod
     release_name="$(format_release_name)"
 
     # Ensure PVC exists before proceeding with deployment
