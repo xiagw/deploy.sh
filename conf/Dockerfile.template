@@ -92,11 +92,10 @@ EXPOSE ${APP_PORTS}
 # builder 产物按根文件系统布局放入 /
 COPY --from=builder ${BUILD_OUTPUT_DIR}/ /
 
-RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,id=apt_lists,sharing=locked \
-    --mount=type=cache,target=/var/cache/apt,id=apt_cache,sharing=locked \
+RUN --mount=type=cache,target=/var/cache/apk,sharing=shared \
+    --mount=type=cache,target=/var/lib/apt/lists,id=apt_lists,sharing=shared \
+    --mount=type=cache,target=/var/cache/apt,id=apt_cache,sharing=shared \
     --mount=type=cache,target=/var/cache/yum,id=yum_cache,sharing=shared \
-    --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
     --mount=type=bind,target=/src,rw \
     set -xe; \
     BUILD_SH=/src/root/opt/build.sh; \
