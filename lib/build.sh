@@ -181,25 +181,6 @@ EOF
     fi
 }
 
-run_command_with_log() {
-    local log_file="$1"
-    shift
-
-    local old_pipefail
-    if (set -o | grep -q '^pipefail[[:space:]]*on$'); then
-        old_pipefail=on
-    else
-        old_pipefail=off
-    fi
-    set +o pipefail
-
-    "$@" 2>&1 | tee "$log_file" >/dev/null
-    local ret=${PIPESTATUS[0]}
-
-    [[ "$old_pipefail" = on ]] && set -o pipefail
-    return "$ret"
-}
-
 build_image() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
     local retention_mode="${1}" lang="${2:-}"
@@ -258,8 +239,12 @@ build_image() {
         local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build.log"
         echo "log file: $base_build_log"
         mkdir -p "$(dirname "$base_build_log")"
+
+        set +e +o pipefail
         $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} base 2>&1 | tee "$base_build_log" >/dev/null
         ret="${PIPESTATUS[0]}"
+        set -eo pipefail
+
         if [ "$ret" -ne 0 ]; then
             echo "============================================================"
             _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
@@ -275,8 +260,13 @@ build_image() {
     local build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-build.log"
     echo "log file: $build_log"
     mkdir -p "$(dirname "$build_log")"
-    if ! run_command_with_log "$build_log" $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS}; then
-        ret=$?
+
+    set +e +o pipefail
+    $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} 2>&1 | tee "$build_log" >/dev/null
+    ret=${PIPESTATUS[0]}
+    set -eo pipefail
+
+    if [ "$ret" -ne 0 ]; then
         echo "============================================================"
         _msg error "Image build failed (exit code: $ret), showing last 100 lines of build log:"
         echo "============================================================"
