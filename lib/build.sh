@@ -14,9 +14,12 @@ ensure_buildx_builder() {
 
     local builder_name="deploy-builder"
     local host_cache_path="/var/cache/buildkit"
+    if "$IS_CHINA"; then
+        local mirror="docker.m.daocloud.io/"
+    fi
     if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
         local c=0 append_flag=()
-        local buildkit_image="${ENV_BUILDX_IMAGE:-docker.m.daocloud.io/moby/buildkit:buildx-stable-1}"
+        local buildkit_image="${mirror}${ENV_BUILDX_IMAGE:-moby/buildkit:buildx-stable-1}"
         for dk_host in "${ENV_BUILDX_REMOTE_HOSTS[@]}"; do
             ((++c))
             docker buildx create --name "$builder_name" "${append_flag[@]}" \
@@ -34,10 +37,12 @@ ensure_buildx_builder() {
 ensure_buildx_builder_kubernetes() {
     [[ "${G_DEBUG_ON:-false}" == true ]] && return
     [[ -z "${ENV_BUILDX_KUBERNETES_NAMESPACE:-}" ]] && return
-
+    if "$IS_CHINA"; then
+        local mirror="docker.m.daocloud.io/"
+    fi
     local builder_name="deploy-builder-k8s"
     if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
-        local buildkit_image="${ENV_BUILDX_IMAGE:-docker.m.daocloud.io/moby/buildkit:buildx-stable-1}"
+        local buildkit_image="${mirror}${ENV_BUILDX_IMAGE:-moby/buildkit:buildx-stable-1}"
         docker buildx create --driver kubernetes --name "$builder_name" \
             --driver-opt namespace="${ENV_BUILDX_KUBERNETES_NAMESPACE:-buildkit}" \
             --driver-opt replicas="${ENV_BUILDX_KUBERNETES_REPLICAS:-1}" \
