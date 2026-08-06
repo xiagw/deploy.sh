@@ -71,7 +71,7 @@ get_jvm_opts() {
     local final_opts="" file_opts
     local default_jvm_opts="-Xms512m -Xmx1024m" # 默认JVM参数
     local jvm_opts_files=(
-        "./.jvm.options"                # 当前目录
+        "./.jvm.options"               # 当前目录
         "./jvm.options"                # 当前目录
         "${G_PATH}/jvm.options"        # 脚本目录
         "${G_PATH}/config/jvm.options" # 配置目录
@@ -142,9 +142,9 @@ start_java() {
 
     local jar_files jvm_opts i=0 pid config_name config_path config_files start_cmd
     local config_entry config_type config_file last_config_entry
-
+    ## 检查Java版本
+    java version 2>/dev/null || java -version 2>/dev/null || java --version 2>/dev/null || java -fullversion 2>/dev/null
     # 获取JVM参数
-    java -version
     jvm_opts=$(get_jvm_opts)
     log "使用JVM参数: ${jvm_opts}"
 
