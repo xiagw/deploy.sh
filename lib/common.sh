@@ -861,10 +861,10 @@ _set_mirror() {
     local mirror_url f
     case ${1:-none} in
     os)
-        mirror_url="https://mirrors.ustc.edu.cn"
+        mirror_url="mirrors.ustc.edu.cn"
         for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apk/repositories; do
             [ -f "$f" ] || continue
-            $use_sudo sed -i -e "s/deb.debian.org/${mirror_url}/g" -e "s/archive.ubuntu.com/${mirror_url}/g" -e "s/dl-cdn.alpinelinux.org/${mirror_url}/g" "$f"
+            $use_sudo sed -i -e "s@deb.debian.org@${mirror_url}@g" -e "s@archive.ubuntu.com@${mirror_url}@g" -e "s@dl-cdn.alpinelinux.org@${mirror_url}@g" "$f"
         done
         ;;
     composer)
