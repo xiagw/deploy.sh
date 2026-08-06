@@ -336,8 +336,6 @@ DOCKERIGNORE
         if $G_DOCK image inspect "${target_image_tag}" >/dev/null 2>&1; then
             $G_DOCK rmi "${target_image_tag}" >/dev/null &
             _msg time "Remove image: ${target_image_tag}"
-        else
-            _msg time "Local image not found, skip rmi: ${target_image_tag}"
         fi
     else
         _msg time "Keep image: ${target_image_tag}"
