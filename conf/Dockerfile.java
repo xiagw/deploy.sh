@@ -1,6 +1,6 @@
 
 ## 全局变量
-ARG IN_CHINA=false
+ARG IS_CHINA=false
 ARG MIRROR=
 ARG BUILD_IMAGE=maven
 ARG BUILD_TAG=3.9-amazoncorretto-17
@@ -30,7 +30,7 @@ ARG INSTALL_LIBREOFFICE=false
 #### 阶段 1：Maven 编译 ####
 FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
 ## FROM之前的全局变量必须重新定义
-ARG IN_CHINA
+ARG IS_CHINA
 ARG APP_WORKDIR
 ARG APP_PORT
 ARG APP_USER
@@ -55,7 +55,7 @@ RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
 ################################################################################
 #### 阶段 2：仅 JDK 运行 ####
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
-ARG IN_CHINA
+ARG IS_CHINA
 ARG APP_WORKDIR
 ARG APP_PORT
 ARG APP_USER

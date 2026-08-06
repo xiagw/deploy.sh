@@ -369,7 +369,7 @@ target "default" {
     dockerfile = "Dockerfile.single"
     platforms = ["linux/amd64", "linux/arm64"]
     args = {
-        IN_CHINA = "${IS_CHINA:-true}"
+        IS_CHINA = "${IS_CHINA:-true}"
         MIRROR = "${mirror}"${extra_args}
     }
     tags = ["${registry}${image_tag}-base"]

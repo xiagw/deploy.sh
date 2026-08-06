@@ -11,14 +11,14 @@
 #   bash build.sh swoole        # PHP：拷贝已编译的 swoole 扩展
 #
 # 依赖环境变量（示例）：
-#   IN_CHINA=true               # 使用国内 apt/apk/maven/npm 镜像
+#   IS_CHINA=true               # 使用国内 apt/apk/maven/npm 镜像
 #   PHP_VERSION=8.2             # PHP 版本
 #   MVN_PROFILE=main            # Maven profile
 #   INSTALL_FONTS=true          # JDK 镜像中安装字体
 # =============================================================================
 
 _is_china() {
-    ${IN_CHINA:-false} || ${CHANGE_SOURCE:-false}
+    ${IS_CHINA:-false} || ${CHANGE_SOURCE:-false}
 }
 
 _set_mirror() {

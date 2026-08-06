@@ -170,7 +170,7 @@ target "default" {
     dockerfile = "Dockerfile"
     platforms = ["linux/amd64"]
     args = {
-        IN_CHINA = "${IS_CHINA}"
+        IS_CHINA = "${IS_CHINA}"
         MIRROR = "${mirror}"
         BUILD_OUTPUT_DIR = "/build_output"${lang_args}${extra_args}
     }

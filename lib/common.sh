@@ -1035,7 +1035,7 @@ _install_acme_official() {
     fi
 
     _msg green "Installing acme.sh..."
-    if ${IN_CHINA:-false}; then
+    if ${IS_CHINA:-false}; then
         git clone --depth 1 https://gitee.com/neilpang/acme.sh.git
         cd acme.sh && ./acme.sh --install --accountemail deploy@deploy.sh
     else

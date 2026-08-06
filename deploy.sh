@@ -306,7 +306,7 @@ parse_command_args() {
 #   - ENV_ADD_HOST: 需要添加到容器中的主机映射数组
 ################################################################################
 config_build_env() {
-    if ${ENV_IN_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
+    if ${ENV_IS_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
         export IS_CHINA=true
     else
         export IS_CHINA=false

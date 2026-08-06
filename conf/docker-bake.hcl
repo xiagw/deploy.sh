@@ -6,7 +6,7 @@
 //   docker buildx bake --file docker-bake.hcl mysql
 // 覆盖变量：--set "<target>.args.<ARG>=value"
 
-variable "IN_CHINA" { default = "false" }
+variable "IS_CHINA" { default = "false" }
 variable "MIRROR" { default = "" }
 
 // 通用构建参数（default target 为 Java 应用多阶段构建，与历史行为一致）
@@ -34,7 +34,7 @@ target "default" {
     # platforms = ["linux/amd64", "linux/arm64"]
     platforms = ["linux/amd64"]
     args = {
-        IN_CHINA = "${IN_CHINA}"
+        IS_CHINA = "${IS_CHINA}"
         MIRROR = "${MIRROR}"
         BUILD_IMAGE = "${BUILD_IMAGE}"
         BUILD_TAG = "${BUILD_TAG}"

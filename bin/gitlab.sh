@@ -52,7 +52,7 @@ EOF
     # Clone deploy repository
     if _get_yes_no "[+] Clone deploy.sh repository?"; then
         if [ ! -d "$HOME/runner" ]; then
-            repo_url="https://$([ "${IN_CHINA:-false}" = true ] && echo 'gitee.com' || echo 'github.com')/xiagw/deploy.sh.git"
+            repo_url="https://$([ "${IS_CHINA:-false}" = true ] && echo 'gitee.com' || echo 'github.com')/xiagw/deploy.sh.git"
             git clone --depth 1 "$repo_url" "$HOME/runner"
         fi
     fi

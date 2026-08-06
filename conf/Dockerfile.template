@@ -14,7 +14,7 @@ ARG BUILD_TAG=3.9-amazoncorretto-17
 ARG RUN_IMAGE=amazoncorretto
 ARG RUN_TAG=17
 
-ARG IN_CHINA=false
+ARG IS_CHINA=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/root/opt/build.sh
 ARG BUILD_OUTPUT_DIR=/build_output
 
@@ -31,7 +31,7 @@ ARG INSTALL_LIBREOFFICE=false
 #### 阶段 1：Maven 编译 ####
 FROM ${MIRROR}${BUILD_IMAGE}:${BUILD_TAG} AS builder
 ## FROM之前的全局变量必须重新定义
-ARG IN_CHINA
+ARG IS_CHINA
 ARG MVN_PROFILE
 ARG BUILD_OUTPUT_DIR
 ARG BUILD_URL
@@ -53,7 +53,7 @@ RUN --mount=type=cache,target=/root/.m2,id=maven_cache,sharing=shared \
 #### 阶段 2：运行时 ####
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG} AS final
 ## FROM之前的全局变量必须重新定义
-ARG IN_CHINA
+ARG IS_CHINA
 ARG APP_WORKDIR=/app
 ARG APP_PORTS="8080 8081"
 ARG APP_VOLUME=/app

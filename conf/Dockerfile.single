@@ -13,7 +13,7 @@ ARG RUN_IMAGE=alpine
 ARG RUN_TAG=latest
 
 FROM ${MIRROR}${RUN_IMAGE}:${RUN_TAG}
-ARG IN_CHINA=false
+ARG IS_CHINA=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/root/opt/build.sh
 ARG RUN_SCRIPT_ARG=
 ARG TZ=UTC
