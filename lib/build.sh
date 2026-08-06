@@ -25,7 +25,6 @@ ensure_buildx_builder() {
             docker buildx create --name "$builder_name" "${append_flag[@]}" \
                 --node "node$c" --driver docker-container --bootstrap \
                 --driver-opt image="${buildkit_image}" \
-                --driver-opt "volumes=${host_cache_path}:/var/lib/buildkit" \
                 "$dk_host" ||
                 _msg error "创建buildx节点node$c失败: ${dk_host}"
             append_flag=(--append)
