@@ -15,11 +15,13 @@ log() {
     case "${1:-}" in
     file)
         shift
-        log_file="$2"
-        if [ -f "$log_file" ]; then
-            shift
-        else
+        log_file="$1"
+        shift
+        if [ -z "$log_file" ]; then
             log_file="/tmp/$(date +%Y%m%d).log"
+        elif [ ! -f "$log_file" ]; then
+            mkdir -p "$(dirname "$log_file")" 2>/dev/null || true
+            touch "$log_file" 2>/dev/null || log_file="/tmp/$(date +%Y%m%d).log"
         fi
         echo "[$(date +%Y%m%d_%u_%T.%3N)] [RUN1] $*" | tee -a "$log_file"
         ;;
@@ -142,14 +144,15 @@ start_java() {
     local config_entry config_type config_file last_config_entry
 
     # 获取JVM参数
+    java -version
     jvm_opts=$(get_jvm_opts)
     log "使用JVM参数: ${jvm_opts}"
 
     # 按文件名自然排序查找所有jar文件
     mapfile -t jar_files < <(find . -maxdepth 2 -name "*.jar" -type f | sort -V)
     if [ ${#jar_files[@]} -eq 0 ]; then
-        log "错误: 未找到JAR文件"
-        return 1
+        log "错误: 未找到JAR文件，回退到调试模式"
+        return 0
     fi
     log "找到 ${#jar_files[@]} 个JAR文件: ${jar_files[*]}"
 
@@ -424,7 +427,7 @@ main() {
     # 检查jemalloc
     # check_jemalloc &
 
-    # 启动日志处理
+    # 启动日志轮转
     local max_size=$((1024 * 1024 * 1024)) # 1GB
     while true; do
         # 处理所有日志文件
@@ -447,10 +450,12 @@ main() {
         ;;
     debug)
         # 调试模式：允许直接终止Java进程而不停止容器
+        log "调试模式下跟踪日志文件: ${G_LOG}"
         exec tail -f "$G_LOG"
         ;;
     *)
         # 等待模式：终止Java进程将导致容器停止
+        log "等待模式下跟踪日志文件: ${G_LOG}"
         tail -f "$G_LOG" &
         G_PIDS+=("$!")
         wait
