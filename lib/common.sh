@@ -820,7 +820,7 @@ _install_docker() {
     local temp_file
     temp_file=$(mktemp)
     curl -fsSLo "$temp_file" https://get.docker.com
-    if "${IS_CHINA:-}"; then
+    if "${IS_CHINA:-false}"; then
         $use_sudo bash "$temp_file" --mirror Aliyun
     else
         $use_sudo bash "$temp_file"
@@ -852,7 +852,7 @@ _notify_wecom() {
 }
 
 _set_mirror() {
-    if "${IS_CHINA:-}"; then
+    if "${IS_CHINA:-false}"; then
         echo "Running in China, setting mirrors for $1"
     else
         return 0

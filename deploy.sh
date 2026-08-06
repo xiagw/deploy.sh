@@ -538,7 +538,7 @@ main() {
     ## ========================================================================
     ## 中国地区特殊配置
     ## 如果处于中国区环境，启用 deploy.env 中的代理设置
-    if [[ "${IS_CHINA}" && -n "${ENV_HTTP_PROXY:-}" ]]; then
+    if [[ "${IS_CHINA:-false}" && -n "${ENV_HTTP_PROXY:-}" ]]; then
         system_proxy on
     fi
 

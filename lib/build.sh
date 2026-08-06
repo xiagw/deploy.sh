@@ -14,7 +14,7 @@ ensure_buildx_builder() {
 
     local builder_name="deploy-builder"
     local host_cache_path="/var/cache/buildkit"
-    if "$IS_CHINA"; then
+    if "${IS_CHINA:-false}"; then
         local mirror="docker.m.daocloud.io/"
     fi
     if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
@@ -38,7 +38,7 @@ ensure_buildx_builder() {
 ensure_buildx_builder_kubernetes() {
     [[ "${G_DEBUG_ON:-false}" == true ]] && return
     [[ -z "${ENV_BUILDX_KUBERNETES_NAMESPACE:-}" ]] && return
-    if "$IS_CHINA"; then
+    if "${IS_CHINA:-false}"; then
         local mirror="docker.m.daocloud.io/"
     fi
     local builder_name="deploy-builder-k8s"
