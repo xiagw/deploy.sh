@@ -86,20 +86,20 @@ get_jvm_opts() {
         [ -f "$opts_file" ] || continue
         file_opts=$(grep -vE '^\s*$|^\s*#' "${opts_file}" | xargs)
         if [ -n "${file_opts}" ]; then
-            log "从配置文件加载JVM参数: ${opts_file}"
+            log "从配置文件加载JVM参数: ${opts_file}" >&2
             final_opts="${file_opts}"
         fi
     done
 
     # 3. 从环境变量获取（覆盖配置文件）
     if [ -n "${JAVA_OPTS}" ]; then
-        log "从JAVA_OPTS环境变量加载JVM参数"
+        log "从JAVA_OPTS环境变量加载JVM参数" >&2
         final_opts="${JAVA_OPTS}"
     fi
 
     # 4. 从JVM_OPTS环境变量获取（最高优先级）
     if [ -n "${JVM_OPTS}" ]; then
-        log "从JVM_OPTS环境变量加载JVM参数"
+        log "从JVM_OPTS环境变量加载JVM参数" >&2
         final_opts="${JVM_OPTS}"
     fi
 
