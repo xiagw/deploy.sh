@@ -186,9 +186,9 @@ deploy_to_kubernetes() {
         ## kubectl rollback to previous revision / 回滚到上一个版本
         $KUBECTL_OPT -n "${G_NAMESPACE}" rollout undo deployment/"${release_name}" 2>/dev/null || true
         ## 显示回滚命令 / Show rollback command
-        echo "$KUBECTL_OPT -n ${G_NAMESPACE} rollout undo deployment/${release_name}"
+        echo "kubectl -n ${G_NAMESPACE} rollout undo deployment/${release_name}"
         ## Scale down deployment to 0 replicas / 将部署缩减为 0 个副本
-        echo "$KUBECTL_OPT -n ${G_NAMESPACE} scale deployment/${release_name} --replicas=0"
+        echo "kubectl -n ${G_NAMESPACE} scale deployment/${release_name} --replicas=0"
         return 1
     fi
 

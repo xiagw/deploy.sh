@@ -407,7 +407,7 @@ select_image_tags() {
     "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
     "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:25" "amazoncorretto:26"
     "node:18" "node:20" "node:21" "node:22" "node:23" "node:24"
-    "redis:latest"
+    "redis:latest" "redis:7-alpine" "redis:8-alpine"
     "nginx:stable-alpine"
   )
 
