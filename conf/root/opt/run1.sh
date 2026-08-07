@@ -138,7 +138,8 @@ find_configs() {
 
 # 函数：启动Java应用
 start_java() {
-    command -v redis-server && redis-server --daemonize yes
+    ## 检查是否安装了redis-server，如果安装了则启动redis-server
+    command -v redis-server >/dev/null 2>&1 && redis-server --daemonize yes
 
     local jar_files jvm_opts i=0 pid config_name config_path config_files start_cmd
     local config_entry config_type config_file last_config_entry
@@ -243,7 +244,7 @@ start_php() {
 
     [ -d /var/lib/php/sessions ] && chmod -R 777 /var/lib/php/sessions
     [ -d /run/php ] || mkdir -p /run/php
-    [ -d "$G_HTML" ] || mkdir "$G_HTML"
+    [ -d "$G_HTML" ] || mkdir -p "$G_HTML"
     [ -f "$G_HTML/index.html" ] || date >>"$G_HTML/index.html"
 
     # 启动PHP-FPM
@@ -297,9 +298,13 @@ start_php() {
 # 函数：启动Node.js应用
 start_node() {
     cd "/app" || return
+    if [ -f "package.json" ] && [ ! -d "node_modules" ]; then
+        log "未找到node_modules/，正在安装..."
+        npm install --registry=https://registry.npmmirror.com
+    fi
+    log "正在启动Node.js应用..."
     npm run start &
     G_PIDS+=("$!")
-    log "Node.js应用启动成功"
 }
 
 # 函数：设置jemalloc
