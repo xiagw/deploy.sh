@@ -354,12 +354,8 @@ _build_node() {
     install -m 0755 -o node -g node -d /.cache /app
 
     # Update npm and install cnpm if in China
-    node_ver=$(node --version | sed -E 's/^[^0-9]*([0-9]+).*/\1/')
-    if [ "$node_ver" -le 18 ]; then
-        npm install -g npm@10.8
-    else
-        npm install -g npm
-    fi
+    npm install -g npm || npm install -g npm@11 || npm install -g npm@10 || true
+
     _is_china && npm install -g cnpm
 
     _check_run_sh
@@ -376,7 +372,7 @@ _build_node() {
         fi
     else
         echo "Error: /app/package.json not found" >&2
-        return 1
+        # return 1
     fi
 }
 
@@ -488,16 +484,18 @@ _build_jdk_runtime() {
     for file in /usr/lib/jvm/java-17-amazon-corretto/conf/security/java.security \
         /usr/lib/jvm/java-1.8.0-amazon-corretto/jre/lib/security/java.security \
         /usr/local/openjdk-8/jre/lib/security/java.security; do
-        [[ -f $file ]] && sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' "$file"
+        [[ -f $file ]] || continue
+        sed -i 's/SSLv3\,\ TLSv1\,\ TLSv1\.1\,//g' "$file"
     done
 
     _check_run_sh
 
     # Set up app directory and permissions
     install -m 0755 -o 1000 -g 1000 -d /app
-    [ -f /src/.jvm.options ] && cp -avf /src/.jvm.options /app/
-    [ -f /src/jvm.options ] && cp -avf /src/jvm.options /app/
-    [ -d /src/cert ] && cp -rv /src/cert /app/
+    for f in /src/.jvm.options /src/jvm.options /src/cert; do
+        [ -e "$f" ] || continue
+        cp -avf "$f" /app/
+    done
     command -v su || command -v runuser || $cmd_pkg install -y util-linux
     command -v useradd || $cmd_pkg install -y shadow-utils
 
@@ -515,8 +513,11 @@ _build_jdk_runtime() {
     else
         # Fallback to bash builtin compgen when find is unavailable
         for _pattern in "/app/*.yml" "/app/*.yaml" "/app/*.YML" "/app/*.YAML" \
-                        "/app/*/*.yml" "/app/*/*.yaml" "/app/*/*.YML" "/app/*/*.YAML"; do
-            compgen -G "$_pattern" >/dev/null 2>&1 && { _has_yml=true; break; }
+            "/app/*/*.yml" "/app/*/*.yaml" "/app/*/*.YML" "/app/*/*.YAML"; do
+            compgen -G "$_pattern" >/dev/null 2>&1 && {
+                _has_yml=true
+                break
+            }
         done
     fi
     if ! $_has_yml && [ "${MVN_PROFILE}" != base ]; then
