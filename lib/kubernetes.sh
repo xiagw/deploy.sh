@@ -288,7 +288,7 @@ build_base_image() {
   local image_tag="$1" mirror registry proxy_url bake_target tag_left tag_right
   local bake_file="${G_DATA}/base-bake.hcl"
   mirror="${ENV_DOCKER_MIRROR:+${ENV_DOCKER_MIRROR%/}/}"
-  registry="${ENV_DOCKER_MIRROR:+${ENV_DOCKER_MIRROR%/}/}"
+  registry="${ENV_DOCKER_REGISTRY:+${ENV_DOCKER_REGISTRY%/}/}"
   proxy_url="${ENV_HTTP_PROXY:-}"
   tag_left="${image_tag%:*}"
   tag_right="${image_tag#*:}"
