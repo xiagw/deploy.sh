@@ -645,8 +645,8 @@ copy_docker_image() {
 
     # 检查目标镜像是否已存在
     if skopeo inspect "docker://${target}" &>/dev/null; then
-        _msg error "Target image already exists: ${target}"
-        return 1
+        _msg warn "Target image already exists: ${target}"
+        # return 1
     fi
 
     echo "Copying multi-arch image to custom registry..."
