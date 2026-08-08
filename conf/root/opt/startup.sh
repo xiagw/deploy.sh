@@ -15,10 +15,11 @@ if [ ! -f "$ssl_dir/dhparams.pem" ]; then
 fi
 # chown 1000:1000 $html_path
 chmod 600 "$ssl_dir"/*.key
-chown -R nginx "$ssl_dir"/*.key "$log_path"
+chown -R nginx "$ssl_dir"/*.key
 
 html_path=/var/www/html
 log_path=/var/log/nginx
+chown -R nginx "$log_path"
 mkdir -p "$html_path"/{s,tp,.well-known/acme-challenge}
 if [ ! -f "$html_path/.well-known/security.txt" ]; then
     (
