@@ -148,25 +148,17 @@ EOF
 }
 
 _check_run_sh() {
-    for i in /opt/run0.sh /opt/run1.sh; do
-        if [ ! -f "$i" ]; then
-            ## Dockerfile 中 mount bind /src 内sh
-            local runsh="/src/root$i"
-            if [ -f "$runsh" ]; then
-                install -m 0755 "$runsh" "$i"
-            else
-                curl -fLo "$i" "$url_deploy_raw/conf/root$i"
-            fi
+    ## Dockerfile 中 mount bind /src 内sh
+    local f target
+    for f in /src/root/opt/{run0.sh,run1.sh,init.sh}; do
+        target="${f#/src/root}"
+        if [ -f "$f" ]; then
+            install -m 0755 "$f" "$target"
+        else
+            curl -L "$url_deploy_raw/conf/root/${target}" -o "$target" || true
+            chmod +x "$target" || true
         fi
-        chmod +x "$i"
     done
-
-    initsh="/src/root/opt/init.sh"
-    if [ -f "$initsh" ]; then
-        install -m 0755 "$initsh" "/opt/init.sh"
-    else
-        echo "Not found $initsh, skip copy."
-    fi
 }
 
 _build_nginx() {
@@ -180,20 +172,33 @@ _build_nginx() {
         # 设置用户权限
         groupmod -g 1000 nginx
         usermod -u 1000 -g 1000 nginx
+        ## 往 /docker-entrypoint.d/run0.sh 写入启动脚本，CMD ["bash", "/opt/run0.sh"] 会调用它
+        cat >/docker-entrypoint.d/run0.sh <<'EOF'
+if [ -f /opt/onrun.sh ]; then
+    bash /opt/onrun.sh;
+elif [ -f /opt/startup.sh ]; then
+    bash /opt/startup.sh;
+fi
+EOF
+        chmod +x /docker-entrypoint.d/run0.sh
+        if [ -f /src/root/opt/startup.sh ]; then
+            install -m 0755 /src/root/opt/startup.sh /opt/startup.sh
+        else
+            curl -L "$url_deploy_raw/conf/root/opt/startup.sh" -o /opt/startup.sh || true
+        fi
         return 0
     fi
 
     # 安装编译依赖
     $cmd_pkg_opt gcc libc-dev make openssl openssl-dev pcre-dev zlib-dev linux-headers git gnupg libxslt-dev gd-dev libmaxminddb libmaxminddb-dev
 
-    # 创建构建目录
-    mkdir -p /build
-    cd /build || exit 1
-
     # 获取当前nginx版本号
     NGINX_VERSION=$(nginx -v 2>&1 | sed 's/.*\///;s/ .*//')
     NGINX_VERSION="${NGINX_VERSION:-1.30.4}" # 设置默认稳定版本
 
+    # 创建构建目录
+    mkdir -p /build
+    cd /build || exit 1
     # 下载并解压nginx源码
     if ! curl -fL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" | tar -xz; then
         echo "Failed to download nginx source" >&2

@@ -62,6 +62,7 @@ VOLUME ${APP_VOLUME}
 CMD ["/bin/bash", "-c", "${APP_CMD:-/opt/run0.sh}"]
 
 ONBUILD COPY --chown=${ONBUILD_CHOWN} ${ONBUILD_COPY_SRC} ${ONBUILD_COPY_DEST}
-ONBUILD RUN if [ -f /opt/onbuild.sh ]; then \
+ONBUILD RUN set -xe; \
+    if [ -f /opt/onbuild.sh ]; then \
         if command -v bash >/dev/null 2>&1; then bash /opt/onbuild.sh; else sh /opt/onbuild.sh; fi; \
     fi

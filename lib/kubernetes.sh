@@ -351,6 +351,9 @@ build_base_image() {
         RUN_TAG = \"${tag_right}\"
         APP_PORTS = \"80 443\"
         APP_CMD = \"\""
+    local dk_file="${G_PATH}/conf/Dockerfile.nginx"
+    cp -vf "${G_PATH}/conf/Dockerfile.single" "${dk_file}"
+    sed -i -e "/^CMD/ s@^@#@" "$dk_file"
     ;;
   *)
     extra_args="
@@ -366,7 +369,7 @@ build_base_image() {
   cat >"${bake_file}" <<EOF
 target "default" {
     context = "${G_PATH}/conf"
-    dockerfile = "Dockerfile.single"
+    dockerfile = "${dk_file:-Dockerfile.single}"
     platforms = ["linux/amd64", "linux/arm64"]
     args = {
         IS_CHINA = "${IS_CHINA:-true}"
@@ -380,6 +383,7 @@ EOF
   if ${DRY_RUN:-false}; then
     echo "## base-bake.hcl: ${bake_file}"
     docker buildx bake --file "${bake_file}" --progress=quiet --print
+    rm -f "${dk_file}" 2>/dev/null || true
     return
   fi
 
@@ -395,6 +399,7 @@ EOF
   fi
 
   docker buildx bake --file "${bake_file}" --progress=plain
+  rm -f "${dk_file}" 2>/dev/null || true
 }
 
 # Build selected base images
