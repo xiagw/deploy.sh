@@ -3,7 +3,7 @@
 ## laradock nginx 启动初始化
 
 ## generate cert
-ssl_dir="/etc/nginx/conf.d/ssl"
+ssl_dir="/etc/nginx/ssl"
 mkdir -p "$ssl_dir"
 if [ ! -f "$ssl_dir/default.pem" ]; then
     openssl genrsa -out "$ssl_dir/default.key" 2048
@@ -13,6 +13,9 @@ fi
 if [ ! -f "$ssl_dir/dhparams.pem" ]; then
     openssl dhparam -dsaparam -out "$ssl_dir/dhparams.pem" 4096
 fi
+# chown 1000:1000 $html_path
+chmod 600 "$ssl_dir"/*.key
+chown -R nginx "$ssl_dir"/*.key "$log_path"
 
 html_path=/var/www/html
 log_path=/var/log/nginx
@@ -25,10 +28,6 @@ if [ ! -f "$html_path/.well-known/security.txt" ]; then
 fi
 [ -f "$html_path/index.html" ] || echo "INDEX Page: $(date)" >>"$html_path/index.html"
 [ -f "$html_path/favicon.ico" ] || touch "$html_path/favicon.ico"
-
-# chown 1000:1000 $html_path
-chmod 600 "$ssl_dir"/*.key
-chown -R nginx "$ssl_dir"/*.key "$log_path"
 
 ## nginx 4xx 5xx
 if [ ! -f "$html_path/4xx.html" ]; then
