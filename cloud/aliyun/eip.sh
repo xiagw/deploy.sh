@@ -71,11 +71,10 @@ eip_create() {
         echo "使用 fzf 交互式模式创建 EIP"
 
         echo "正在获取可用的 EIP 带宽选项..."
-        local bandwidth_result
+        local bandwidth_result bandwidth_list
         bandwidth_result=$(call_aliyun_api vpc describe-common-bandwidth-packages --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
-
-        local bandwidth_list
-        if [ $? -eq 0 ] && [ -n "$bandwidth_result" ]; then
+        ret=$?
+        if [ $ret -eq 0 ] && [ -n "$bandwidth_result" ]; then
             bandwidth_list="1
 2
 5
@@ -153,11 +152,10 @@ eip_update() {
         # 选择新带宽
         if [ -z "$new_bandwidth" ]; then
             echo "正在获取可用的 EIP 带宽选项..."
-            local bandwidth_result
+            local bandwidth_result bandwidth_list
             bandwidth_result=$(call_aliyun_api vpc describe-common-bandwidth-packages --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
-
-            local bandwidth_list
-            if [ $? -eq 0 ] && [ -n "$bandwidth_result" ]; then
+            ret=$?
+            if [ $ret -eq 0 ] && [ -n "$bandwidth_result" ]; then
                 bandwidth_list="1
 2
 5
@@ -259,8 +257,8 @@ eip_delete() {
         local unbind_result
         unbind_result=$(call_aliyun_api vpc unassociate-eip-address --biz-region-id "${region:-}" --region "${region:-}" \
             --allocation-id "$eip_id")
-
-        if [ $? -eq 0 ]; then
+        ret=$?
+        if [ $ret -eq 0 ]; then
             echo "$unbind_result" | jq '.'
             log_result "${profile:-}" "$region" "eip" "unbind" "$unbind_result"
             echo "等待解绑完成（10秒）..."

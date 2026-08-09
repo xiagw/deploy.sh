@@ -468,16 +468,7 @@ cdn_pay() {
     echo -e "[$(date +'%F %T')] 购买 1TB 资源包..."
     echo "CDN 资源包购买："
 
-    # 优先使用 CLI 旧版参数 bssopenapi CreateResourcePackage --ProductCode dcdn --PackageType FPT_dcdnpaybag_deadlineAcc_1541405199 --Duration 1 --PricingCycle Month --Specification 1024 --endpoint business.aliyuncs.com --force --version 2017-12-14
     local _result
-    # _result=$(call_api_logged "cdn" "pay" "错误：CDN 资源包购买失败。" \
-    #     -- bssopenapi create-resource-package \
-    #     --api-version 2017-12-14 \
-    #     --product-code dcdn \
-    #     --package-type FPT_dcdnpaybag_deadlineAcc_1541405199 \
-    #     --duration 1 \
-    #     --pricing-cycle Month \
-    #     --specification "$package_unit_size" 2>&1)
     _result=$(call_api_logged "cdn" "pay" "错误：CDN 资源包购买失败。" \
         -- bssopenapi CreateResourcePackage \
         --endpoint business.aliyuncs.com --force --version 2017-12-14 \

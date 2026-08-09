@@ -78,8 +78,8 @@ ack_list() {
 
     local result
     result=$(call_aliyun_api cs GET /clusters --region "${region:-}")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -211,8 +211,9 @@ ack_create() {
                 is_enterprise_security_group: true,
                 cloud_monitor_flags: 1
             }')")
+    ret=$?
 
-    if [ $? -eq 0 ]; then
+    if [ $ret -eq 0 ]; then
         echo "ACK 集群创建请求已提交："
         echo "$result" | jq '.'
 
@@ -345,8 +346,8 @@ ack_detail() {
 
     local result
     result=$(call_aliyun_api cs GET "/clusters/$cluster_id" --region "$region")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         case "$format" in
         json)
             echo "$result"
@@ -393,8 +394,8 @@ ack_node_list() {
 
     local result
     result=$(call_aliyun_api cs GET "/clusters/$cluster_id/nodes" --region "$region")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取节点列表。" >&2
         return 1
     fi
@@ -434,8 +435,8 @@ ack_node_add() {
     result=$(call_aliyun_api cs POST "/clusters/$cluster_id/nodes" \
         --region "$region" \
         --body "$(jq -nc --argjson count "$count" '{count: $count}')")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "节点添加请求已提交："
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ack" "add-node" "$result"
@@ -462,7 +463,8 @@ ack_node_remove() {
     if [ -z "$node_id" ]; then
         local node_result node_candidates raw_node
         node_result=$(call_aliyun_api cs GET "/clusters/$cluster_id/nodes" --region "$region" 2>/dev/null)
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取节点列表。" >&2
             return 1
         fi
@@ -484,8 +486,8 @@ ack_node_remove() {
     result=$(call_aliyun_api cs DELETE "/clusters/$cluster_id/nodes" \
         --region "$region" \
         --body "$(jq -nc --arg node_id "$node_id" '{nodes: [$node_id], release_node: true}')")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "节点移除请求已提交："
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ack" "node-remove" "$result"
@@ -512,8 +514,8 @@ ack_get_kubeconfig() {
     result=$(call_aliyun_api cs GET "/k8s/$cluster_id/user_config" \
         --region "$region" \
         --private_ip_address "$private")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "$result" | jq -r '.config'
         log_result "${profile:-}" "$region" "ack" "kubeconfig" "$result"
     else

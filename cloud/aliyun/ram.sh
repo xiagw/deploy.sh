@@ -90,8 +90,8 @@ ram_list() {
 
     local result
     result=$(call_aliyun_api ram list-users --region "${region:-cn-hangzhou}" 2>/dev/null)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -154,8 +154,8 @@ ram_create() {
 
     local result
     result=$(call_aliyun_api ram create-user --user-name "$username" --display-name "$display_name" --region "${region:-cn-hangzhou}")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "子账号创建成功："
         echo "$result" | jq '.'
 
@@ -279,8 +279,8 @@ ram_update() {
             --user-name "$username" \
             --new-user-name "$username" \
             --new-display-name "$new_display_name")
-
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：子账号更新失败。"
             echo "$result"
             return 1
@@ -296,8 +296,8 @@ ram_update() {
             --user-name "$username" \
             --password "$new_password" \
             --password-reset-required false)
-
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：密码更新失败。"
             echo "$result"
             return 1
@@ -332,8 +332,8 @@ ram_delete() {
     echo "删除 RAM 子账号："
     local result
     result=$(call_aliyun_api ram delete-user --user-name "$username" 2>&1)
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "子账号删除成功。"
         log_delete_operation "${profile:-}" "$region" "ram" "$username" "RAM 子账号" "成功" "$result"
     else
@@ -363,8 +363,8 @@ ram_create_key() {
     echo "为子账号创建 AccessKey："
     local result
     result=$(call_aliyun_api ram create-access-key --user-name "$username" --region "${region:-cn-hangzhou}")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "AccessKey 创建成功："
         echo "$result" | jq '.'
         echo "请保存 AccessKeyId 和 AccessKeySecret，它们只会显示一次！"
@@ -407,8 +407,8 @@ ram_list_keys() {
 
     local result
     result=$(call_aliyun_api ram list-access-keys --user-name "$username" --region "${region:-cn-hangzhou}")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ram" "list-keys" "$result"
     else
@@ -435,7 +435,8 @@ ram_delete_key() {
 
     local result
     result=$(call_aliyun_api ram list-access-keys --user-name "$username" --region "${region:-cn-hangzhou}")
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取 AccessKey 列表。" >&2
         echo "$result"
         return 1
@@ -476,8 +477,8 @@ ram_delete_key() {
         result=$(call_aliyun_api ram delete-access-key --region "${region:-cn-hangzhou}" \
             --user-access-key-id "$key_id" \
             --user-name "$username")
-
-        if [ $? -eq 0 ]; then
+        ret=$?
+        if [ $ret -eq 0 ]; then
             echo "AccessKey 删除成功：$key_id"
         else
             echo "错误：AccessKey 删除失败：$key_id"
@@ -557,8 +558,8 @@ ram_grant_permission() {
             --policy-type System \
             --policy-name "$policy_name" \
             --user-name "$username")
-
-        if [ $? -eq 0 ]; then
+        ret=$?
+        if [ $ret -eq 0 ]; then
             echo "权限授予成功：$policy_name"
             echo "$result" | jq '.'
         else
@@ -598,7 +599,8 @@ ram_revoke_permission() {
 
     local result
     result=$(call_aliyun_api ram list-policies-for-user --user-name "$username" --region "${region:-cn-hangzhou}")
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取用户权限列表。" >&2
         echo "$result"
         return 1
@@ -668,8 +670,9 @@ ram_revoke_permission() {
                 --principal-name "$principal_name" \
                 --resource-group-id "$policy_scope")
         fi
+        ret=$?
 
-        if [ $? -eq 0 ]; then
+        if [ $ret -eq 0 ]; then
             echo "权限撤销成功：$policy_name ($policy_scope)"
         else
             echo "错误：权限撤销失败：$policy_name ($policy_scope)"
@@ -708,8 +711,8 @@ ram_list_permissions() {
 
     local result
     result=$(call_aliyun_api ram list-policies-for-user --user-name "$username" --region "${region:-cn-hangzhou}")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取用户权限列表。"
         echo "$result"
         return 1
@@ -778,8 +781,8 @@ ram_create_updated() {
     result=$(call_aliyun_api ram create-user --region "${region:-cn-hangzhou}" \
         --user-name "$username" \
         --display-name "$display_name")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "子账号创建成功："
         echo "$result" | jq '.'
 

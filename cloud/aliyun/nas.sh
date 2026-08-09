@@ -256,8 +256,8 @@ nas_mount_list() {
     local result
     result=$(call_aliyun_api nas describe-mount-targets \
         --file-system-id "$fs_id")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取挂载点列表。" >&2
         return 1
     fi

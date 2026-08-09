@@ -105,8 +105,8 @@ clb_list() {
 
     local result
     result=$(call_aliyun_api slb describe-load-balancers --biz-region-id "${region:-}" --api-version 2014-05-15)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取 CLB 实例列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -151,8 +151,8 @@ nlb_list() {
 
     local result
     result=$(call_aliyun_api nlb list-load-balancers --biz-region-id "${region:-}" --api-version 2022-04-30)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取 NLB 实例列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -179,8 +179,8 @@ alb_list() {
 
     local result
     result=$(call_aliyun_api alb list-load-balancers --biz-region-id "${region:-}" --api-version 2022-04-30)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取 ALB 实例列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -241,9 +241,8 @@ slb_create() {
             echo "正在获取可用的 CLB 规格..."
             local spec_result
             spec_result=$(call_aliyun_api slb describe-load-balancers --biz-region-id "${region:-}" --api-version 2014-05-15 2>/dev/null)
-
-            local spec_list
-            if [ $? -eq 0 ] && [ -n "$spec_result" ]; then
+            ret=$?
+            if [ $ret -eq 0 ] && [ -n "$spec_result" ]; then
                 spec_list="slb.s1.small
 slb.s1.medium
 slb.s2.small

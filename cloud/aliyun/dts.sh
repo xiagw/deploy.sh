@@ -221,8 +221,8 @@ dts_create() {
         --migration-job-name "$task_name" \
         --source-type "$source_type" \
         --destination-type "$dest_type")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "DTS 迁移任务创建成功："
         echo "$result" | jq '.'
 
@@ -260,8 +260,8 @@ dts_sync_create() {
         --synchronization-job-name "$task_name" \
         --source-type "$source_type" \
         --destination-type "$dest_type")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "DTS 同步任务创建成功："
         echo "$result" | jq '.'
 
@@ -395,16 +395,19 @@ dts_delete() {
     case "$kind" in
     migration)
         result=$(call_aliyun_api dts delete-migration-job --api-version 2020-01-01 --migration-job-id "$task_id")
+        ret=$?
         ;;
     sync)
         result=$(call_aliyun_api dts delete-synchronization-job --api-version 2020-01-01 --synchronization-job-id "$task_id")
+        ret=$?
         ;;
     subscribe)
         result=$(call_aliyun_api dts delete-subscription-instance --api-version 2020-01-01 --subscription-instance-id "$task_id")
+        ret=$?
         ;;
     esac
 
-    if [ $? -eq 0 ]; then
+    if [ $ret -eq 0 ]; then
         echo "DTS ${kind_cn}任务删除成功。"
         log_delete_operation "${profile:-}" "$region" "dts" "$task_id" "$del_label" "成功" "$result"
     else
@@ -425,8 +428,8 @@ dts_start() {
     echo "启动 DTS 迁移任务：$task_id"
     local result
     result=$(call_aliyun_api dts configure-migration-job --api-version 2020-01-01 --migration-job-id "$task_id" --migration-job-id-list "[\"$task_id\"]" --action-start)
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "DTS 迁移任务启动命令已发送。"
         echo "$result" | jq '.'
 
@@ -460,8 +463,8 @@ dts_stop() {
     echo "停止 DTS 迁移任务：$task_id"
     local result
     result=$(call_aliyun_api dts suspend-migration-job --api-version 2020-01-01 --migration-job-id "$task_id")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "DTS 迁移任务停止命令已发送。"
         echo "$result" | jq '.'
 

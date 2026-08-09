@@ -129,8 +129,8 @@ rds_create() {
             echo "正在获取可用的数据库引擎..."
             local engine_result
             engine_result=$(call_aliyun_api rds describe-regions 2>/dev/null)
-
-            if [ $? -eq 0 ] && [ -n "$engine_result" ]; then
+            ret=$?
+            if [ $ret -eq 0 ] && [ -n "$engine_result" ]; then
                 # 获取支持的数据库引擎
                 local engine_list="MySQL
 PostgreSQL
@@ -157,11 +157,12 @@ SQLServer"
             echo "正在获取 $engine 引擎的可用版本..."
             local version_result
             version_result=$(call_aliyun_api rds describe-regions 2>/dev/null)
+            ret=$?
 
             local version_list
             case "$engine" in
             MySQL)
-                if [ $? -eq 0 ] && [ -n "$version_result" ]; then
+                if [ $ret -eq 0 ] && [ -n "$version_result" ]; then
                     version_list="8.0
 5.7
 5.6"
@@ -172,7 +173,7 @@ SQLServer"
                 fi
                 ;;
             PostgreSQL)
-                if [ $? -eq 0 ] && [ -n "$version_result" ]; then
+                if [ $ret -eq 0 ] && [ -n "$version_result" ]; then
                     version_list="16.0
 15.0
 14.0
@@ -184,7 +185,7 @@ SQLServer"
                 fi
                 ;;
             SQLServer)
-                if [ $? -eq 0 ] && [ -n "$version_result" ]; then
+                if [ $ret -eq 0 ] && [ -n "$version_result" ]; then
                     version_list="2022
 2019
 2017
@@ -196,7 +197,7 @@ SQLServer"
                 fi
                 ;;
             MariaDB)
-                if [ $? -eq 0 ] && [ -n "$version_result" ]; then
+                if [ $ret -eq 0 ] && [ -n "$version_result" ]; then
                     version_list="10.11
 10.6
 10.5
@@ -223,7 +224,7 @@ SQLServer"
         # 选择规格
         if [ -z "$class" ]; then
             echo "正在获取 $engine $version 的可用实例规格..."
-            local class_result
+            local class_result class_list
             class_result=$(call_aliyun_api rds describe-available-classes \
                 --biz-region-id "${region:-}" \
                 --engine "$engine" \
@@ -232,9 +233,8 @@ SQLServer"
                 --category "Basic" \
                 --db-instance-storage-type "cloud_essd" \
                 --zone-id "$(call_aliyun_api rds describe-zones 2>/dev/null | jq -r '.Zones.Zone[0].ZoneId')" 2>/dev/null)
-
-            local class_list
-            if [ $? -eq 0 ] && [ -n "$class_result" ]; then
+            ret=$?
+            if [ $ret -eq 0 ] && [ -n "$class_result" ]; then
                 class_list=$(echo "$class_result" | jq -r '.Items.DBInstanceClass[].DBInstanceClass' | sort -u)
 
                 if [ -z "$class_list" ]; then
@@ -467,8 +467,8 @@ rds_account_create() {
         --account-password "$password" \
         --account-description "$description" \
         --account-type Normal)
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "账号创建成功："
         echo "$result" | jq '.'
 
@@ -562,8 +562,8 @@ rds_account_list() {
 
     local result
     result=$(call_aliyun_api rds describe-accounts --db-instance-id "$instance_id" --biz-region-id "$region" 2>/dev/null)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取账号列表。" >&2
         return 1
     fi
@@ -598,8 +598,8 @@ rds_db_list() {
 
     local result
     result=$(call_aliyun_api rds describe-databases --db-instance-id "$instance_id" --biz-region-id "$region" 2>/dev/null)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取数据库列表。" >&2
         return 1
     fi
@@ -767,7 +767,8 @@ _rds_resolve_instance_id() {
 rds_backup_list() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择要查看备份的 RDS 实例")
-    [ $? -ne 0 ] && return 1
+    ret=$?
+    [ $ret -ne 0 ] && return 1
     local format=${2:-human}
 
     local table_header="BackupId\tBackupMode\tBackupStatus\tBackupStartTime\tBackupEndTime\tBackupType\tBackupMethod\tBackupSize\tMetaStatus"
@@ -778,8 +779,8 @@ rds_backup_list() {
         --biz-region-id "$region" \
         --page-size 30 \
         --page-number 1)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取备份列表。" >&2
         echo "$result" >&2
         return 1
@@ -799,7 +800,8 @@ rds_backup_list() {
 rds_backup_delete() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择要清理备份的 RDS 实例")
-    [ $? -ne 0 ] && return 1
+    ret=$?
+    [ $ret -ne 0 ] && return 1
     local backup_id=$2
 
     if [ -z "$backup_id" ]; then
@@ -889,12 +891,13 @@ _rds_utc_to_local() {
 rds_recovery_time() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择要查询可恢复时间的 RDS 实例")
-    [ $? -ne 0 ] && return 1
+    ret=$?
+    [ $ret -ne 0 ] && return 1
 
     local result
     result=$(call_aliyun_api rds describe-local-available-recovery-time --db-instance-id "$instance_id" --biz-region-id "$region")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取可恢复时间范围。请确认实例已开启日志备份。" >&2
         echo "$result" >&2
         return 1
@@ -916,7 +919,8 @@ _rds_select_backup_or_time() {
     local instance_id=$1
     local backups_json
     backups_json=$(call_aliyun_api rds describe-backups --db-instance-id "$instance_id" --biz-region-id "$region" --page-size 50 --page-number 1 2>/dev/null)
-    if [ $? -ne 0 ] || [ -z "$backups_json" ]; then
+    ret=$?
+    if [ $ret -ne 0 ] || [ -z "$backups_json" ]; then
         echo "错误：无法获取备份列表。" >&2
         return 1
     fi
@@ -976,7 +980,8 @@ _rds_select_backup_or_time() {
 rds_restore_clone() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择源 RDS 实例")
-    [ $? -ne 0 ] && return 1
+    ret=$?
+    [ $ret -ne 0 ] && return 1
     shift
 
     local backup_or_time=$1
@@ -986,7 +991,8 @@ rds_restore_clone() {
     if [ -z "$backup_or_time" ]; then
         local selection
         selection=$(_rds_select_backup_or_time "$instance_id")
-        [ $? -ne 0 ] && return 1
+        ret=$?
+        [ $ret -ne 0 ] && return 1
         if [[ "$selection" == RESTORE_TIME:* ]]; then
             backup_or_time="${selection#RESTORE_TIME:}"
         elif [[ "$selection" == BACKUP_ID:* ]]; then
@@ -1050,8 +1056,8 @@ rds_restore_clone() {
 
     local result
     result=$(call_aliyun_api rds clone-db-instance --biz-region-id "$region" "${api_args[@]}")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "克隆任务已提交："
         echo "$result" | jq '.'
         local new_id
@@ -1069,7 +1075,8 @@ rds_restore_clone() {
 rds_restore_table() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择要恢复库表的 RDS 实例")
-    [ $? -ne 0 ] && return 1
+    ret=$?
+    [ $ret -ne 0 ] && return 1
     shift
 
     local backup_or_time=$1
@@ -1120,8 +1127,8 @@ rds_restore_table() {
 
     local result
     result=$(call_aliyun_api rds restore-table --biz-region-id "$region" "${api_args[@]}")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "库表恢复任务已提交。"
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "rds" "restore-table" "$result"

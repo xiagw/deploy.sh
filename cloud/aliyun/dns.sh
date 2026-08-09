@@ -221,11 +221,13 @@ dns_update() {
             domain_name=$(echo "$domain_list" | awk '{print $1}')
             echo "自动选择唯一的域名: $domain_name"
             result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
+            ret=$?
         else
             read -r -p "请输入域名以查找记录 (留空则查看所有域名): " domain_name
 
             if [ -n "$domain_name" ]; then
                 result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
+                ret=$?
             else
                 if type select_with_fzf >/dev/null 2>&1; then
                     domain_name=$(select_with_fzf "选择域名以查找要更新的记录" "$domain_list" | awk '{print $1}')
@@ -234,6 +236,7 @@ dns_update() {
                         return 1
                     fi
                     result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
+                    ret=$?
                 else
                     echo "请输入域名以查找要更新的记录。" >&2
                     return 1
@@ -241,7 +244,7 @@ dns_update() {
             fi
         fi
 
-        if [ $? -ne 0 ]; then
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取 DNS 记录列表。请检查您的凭证和权限。" >&2
             return 1
         fi
@@ -275,7 +278,8 @@ dns_update() {
         # 获取当前记录信息
         local current_record_info
         current_record_info=$(call_aliyun_api alidns describe-domain-record-info --region public --record-id "$record_id" 2>/dev/null)
-        if [ $? -eq 0 ]; then
+        ret=$?
+        if [ $ret -eq 0 ]; then
             local current_rr current_type current_value
             current_rr=$(echo "$current_record_info" | jq -r '.RR')
             current_type=$(echo "$current_record_info" | jq -r '.Type')
@@ -387,11 +391,13 @@ dns_delete() {
             domain_name=$(echo "$domain_list" | awk '{print $1}')
             echo "自动选择唯一的域名: $domain_name"
             result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
+            ret=$?
         else
             read -r -p "请输入域名以查找记录 (留空则查看所有域名): " domain_name
 
             if [ -n "$domain_name" ]; then
                 result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
+                ret=$?
             else
                 if type select_with_fzf >/dev/null 2>&1; then
                     domain_name=$(select_with_fzf "选择域名以查找要删除的记录" "$domain_list" | awk '{print $1}')
@@ -400,6 +406,7 @@ dns_delete() {
                         return 1
                     fi
                     result=$(call_aliyun_api alidns describe-domain-records --region public --domain-name "$domain_name" --page-size 100 2>/dev/null)
+                    ret=$?
                 else
                     echo "请输入域名以查找要删除的记录。" >&2
                     return 1
@@ -407,7 +414,7 @@ dns_delete() {
             fi
         fi
 
-        if [ $? -ne 0 ]; then
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取 DNS 记录列表。请检查您的凭证和权限。" >&2
             return 1
         fi
@@ -460,8 +467,8 @@ dns_domain_list() {
 
     local result
     result=$(call_aliyun_api alidns describe-domains --region "public" 2>/dev/null)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取域名列表。请检查您的凭证和权限。" >&2
         return 1
     fi

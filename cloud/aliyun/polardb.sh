@@ -170,15 +170,14 @@ PostgreSQL"
         # 选择节点规格
         if [ -z "$db_node_class" ]; then
             echo "正在获取 $db_type $db_version 的可用 PolarDB 节点规格..."
-            local class_result
+            local class_result class_list
             class_result=$(call_aliyun_api polardb describe-db-node-classes \
                 --biz-region-id "${region:-}" \
                 --db-type "$db_type" \
                 --db-version "$db_version" \
                 --pay-type "Postpaid")
-
-            local class_list
-            if [ $? -eq 0 ] && [ -n "$class_result" ]; then
+            ret=$?
+            if [ $ret -eq 0 ] && [ -n "$class_result" ]; then
                 class_list=$(echo "$class_result" | jq -r '.Items[] | select(.ZoneId != null) | .SupportedDBNodeClasses[] | "\(.DBNodeClass)"' | sort -u)
 
                 if [ -z "$class_list" ]; then
@@ -589,8 +588,8 @@ polardb_ip_get() {
 
     local result
     result=$(call_aliyun_api polardb describe-db-cluster-access-whitelist --db-cluster-id "$cluster_id")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取IP白名单信息。" >&2
         echo "$result"
         return 1
@@ -628,8 +627,8 @@ polardb_ip_set() {
         # 显示当前IP白名单并让用户选择或输入新IP
         local current_whitelist
         current_whitelist=$(call_aliyun_api polardb describe-db-cluster-access-whitelist --db-cluster-id "$cluster_id" 2>/dev/null)
-
-        if [ $? -eq 0 ] && [ -n "$current_whitelist" ]; then
+        ret=$?
+        if [ $ret -eq 0 ] && [ -n "$current_whitelist" ]; then
             echo "当前集群的IP白名单："
             echo "$current_whitelist" | jq -r '.Items.DBClusterIPArray[]? | select(. != null) | "\(.DBClusterIPArrayName // "N/A")  \(.SecurityIps // "N/A")"' |
                 awk 'BEGIN {FS="  "; OFS="  "}
@@ -743,8 +742,8 @@ polardb_ip_set() {
     fi
 
     result=$(call_aliyun_api polardb modify-db-cluster-access-whitelist "${params[@]}")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：设置IP白名单失败。" >&2
         echo "$result"
         return 1
@@ -788,8 +787,8 @@ polardb_ip_append() {
         --security-ips "$ips" \
         --modify-mode "Append" \
        )
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：追加IP白名单失败。" >&2
         echo "$result"
         return 1
@@ -820,8 +819,8 @@ polardb_ip_clear() {
         --security-ips "127.0.0.1" \
         --modify-mode "Cover" \
        )
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：清空IP白名单失败。" >&2
         echo "$result"
         return 1
@@ -857,7 +856,8 @@ _polardb_backup_time_range() {
 polardb_backup_list() {
     local cluster_id
     cluster_id=$(_polardb_resolve_cluster_id "$1" "选择要查看备份的 PolarDB 集群")
-    [ $? -ne 0 ] && return 1
+    ret=$?
+    [ $ret -ne 0 ] && return 1
     local format=${2:-human}
 
     local time_range start_time end_time
@@ -872,8 +872,8 @@ polardb_backup_list() {
         --end-time "$end_time" \
         --page-size 50 \
         --page-number 1)
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取备份列表。" >&2
         echo "$result" >&2
         return 1
@@ -896,7 +896,8 @@ polardb_backup_list() {
 polardb_backup_delete() {
     local cluster_id
     cluster_id=$(_polardb_resolve_cluster_id "$1" "选择要清理备份的 PolarDB 集群")
-    [ $? -ne 0 ] && return 1
+    ret=$?
+    [ $ret -ne 0 ] && return 1
     local backup_id=$2
 
     if [ -z "$backup_id" ]; then

@@ -352,9 +352,9 @@ ecs_create() {
     local system_disk_category
     local disk_category_list disk_categories_with_info
     disk_categories_with_info=$(get_supported_disk_categories "$zone_id")
-
+    ret=$?
     # 检查API调用是否成功
-    if [ $? -eq 0 ] && [ -n "$disk_categories_with_info" ]; then
+    if [ $ret -eq 0 ] && [ -n "$disk_categories_with_info" ]; then
         disk_category_list=$(echo "$disk_categories_with_info" | while read -r line; do
             echo "$line" | cut -d' ' -f1
         done)
@@ -411,8 +411,8 @@ cloud"
     local key_pair_list
     local key_result
     key_result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
-
-    if [ $? -eq 0 ] && [ -n "$key_result" ]; then
+    ret=$?
+    if [ $ret -eq 0 ] && [ -n "$key_result" ]; then
         key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
         local key_count
         key_count=$(printf '%s\n' "$key_pair_list" | awk 'NF{c++} END{print c+0}')
@@ -487,8 +487,8 @@ cloud"
     echo "正在创建 ECS 实例..."
     local result
     result=$(call_aliyun_api ecs run-instances --biz-region-id "${region:-cn-hangzhou}" "${api_args[@]}")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
         echo "ECS 实例创建并启动成功。"
 
@@ -587,8 +587,8 @@ ecs_key_list() {
 
     local result
     result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取 SSH 密钥对列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -710,8 +710,8 @@ ecs_key_create() {
     echo "创建 SSH 密钥对："
     local result
     result=$(call_aliyun_api ecs create-key-pair --biz-region-id "${region:-cn-hangzhou}" --biz-key-pair-name "$key_name")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "SSH 密钥对创建成功："
         echo "$result" | jq '.'
         echo "请保存私钥内容，它只会显示一次！"
@@ -753,8 +753,8 @@ ecs_key_import() {
     local result
     result=$(call_aliyun_api ecs import-key-pair --biz-region-id "${region:-cn-hangzhou}" --biz-key-pair-name "$key_name" \
         --public-key-body "$public_key")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "SSH 密钥对导入成功："
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ecs" "set-key" "$result"
@@ -773,7 +773,8 @@ ecs_key_delete() {
     if [ -z "$key_name" ]; then
         local key_result key_list
         key_result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取 SSH 密钥对列表。请检查您的凭证和权限。" >&2
             return 1
         fi
@@ -808,8 +809,8 @@ ecs_key_delete() {
     local result
     key_pair_names_json=$(jq -nc --arg k "$key_name" '[$k]')
     result=$(call_aliyun_api ecs delete-key-pairs --biz-region-id "${region:-cn-hangzhou}" --key-pair-names "$key_pair_names_json")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "SSH 密钥对删除成功。"
         log_delete_operation "${profile:-}" "$region" "ecs" "$key_name" "SSH密钥对" "成功" "$result"
     else
@@ -830,7 +831,8 @@ ecs_key_attach() {
         local instance_list
         local result
         result=$(ecs_describe_all_instances)
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
             return 1
         fi
@@ -862,8 +864,8 @@ ecs_key_attach() {
         local key_pair_list
         local key_result
         key_result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
-
-        if [ $? -eq 0 ] && [ -n "$key_result" ]; then
+        ret=$?
+        if [ $ret -eq 0 ] && [ -n "$key_result" ]; then
             key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
             local key_count
             key_count=$(printf '%s\n' "$key_pair_list" | awk 'NF{c++} END{print c+0}')
@@ -902,8 +904,8 @@ ecs_key_attach() {
     instance_ids_json=$(jq -nc --arg i "$instance_id" '[$i]')
     result=$(call_aliyun_api ecs attach-key-pair --biz-region-id "${region:-cn-hangzhou}" --instance-ids "$instance_ids_json" \
         --biz-key-pair-name "$key_pair_name")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "SSH 密钥对绑定成功。"
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ecs" "key-attach" "$result"
@@ -924,7 +926,8 @@ ecs_key_detach() {
         local instance_list
         local result
         result=$(ecs_describe_all_instances)
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取 ECS 实例列表。请检查您的凭证和权限。" >&2
             return 1
         fi
@@ -956,8 +959,8 @@ ecs_key_detach() {
         local key_pair_list
         local key_result
         key_result=$(call_aliyun_api ecs describe-key-pairs --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
-
-        if [ $? -eq 0 ] && [ -n "$key_result" ]; then
+        ret=$?
+        if [ $ret -eq 0 ] && [ -n "$key_result" ]; then
             key_pair_list=$(echo "$key_result" | jq -r '.KeyPairs.KeyPair[]? | .KeyPairName' 2>/dev/null)
             local key_count
             key_count=$(printf '%s\n' "$key_pair_list" | awk 'NF{c++} END{print c+0}')
@@ -997,8 +1000,8 @@ ecs_key_detach() {
     result=$(call_aliyun_api ecs detach-key-pair --biz-region-id "${region:-cn-hangzhou}" \
         --instance-ids "$instance_ids_json" \
         --biz-key-pair-name "$key_pair_name")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "SSH 密钥对解绑成功。"
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ecs" "key-detach" "$result"
@@ -1017,7 +1020,8 @@ ecs_snapshot_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-22s  %-20s  %-22s  %-8s  %-10s  %-8s  %s\n", $1, substr($2,1,18), $3, $4, $5, $6, $7}'
     local result
     result=$(call_aliyun_api ecs describe-snapshots --biz-region-id "${region:-cn-hangzhou}")
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取快照列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -1039,7 +1043,8 @@ ecs_snapshot_create() {
     if [ -z "$disk_id" ]; then
         local result
         result=$(call_aliyun_api ecs describe-disks --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
-        if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
+        ret=$?
+        if [ $ret -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
             echo "错误：无法获取磁盘列表。" >&2
             return 1
         fi
@@ -1064,7 +1069,8 @@ ecs_snapshot_create() {
     echo "创建快照：磁盘=$disk_id 名称=$snapshot_name"
     local result
     result=$(call_aliyun_api ecs create-snapshot --disk-id "$disk_id" --snapshot-name "$snapshot_name")
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ecs" "add-snap" "$result"
     else
@@ -1079,7 +1085,8 @@ ecs_snapshot_delete() {
     if [ -z "$snapshot_id" ]; then
         local result
         result=$(call_aliyun_api ecs describe-snapshots --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null)
-        if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
+        ret=$?
+        if [ $ret -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
             echo "错误：无法获取快照列表。" >&2
             return 1
         fi
@@ -1102,7 +1109,8 @@ ecs_snapshot_delete() {
     fi
     local result
     result=$(call_aliyun_api ecs delete-snapshot --snapshot-id "$snapshot_id")
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "快照删除成功。"
         log_delete_operation "${profile:-}" "$region" "ecs" "$snapshot_id" "快照" "成功" "$result"
     else
@@ -1121,7 +1129,8 @@ ecs_image_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-22s  %-24s  %-20s  %-6s  %-10s  %s\n", $1, substr($2,1,22), substr($3,1,18), $4, $5, $6}'
     local result
     result=$(call_aliyun_api ecs describe-images --biz-region-id "${region:-cn-hangzhou}" --image-owner-alias self --status Available 2>/dev/null)
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：无法获取自定义镜像列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -1143,7 +1152,8 @@ ecs_image_create() {
     if [ -z "$instance_id" ]; then
         local result
         result=$(ecs_describe_all_instances)
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取实例列表。" >&2
             return 1
         fi
@@ -1168,7 +1178,8 @@ ecs_image_create() {
     echo "从实例创建自定义镜像：实例=$instance_id 镜像名称=$image_name"
     local result
     result=$(call_aliyun_api ecs create-image --biz-region-id "${region:-cn-hangzhou}" --instance-id "$instance_id" --image-name "$image_name")
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ecs" "add-image" "$result"
     else
@@ -1183,7 +1194,8 @@ ecs_image_delete() {
     if [ -z "$image_id" ]; then
         local result
         result=$(call_aliyun_api ecs describe-images --biz-region-id "${region:-cn-hangzhou}" --image-owner-alias self 2>/dev/null)
-        if [ $? -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
+        ret=$?
+        if [ $ret -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
             echo "错误：无法获取自定义镜像列表。" >&2
             return 1
         fi
@@ -1206,7 +1218,8 @@ ecs_image_delete() {
     fi
     local result
     result=$(call_aliyun_api ecs delete-image --biz-region-id "${region:-cn-hangzhou}" --image-id "$image_id")
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "镜像删除成功。"
         log_delete_operation "${profile:-}" "$region" "ecs" "$image_id" "自定义镜像" "成功" "$result"
     else
@@ -1226,8 +1239,8 @@ get_supported_disk_categories() {
     result=$(call_aliyun_api ecs describe-available-resource --biz-region-id "${region:-cn-hangzhou}" --zone-id "$zone_id" \
         --destination-resource SystemDisk \
         --instance-type "${instance_type:-}")
-
-    if [ $? -ne 0 ]; then
+    ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：调用 DescribeAvailableResource API 失败。" >&2
         echo "$result" >&2
         return 1
@@ -1277,8 +1290,8 @@ ecs_start() {
     echo "启动 ECS 实例：$instance_id"
     local result
     result=$(call_aliyun_api ecs start-instance --instance-id "$instance_id")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "ECS 实例启动命令已发送。"
         echo "$result" | jq '.'
 
@@ -1316,8 +1329,8 @@ ecs_stop() {
         --instance-id "$instance_id" \
         --stopped-mode StopCharging \
         --force-stop false)
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "ECS 实例停止命令已发送。"
         echo "$result" | jq '.'
 

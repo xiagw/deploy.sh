@@ -295,8 +295,8 @@ oss_create() {
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     local result
     result=$(aliyun --profile "${profile:-}" ossutil mb --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name")
-
-    if [ $? -eq 0 ]; then
+    ret=$?
+    if [ $ret -eq 0 ]; then
         echo "$result"
         log_result "${profile:-}" "$region" "oss" "create" "$result"
     else
@@ -316,8 +316,8 @@ oss_delete() {
         endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
         local result
         result=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}")
-
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取 OSS 存储桶列表。" >&2
             return 1
         fi
@@ -1155,8 +1155,8 @@ oss_set() {
         endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
         local result
         result=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}")
-
-        if [ $? -ne 0 ]; then
+        ret=$?
+        if [ $ret -ne 0 ]; then
             echo "错误：无法获取 OSS 存储桶列表。" >&2
             return 1
         fi
@@ -1231,8 +1231,8 @@ public-read-write"
             endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
             local result
             result=$(aliyun --profile "${profile:-}" ossutil set-acl --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" --acl "$setting_value")
-
-            if [ $? -eq 0 ]; then
+            ret=$?
+            if [ $ret -eq 0 ]; then
                 echo "ACL 权限设置成功。"
                 echo "$result"
                 log_result "${profile:-}" "$region" "oss" "set-acl" "$result"
