@@ -13,7 +13,6 @@ ensure_buildx_builder() {
     [[ -z "${ENV_BUILDX_REMOTE_HOSTS[*]:-}" ]] && return
 
     local builder_name="deploy-builder"
-    local host_cache_path="/var/cache/buildkit"
     if "${IS_CHINA:-false}"; then
         local mirror="docker.m.daocloud.io/"
     fi
@@ -506,6 +505,9 @@ build_node() {
     local file_json
     local file_json_md5
     local yarn_install
+    local me_log="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-yarn"
+
+    mkdir -p "${G_DATA}/cache"
 
     file_json="${G_REPO_DIR}/package.json"
     file_json_md5="$G_REPO_GROUP_PATH/$G_NAMESPACE/$(md5sum "$file_json" | awk '{print $1}')"

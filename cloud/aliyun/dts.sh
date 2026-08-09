@@ -231,7 +231,7 @@ dts_create() {
         task_id=$(echo "$result" | jq -r '.MigrationJobId')
         echo "迁移任务ID: $task_id"
 
-        log_result "${profile:-}" "$region" "dts" "create" "$result"
+        log_result "${profile:-}" "${region:-}" "dts" "create" "$result"
     else
         echo "错误：DTS 迁移任务创建失败。"
         echo "$result"
@@ -433,7 +433,7 @@ dts_start() {
         # 等待任务状态变为 Prechecking 或 Preparing 或 migrating
         echo "等待任务启动..."
         local status
-        for i in {1..30}; do
+        for _ in {1..30}; do
             sleep 5
             status=$(call_aliyun_api dts describe-migration-jobs --api-version 2020-01-01 --migration-job-id "$task_id" 2>/dev/null | jq -r '.MigrationJobs.MigrationJob[0].Status')
             if [[ "$status" == "Prechecking"* || "$status" == "Preparing"* || "$status" == "Migrating"* || "$status" == "NotStarted" ]]; then
@@ -468,7 +468,7 @@ dts_stop() {
         # 等待任务状态变为 Paused
         echo "等待任务停止..."
         local status
-        for i in {1..30}; do
+        for _ in {1..30}; do
             sleep 5
             status=$(call_aliyun_api dts describe-migration-job-status --api-version 2020-01-01 --migration-job-id "$task_id" 2>/dev/null | jq -r '.MigrationJobs.MigrationJob[0].Status')
             if [ "$status" = "Paused" ]; then

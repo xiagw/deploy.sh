@@ -8,7 +8,7 @@
 #   $1 - project_path: 项目路径，格式为 "namespace/project_name"
 # 返回: 配置文件路径（通过全局变量 G_CONF 返回）
 # 说明:
-#   - 仅使用项目专用配置: data/projects/namespace/project-name.json
+#   - 仅使用项目专用配置: data/conf/namespace/project-name.json
 #   - 如果配置文件不存在且模板存在，自动从模板创建
 #   - 自动创建后必须修改配置才能继续部署
 #   优势:
@@ -33,11 +33,11 @@ find_project_config() {
     project_name="${project_path##*/}"
 
     ## 创建项目配置目录
-    mkdir -p "${G_DATA}/projects/${namespace}"
+    mkdir -p "${G_DATA}/conf/${namespace}"
 
     ## 项目专用配置文件
-    ## 路径格式: data/projects/namespace/project-name.json
-    project_conf="${G_DATA}/projects/${namespace}/${project_name}.json"
+    ## 路径格式: data/conf/namespace/project-name.json
+    project_conf="${G_DATA}/conf/${namespace}/${project_name}.json"
     if [[ -f "${project_conf}" ]]; then
         G_CONF="${project_conf}"
         ## 读取构建和部署配置覆盖（如果存在）
@@ -85,6 +85,7 @@ find_project_config() {
 config_deploy_init() {
     ## 初始化环境变量配置文件
     mkdir -p "${G_DATA}"
+    mkdir -p "${G_DATA}/conf"
     [[ -f "${G_ENV}" ]] || cp -v "${G_PATH}/conf/templates/deploy.env" "${G_ENV}"
 
     ## ========================================================================

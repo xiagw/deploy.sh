@@ -3,6 +3,31 @@
 
 权限：运维部门/管理者
 
+### bin/
+说明：可执行脚本/二进制文件，自动加入 PATH（如 deploy.custom.sh、sendEmail、pve.create.user.sh）
+
+权限：运维部门/管理者
+
+### logs/
+说明：运行时日志目录（deploy.sh.log、*-build.log 等）
+
+权限：运维部门/管理者
+
+### docs/
+说明：文档/需求记录等
+
+权限：运维部门/管理者
+
+### conf/
+说明：运行时/项目配置文件
+- namespace/project-name.json：单项目部署配置（`find_project_config` 使用）
+- config.cfg、rsyncd.conf、aliyun.functions.json 等
+
+权限：运维部门/管理者/研发部门 可配置
+
+### cache/
+说明：运行时缓存（构建 hash 缓存、image_records 镜像记录等），可安全清理
+
 ### .acme.sh/
 说明：使用 acme.sh 自动生产/更新 ssl 证书的程序和配置文件，例如 dns api， 软链接到 ~/.acme.sh
 
@@ -46,11 +71,6 @@
 说明：服务器开机自启动 gitlab-runner systemctl config 文件 （自定义路径/非默认配置）
 
 权限：运维部门/管理者
-
-### deploy.json
-说明：deploy.sh 的项目配置文件，发布`哪个项目`到`哪个服务器`
-
-权限：运维部门/管理者/研发部门 可配置
 
 ### deploy.env
 说明：deploy.sh 的机密配置文件

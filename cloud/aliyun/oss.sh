@@ -309,7 +309,6 @@ oss_create() {
 # 修改 oss_delete 函数，添加 endpoint 支持，使用框架确认
 oss_delete() {
     local bucket_name=$1
-    local region_arg=$2
 
     # 如果没有提供存储桶名称，则使用 fzf 选择
     if [ -z "$bucket_name" ]; then

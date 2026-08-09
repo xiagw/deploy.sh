@@ -496,10 +496,10 @@ cdn_pay() {
     fi
 
     # 从 aliyun 配置读取凭证
-    local _prof_name="${profile:-$(jq -r '.current' $HOME/.aliyun/config.json 2>/dev/null)}"
+    local _prof_name="${profile:-$(jq -r '.current' "$HOME/.aliyun/config.json" 2>/dev/null)}"
     local _ak_id _ak_secret
-    _ak_id=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_id' $HOME/.aliyun/config.json)
-    _ak_secret=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_secret' $HOME/.aliyun/config.json)
+    _ak_id=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_id' "$HOME/.aliyun/config.json")
+    _ak_secret=$(jq -r --arg p "$_prof_name" '.profiles[] | select(.name==$p) | .access_key_secret' "$HOME/.aliyun/config.json")
     if [ -z "$_ak_id" ] || [ -z "$_ak_secret" ]; then
         echo "错误：无法从配置中获取凭证（profile: ${_prof_name}）" >&2
         return 1

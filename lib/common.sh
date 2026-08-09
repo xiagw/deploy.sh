@@ -587,7 +587,7 @@ _install_shellcheck() {
             $cmd_pkg update -yqq
             $cmd_pkg_install shellcheck && return 0
             ;;
-        *yum* | *dnf* | *microdnf*)
+        *yum* | *dnf*)
             $cmd_pkg install -y shellcheck && return 0
             ;;
         *pacman*)
@@ -642,7 +642,7 @@ _install_shfmt() {
             $cmd_pkg update -yqq
             $cmd_pkg_install shfmt && return 0
             ;;
-        *yum* | *dnf* | *microdnf*)
+        *yum* | *dnf*)
             $cmd_pkg install -y shfmt && return 0
             ;;
         *pacman*)
@@ -665,7 +665,7 @@ _install_shfmt() {
     *) arch="amd64" ;;
     esac
     release_info=$(curl -fsSL https://api.github.com/repos/mvdan/sh/releases/latest)
-    download_url=$(printf '%s' "$release_info" | grep -Eo 'https://[^\"]+shfmt_[0-9.]+_${os}_${arch}\.tar\.gz' | head -n 1)
+    download_url=$(printf '%s' "$release_info" | grep -Eo "https://[^\"]+shfmt_[0-9.]+_${os}_${arch}\.tar\.gz" | head -n 1)
     if [ -z "$download_url" ]; then
         _msg error "Failed to determine shfmt download URL"
         rm -f "$temp_file"

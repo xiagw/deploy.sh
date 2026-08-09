@@ -431,8 +431,9 @@ main() {
     ME_NAME="$(basename "$0")"
     ME_PATH="$(dirname "$(readlink -f "$0")")"
     ME_DATA="$(dirname "$ME_PATH")/data"
-    ME_LOG="$ME_DATA/${ME_NAME}.log"
+    ME_LOG="$ME_DATA/logs/${ME_NAME}.log"
     ME_ENV="$ME_DATA/${ME_NAME}.env"
+    mkdir -p "$(dirname "$ME_LOG")"
 
     import_lib
 

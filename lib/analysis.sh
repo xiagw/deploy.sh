@@ -85,7 +85,7 @@ analysis_vulmap() {
         return 0
     fi
 
-    local config_file="$G_DATA/config.cfg"
+    local config_file="$G_DATA/conf/config.cfg"
     local output_file="vulmap_report.html"
 
     _msg step "[security] running Vulmap security scan"

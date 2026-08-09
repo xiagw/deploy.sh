@@ -51,7 +51,7 @@ execute_custom_deploy_hook() {
 record_deployed_image() {
     local release_name="${1:?release_name is required}"
     local deploy_result="${2:-0}"
-    local image_record_dir="${G_DATA}/image_records"
+    local image_record_dir="${G_DATA}/cache"
     local current_image="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
     local image_record_file="${image_record_dir}/${release_name}-${G_NAMESPACE}.current"
 
@@ -70,7 +70,7 @@ record_deployed_image() {
                 local registry_prefix="${ENV_DOCKER_REGISTRY%/}"
                 if [[ "${previous_image}" == "${registry_prefix}"* ]]; then
                     local rest repo_and_tag image_repo image_tag repo_ns repo_name
-                    rest="${previous_image#${registry_prefix}/}"
+                    rest="${previous_image#"${registry_prefix}"/}"
                     repo_and_tag="${rest}"
                     image_repo="${repo_and_tag%:*}"
                     image_tag="${repo_and_tag#*:}"
@@ -217,8 +217,8 @@ deploy_aliyun_functions() {
 
     ## create FC
     _msg step "[deploy] Creating/updating Aliyun Functions"
-    functions_conf_tmpl="$G_DATA/aliyun.functions.${lang}.json"
-    functions_conf="$G_DATA/aliyun.functions.json"
+    functions_conf_tmpl="$G_DATA/conf/aliyun.functions.${lang}.json"
+    functions_conf="$G_DATA/conf/aliyun.functions.json"
     if [ -f "$functions_conf_tmpl" ]; then
         TEMPLATE_NAME=$release_name TEMPLATE_REGISTRY=${ENV_DOCKER_REGISTRY} TEMPLATE_NAME=${G_IMAGE_NAME} TEMPLATE_TAG=${G_IMAGE_TAG} envsubst <"$functions_conf_tmpl" >"$functions_conf"
     else
@@ -329,7 +329,7 @@ deploy_via_rsync_ssh() {
         ssh_opt="ssh -o StrictHostKeyChecking=no -oConnectTimeout=10 -p ${ssh_port:-22}"
 
         case "$lang" in
-        java) rsync_relative_path="jars/" ;;
+        java) rsync_relative_path="build_output/" ;;
         node) rsync_relative_path="dist/" ;;
         *) rsync_relative_path="" ;;
         esac
@@ -408,7 +408,7 @@ deploy_aliyun_oss() {
 # Deploy via Rsync
 deploy_via_rsync() {
     _msg step "[deploy] Deploy files to Rsyncd server"
-    rsyncd_conf="$G_DATA/rsyncd.conf"
+    rsyncd_conf="$G_DATA/conf/rsyncd.conf"
     source "$rsyncd_conf"
 
     rsync_options="rsync -avz"

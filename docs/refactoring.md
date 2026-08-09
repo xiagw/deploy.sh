@@ -209,7 +209,7 @@ Based on the current codebase analysis, these are the next potential modules to 
      G[core_data_path]="${G[core_path]}/data"
      G[core_log_file]="${G[core_data_path]}/${G[core_name]}.log"
      # Note: G_CONF is set by find_project_config() to project-specific config
-     # Format: data/projects/namespace/project-name.json
+     # Format: data/conf/namespace/project-name.json
      # G[core_conf_file] is no longer used (replaced by project-specific configs)
      G[core_env_file]="${G[core_data_path]}/deploy.env"
 

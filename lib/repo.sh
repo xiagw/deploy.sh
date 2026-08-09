@@ -45,7 +45,7 @@ repo_inject_file() {
     }
 
     ## 1. Dockerfile 注入
-    ## Dockerfile.template：多阶段编译型（java/go/php/nginx）
+    ## Dockerfile.multi：多阶段编译型（java/go/php/nginx）
     ## Dockerfile.single：单阶段运行时型（python/mysql/redis）
     ## node：特殊处理，Dockerfile.single 作为 base，生成只含 FROM 的 Dockerfile
     ## 存在 dockerfile 则跳过
@@ -55,7 +55,7 @@ repo_inject_file() {
         return 0
     fi
     local _single="${G_PATH}/conf/Dockerfile.single"
-    local _template="${G_PATH}/conf/Dockerfile.template"
+    local _template="${G_PATH}/conf/Dockerfile.multi"
     case "$lang" in
     node)
         ## node：
@@ -63,8 +63,8 @@ repo_inject_file() {
         ## 用 Dockerfile.single 作为 base image，再生成只含 FROM 的 Dockerfile
         echo "Checking package.json hash..."
         hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
-        mkdir -p "${G_DATA}/hash_cache"
-        hash_saved="$(cat "${G_DATA}/hash_cache/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
+        mkdir -p "${G_DATA}/cache"
+        hash_saved="$(cat "${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
         if [[ "$hash_now" != "$hash_saved" ]]; then
             echo "Copying Dockerfile.single as Dockerfile.base..."
             cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
@@ -76,7 +76,7 @@ repo_inject_file() {
         ;;
     java | go | golang | php | nginx)
         [[ -f "${_template}" ]] && {
-            echo "Copying Dockerfile.template..."
+            echo "Copying Dockerfile.multi..."
             cp -f "${_template}" "${G_REPO_DIR}/Dockerfile"
         }
         ;;
@@ -416,8 +416,9 @@ get_git_last_commit_message() {
 # SVN related functions
 setup_svn_repo() {
     [ -z "$1" ] && return
-    local svn_repo_url="${1:-}" svn_repo_name svn_repo_dir="${G_PATH}/builds/${svn_repo_name}"
+    local svn_repo_url="${1:-}" svn_repo_name svn_repo_dir
     svn_repo_name=$(basename "$svn_repo_url")
+    svn_repo_dir="${G_PATH}/builds/${svn_repo_name}"
 
     command -v svn >/dev/null || _install_packages subversion
     if [ -d "$svn_repo_dir/.svn" ]; then

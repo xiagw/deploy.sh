@@ -19,3 +19,4 @@ tmp/
 .cursor/
 .qoderignore
 .dockerignore
+.qoder/

@@ -3,7 +3,7 @@
     "project": "root/example",
     "description": "示例项目配置",
     "documentation": {
-        "description": "此文件用于单个项目的部署配置，放在 data/projects/namespace/project-name.json",
+        "description": "此文件用于单个项目的部署配置，放在 data/conf/namespace/project-name.json",
         "advantages": [
             "避免全局配置文件过大",
             "减少版本冲突",

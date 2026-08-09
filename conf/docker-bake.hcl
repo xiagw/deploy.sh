@@ -1,5 +1,5 @@
 // docker-bake.hcl
-// 与 Dockerfile.template（多阶段编译型）/ Dockerfile.single（单阶段运行时型）配套。
+// 与 Dockerfile.multi（多阶段编译型）/ Dockerfile.single（单阶段运行时型）配套。
 // 各语言 target 只负责传不同的 ARG 组合，模板本身通用。
 // 用法：
 //   docker buildx bake --file docker-bake.hcl --set "java.tags=registry.example.com/myapp:tag" java
@@ -30,7 +30,7 @@ variable "CONTEXT_PATH" { default = "." }
 
 target "default" {
     context = "${CONTEXT_PATH}"
-    dockerfile = "Dockerfile.template"
+    dockerfile = "Dockerfile.multi"
     # platforms = ["linux/amd64", "linux/arm64"]
     platforms = ["linux/amd64"]
     args = {
@@ -53,7 +53,7 @@ target "default" {
 }
 
 // ============================================================================
-// 多阶段编译型（Dockerfile.template）
+// 多阶段编译型（Dockerfile.multi）
 // ============================================================================
 
 // Java 应用（maven 编译 + JDK 运行）

@@ -445,7 +445,6 @@ cloud"
         "--instance-name" "$instance_name"
         "--instance-type" "${instance_type:? ECS 实例类型不能为空}"
         "--vswitch-id" "${vswitch_id:? 交换机ID不能为空}"
-        "--security-group-id" "${security_group_id:? 安全组ID不能为空}"
         "--system-disk-category" "${system_disk_category:? 系统盘类型不能为空}"
         "--instance-charge-type" "PostPaid"
         "--spot-strategy" "NoSpot"
@@ -453,6 +452,14 @@ cloud"
         "--internet-charge-type" "PayByTraffic"
         "--internet-max-bandwidth-out" "$internet_max_bandwidth_out"
     )
+
+    # 单个安全组用 --security-group-id；多选时用列表参数 --security-group-ids
+    if [[ "$security_group_id" == *,* ]]; then
+        local sg_ids=(${security_group_id//,/ })
+        api_args+=("--security-group-ids" "${sg_ids[@]}")
+    else
+        api_args+=("--security-group-id" "${security_group_id:? 安全组ID不能为空}")
+    fi
 
     # 添加镜像参数
     if [[ "$create_command_image_param" == *"--image-id"* ]]; then
@@ -486,14 +493,18 @@ cloud"
         local instance_id
         instance_id=$(echo "$result" | jq -r '.InstanceIdSets.InstanceIdSet[0]')
 
-        # 等待并显示公网IP
-        echo "等待分配公网IP..."
-        local public_ip
+        # 等待并显示公网/内网IP
+        echo "等待分配 IP..."
+        local public_ip="" private_ip=""
         for i in {1..30}; do
             sleep 5
-            public_ip=$(call_aliyun_api ecs describe-instance-attribute --instance-id "$instance_id" 2>/dev/null | jq -r '.PublicIpAddress.IpAddress[0]')
+            local attr
+            attr=$(call_aliyun_api ecs describe-instance-attribute --instance-id "$instance_id" 2>/dev/null)
+            public_ip=$(echo "$attr" | jq -r '.PublicIpAddress.IpAddress[0] // ""')
+            private_ip=$(echo "$attr" | jq -r '.VpcAttributes.PrivateIpAddress.IpAddress[0] // ""')
             if [ -n "$public_ip" ] && [ "$public_ip" != "null" ]; then
                 echo "公网IP: $public_ip"
+                [ -n "$private_ip" ] && [ "$private_ip" != "null" ] && echo "内网IP: $private_ip"
                 break
             fi
         done

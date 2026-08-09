@@ -149,6 +149,32 @@ remove_host() {
     fi
 }
 
+port_forward() {
+    local alias_name forward_port count=0
+    alias_name=$(select_host "$1" "Select host to forward:") || return 1
+    forward_port="${2:-3306}"
+
+    command -v nc >/dev/null 2>&1 || {
+        log error "nc is required for port forwarding."
+        return 1
+    }
+
+    ssh -qfg -o ExitOnForwardFailure=yes -L "$forward_port":localhost:3306 "$alias_name" "sleep 300" || true
+
+    (
+        while nc -vz localhost "$forward_port"; do
+            ((count++))
+            if [ $count -gt 30 ]; then
+                log info "Forward port $forward_port and ${alias_name} tunnel alive too long, closing."
+                pkill -f "ssh -qfg -o ExitOnForwardFailure=yes -L $forward_port:localhost:3306" >/dev/null 2>&1 || true
+                break
+            fi
+            sleep 10
+        done
+    ) &
+    log success "Tunnel ${forward_port} -> ${alias_name}:3306"
+}
+
 connect_host() {
     local alias_name use_byobu
     alias_name=$(select_host "$1" "Select host to connect:") || return 1
@@ -233,6 +259,7 @@ Commands:
     modify, m <user@host:port> [alias]   Modify SSH host
     remove, r <alias>                    Remove SSH host
     connect, c [alias]                   Connect to SSH host (default)
+    port, p   <alias> [local:remote]     Open SSH tunnel to remote 3306
 
 Options:
     -b, --byobu                         Enable byobu session
@@ -288,6 +315,10 @@ main() {
     connect | c)
         shift
         connect_host "$@"
+        ;;
+    port | p)
+        shift
+        port_forward "$@"
         ;;
     help | -h | --help | h)
         _show_help

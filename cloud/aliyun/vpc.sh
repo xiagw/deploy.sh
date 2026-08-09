@@ -435,7 +435,7 @@ get_next_vswitch_cidr() {
     fi
 
     local next_octet
-    next_octet=$((${BASH_REMATCH[1]} + 1))
+    next_octet=$((BASH_REMATCH[1] + 1))
     echo "192.168.${next_octet}.0/24"
 }
 

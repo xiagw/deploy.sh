@@ -14,6 +14,7 @@ check_php_style() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
     if ! ${G_DOCK} images | grep -q 'deploy/phpcs'; then
+        # shellcheck disable=SC2086 # G_ARGS intentionally word-split (optional docker flags)
         ${G_DOCK} build ${G_ARGS} -t deploy/phpcs -f "$me_dockerfile/Dockerfile.phpcs" "$me_dockerfile" >/dev/null
     fi
 

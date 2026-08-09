@@ -318,7 +318,6 @@ CAA"
 
         # 输入记录值
         if [ -z "$value" ]; then
-            local prompt_msg="请输入记录值 (当前: $current_value)"
             case "$type" in
             A | AAAA)
                 read -r -p "请输入IP地址 (当前: $current_value): " value
