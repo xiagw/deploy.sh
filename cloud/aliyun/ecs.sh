@@ -122,8 +122,11 @@ ecs_list() {
         return 1
     fi
 
-    # 获取 EIP 列表（用于合并显示）
+    # 获取 EIP 列表（用于合并显示）；失败时兜底为 {}，避免 --argjson 解析空串报错
     eip_result=$(call_aliyun_api vpc describe-eip-addresses --biz-region-id "${region:-}" 2>/dev/null)
+    if ! echo "$eip_result" | jq -e . >/dev/null 2>&1; then
+        eip_result='{}'
+    fi
 
     case "$format" in
     json)
@@ -803,7 +806,8 @@ ecs_key_delete() {
 
     echo "删除 SSH 密钥对："
     local result
-    result=$(call_aliyun_api ecs delete-key-pairs --biz-region-id "${region:-cn-hangzhou}" --key-pair-names "['$key_name']")
+    key_pair_names_json=$(jq -nc --arg k "$key_name" '[$k]')
+    result=$(call_aliyun_api ecs delete-key-pairs --biz-region-id "${region:-cn-hangzhou}" --key-pair-names "$key_pair_names_json")
 
     if [ $? -eq 0 ]; then
         echo "SSH 密钥对删除成功。"
@@ -895,7 +899,8 @@ ecs_key_attach() {
 
     echo "绑定 SSH 密钥对到实例："
     local result
-    result=$(call_aliyun_api ecs attach-key-pair --biz-region-id "${region:-cn-hangzhou}" --instance-ids "['$instance_id']" \
+    instance_ids_json=$(jq -nc --arg i "$instance_id" '[$i]')
+    result=$(call_aliyun_api ecs attach-key-pair --biz-region-id "${region:-cn-hangzhou}" --instance-ids "$instance_ids_json" \
         --biz-key-pair-name "$key_pair_name")
 
     if [ $? -eq 0 ]; then
@@ -988,8 +993,9 @@ ecs_key_detach() {
 
     echo "解绑实例的 SSH 密钥对："
     local result
+    instance_ids_json=$(jq -nc --arg i "$instance_id" '[$i]')
     result=$(call_aliyun_api ecs detach-key-pair --biz-region-id "${region:-cn-hangzhou}" \
-        --instance-ids "['$instance_id']" \
+        --instance-ids "$instance_ids_json" \
         --biz-key-pair-name "$key_pair_name")
 
     if [ $? -eq 0 ]; then
