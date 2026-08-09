@@ -353,7 +353,7 @@ main() {
     G_NAME="${BASH_SOURCE[0]##*/}"
     G_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
     G_DATA="$(dirname "${G_DIR}")/data"
-    G_ENV="${G_DATA}/${G_NAME}.env"
+    G_ENV="${G_DATA}/conf/${G_NAME}.env"
 
     # 初始化环境
     CMD_CAT="$(command -v bat || command -v batcat || command -v cat)"

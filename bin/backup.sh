@@ -461,8 +461,8 @@ main() {
     SCRIPT_LIB="${SCRIPT_PARENT}/lib"
     SCRIPT_CONF_PATH="${SCRIPT_PARENT}/conf"
     SCRIPT_DATA="${SCRIPT_PARENT}/data"
-    SCRIPT_ENV="${SCRIPT_DATA}/${SCRIPT_NAME}.env"
-    SCRIPT_LOG="${SCRIPT_DATA}/${SCRIPT_NAME}.log"
+    SCRIPT_ENV="${SCRIPT_DATA}/conf/${SCRIPT_NAME}.env"
+    SCRIPT_LOG="${SCRIPT_DATA}/logs/${SCRIPT_NAME}.log"
 
     # 导入通用函数
     # shellcheck source=/dev/null

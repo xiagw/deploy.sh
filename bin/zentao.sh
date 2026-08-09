@@ -241,8 +241,8 @@ main() {
     G_PATH="$(dirname "$(readlink -f "$0")")"
     G_PATH_UP="$(dirname "$G_PATH")"
     G_DATA="${G_PATH_UP}/data"
-    G_LOG="${G_DATA}/${G_NAME}.log"
-    G_ENV="${G_DATA}/${G_NAME}.env"
+    G_LOG="${G_DATA}/logs/${G_NAME}.log"
+    G_ENV="${G_DATA}/conf/${G_NAME}.env"
 
     # Create data directory if not exists
     [ -d "$G_DATA" ] || mkdir -p "$G_DATA"

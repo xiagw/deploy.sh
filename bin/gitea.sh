@@ -451,8 +451,8 @@ main() {
     SCRIPT_NAME=$(basename "$0")
     SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
     SCRIPT_DATA="$(dirname "$SCRIPT_DIR")/data"
-    SCRIPT_LOG="$SCRIPT_DATA/${SCRIPT_NAME}.log"
-    SCRIPT_ENV="$SCRIPT_DATA/${SCRIPT_NAME}.env"
+    SCRIPT_LOG="$SCRIPT_DATA/logs/${SCRIPT_NAME}.log"
+    SCRIPT_ENV="$SCRIPT_DATA/conf/${SCRIPT_NAME}.env"
     [ -d "$SCRIPT_DATA" ] || mkdir -p "$SCRIPT_DATA"
     # 配置变量:
     # GITEA_URL=       # Gitea服务器URL
