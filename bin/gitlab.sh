@@ -155,7 +155,9 @@ update_account_password() {
         --password "${password_rand}" \
         --skip-reconfirmation 1
 
-    send_msg="${GITLAB_URL}  / username=$user / password=$password_rand"
+    send_msg="${GITLAB_URL}
+username=$user
+password=$password_rand"
     _msg log "$ME_LOG" "Update password for $user: $password_rand"
     _notify_wecom "${GITLAB_WECOM_KEY:? ERR: empty wecom_key}" "$send_msg"
     return 0
@@ -190,7 +192,9 @@ add_account() {
         --skip-confirmation 1 \
         --can-create-group 0
 
-    send_msg="${GITLAB_URL}  / username=$user / password=$password_rand"
+    send_msg="${GITLAB_URL}
+username=$user
+password=$password_rand"
 
     _msg log "$ME_LOG" "$send_msg"
 
