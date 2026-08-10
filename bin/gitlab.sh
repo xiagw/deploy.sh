@@ -201,6 +201,40 @@ password=$password_rand"
     _notify_wecom "${GITLAB_WECOM_KEY:? ERR: empty wecom_key}" "$send_msg"
 }
 
+add_user_to_project() {
+    local user="$1" project_ref project_id access_level
+
+    read -rp "[?] Project path (e.g. group/project): " project_ref
+    [[ -z "$project_ref" ]] && {
+        _msg error "Project path required"
+        return 1
+    }
+
+    project_id=$($cmd_gitlab project get --id "$project_ref" | jq -r '.id // empty')
+    [[ -z "$project_id" ]] && {
+        _msg error "Project not found: $project_ref"
+        return 1
+    }
+
+    # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
+    access_level=$(
+        printf '%s\n' \
+            "40  Maintainer   Manage project settings, members" \
+            "30  Developer    Push, manage issues/MRs" \
+            "20  Reporter     Read-only access" \
+            "10  Guest        Minimal access" |
+            fzf --prompt="Select access level: " --height=40% | awk '{print $1}'
+    )
+    [[ -z "$access_level" ]] && return 1
+
+    _get_yes_no "[+] Add [$user] as level [$access_level] to project [$project_ref]?" || return 1
+
+    $cmd_gitlab project-member create \
+        --project-id "$project_id" \
+        --access-level "$access_level" \
+        --username "$user"
+}
+
 import_lib() {
     local file
     file="$(dirname "$ME_PATH")/lib/common.sh"
@@ -228,6 +262,7 @@ select_action() {
         "user get      List all users"
         "user set      Update user password"
         "user block    Block a user"
+        "user member   Add user to a project (maintainer/etc.)"
         "project get   List all projects"
         "project size  Check large repositories"
         "project del   Delete a project"
@@ -401,6 +436,14 @@ execute_command() {
                 return 1
             }
             block_account "$gitlab_account"
+            ;;
+        member)
+            read -rp "[?] Username: " gitlab_account
+            [[ -z "$gitlab_account" ]] && {
+                _msg error "Username required"
+                return 1
+            }
+            add_user_to_project "$gitlab_account"
             ;;
         esac
         ;;
