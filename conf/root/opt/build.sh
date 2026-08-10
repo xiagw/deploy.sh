@@ -17,10 +17,6 @@
 #   INSTALL_FONTS=true          # JDK 镜像中安装字体
 # =============================================================================
 
-_is_china() {
-    ${IS_CHINA:-false} || ${CHANGE_SOURCE:-false}
-}
-
 _set_mirror() {
     case "$1" in
     shanghai)
@@ -41,7 +37,7 @@ _set_mirror() {
     */apk) cmd_pkg=apk && cmd_pkg_opt="$cmd_pkg add --no-cache" ;;
     esac
 
-    if _is_china; then
+    if "${IS_CHINA:-false}"; then
         url_deploy_raw=https://gitee.com/xiagw/deploy.sh/raw/main
         url_laradock_raw=https://gitee.com/xiagw/laradock/raw/china
     else
@@ -125,7 +121,7 @@ EOF
         composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
         mkdir -p /var/www
         install -m 0755 -o 1000 -g 1000 -d /var/www/.composer /.composer
-        chown -R 1000:1000 /tmp/cache /tmp/config.json /tmp/auth.json
+        chown -R 1000:1000 /tmp/cache /tmp/config.json /tmp/auth.json || true
         ;;
     */node)
         # npm_mirror=https://mirrors.ustc.edu.cn/node/
@@ -270,8 +266,9 @@ _build_php() {
     $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
     LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
 
-    if _is_china; then
-        find /etc/apt/sources.list.d/ -iname 'ondrej*.list' -print0 | xargs -0 -r -t -I {} sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" {}
+    if "${IS_CHINA:-false}"; then
+        find /etc/apt/sources.list.d/ -iname 'ondrej*.list' -print0 |
+            xargs -0 -r -t -I {} sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" {}
     fi
 
     # Install PHP-specific packages based on version
@@ -361,7 +358,7 @@ _build_node() {
     # Update npm and install cnpm if in China
     npm install -g npm || npm install -g npm@11 || npm install -g npm@10 || true
 
-    _is_china && npm install -g cnpm
+    "${IS_CHINA:-false}" && npm install -g cnpm
 
     _check_run_sh
 
@@ -371,9 +368,9 @@ _build_node() {
     # Install dependencies if package.json exists
     if [ -f /app/package.json ]; then
         if command -v runuser >/dev/null 2>&1; then
-            runuser -u node -- sh -c "cd /app && $(_is_china && echo 'cnpm' || echo 'npm') install"
+            runuser -u node -- sh -c "cd /app && $("${IS_CHINA:-false}" && echo 'cnpm' || echo 'npm') install"
         else
-            su node -c "cd /app && $(_is_china && echo 'cnpm' || echo 'npm') install"
+            su node -c "cd /app && $("${IS_CHINA:-false}" && echo 'cnpm' || echo 'npm') install"
         fi
     else
         echo "Error: /app/package.json not found" >&2
@@ -424,9 +421,12 @@ _build_maven() {
     fi
 
     # Copy config files if needed
-    [ -f /src/.jvm.options ] && cp -v /src/.jvm.options $build_output/
-    [ -f /src/jvm.options ] && cp -v /src/jvm.options $build_output/
-    [ -d /src/cert ] && cp -rv /src/cert $build_output/
+    [ -f /src/.jvm.options ] && cp -v /src/.jvm.options "$build_output/"
+    [ -f /src/jvm.options ] && cp -v /src/jvm.options "$build_output/"
+    if [ -d /src/cert ]; then
+        cp -av /src/cert "$build_output/"
+        chown -R 1000:1000 "$build_output/"
+    fi
 
     for file in ./**/src/*/resources/*${MVN_PROFILE:-main}*.yml ./**/src/*/resources/*${MVN_PROFILE:-main}*.yaml; do
         [ -f "$file" ] || continue
@@ -442,7 +442,7 @@ _build_go() {
     build_output="${BUILD_OUTPUT_DIR:-/build_output}/app"
     mkdir -p "$build_output"
     export CGO_ENABLED=0
-    _is_china && export GOPROXY=https://goproxy.cn,direct
+    "${IS_CHINA:-false}" && export GOPROXY=https://goproxy.cn,direct
     cd /src || exit 1
     go mod download
     go build -ldflags='-s -w' -o "$build_output/server" .
@@ -553,8 +553,8 @@ _build_mysql() {
     chown -R mysql:root /var/lib/mysql/
     chmod o-rw /var/run/mysqld
 
-    my_ver=$(mysqld --version | awk '{print $3}' | cut -d. -f1)
-    if [ "$my_ver" -lt 8 ]; then
+    my_ver=$(mysqld --version 2>/dev/null | awk '{print $3}' | cut -d- -f1 | cut -d. -f1 | tr -cd '0-9')
+    if [ "${my_ver:-0}" -lt 8 ]; then
         my_cnf=/etc/my.cnf
     else
         my_cnf=/etc/mysql/conf.d/my.cnf
@@ -612,7 +612,7 @@ long_query_time = 1
 EOF
 
     # Add version-specific configurations
-    if [ "$my_ver" -lt 8 ]; then
+    if [ "${my_ver:-0}" -lt 8 ]; then
         # MySQL 5.7 specific configurations
         cat >>$my_cnf <<'EOF'
 sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER"
@@ -764,7 +764,6 @@ main() {
             command -v rabbitmq
     )" in
     */nginx) _build_nginx "$@" ;;
-    */composer) _build_composer ;;
     */mvn) _build_maven ;;
     */go) _build_go ;;
     */jmeter) _build_jmeter ;;
@@ -774,8 +773,6 @@ main() {
     */python) command -v mysqld >/dev/null || _build_python ;;
     */redis-server) _build_redis ;;
     */catalina.sh) _build_tomcat ;;
-    */memcached) _build_memcached ;;
-    */rabbitmq) _build_rabbitmq ;;
     *) echo "No specific build environment detected." ;;
     esac
 
