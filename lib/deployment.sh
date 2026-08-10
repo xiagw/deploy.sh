@@ -184,7 +184,7 @@ deploy_to_kubernetes() {
         ## helm rollback to previous revision / 回滚到上一个版本
         echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))"
         ## kubectl rollback to previous revision / 回滚到上一个版本
-        $KUBECTL_OPT -n "${G_NAMESPACE}" rollout undo deployment/"${release_name}" 2>/dev/null || true
+        echo "$KUBECTL_OPT -n ${G_NAMESPACE} rollout undo deployment/${release_name}"
         ## 显示回滚命令 / Show rollback command
         echo "kubectl -n ${G_NAMESPACE} rollout undo deployment/${release_name}"
         ## Scale down deployment to 0 replicas / 将部署缩减为 0 个副本
