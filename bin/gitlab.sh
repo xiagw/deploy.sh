@@ -114,20 +114,28 @@ EOF
 }
 
 add_account_to_groups() {
-    local user="$1" user_id level
+    local user="$1" user_id level pms_id
 
     _msg "Add user [$user] to groups..."
     user_id=$($cmd_gitlab user list --username "$user" | jq -r '.[].id')
 
     # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
-    # Get selected groups using fzf multi-select
+    # 默认自动加入 pms 组，级别为 Developer，（因为需要读取CI/CD公共配置模版）
+    pms_id=$($cmd_gitlab group list --skip-groups 2 --top-level-only 1 |
+        jq -r '.[] | select(.name=="pms") | .id')
+    if [ -n "$pms_id" ]; then
+        $cmd_gitlab group-member create --access-level 30 --group-id "$pms_id" --user-id "$user_id"
+        _msg "Added user [$user] to group [pms]"
+    fi
+
+    # Manually select additional groups using fzf multi-select
     while IFS=$'\t' read -r group_id group_name; do
-        [[ $group_name == "pms" ]] && level=30 || level=40
+        level=40
         $cmd_gitlab group-member create --access-level "$level" --group-id "$group_id" --user-id "$user_id"
         _msg "Added user [$user] to group [$group_name]"
     done < <(
         $cmd_gitlab group list --skip-groups 2 --top-level-only 1 |
-            jq -r '.[] | "\(.id)\t\(.name)"' |
+            jq -r '.[] | select(.name!="pms") | "\(.id)\t\(.name)"' |
             fzf --multi --prompt="Select groups (TAB to multi-select, ENTER to confirm): " --header="ID\tName" --height=60%
     )
 }
