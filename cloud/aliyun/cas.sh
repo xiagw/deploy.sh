@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
+# shellcheck disable=2016
 
 # 证书服务（Certificate Authority Service）相关函数 - 使用新框架重构
 

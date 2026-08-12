@@ -366,7 +366,7 @@ oss_delete() {
     # 先删除存储桶中的所有对象
     echo "正在删除存储桶中的所有对象..."
     local delete_objects_result
-    delete_objects_result=$(aliyun --profile "${profile:-}" ossutil rm --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name/" -r -f --all-versions)
+    delete_objects_result=$(aliyun --no-cli-ai-mode --profile "${profile:-}" ossutil rm --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name/" -r -f --all-versions)
     local delete_objects_status=$?
 
     if [ $delete_objects_status -ne 0 ]; then
@@ -378,7 +378,7 @@ oss_delete() {
     # 删除存储桶本身
     echo "正在删除存储桶..."
     local delete_bucket_result
-    delete_bucket_result=$(aliyun --profile "${profile:-}" ossutil rb --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name")
+    delete_bucket_result=$(aliyun --no-cli-ai-mode --profile "${profile:-}" ossutil rb --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name")
     local delete_bucket_status=$?
 
     if [ $delete_bucket_status -eq 0 ]; then
@@ -724,7 +724,7 @@ oss_batch_delete() {
     fi
 
     local result
-    result=$(aliyun --profile "${profile:-}" ossutil rm --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "$bucket_path" --all-versions -r -f --include-from "$file_list" --metadata-include "x-oss-storage-class=$storage_class")
+    result=$(aliyun --no-cli-ai-mode --profile "${profile:-}" ossutil rm --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "$bucket_path" --all-versions -r -f --include-from "$file_list" --metadata-include "x-oss-storage-class=$storage_class")
 
     local status=$?
     echo "$result"

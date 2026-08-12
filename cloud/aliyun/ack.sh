@@ -390,6 +390,7 @@ ack_node_list() {
 
     local table_header="NodeId\tNodeName\tStatus\tInstanceType\tCreated"
     local jq_filter=".nodes[] | [.instance_id, .instance_name, .state, .instance_type, .creation_time] | @tsv"
+    # shellcheck disable=2016
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-16s  %-18s  %-8s  %-15s  %s\n", $1, $2, $3, $4, $5}'
 
     local result

@@ -8,7 +8,7 @@ Bash wrapper around the Alibaba Cloud CLI (plugin mode, aliyun >= 3.4). Entry: `
 
 - All API calls go through `call_aliyun_api` (base.sh), which appends `--profile` and auto-plugin-install flags. Never call `aliyun` directly in service modules.
 - Plugin CLI renamed params that clash with reserved/global flags: use `--biz-region-id` (not `--region-id`/`--RegionId`) and `--biz-key-pair-name` (not `--key-pair-name`). Other commands may have similar `--biz-*` renames — verify with `aliyun <product> <command> --help` before adding/changing any call.
-- Use new plugin-style kebab-case commands, not legacy PascalCase API names: `ram get-account-alias` (not `ram GetAccountAlias`), `sts get-caller-identity`, `ecs describe-key-pairs`. Exception: ACK uses REST style (`cs GET /clusters`).
+- Use new plugin-style kebab-case commands, not legacy PascalCase API names: `ram get-account-alias` (not `ram GetAccountAlias`), `sts get-caller-identity`, `ecs describe-key-pairs`. Exception: ACK uses REST style (`cs GET /clusters`); CR personal edition uses REST style (`cr GET /namespace --version 2016-06-07 --force`); `dds` (MongoDB) and `eci` use PascalCase API mode (no plugin).
 - Central services ignore the user region: `cas` calls must use `--region cn-hangzhou`; `alidns` calls must use `--region public` (cn-hangzhou also fails). `ram`/`cdn` need no region.
 - `--region` (global flag) selects the endpoint; `--biz-region-id` is the API's RegionId business param. Regional services often need both.
 

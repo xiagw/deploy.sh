@@ -19,6 +19,11 @@
    - [x] ACK（容器服务 Kubernetes）完整支持
    - [x] PolarDB（云原生数据库）完整支持
    - [x] Domain（域名服务）完整支持
+   - [x] SMS（短信服务）完整支持
+   - [x] ACR（容器镜像服务 个人版）完整支持
+   - [x] MongoDB（云数据库 MongoDB）完整支持
+   - [x] ECI（弹性容器实例）完整支持
+   - [x] Ticket（工单服务）完整支持
    - [ ] WAF（Web应用防火墙）支持
    - [ ] DMS（数据管理）支持
    - [ ] MSE（微服务引擎）支持

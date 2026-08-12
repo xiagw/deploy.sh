@@ -57,10 +57,15 @@ show_help() {
     echo "  ram      - 访问控制"
     echo "  nas      - 文件存储"
     echo "  ack      - 容器服务 Kubernetes 版"
+    echo "  sms      - 短信服务"
+    echo "  acr      - 容器镜像服务 (个人版)"
+    echo "  mongodb  - 云数据库 MongoDB"
+    echo "  eci      - 弹性容器实例"
+    echo "  ticket   - 工单服务"
     echo "  config   - 配置管理"
     echo "  region   - 地域列表查询"
     echo "  balance  - 账户余额查询"
-    echo "  cost     - 费用查询"
+    echo "  cost     - 每日消费查询"
     echo
     echo "每个服务的具体操作和参数，请使用 '$0 <服务>' 查看"
     echo
@@ -481,6 +486,22 @@ list_all_services() {
     echo "================================"
     echo "SSH 密钥："
     handle_ecs_commands get-key
+
+    echo "================================"
+    echo "ACR 命名空间："
+    handle_acr_commands get
+
+    echo "================================"
+    echo "MongoDB 实例："
+    handle_mongodb_commands get
+
+    echo "================================"
+    echo "ECI 实例："
+    handle_eci_commands get
+
+    echo "================================"
+    echo "工单列表："
+    handle_ticket_commands get
 
     # 可以根据需要添加更多服务
 }

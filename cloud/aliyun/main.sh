@@ -134,6 +134,11 @@ main() {
     nas) handle_nas_commands "${args[@]}" ;;
     ack) handle_ack_commands "${args[@]}" ;;
     dts) handle_dts_commands "${args[@]}" ;;
+    sms) handle_sms_commands "${args[@]}" ;;
+    acr) handle_acr_commands "${args[@]}" ;;
+    mongodb) handle_mongodb_commands "${args[@]}" ;;
+    eci) handle_eci_commands "${args[@]}" ;;
+    ticket) handle_ticket_commands "${args[@]}" ;;
     *) echo "错误：未知的服务：$service" >&2 && show_help && exit 1 ;;
     esac
 }
