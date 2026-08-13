@@ -398,10 +398,10 @@ env_file_list() {
                 # 数组类型处理
                 if declare -p "$var" 2>/dev/null | grep -q 'declare -a'; then
                     # 使用 nameref 读取命名数组，避免 eval 注入
-                    local -n arr="$var"
+                    local -n ref="$var"
                     printf '%s=(' "$var"
                     local first=true
-                    for item in "${arr[@]}"; do
+                    for item in "${ref[@]}"; do
                         if [[ "$first" == true ]]; then
                             first=false
                         else

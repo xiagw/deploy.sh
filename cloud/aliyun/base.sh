@@ -14,16 +14,19 @@ call_aliyun_api() {
         return 1
     }
 
-    # 回显完整命令便于排错；stdout 被 $() 捕获、stderr 常被 2>/dev/null 丢弃，故优先写 /dev/tty
-    # local debug_cmd
-    # debug_cmd=$(printf '%q ' aliyun --profile "${profile:-}" "$@")
-    # if { true >/dev/tty; } 2>/dev/null; then
-    #     echo "+ ${debug_cmd% }" >/dev/tty
-    # else
-    #     echo "+ ${debug_cmd% }" >&2
-    # fi
+    # 统一地域语义（AUDIT 1.5）：调用方未显式传 --region 时自动补上，保证
+    # 全局 -r 对 nas/kvstore/dts 等一切区域服务都生效，不再落回 profile 默认地域。
+    # --region 是全局 endpoint 选择参数，对中心化服务（ram/cdn/cas/alidns 等）无副作用。
+    local api_args=("$@")
+    if [ -n "${region:-}" ]; then
+        local has_region=0 arg
+        for arg in "$@"; do
+            [ "$arg" = "--region" ] && has_region=1 && break
+        done
+        [ "$has_region" -eq 0 ] && api_args+=("--region" "${region}")
+    fi
 
-    aliyun --profile "${profile:-}" --auto-plugin-install true --auto-plugin-install-enable-pre true "$@"
+    aliyun --profile "${profile:-}" --auto-plugin-install true --auto-plugin-install-enable-pre true "${api_args[@]}"
 }
 
 # 通用资源 ID 解析器：已提供则直通；否则 列表 API -> jq 提取 "ID (名称)" 行
@@ -225,12 +228,7 @@ generic_list() {
     local title=${9:-"列出资源："}
 
     local result
-    local api_args=()
-
-    # 添加 RegionId 参数
-    if [[ "$api_action" != *"biz-region-id"* ]]; then
-        api_args+=("--biz-region-id" "${region:-}")
-    fi
+    local api_args=("--biz-region-id" "${region:-}")
 
     if ! result=$(call_aliyun_api "$service" "$api_action" "${api_args[@]}"); then
         echo "错误：无法获取资源列表。请检查您的凭证和权限。" >&2

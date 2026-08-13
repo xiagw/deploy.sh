@@ -69,7 +69,7 @@ ticket_list() {
 
     local result
     result=$(call_aliyun_api workorder list-tickets --page-number 1 --page-size 100 --start-date "$start_date" --end-date "$end_date" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         format_output "$result" "$format" "ticket" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到工单。" "列出工单（最近 3 个月）："
     else
@@ -85,7 +85,7 @@ ticket_create() {
         echo "正在获取产品列表..."
         local product_result
         product_result=$(call_aliyun_api workorder list-products 2>/dev/null)
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ] || [ -z "$product_result" ]; then
             echo "错误：无法获取产品列表。" >&2
             return 1
@@ -224,7 +224,7 @@ ticket_notes() {
     echo "工单沟通记录："
     local result
     result=$(call_aliyun_api workorder list-ticket-notes --ticket-id "$ticket_id" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         if [[ $(echo "$result" | jq '.Data | length') -eq 0 ]]; then
             echo "没有找到沟通记录。"
@@ -249,7 +249,7 @@ ticket_products() {
 
     local result
     result=$(call_aliyun_api workorder list-products "${extra_args[@]}" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "产品ID              产品名称"
         echo "$result" | jq -r '.Data[].ProductList[] | [.ProductId, .ProductName] | @tsv' |
@@ -275,7 +275,7 @@ ticket_categories() {
     echo "问题分类列表："
     local result
     result=$(call_aliyun_api workorder list-categories --product-id "$product_id" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "分类ID              分类名称"
         echo "$result" | jq -r '.Data[] | [.CategoryId, .CategoryName] | @tsv' |

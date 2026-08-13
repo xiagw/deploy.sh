@@ -637,8 +637,12 @@ main() {
     ## ========================================================================
     ## 独立功能: 使用Terraform创建Kubernetes集群
     ## 如果指定了 --create-k8s 参数，使用Terraform创建K8s集群
+    ## 这是一个独立功能，执行完成后直接返回
     ## ========================================================================
-    ${create_k8s_with_terraform:-false} && kube_setup_terraform
+    if ${create_k8s_with_terraform:-false}; then
+        kube_setup_terraform
+        return $?
+    fi
 
     ## ========================================================================
     ## Kubernetes配置初始化

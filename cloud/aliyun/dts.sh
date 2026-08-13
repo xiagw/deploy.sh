@@ -67,7 +67,7 @@ handle_dts_commands() {
 _dts_resolve_job_id() {
     resolve_resource_id "$1" "${2:-选择 DTS 迁移任务}" "${4:-错误：没有找到任何 DTS 迁移任务。}" \
         ".MigrationJobs.MigrationJob[]? ${3:+| select($3)} | \"\(.MigrationJobId) (\(.MigrationJobName)) [\(.Status)]\"" \
-        -- dts describe-migration-jobs --api-version 2020-01-01
+        -- dts describe-migration-jobs --api-version 2020-01-01 --biz-region-id "${region:-}" --pager
 }
 
 # DTS 迁移任务列表
@@ -75,7 +75,7 @@ dts_list() {
     local format=${1:-human}
 
     local result
-    if ! result=$(call_aliyun_api dts describe-migration-jobs --api-version 2020-01-01); then
+    if ! result=$(call_aliyun_api dts describe-migration-jobs --api-version 2020-01-01 --biz-region-id "${region:-}" --pager); then
         echo "错误：无法获取 DTS 迁移任务列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -125,7 +125,7 @@ dts_sync_list() {
     local format=${1:-human}
 
     local result
-    if ! result=$(call_aliyun_api dts describe-synchronization-jobs --api-version 2020-01-01); then
+    if ! result=$(call_aliyun_api dts describe-synchronization-jobs --api-version 2020-01-01 --biz-region-id "${region:-}" --pager path=SynchronizationInstances); then
         echo "错误：无法获取 DTS 同步任务列表。请检查您的凭证和权限。" >&2
         return 1
     fi
@@ -166,18 +166,18 @@ dts_subscribe_list() {
     local format=${1:-human}
 
     local result
-    if ! result=$(call_aliyun_api dts describe-subscription-instances --api-version 2020-01-01); then
+    if ! result=$(call_aliyun_api dts describe-subscription-instances --api-version 2020-01-01 --biz-region-id "${region:-}" --pager); then
         echo "错误：无法获取 DTS 订阅任务列表。请检查您的凭证和权限。" >&2
         return 1
     fi
 
     local table_header="SubscriptionInstanceId\tSubscriptionInstanceName\tStatus\tSourceEndpointInstanceType\tCreateTime"
-    local jq_filter='.SubscriptionInstanceInfos.SubscriptionInstanceInfo[]? | [
-        .SubscriptionInstanceId,
+    local jq_filter='.SubscriptionInstances.SubscriptionInstance[]? | [
+        .SubscriptionInstanceID,
         .SubscriptionInstanceName,
         .Status,
         .SourceEndpoint.InstanceType,
-        .CreateTime
+        .InstanceCreateTime
     ] | @tsv'
     local status_mapper='BEGIN {FS="\t"; OFS="\t"}
     {
@@ -198,7 +198,7 @@ dts_subscribe_list() {
         "没有找到 DTS 订阅任务。" \
         "DTS 订阅任务列表：" \
         "$human_header" \
-        '.SubscriptionInstanceInfos.SubscriptionInstanceInfo | length'
+        '.SubscriptionInstances.SubscriptionInstance | length'
 }
 
 # DTS 迁移任务创建
@@ -206,37 +206,59 @@ dts_create() {
     local task_name=$1
     local source_type=$2
     local dest_type=$3
+    local job_class=${4:-large}
 
     if [ -z "$task_name" ] || [ -z "$source_type" ] || [ -z "$dest_type" ]; then
         echo "错误：任务名称、源库类型和目标库类型都是必需的参数。" >&2
-        echo "用法: $0 dts add <任务名称> <源库类型> <目标库类型>"
-        echo "例如: $0 dts add my-task mysql mysql"
+        echo "用法: $0 dts add <任务名称> <源库类型> <目标库类型> [规格]" >&2
+        echo "例如: $0 dts add my-task mysql mysql" >&2
         return 1
     fi
 
     echo "创建 DTS 迁移任务："
 
     local result
-    result=$(call_aliyun_api dts create-migration-job --api-version 2020-01-01 \
-        --migration-job-name "$task_name" \
-        --source-type "$source_type" \
-        --destination-type "$dest_type")
-    ret=$?
-    if [ $ret -eq 0 ]; then
-        echo "DTS 迁移任务创建成功："
-        echo "$result" | jq '.'
-
-        # 提取任务ID
-        local task_id
-        task_id=$(echo "$result" | jq -r '.MigrationJobId')
-        echo "迁移任务ID: $task_id"
-
-        log_result "${profile:-}" "${region:-}" "dts" "create" "$result"
-    else
+    result=$(call_aliyun_api dts create-migration-job --api-version 2020-01-01 --biz-region-id "${region:-}" \
+        --biz-region "${region:-}" --migration-job-class "$job_class")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：DTS 迁移任务创建失败。"
         echo "$result"
         return 1
     fi
+
+    local task_id
+    task_id=$(echo "$result" | jq -r '.MigrationJobId // empty')
+    if [ -z "$task_id" ]; then
+        echo "错误：DTS 迁移任务创建成功但未能获取任务 ID。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    echo "DTS 迁移任务创建成功："
+    echo "$result" | jq '.'
+    echo "迁移任务ID: $task_id"
+
+    # 配置迁移任务（任务名称、源/目标库类型、全库全量+增量迁移）
+    local config_result
+    config_result=$(call_aliyun_api dts configure-migration-job --api-version 2020-01-01 --biz-region-id "${region:-}" \
+        --migration-job-id "$task_id" \
+        --migration-job-name "$task_name" \
+        --source-endpoint-instance-type "$source_type" \
+        --destination-endpoint-instance-type "$dest_type" \
+        --migration-mode-structure-intialization true \
+        --migration-mode-data-intialization true \
+        --migration-mode-data-synchronization true \
+        --migration-object '[{"DBName":".*"}]')
+    local config_ret=$?
+    if [ $config_ret -eq 0 ]; then
+        echo "DTS 迁移任务配置完成。"
+    else
+        echo "警告：迁移任务已创建，但配置失败（源/目标库连接信息需在控制台补充）。" >&2
+        echo "$config_result" >&2
+    fi
+
+    log_result "${profile:-}" "${region:-}" "dts" "create" "$result"
 }
 
 # DTS 同步任务创建
@@ -244,38 +266,57 @@ dts_sync_create() {
     local task_name=$1
     local source_type=$2
     local dest_type=$3
+    local job_class=${4:-large}
 
     if [ -z "$task_name" ] || [ -z "$source_type" ] || [ -z "$dest_type" ]; then
         echo "错误：任务名称、源库类型和目标库类型都是必需的参数。" >&2
-        echo "用法: $0 dts add-sync <任务名称> <源库类型> <目标库类型>"
-        echo "例如: $0 dts add-sync my-sync-task mysql mysql"
+        echo "用法: $0 dts add-sync <任务名称> <源库类型> <目标库类型> [规格]" >&2
+        echo "例如: $0 dts add-sync my-sync-task mysql mysql" >&2
         return 1
     fi
 
     echo "创建 DTS 同步任务："
 
     local result
-    result=$(call_aliyun_api dts create-synchronization-job --api-version 2020-01-01 \
-        --biz-region-id "${region:-}" \
-        --synchronization-job-name "$task_name" \
-        --source-type "$source_type" \
-        --destination-type "$dest_type")
-    ret=$?
-    if [ $ret -eq 0 ]; then
-        echo "DTS 同步任务创建成功："
-        echo "$result" | jq '.'
-
-        # 提取任务ID
-        local task_id
-        task_id=$(echo "$result" | jq -r '.SynchronizationJobId')
-        echo "同步任务ID: $task_id"
-
-        log_result "${profile:-}" "$region" "dts" "sync-create" "$result"
-    else
+    result=$(call_aliyun_api dts create-synchronization-job --api-version 2020-01-01 --biz-region-id "${region:-}" \
+        --source-region "${region:-}" --dest-region "${region:-}" \
+        --pay-type PostPaid --synchronization-job-class "$job_class")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：DTS 同步任务创建失败。"
         echo "$result"
         return 1
     fi
+
+    local task_id
+    task_id=$(echo "$result" | jq -r '.SynchronizationJobId // empty')
+    if [ -z "$task_id" ]; then
+        echo "错误：DTS 同步任务创建成功但未能获取任务 ID。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    echo "DTS 同步任务创建成功："
+    echo "$result" | jq '.'
+    echo "同步任务ID: $task_id"
+
+    # 配置同步任务（任务名称、全库结构+数据初始化）
+    local config_result
+    config_result=$(call_aliyun_api dts configure-synchronization-job --api-version 2020-01-01 --biz-region-id "${region:-}" \
+        --synchronization-job-id "$task_id" \
+        --synchronization-job-name "$task_name" \
+        --structure-initialization true \
+        --data-initialization true \
+        --synchronization-objects '[{"DBName":".*"}]')
+    local config_ret=$?
+    if [ $config_ret -eq 0 ]; then
+        echo "DTS 同步任务配置完成。"
+    else
+        echo "警告：同步任务已创建，但配置失败（源/目标库连接信息需在控制台补充）。" >&2
+        echo "$config_result" >&2
+    fi
+
+    log_result "${profile:-}" "$region" "dts" "sync-create" "$result"
 }
 
 # DTS 任务更新（支持fzf选择任务）
@@ -295,7 +336,7 @@ dts_update() {
 
     echo "更新 DTS 迁移任务："
     call_api_logged "dts" "set" "错误：DTS 迁移任务更新失败。" \
-        -- dts configure-migration-job --api-version 2020-01-01 \
+        -- dts configure-migration-job --api-version 2020-01-01 --biz-region-id "${region:-}" \
         --migration-job-id "$task_id" \
         --migration-job-name "$new_name"
 }
@@ -306,15 +347,15 @@ dts_delete() {
     local kind=""
     local mig syn sub combined
 
-    mig=$(call_aliyun_api dts describe-migration-jobs --api-version 2020-01-01) || {
+    mig=$(call_aliyun_api dts describe-migration-jobs --api-version 2020-01-01 --biz-region-id "${region:-}" --pager) || {
         echo "错误：无法获取 DTS 迁移任务列表。请检查您的凭证和权限。" >&2
         return 1
     }
-    syn=$(call_aliyun_api dts describe-synchronization-jobs --api-version 2020-01-01) || {
+    syn=$(call_aliyun_api dts describe-synchronization-jobs --api-version 2020-01-01 --biz-region-id "${region:-}" --pager path=SynchronizationInstances) || {
         echo "错误：无法获取 DTS 同步任务列表。请检查您的凭证和权限。" >&2
         return 1
     }
-    sub=$(call_aliyun_api dts describe-subscription-instances --api-version 2020-01-01) || {
+    sub=$(call_aliyun_api dts describe-subscription-instances --api-version 2020-01-01 --biz-region-id "${region:-}" --pager) || {
         echo "错误：无法获取 DTS 订阅任务列表。请检查您的凭证和权限。" >&2
         return 1
     }
@@ -323,7 +364,7 @@ dts_delete() {
         {
             echo "$mig" | jq -r '.MigrationJobs.MigrationJob[]? | "migration \(.MigrationJobId) (\(.MigrationJobName)) [\(.Status)]"'
             echo "$syn" | jq -r '.SynchronizationInstances[]? | "sync \(.SynchronizationJobId // .InstanceId // .Id) (\(.SynchronizationJobName // .InstanceName // .Name // .SynchronizationObject)) [\(.Status // .DataSynchronizationStatus.Status)]"'
-            echo "$sub" | jq -r '.SubscriptionInstanceInfos.SubscriptionInstanceInfo[]? | "subscribe \(.SubscriptionInstanceId) (\(.SubscriptionInstanceName)) [\(.Status)]"'
+            echo "$sub" | jq -r '.SubscriptionInstances.SubscriptionInstance[]? | "subscribe \(.SubscriptionInstanceID) (\(.SubscriptionInstanceName)) [\(.Status)]"'
         } | sed '/^$/d'
     )
 
@@ -392,17 +433,18 @@ dts_delete() {
 
     echo "删除 DTS ${kind_cn}任务："
     local result
+    local ret
     case "$kind" in
     migration)
-        result=$(call_aliyun_api dts delete-migration-job --api-version 2020-01-01 --migration-job-id "$task_id")
+        result=$(call_aliyun_api dts delete-migration-job --api-version 2020-01-01 --biz-region-id "${region:-}" --migration-job-id "$task_id")
         ret=$?
         ;;
     sync)
-        result=$(call_aliyun_api dts delete-synchronization-job --api-version 2020-01-01 --synchronization-job-id "$task_id")
+        result=$(call_aliyun_api dts delete-synchronization-job --api-version 2020-01-01 --biz-region-id "${region:-}" --synchronization-job-id "$task_id")
         ret=$?
         ;;
     subscribe)
-        result=$(call_aliyun_api dts delete-subscription-instance --api-version 2020-01-01 --subscription-instance-id "$task_id")
+        result=$(call_aliyun_api dts delete-subscription-instance --api-version 2020-01-01 --biz-region-id "${region:-}" --subscription-instance-id "$task_id")
         ret=$?
         ;;
     esac
@@ -427,23 +469,36 @@ dts_start() {
 
     echo "启动 DTS 迁移任务：$task_id"
     local result
-    result=$(call_aliyun_api dts configure-migration-job --api-version 2020-01-01 --migration-job-id "$task_id" --migration-job-id-list "[\"$task_id\"]" --action-start)
-    ret=$?
+    result=$(call_aliyun_api dts start-migration-job --api-version 2020-01-01 --biz-region-id "${region:-}" --migration-job-id "$task_id")
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "DTS 迁移任务启动命令已发送。"
         echo "$result" | jq '.'
 
-        # 等待任务状态变为 Prechecking 或 Preparing 或 migrating
+        # 等待任务状态变为 Prechecking 或 Migrating（预检查/迁移中即视为已启动）
+        # 终态（PrecheckFailed/MigrationFailed/Finished）立即退出，不再空转满 150 秒
         echo "等待任务启动..."
         local status
         for _ in {1..30}; do
             sleep 5
-            status=$(call_aliyun_api dts describe-migration-jobs --api-version 2020-01-01 --migration-job-id "$task_id" 2>/dev/null | jq -r '.MigrationJobs.MigrationJob[0].Status')
-            if [[ "$status" == "Prechecking"* || "$status" == "Preparing"* || "$status" == "Migrating"* || "$status" == "NotStarted" ]]; then
-                echo "任务状态: $status"
+            status=$(call_aliyun_api dts describe-migration-job-status --api-version 2020-01-01 --biz-region-id "${region:-}" --migration-job-id "$task_id" 2>/dev/null | jq -r '.MigrationJobStatus // empty')
+            if [ -z "$status" ]; then
+                echo "错误：无法获取任务状态。" >&2
                 break
             fi
-            echo "当前状态: $status"
+            case "$status" in
+            Prechecking | Migrating | NotStarted)
+                echo "任务状态: $status"
+                break
+                ;;
+            PrecheckFailed | MigrationFailed | Finished)
+                echo "错误：任务启动失败（状态: $status）。" >&2
+                break
+                ;;
+            *)
+                echo "当前状态: $status"
+                ;;
+            esac
         done
         log_result "${profile:-}" "$region" "dts" "start" "$result"
     else
@@ -462,23 +517,36 @@ dts_stop() {
 
     echo "停止 DTS 迁移任务：$task_id"
     local result
-    result=$(call_aliyun_api dts suspend-migration-job --api-version 2020-01-01 --migration-job-id "$task_id")
-    ret=$?
+    result=$(call_aliyun_api dts suspend-migration-job --api-version 2020-01-01 --biz-region-id "${region:-}" --migration-job-id "$task_id")
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "DTS 迁移任务停止命令已发送。"
         echo "$result" | jq '.'
 
-        # 等待任务状态变为 Paused
+        # 等待任务状态变为 Suspending（暂停中）
+        # 终态（NotStarted/Finished/MigrationFailed）立即退出，不再空转满 150 秒
         echo "等待任务停止..."
         local status
         for _ in {1..30}; do
             sleep 5
-            status=$(call_aliyun_api dts describe-migration-job-status --api-version 2020-01-01 --migration-job-id "$task_id" 2>/dev/null | jq -r '.MigrationJobs.MigrationJob[0].Status')
-            if [ "$status" = "Paused" ]; then
-                echo "任务已成功停止。"
+            status=$(call_aliyun_api dts describe-migration-job-status --api-version 2020-01-01 --biz-region-id "${region:-}" --migration-job-id "$task_id" 2>/dev/null | jq -r '.MigrationJobStatus // empty')
+            if [ -z "$status" ]; then
+                echo "错误：无法获取任务状态。" >&2
                 break
             fi
-            echo "当前状态: $status"
+            case "$status" in
+            Suspending | NotStarted | Finished)
+                echo "任务已成功停止（状态: $status）。"
+                break
+                ;;
+            MigrationFailed | PrecheckFailed)
+                echo "错误：任务停止时状态异常（状态: $status）。" >&2
+                break
+                ;;
+            *)
+                echo "当前状态: $status"
+                ;;
+            esac
         done
         log_result "${profile:-}" "$region" "dts" "stop" "$result"
     else
@@ -496,7 +564,7 @@ dts_status() {
     echo "查询 DTS 迁移任务状态：$task_id"
     echo "DTS 迁移任务状态："
     call_api_logged "dts" "status" "错误：DTS 迁移任务状态查询失败。" \
-        -- dts describe-migration-job-status --api-version 2020-01-01 --migration-job-id "$task_id"
+        -- dts describe-migration-job-status --api-version 2020-01-01 --biz-region-id "${region:-}" --migration-job-id "$task_id"
 }
 
 # DTS 任务详情获取（支持fzf选择任务）
@@ -507,5 +575,5 @@ dts_job_get() {
     echo "获取 DTS 迁移任务详情：$task_id"
     echo "DTS 迁移任务详情："
     call_api_logged "dts" "get-job" "错误：DTS 迁移任务详情获取失败。" \
-        -- dts describe-migration-job-detail --api-version 2020-01-01 --migration-job-id "$task_id"
+        -- dts describe-migration-job-detail --api-version 2020-01-01 --biz-region-id "${region:-}" --migration-job-id "$task_id"
 }

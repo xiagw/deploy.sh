@@ -103,11 +103,6 @@ nas_create() {
     local file_system_type=${4:-standard}
     local storage_type
 
-    if [ -z "$name" ]; then
-        echo "错误：无法生成文件系统名称。" >&2
-        return 1
-    fi
-
     if [ "$1" = "" ]; then
         echo "未提供文件系统名称，自动生成: $name"
     fi
@@ -256,7 +251,7 @@ nas_mount_list() {
     local result
     result=$(call_aliyun_api nas describe-mount-targets \
         --file-system-id "$fs_id")
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取挂载点列表。" >&2
         return 1

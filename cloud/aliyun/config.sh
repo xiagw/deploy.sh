@@ -52,7 +52,7 @@ create_profile() {
         --access-key-id "$access_key_id" \
         --access-key-secret "$access_key_secret"
 
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "配置文件已创建。"
     else
@@ -74,7 +74,7 @@ update_profile() {
         --access-key-id "$access_key_id" \
         --access-key-secret "$access_key_secret"
 
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "配置文件已更新。"
     else
@@ -88,7 +88,7 @@ delete_profile() {
 
     aliyun configure delete --profile "$name"
 
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "配置文件已删除。"
     else

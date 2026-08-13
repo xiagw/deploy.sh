@@ -90,7 +90,7 @@ ram_list() {
 
     local result
     result=$(call_aliyun_api ram list-users --region "${region:-cn-hangzhou}" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
         return 1
@@ -154,27 +154,35 @@ ram_create() {
 
     local result
     result=$(call_aliyun_api ram create-user --user-name "$username" --display-name "$display_name" --region "${region:-cn-hangzhou}")
-    ret=$?
-    if [ $ret -eq 0 ]; then
-        echo "子账号创建成功："
-        echo "$result" | jq '.'
-
-        # 创建登录配置
-        call_aliyun_api ram create-login-profile --user-name "$username" --password "$password" --password-reset-required false --region "${region:-cn-hangzhou}" >/dev/null 2>&1
-
-        local account_alias
-        account_alias=$(call_aliyun_api ram get-account-alias 2>/dev/null | jq -r '.AccountAlias // empty')
-        if [ -z "$account_alias" ]; then
-            account_alias=$(call_aliyun_api sts get-caller-identity 2>/dev/null | jq -r '.AccountId // empty')
-        fi
-        [ -n "$account_alias" ] && echo "登录用户名：${username}@${account_alias}.onaliyun.com"
-        echo "登录密码：$password"
-        log_result "${profile:-}" "$region" "ram" "create" "$result"
-    else
+    local ret=$?
+    if [ $ret -ne 0 ]; then
         echo "错误：子账号创建失败。"
         echo "$result"
         return 1
     fi
+
+    echo "子账号创建成功："
+    echo "$result" | jq '.'
+
+    # 创建登录配置（失败不能吞：否则会打印一个登录不了的密码）
+    local login_result
+    login_result=$(call_aliyun_api ram create-login-profile --user-name "$username" --password "$password" --password-reset-required false --region "${region:-cn-hangzhou}" 2>&1)
+    local login_ret=$?
+    if [ $login_ret -ne 0 ]; then
+        echo "警告：子账号已创建，但登录密码设置失败，请手动重设密码。" >&2
+        echo "$login_result" >&2
+        log_result "${profile:-}" "$region" "ram" "create" "$result"
+        return 1
+    fi
+
+    local account_alias
+    account_alias=$(call_aliyun_api ram get-account-alias 2>/dev/null | jq -r '.AccountAlias // empty')
+    if [ -z "$account_alias" ]; then
+        account_alias=$(call_aliyun_api sts get-caller-identity 2>/dev/null | jq -r '.AccountId // empty')
+    fi
+    [ -n "$account_alias" ] && echo "登录用户名：${username}@${account_alias}.onaliyun.com"
+    echo "登录密码：$password"
+    log_result "${profile:-}" "$region" "ram" "create" "$result"
 }
 
 # 更新子账号（支持修改显示名和密码）
@@ -279,7 +287,7 @@ ram_update() {
             --user-name "$username" \
             --new-user-name "$username" \
             --new-display-name "$new_display_name")
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ]; then
             echo "错误：子账号更新失败。"
             echo "$result"
@@ -296,7 +304,7 @@ ram_update() {
             --user-name "$username" \
             --password "$new_password" \
             --password-reset-required false)
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ]; then
             echo "错误：密码更新失败。"
             echo "$result"
@@ -332,7 +340,7 @@ ram_delete() {
     echo "删除 RAM 子账号："
     local result
     result=$(call_aliyun_api ram delete-user --user-name "$username" 2>&1)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "子账号删除成功。"
         log_delete_operation "${profile:-}" "$region" "ram" "$username" "RAM 子账号" "成功" "$result"
@@ -363,7 +371,7 @@ ram_create_key() {
     echo "为子账号创建 AccessKey："
     local result
     result=$(call_aliyun_api ram create-access-key --user-name "$username" --region "${region:-cn-hangzhou}")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "AccessKey 创建成功："
         echo "$result" | jq '.'
@@ -407,7 +415,7 @@ ram_list_keys() {
 
     local result
     result=$(call_aliyun_api ram list-access-keys --user-name "$username" --region "${region:-cn-hangzhou}")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ram" "list-keys" "$result"
@@ -435,7 +443,7 @@ ram_delete_key() {
 
     local result
     result=$(call_aliyun_api ram list-access-keys --user-name "$username" --region "${region:-cn-hangzhou}")
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取 AccessKey 列表。" >&2
         echo "$result"
@@ -477,7 +485,7 @@ ram_delete_key() {
         result=$(call_aliyun_api ram delete-access-key --region "${region:-cn-hangzhou}" \
             --user-access-key-id "$key_id" \
             --user-name "$username")
-        ret=$?
+        local ret=$?
         if [ $ret -eq 0 ]; then
             echo "AccessKey 删除成功：$key_id"
         else
@@ -558,7 +566,7 @@ ram_grant_permission() {
             --policy-type System \
             --policy-name "$policy_name" \
             --user-name "$username")
-        ret=$?
+        local ret=$?
         if [ $ret -eq 0 ]; then
             echo "权限授予成功：$policy_name"
             echo "$result" | jq '.'
@@ -599,7 +607,7 @@ ram_revoke_permission() {
 
     local result
     result=$(call_aliyun_api ram list-policies-for-user --user-name "$username" --region "${region:-cn-hangzhou}")
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取用户权限列表。" >&2
         echo "$result"
@@ -670,7 +678,7 @@ ram_revoke_permission() {
                 --principal-name "$principal_name" \
                 --resource-group-id "$policy_scope")
         fi
-        ret=$?
+        local ret=$?
 
         if [ $ret -eq 0 ]; then
             echo "权限撤销成功：$policy_name ($policy_scope)"
@@ -711,7 +719,7 @@ ram_list_permissions() {
 
     local result
     result=$(call_aliyun_api ram list-policies-for-user --user-name "$username" --region "${region:-cn-hangzhou}")
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取用户权限列表。"
         echo "$result"
@@ -737,66 +745,3 @@ ram_list_permissions() {
     log_result "${profile:-}" "$region" "ram" "list-permissions" "$result"
 }
 
-# 创建子账号（保持原有实现，但使用框架函数，支持交互式输入）
-ram_create_updated() {
-    local username=$1
-    local display_name=$2
-
-    # 如果没有提供参数，则使用交互式输入
-    if [ -z "$username" ] || [ -z "$display_name" ]; then
-        echo "使用交互式模式创建 RAM 子账号"
-
-        # 输入用户名
-        if [ -z "$username" ]; then
-            read -r -p "请输入用户名 (回车生成 dev开头的用户名): " username_input
-            if [ -z "$username_input" ]; then
-                username="dev$(date +%Y%m%d)"
-                echo "自动生成用户名：$username"
-            else
-                username="$username_input"
-            fi
-        fi
-
-        # 输入显示名
-        if [ -z "$display_name" ]; then
-            read -r -p "请输入显示名称 (回车使用用户名): " display_name_input
-            display_name=${display_name_input:-$username}
-            if [ -z "$display_name" ]; then
-                echo "错误：显示名称不能为空。" >&2
-                return 1
-            fi
-        fi
-    fi
-
-    # 生成随机密码
-    local password
-    password=$(_ram_random_password)
-
-    echo "创建 RAM 子账号："
-    echo "用户名：$username"
-    echo "显示名：$display_name"
-    echo "密码：$password"
-
-    local result
-    result=$(call_aliyun_api ram create-user --region "${region:-cn-hangzhou}" \
-        --user-name "$username" \
-        --display-name "$display_name")
-    ret=$?
-    if [ $ret -eq 0 ]; then
-        echo "子账号创建成功："
-        echo "$result" | jq '.'
-
-        # 创建登录配置
-        call_aliyun_api ram create-login-profile --region "${region:-cn-hangzhou}" \
-            --user-name "$username" \
-            --password "$password" \
-            --password-reset-required false >/dev/null 2>&1
-
-        echo "登录密码：$password"
-        log_result "${profile:-}" "$region" "ram" "create" "$result"
-    else
-        echo "错误：子账号创建失败。"
-        echo "$result"
-        return 1
-    fi
-}

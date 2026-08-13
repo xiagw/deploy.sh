@@ -41,9 +41,12 @@ sms_list() {
 
     echo "短信模板："
     local template_result
-    template_result=$(call_aliyun_api dysmsapi query-sms-template-list --api-version 2017-05-25 2>/dev/null)
-    ret=$?
-    if [ $ret -eq 0 ] && [ "$(echo "$template_result" | jq '.SmsTemplateList | length // 0')" -gt 0 ]; then
+    template_result=$(call_aliyun_api dysmsapi query-sms-template-list --api-version 2017-05-25)
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：查询短信模板失败。" >&2
+        echo "$template_result" >&2
+    elif [ "$(echo "$template_result" | jq '.SmsTemplateList | length // 0')" -gt 0 ]; then
         local table_header="TemplateCode\tTemplateName\tTemplateType\tAuditStatus\tCreateDate"
         local jq_filter=".SmsTemplateList[] | [.TemplateCode, .TemplateName, .TemplateType, .AuditStatus, .CreateDate] | @tsv"
         local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-18s  %-5s  %-8s  %s\n", $1, $2, $3, $4, $5}'
@@ -55,9 +58,12 @@ sms_list() {
     echo ""
     echo "短信签名："
     local sign_result
-    sign_result=$(call_aliyun_api dysmsapi query-sms-sign-list --api-version 2017-05-25 2>/dev/null)
-    ret=$?
-    if [ $ret -eq 0 ] && [ "$(echo "$sign_result" | jq '.SmsSignList | length // 0')" -gt 0 ]; then
+    sign_result=$(call_aliyun_api dysmsapi query-sms-sign-list --api-version 2017-05-25)
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：查询短信签名失败。" >&2
+        echo "$sign_result" >&2
+    elif [ "$(echo "$sign_result" | jq '.SmsSignList | length // 0')" -gt 0 ]; then
         echo "$sign_result" | jq -r '.SmsSignList[] | [.SignName, .AuditStatus, .SignType, .CreateDate] | @tsv' |
             awk 'BEGIN {FS="\t"; OFS="\t"} {printf "%-18s  %-8s  %-8s  %s\n", $1, $2, $3, $4}'
         log_result "${profile:-}" "$region" "sms" "sign-list" "$sign_result"

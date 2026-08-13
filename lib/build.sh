@@ -328,8 +328,7 @@ DOCKERIGNORE
     local build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-build-${G_REPO_BRANCH}.log"
     _msg note "log file: $build_log"
     mkdir -p "$(dirname "$build_log")"
-# echo pause
-# sleep 600
+
     set +e +o pipefail
     $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} 2>&1 | tee "$build_log" >/dev/null
     ret=${PIPESTATUS[0]}

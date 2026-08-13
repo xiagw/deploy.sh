@@ -10,14 +10,14 @@
 show_nat_help() {
     echo "NAT网关操作："
     echo "  get [format]                       - 列出NAT网关"
-    echo "  add <VPC-ID> <名称> <规格>        - 创建NAT网关"
+    echo "  add <VPC-ID> <名称>        - 创建NAT网关（增强型）"
     echo "  set [<NAT网关ID>] [<名称>]        - 更新NAT网关（NAT网关ID和名称都是可选的，可使用fzf选择）"
     echo "  del [<NAT网关ID>]                 - 删除NAT网关（NAT网关ID可选，可使用fzf选择）"
     echo
     echo "示例："
     echo "  $0 nat get"
     echo "  $0 nat get json"
-    echo "  $0 nat add vpc-bp1qpo0kug3a20qqe**** my-nat Small"
+    echo "  $0 nat add vpc-bp1qpo0kug3a20qqe**** my-nat"
     echo "  $0 nat set ngw-bp1uewa15k4iy5770**** new-name"
     echo "  $0 nat del ngw-bp1uewa15k4iy5770****"
     echo ""
@@ -53,7 +53,7 @@ nat_list() {
     #aliyun vpc describe-nat-gateways --biz-region-id cn-hangzhou --region cn-hangzhou
     local result
     result=$(call_aliyun_api vpc describe-nat-gateways --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         format_output "$result" "$format" "nat" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 NAT 网关。" "列出 NAT 网关："
     else
@@ -64,10 +64,10 @@ nat_list() {
 
 # 使用新框架的创建函数
 nat_create() {
-    local vpc_id=$1 name=$2 spec=$3
+    local vpc_id=$1 name=$2 vswitch_id=$3
 
     # 如果没有提供参数，则使用交互式输入
-    if [ -z "$vpc_id" ] || [ -z "$name" ] || [ -z "$spec" ]; then
+    if [ -z "$vpc_id" ] || [ -z "$name" ]; then
         echo "使用交互式模式创建 NAT 网关"
 
         # 选择 VPC
@@ -85,42 +85,24 @@ nat_create() {
                 return 1
             fi
         fi
-
-        # 选择规格
-        if [ -z "$spec" ]; then
-            local spec_list="Small
-Medium
-Large"
-            if type select_with_fzf >/dev/null 2>&1; then
-                spec=$(select_with_fzf "选择 NAT 网关规格" "$spec_list")
-            else
-                read -r -p "请输入规格 (Small/Medium/Large): " spec
-                if [ -z "$spec" ]; then
-                    echo "错误：规格不能为空。" >&2
-                    return 1
-                fi
-            fi
-        fi
     fi
 
-    if ! validate_required_params "$vpc_id" "$name" "$spec" "错误：VPC ID、名称和规格不能为空。"; then
-        echo "用法：nat add <VPC-ID> <名称> <规格>" >&2
-        return 1
+    # 选择交换机（NAT 网关所属 vSwitch）
+    if [ -z "$vswitch_id" ]; then
+        vswitch_id=$(resolve_resource_id "" "选择交换机" "错误：在选定的 VPC 中没有找到交换机。" \
+            '.VSwitches.VSwitch[] | "\(.VSwitchId) (\(.VSwitchName // .VSwitchId)) [\(.CidrBlock)]"' \
+            -- vpc describe-vswitches --biz-region-id "${region:-}" --region "${region:-}" --vpc-id "$vpc_id") || return 1
     fi
 
-    # 验证规格
-    case "$spec" in
-    Small | Medium | Large) ;;
-    *)
-        echo "错误：规格必须是 Small、Medium 或 Large。" >&2
+    if ! validate_required_params "$vpc_id" "$name" "$vswitch_id" "错误：VPC ID、名称和交换机不能为空。"; then
+        echo "用法：nat add <VPC-ID> <名称>" >&2
         return 1
-        ;;
-    esac
+    fi
 
     #aliyun vpc create-nat-gateway --biz-region-id cn-hangzhou --region cn-hangzhou
     call_api_logged "nat" "create" "错误：创建失败。" \
         -- vpc create-nat-gateway --biz-region-id "${region:-}" --region "${region:-}" \
-        --vpc-id "$vpc_id" --name "$name" --spec "$spec"
+        --vpc-id "$vpc_id" --vswitch-id "$vswitch_id" --nat-type Enhanced --name "$name"
 }
 
 # 使用新框架的更新函数

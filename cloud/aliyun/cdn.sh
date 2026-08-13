@@ -16,7 +16,7 @@ show_cdn_help() {
     echo "  refresh <类型> <路径>                   - 刷新 CDN 目录、文件或正则（20h 冷却）"
     echo "  trigger <触发文件> [类型]               - 根据触发文件批量刷新（每行一个URL）"
     echo "  prefetch <路径>                         - 预热 CDN 文件"
-    echo "  pay                                     - 购买 CDN 资源包（自动判断余量）"
+    echo "  pay [--dry-run]                         - 购买 CDN 资源包（自动判断余量；--dry-run 只展示不购买）"
     echo
     echo "示例："
     echo "  $0 cdn get                                                  # 列出所有域名"
@@ -73,7 +73,7 @@ cdn_list() {
 
     local result
     result=$(call_aliyun_api cdn describe-user-domains)
-    ret=$?
+    local ret=$?
 
     if [ "$ret" -ne 0 ]; then
         echo "错误：无法获取 CDN 域名列表。请检查您的凭证和权限。" >&2
@@ -346,10 +346,23 @@ cdn_prefetch() {
 }
 
 # 购买资源包功能（保持原有实现，但使用框架函数）
+# 用法: cdn_pay [--dry-run]   --dry-run 仅计算余量/价格并展示，不真正下单（便于调试）
 cdn_pay() {
     local color_reset="\033[0m"
     local color_green="\033[0;32m"
     local color_red="\033[0;31m"
+
+    local dry_run=0
+    case "${1:-}" in
+    --dry-run) dry_run=1 ;;
+    "")
+        : ;;
+    *)
+        echo "错误：未知参数：$1" >&2
+        echo "用法：cdn pay [--dry-run]" >&2
+        return 1
+        ;;
+    esac
 
     # 资源包规格和价格配置
     local package_unit_size=1024 # 1TB = 1024GB
@@ -359,40 +372,22 @@ cdn_pay() {
     local remaining_threshold=4.000 # 剩余容量阈值 4TB
     local balance_threshold=700     # 账户余额阈值 700 元
 
-    # 查询当前资源包剩余容量
+    # 查询当前资源包剩余容量（--pager 自动合并全部分页）
     local query_result
-    local page_num=1
     local remaining_amount=0
     local remaining_https_request=0
 
-    while true; do
-        query_result=$(call_aliyun_api bssopenapi query-resource-package-instances \
-            --product-code dcdn \
-            --page-num "$page_num" \
-            --page-size 100 2>/dev/null) || {
-            echo -e "[CDN] ${color_red}查询资源包失败${color_reset}"
-            return 1
-        }
+    query_result=$(call_aliyun_api bssopenapi query-resource-package-instances --product-code dcdn --pager path=Data.Instances.Instance 2>/dev/null) || {
+        echo -e "[CDN] ${color_red}查询资源包失败${color_reset}"
+        return 1
+    }
 
-        # 直接处理当前页的数据
-        remaining_amount="$(
-            echo "$remaining_amount + $(
-                echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") | if .RemainingAmountUnit == "GB" then (. | .RemainingAmount | tonumber) / 1024 elif .RemainingAmountUnit == "TB" then (. | .RemainingAmount | tonumber) else 0 end' | awk '{s+=$1} END {printf "%.3f", s}' 2>/dev/null || echo "-1"
-            )" | bc -l
-        )"
-        remaining_https_request="$(
-            echo "$remaining_https_request + $(
-                echo "$query_result" | jq -r '.Data.Instances.Instance[] | select(.RemainingAmount != "0" and .RemainingAmountUnit == "次") | .RemainingAmount' | awk '{s+=$1} END {printf "%.0f", s}' 2>/dev/null || echo "0"
-            )" | bc -l
-        )"
-
-        # 如果当前页的结果数量小于 100，说明没有更多页了
-        if [[ $(echo "$query_result" | jq '.Data.Instances.Instance | length') -lt 100 ]]; then
-            break
-        fi
-
-        ((page_num++))
-    done
+    remaining_amount="$(
+        echo "$query_result" | jq -r '(.Data.Instance // [])[] | select(.RemainingAmount != "0" and .RemainingAmountUnit != "次") | if .RemainingAmountUnit == "GB" then (. | .RemainingAmount | tonumber) / 1024 elif .RemainingAmountUnit == "TB" then (. | .RemainingAmount | tonumber) else 0 end' | awk '{s+=$1} END {printf "%.3f", s}' 2>/dev/null || echo "-1"
+    )"
+    remaining_https_request="$(
+        echo "$query_result" | jq -r '(.Data.Instance // [])[] | select(.RemainingAmount != "0" and .RemainingAmountUnit == "次") | .RemainingAmount' | awk '{s+=$1} END {printf "%.0f", s}' 2>/dev/null || echo "0"
+    )"
 
     local https_color_code="${color_red}" # 默认红色
     if ((remaining_https_request >= 20000000)); then
@@ -435,7 +430,7 @@ cdn_pay() {
     local available_balance
     local balance_result
     balance_result=$(call_aliyun_api bssopenapi query-account-balance)
-    ret=$?
+    local ret=$?
     if [ "$ret" -ne 0 ]; then
         echo "错误：无法查询账户余额。" >&2
         return 1
@@ -465,10 +460,20 @@ cdn_pay() {
     # 执行购买操作
     log_result "${profile:-}" "${region:-}" "cdn" "pay" "当前剩余: ${remaining_amount:-0}TB，准备购买 $((package_size / package_unit_size))TB 资源包..."
     ## 特殊方式，修改为只买1TB时长1月的（1月的单价108¥，6-12月的单价126¥）
-    echo -e "[$(date +'%F %T')] 购买 1TB 资源包..."
+    echo -e "[$(date +'%F %T')] 准备购买 1TB 资源包（1个月，单价 ${package_unit_price} 元）..."
+
+    if [ "$dry_run" -eq 1 ]; then
+        echo -e "[$(date +'%F %T')] [DRY-RUN] 仅展示，未下单。确认无误后去掉 --dry-run 再执行。"
+        return 0
+    fi
+
+    if ! confirm_action "确认购买 CDN 资源包（1TB / 1 个月，约 ${package_unit_price} 元）？"; then
+        return 1
+    fi
+
     echo "CDN 资源包购买："
 
-    local _result
+    local _result _ret
     _result=$(call_api_logged "cdn" "pay" "错误：CDN 资源包购买失败。" \
         -- bssopenapi CreateResourcePackage \
         --endpoint business.aliyuncs.com --force --version 2017-12-14 \
@@ -477,13 +482,17 @@ cdn_pay() {
         --Duration 1 \
         --PricingCycle Month \
         --Specification "$package_unit_size" 2>&1)
+    _ret=$?
 
     # CLI 插件未实现此子命令时，fallback 到 curl 直调 RPC API
     if echo "$_result" | grep -q "unknown command"; then
         echo "CLI 插件暂不支持 create-resource-package，切换到 curl 直调..."
+    elif [ "$_ret" -eq 0 ]; then
+        echo "$_result"
+        return 0
     else
         echo "$_result" >&2
-        return
+        return 1
     fi
 
     # 从 aliyun 配置读取凭证

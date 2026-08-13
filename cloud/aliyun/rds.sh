@@ -129,7 +129,7 @@ rds_create() {
             echo "正在获取可用的数据库引擎..."
             local engine_result
             engine_result=$(call_aliyun_api rds describe-regions 2>/dev/null)
-            ret=$?
+            local ret=$?
             if [ $ret -eq 0 ] && [ -n "$engine_result" ]; then
                 # 获取支持的数据库引擎
                 local engine_list="MySQL
@@ -157,7 +157,7 @@ SQLServer"
             echo "正在获取 $engine 引擎的可用版本..."
             local version_result
             version_result=$(call_aliyun_api rds describe-regions 2>/dev/null)
-            ret=$?
+            local ret=$?
 
             local version_list
             case "$engine" in
@@ -232,8 +232,8 @@ SQLServer"
                 --instance-charge-type "PostPaid" \
                 --category "Basic" \
                 --db-instance-storage-type "cloud_essd" \
-                --zone-id "$(call_aliyun_api rds describe-zones 2>/dev/null | jq -r '.Zones.Zone[0].ZoneId')" 2>/dev/null)
-            ret=$?
+                --zone-id "$(call_aliyun_api rds describe-zones --biz-region-id "${region:-}" 2>/dev/null | jq -r '.Zones.Zone[0].ZoneId')" 2>/dev/null)
+            local ret=$?
             if [ $ret -eq 0 ] && [ -n "$class_result" ]; then
                 class_list=$(echo "$class_result" | jq -r '.Items.DBInstanceClass[].DBInstanceClass' | sort -u)
 
@@ -369,7 +369,7 @@ rds_account_create() {
     local instance_id=$1
     local account_name=$2
     local password=$3
-    local description=${4:-"Created by CLI"}
+    local description=$4
     local instance_desc=""
 
     instance_id=$(_rds_resolve_instance_id "$instance_id" "选择要创建账号的 RDS 实例") || return 1
@@ -467,7 +467,7 @@ rds_account_create() {
         --account-password "$password" \
         --account-description "$description" \
         --account-type Normal)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "账号创建成功："
         echo "$result" | jq '.'
@@ -562,7 +562,7 @@ rds_account_list() {
 
     local result
     result=$(call_aliyun_api rds describe-accounts --db-instance-id "$instance_id" --biz-region-id "$region" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取账号列表。" >&2
         return 1
@@ -598,7 +598,7 @@ rds_db_list() {
 
     local result
     result=$(call_aliyun_api rds describe-databases --db-instance-id "$instance_id" --biz-region-id "$region" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取数据库列表。" >&2
         return 1
@@ -692,7 +692,7 @@ rds_account_grant() {
     local instance_id=$1
     local account_name=$2
     local db_name=$3
-    local privilege=${4:-ReadWrite}
+    local privilege=$4
 
     instance_id=$(_rds_resolve_instance_id "$instance_id" "选择 RDS 实例") || return 1
 
@@ -767,7 +767,7 @@ _rds_resolve_instance_id() {
 rds_backup_list() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择要查看备份的 RDS 实例")
-    ret=$?
+    local ret=$?
     [ $ret -ne 0 ] && return 1
     local format=${2:-human}
 
@@ -779,7 +779,7 @@ rds_backup_list() {
         --biz-region-id "$region" \
         --page-size 30 \
         --page-number 1)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取备份列表。" >&2
         echo "$result" >&2
@@ -800,7 +800,7 @@ rds_backup_list() {
 rds_backup_delete() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择要清理备份的 RDS 实例")
-    ret=$?
+    local ret=$?
     [ $ret -ne 0 ] && return 1
     local backup_id=$2
 
@@ -891,12 +891,12 @@ _rds_utc_to_local() {
 rds_recovery_time() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择要查询可恢复时间的 RDS 实例")
-    ret=$?
+    local ret=$?
     [ $ret -ne 0 ] && return 1
 
     local result
     result=$(call_aliyun_api rds describe-local-available-recovery-time --db-instance-id "$instance_id" --biz-region-id "$region")
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取可恢复时间范围。请确认实例已开启日志备份。" >&2
         echo "$result" >&2
@@ -919,7 +919,7 @@ _rds_select_backup_or_time() {
     local instance_id=$1
     local backups_json
     backups_json=$(call_aliyun_api rds describe-backups --db-instance-id "$instance_id" --biz-region-id "$region" --page-size 50 --page-number 1 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ] || [ -z "$backups_json" ]; then
         echo "错误：无法获取备份列表。" >&2
         return 1
@@ -980,7 +980,7 @@ _rds_select_backup_or_time() {
 rds_restore_clone() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择源 RDS 实例")
-    ret=$?
+    local ret=$?
     [ $ret -ne 0 ] && return 1
     shift
 
@@ -991,7 +991,7 @@ rds_restore_clone() {
     if [ -z "$backup_or_time" ]; then
         local selection
         selection=$(_rds_select_backup_or_time "$instance_id")
-        ret=$?
+        local ret=$?
         [ $ret -ne 0 ] && return 1
         if [[ "$selection" == RESTORE_TIME:* ]]; then
             backup_or_time="${selection#RESTORE_TIME:}"
@@ -1056,7 +1056,7 @@ rds_restore_clone() {
 
     local result
     result=$(call_aliyun_api rds clone-db-instance --biz-region-id "$region" "${api_args[@]}")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "克隆任务已提交："
         echo "$result" | jq '.'
@@ -1075,7 +1075,7 @@ rds_restore_clone() {
 rds_restore_table() {
     local instance_id
     instance_id=$(_rds_resolve_instance_id "$1" "选择要恢复库表的 RDS 实例")
-    ret=$?
+    local ret=$?
     [ $ret -ne 0 ] && return 1
     shift
 
@@ -1127,7 +1127,7 @@ rds_restore_table() {
 
     local result
     result=$(call_aliyun_api rds restore-table --biz-region-id "$region" "${api_args[@]}")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "库表恢复任务已提交。"
         echo "$result" | jq '.'

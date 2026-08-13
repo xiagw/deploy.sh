@@ -10,7 +10,7 @@
 show_kvstore_help() {
     echo "KVStore (Redis) 操作："
     echo "  get [format]                           - 列出 KVStore 实例"
-    echo "  add <名称> <实例类型> <容量>          - 创建 KVStore 实例"
+    echo "  add <名称> <实例类型> <容量> [<可用区>] - 创建 KVStore 实例（可用区可选，未提供时自动选择）"
     echo "  set [<实例ID>] [<新名称>]              - 更新 KVStore 实例（实例ID和新名称都是可选的，可使用fzf选择）"
     echo "  del [<实例ID>]                         - 删除 KVStore 实例（实例ID可选，可使用fzf选择）"
     echo
@@ -69,7 +69,7 @@ kvstore_list() {
     #aliyun r-kvstore describe-instances --biz-region-id "${region:-}" --region "${region:-}"
     local result
     result=$(call_aliyun_api r-kvstore describe-instances --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         format_output "$result" "$format" "kvstore" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 Redis 实例。" "列出 Redis 实例："
     else
@@ -80,7 +80,7 @@ kvstore_list() {
 
 # 使用新框架的创建函数
 kvstore_create() {
-    local name=$1 instance_class=$2 capacity=$3
+    local name=$1 instance_class=$2 capacity=$3 zone_id=$4
 
     # 如果没有提供参数，则使用 fzf 交互式选择
     if [ -z "$name" ] || [ -z "$instance_class" ] || [ -z "$capacity" ]; then
@@ -101,7 +101,7 @@ kvstore_create() {
             local class_result
             class_result=$(call_aliyun_api r-kvstore describe-instance-classes --biz-region-id "${region:-}" --engine "Redis" 2>/dev/null)
 
-            ret=$?
+            local ret=$?
             if [ $ret -eq 0 ] && [ -n "$class_result" ]; then
                 local class_list
                 class_list=$(echo "$class_result" | jq -r '.AvailableZones.AvailableZone[].AvailableResources.AvailableResource[] | select(.Type == "InstanceClass") | .SupportedResources.SupportedResource[] | "\(.Value)"' | sort -u)
@@ -141,7 +141,7 @@ redis.master.4xlarge.default"
             local capacity_result
             capacity_result=$(call_aliyun_api r-kvstore describe-instance-classes --biz-region-id "${region:-}" --engine "Redis" --instance-class "$instance_class" 2>/dev/null)
 
-            ret=$?
+            local ret=$?
             if [ $ret -eq 0 ] && [ -n "$capacity_result" ]; then
                 local capacity_list
                 capacity_list=$(echo "$capacity_result" | jq -r '.AvailableZones.AvailableZone[].AvailableResources.AvailableResource[] | select(.Type == "Capacity") | .SupportedResources.SupportedResource[] | "\(.Value)"' | sort -n | uniq)
@@ -188,17 +188,25 @@ redis.master.4xlarge.default"
         return 1
     fi
 
+    # 未提供可用区时，从 describe-zones 交互式选择（只有一个可用区时自动选中）
+    if [ -z "$zone_id" ]; then
+        zone_id=$(resolve_resource_id "" "选择可用区" "错误：当前地域没有可用可用区。" \
+            '.Zones.KVStoreZone[] | "\(.ZoneId) (\(.ZoneName))"' \
+            -- r-kvstore describe-zones --biz-region-id "${region:-}") || return 1
+    fi
+
     local api_args=(
         "--instance-name" "$name"
         "--instance-class" "$instance_class"
         "--capacity" "$capacity"
         "--instance-type" "Redis"
         "--charge-type" "PostPaid"
+        "--zone-id" "$zone_id"
     )
 
     generic_create \
         "r-kvstore" \
-        "CreateInstance" \
+        "create-instance" \
         "kvstore" \
         "$name" \
         "${api_args[@]}"
@@ -244,7 +252,7 @@ kvstore_delete() {
     instance_name=$(echo "$instance_info" | jq -r '.InstanceName // "未知"')
 
     # 检查实例是否存在
-    if [ "$instance_name" = "null" ] || [ -z "$instance_name" ] || [ "$instance_name" = "未知" ]; then
+    if [ -z "$instance_name" ] || [ "$instance_name" = "未知" ]; then
         echo "错误：未找到指定的 Redis 实例：$instance_id" >&2
         return 1
     fi

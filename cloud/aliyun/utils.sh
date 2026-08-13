@@ -157,7 +157,7 @@ log_delete_operation() {
 check_fzf() {
     if ! command -v fzf &>/dev/null; then
         echo "错误：fzf 未安装。请安装 fzf 或直接提供参数。" >&2
-        exit 1
+        return 1
     fi
 }
 
@@ -167,132 +167,15 @@ select_with_fzf() {
     shift 2
     local args=("$@") # 获取额外的参数，比如 -m
 
-    check_fzf
+    check_fzf || return 1
 
     local selected
     selected=$(echo "$options" | fzf --height=50% --prompt="$prompt: " "${args[@]}")
     if [ -z "$selected" ]; then
         echo "未选择选项，操作取消。" >&2
-        exit 1
+        return 1
     fi
     echo "$selected"
-}
-
-get_credentials() {
-    local profile=$1
-    local config_file="$HOME/.aliyun/config.json"
-    local access_key_id=""
-    local access_key_secret=""
-    local region=""
-
-    # 首先检查环境变量
-    if [ -n "$ALICLOUD_ACCESS_KEY_ID" ] && [ -n "$ALICLOUD_ACCESS_KEY_SECRET" ]; then
-        access_key_id=$ALICLOUD_ACCESS_KEY_ID
-        access_key_secret=$ALICLOUD_ACCESS_KEY_SECRET
-        region=${ALICLOUD_REGION_ID:-}
-    fi
-
-    # 如果环境变量中没有凭证，则从 config.json 文件中读取
-    if [ -z "$access_key_id" ] || [ -z "$access_key_secret" ]; then
-        if [ -f "$config_file" ]; then
-            access_key_id=$(jq -r ".profiles[] | select(.name == \"$profile\") | .access_key_id" "$config_file")
-            access_key_secret=$(jq -r ".profiles[] | select(.name == \"$profile\") | .access_key_secret" "$config_file")
-            region=$(jq -r ".profiles[] | select(.name == \"$profile\") | .region_id" "$config_file")
-        fi
-    fi
-
-    # 如果仍然没有找到凭证，则报错
-    if [ -z "$access_key_id" ] || [ -z "$access_key_secret" ]; then
-        echo "错误：无法获取 Aliyun 凭证。请确保设置了正确的环境变量或 config.json 文件。" >&2
-        exit 1
-    fi
-
-    # 如果没有找到 region，使用默认值
-    if [ -z "$region" ]; then
-        region="cn-hangzhou"
-    fi
-
-    # 将凭证信息存入 config.json 文件（如果文件不存在或信息不完整）
-    if [ ! -f "$config_file" ] || [ "$(jq ".profiles | length" "$config_file")" -eq 0 ]; then
-        mkdir -p "$(dirname "$config_file")"
-        echo '{
-            "current": "",
-            "profiles": [
-                {
-                    "name": "'"$profile"'",
-                    "mode": "AK",
-                    "access_key_id": "'"$access_key_id"'",
-                    "access_key_secret": "'"$access_key_secret"'",
-                    "region_id": "'"$region"'"
-                }
-            ]
-        }' >"$config_file"
-    fi
-}
-
-create_profile() {
-    local name=$1
-    local access_key_id=$2
-    local access_key_secret=$3
-    local region_id=${4:-cn-hangzhou}
-    local config_file="$HOME/.aliyun/config.json"
-
-    if [ -f "$config_file" ]; then
-        jq --arg name "$name" \
-            --arg key "$access_key_id" \
-            --arg secret "$access_key_secret" \
-            --arg region "$region_id" \
-            '.profiles += [{"name": $name, "mode": "AK", "access_key_id": $key, "access_key_secret": $secret, "region_id": $region}]' "$config_file" >"${config_file}.tmp" &&
-            mv "${config_file}.tmp" "$config_file"
-    else
-        mkdir -p "$(dirname "$config_file")"
-        echo '{
-            "current": "",
-            "profiles": [
-                {
-                    "name": "'"$name"'",
-                    "mode": "AK",
-                    "access_key_id": "'"$access_key_id"'",
-                    "access_key_secret": "'"$access_key_secret"'",
-                    "region_id": "'"$region_id"'"
-                }
-            ]
-        }' >"$config_file"
-    fi
-    echo "配置文件已创建/更新。"
-}
-
-update_profile() {
-    local name=$1
-    local access_key_id=$2
-    local access_key_secret=$3
-    local region_id=${4:-cn-hangzhou}
-    local config_file="$HOME/.aliyun/config.json"
-
-    if [ -f "$config_file" ]; then
-        jq --arg name "$name" \
-            --arg key "$access_key_id" \
-            --arg secret "$access_key_secret" \
-            --arg region "$region_id" \
-            '(.profiles[] | select(.name == $name)) |= {"name": $name, "mode": "AK", "access_key_id": $key, "access_key_secret": $secret, "region_id": $region}' "$config_file" >"${config_file}.tmp" &&
-            mv "${config_file}.tmp" "$config_file"
-        echo "配置文件已更新。"
-    else
-        echo "配置文件不存在，无法更新。"
-    fi
-}
-
-delete_profile() {
-    local name=$1
-    local config_file="$HOME/.aliyun/config.json"
-
-    if [ -f "$config_file" ]; then
-        jq --arg name "$name" 'del(.profiles[] | select(.name == $name))' "$config_file" >"${config_file}.tmp" &&
-            mv "${config_file}.tmp" "$config_file"
-        echo "配置文件已删除。"
-    else
-        echo "配置文件不存在，无法删除。"
-    fi
 }
 
 query_account_balance() {
@@ -300,7 +183,7 @@ query_account_balance() {
 
     local result
     result=$(call_aliyun_api bssopenapi query-account-balance)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         case "$format" in
         json)
@@ -516,7 +399,7 @@ query_daily_cost() {
     result=$(
         call_aliyun_api bssopenapi query-account-bill --api-version 2017-12-14 --billing-cycle "$current_month" --billing-date "$query_date" --granularity DAILY
     )
-    return_code=$?
+    local return_code=$?
     if [ $return_code -eq 0 ]; then
         case "$format" in
         json)

@@ -137,7 +137,7 @@ vpc_list_all() {
     vpc_list "$@"
 
     local vpc_ids
-    vpc_ids=$(call_aliyun_api vpc describe-vpcs --biz-region-id "${region:-}" | jq -r '.Vpcs.Vpc[].VpcId')
+    vpc_ids=$(call_aliyun_api vpc describe-vpcs --biz-region-id "${region:-}" --pager | jq -r '.Vpcs.Vpc[].VpcId')
 
     for vpc_id in $vpc_ids; do
         echo "VPC ID: $vpc_id 的资源："
@@ -330,7 +330,7 @@ vpc_enable_ipv6() {
     result=$(call_aliyun_api vpc modify-vpc-attribute --biz-region-id "$region" --region "$region" \
         --vpc-id "$vpc_id" \
         --enable-ipv6 true)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "IPv6 开启成功。"
         ipv6_cidr=$(call_aliyun_api vpc describe-vpcs --vpc-id "$vpc_id" --biz-region-id "$region" --region "$region" 2>/dev/null | jq -r '.Vpcs.Vpc[0].Ipv6CidrBlock // ""')
@@ -351,7 +351,7 @@ vpc_delete() {
     # 检查 VPC 是否存在
     local vpc_info
     vpc_info=$(call_aliyun_api vpc describe-vpcs --vpc-id "$vpc_id" --biz-region-id "$region" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ] || [ "$(echo "$vpc_info" | jq '.Vpcs.Vpc | length')" -eq 0 ]; then
         echo "错误：VPC $vpc_id 不存在或无法访问。" >&2
         return 1
@@ -453,6 +453,7 @@ select_zone() {
 # 创建交换机（保持原有逻辑，但使用框架函数）
 vpc_vswitch_create() {
     local vpc_id name=$2 cidr=$3 zone=$4
+    local ret
 
     vpc_id=$(_vpc_resolve_vpc_id "$1" "选择要创建交换机的 VPC") || return 1
 
@@ -763,7 +764,7 @@ vpc_sg_rule_set() {
         result=$(call_aliyun_api ecs describe-security-group-attribute \
             --security-group-id "$sg_id" \
             --biz-region-id "$region")
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ]; then
             echo "错误：无法获取安全组规则列表。请检查您的凭证和权限。" >&2
             return 1
@@ -835,7 +836,7 @@ vpc_sg_rule_delete() {
         result=$(call_aliyun_api ecs describe-security-group-attribute \
             --security-group-id "$sg_id" \
             --biz-region-id "$region")
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ]; then
             echo "错误：无法获取安全组规则列表。请检查您的凭证和权限。" >&2
             return 1
@@ -896,7 +897,7 @@ vpc_sg_rule_delete() {
             --security-group-id "$sg_id" \
             --security-group-rule-id "$rule_id")
     fi
-    ret=$?
+    local ret=$?
 
     if [ $ret -eq 0 ]; then
         echo "安全组规则删除成功。"
@@ -968,7 +969,7 @@ vpc_ipv6_bandwidth_allocate() {
         gw_result=$(call_aliyun_api vpc create-ipv6-gateway --biz-region-id "$region" --region "$region" \
             --vpc-id "$vpc_id" \
             --name "ipv6gw-$(date +%Y%m%d-%H%M%S)")
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ]; then
             echo "错误：IPv6 网关创建失败。" >&2
             echo "$gw_result"

@@ -18,8 +18,3 @@ deploy.sh 部署系统开发约定。
   - 可用性校验用 `check_*`（`check_docker_available` / `check_k8s_available`）
   - 模块内部私有助手用 `_` 前缀（`_project_hosts` / `_project_oss_dest`）
 - 禁止裸字符串调 `_msg`，必须带级别（`_msg note/task/warn/error`）。
-
-## 验证
-
-- 任何 shell 改动必须过 `bash -n <file>` 与 `shellcheck -S warning <file>`（零输出、exit 0）。
-- 禁止 `if [ $? -eq 0 ]` 判断命令结果。

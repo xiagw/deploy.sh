@@ -57,7 +57,7 @@ mongodb_list() {
 
     local result
     result=$(call_aliyun_api dds DescribeDBInstances --RegionId "${region:-}" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         format_output "$result" "$format" "mongodb" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 MongoDB 实例。" "列出 MongoDB 实例："
     else
@@ -174,7 +174,7 @@ mongodb_delete() {
 
     local instance_info
     instance_info=$(call_aliyun_api dds DescribeDBInstanceAttribute --DBInstanceId "$instance_id" --RegionId "$region" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取实例信息。" >&2
         return 1

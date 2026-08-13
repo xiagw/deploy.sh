@@ -85,7 +85,7 @@ acr_namespace_list() {
 
     local result
     result=$(call_aliyun_api cr GET /namespace --version "$_ACR_API_VERSION" --endpoint "$(_acr_endpoint)" --force 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         format_output "$result" "$format" "acr" "get" "$table_header" "$jq_filter" "$status_mapper" "没有找到命名空间。" "列出命名空间："
     else
@@ -110,7 +110,7 @@ acr_repo_list() {
     if [ -n "$namespace_name" ]; then
         local result
         result=$(call_aliyun_api cr GET "/repos/$namespace_name" --version "$_ACR_API_VERSION" --endpoint "$(_acr_endpoint)" --force 2>/dev/null)
-        ret=$?
+        local ret=$?
         if [ $ret -eq 0 ]; then
             format_output "$result" "$format" "acr" "get-repo" "$table_header" "$jq_filter" "$status_mapper" "没有找到仓库。" "列出仓库："
         else
@@ -120,7 +120,7 @@ acr_repo_list() {
     else
         local result
         result=$(call_aliyun_api cr GET /repos --version "$_ACR_API_VERSION" --endpoint "$(_acr_endpoint)" --force 2>/dev/null)
-        ret=$?
+        local ret=$?
         if [ $ret -eq 0 ]; then
             format_output "$result" "$format" "acr" "get-repo" "$table_header" "$jq_filter" "$status_mapper" "没有找到仓库。" "列出仓库："
         else
@@ -146,7 +146,7 @@ acr_tag_list() {
     echo "列出镜像标签："
     local result
     result=$(call_aliyun_api cr GET "/repos/$namespace/$repo_name/tags" --version "$_ACR_API_VERSION" --endpoint "$(_acr_endpoint)" --force 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         if [[ $(echo "$result" | jq '.data.tags | length') -eq 0 ]]; then
             echo "没有找到镜像标签。"
@@ -283,7 +283,7 @@ acr_login() {
     echo "获取临时登录凭证："
     local result
     result=$(call_aliyun_api cr GET /tokens --version "$_ACR_API_VERSION" --endpoint "$(_acr_endpoint)" --force 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         local user token
         user=$(echo "$result" | jq -r '.data.tempUserName // ""')

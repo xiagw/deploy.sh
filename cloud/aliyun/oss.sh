@@ -295,7 +295,7 @@ oss_create() {
     endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
     local result
     result=$(aliyun --profile "${profile:-}" ossutil mb --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "$result"
         log_result "${profile:-}" "$region" "oss" "create" "$result"
@@ -316,7 +316,7 @@ oss_delete() {
         endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
         local result
         result=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}")
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ]; then
             echo "错误：无法获取 OSS 存储桶列表。" >&2
             return 1
@@ -413,24 +413,6 @@ oss_delete() {
     fi
 }
 
-get_cname_token() {
-    local bucket_name=$1
-    local domain=$2
-    echo "获取 CNAME 令牌："
-    local result
-    result=$(aliyun --profile "${profile:-}" ossutil get-cname-token --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" "$domain")
-    echo "$result"
-    local token
-    token=$(echo "$result" | grep -oP '(?<=<Token>)[^<]+')
-    echo "成功获取 CNAME 令牌：$token"
-
-    echo "请在您的 DNS 服务商处添加以下 TXT 记录："
-    echo "记录名：$domain"
-    echo "记录值：$token"
-    echo "请在添加 TXT 记录后按回车键继续..."
-    read -r
-}
-
 oss_bind_domain() {
     local bucket_name=$1
     local domain=$2
@@ -504,49 +486,6 @@ oss_bind_domain() {
     fi
 
     echo "域名绑定和验证完成。"
-}
-
-generate_oss_signature() {
-    local method=$1
-    local bucket=$2
-    local resource=$3
-    local access_key_id=$4
-    local access_key_secret=$5
-    local date
-    date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
-    local host="${bucket}.oss-${region}.aliyuncs.com"
-
-    # Construct the canonical request
-    local canonical_headers="content-type:${content_type:-}\nhost:${host}\nx-oss-date:${date}\n"
-    local signed_headers="content-type;host;x-oss-date"
-    local canonical_resource="/${bucket}${resource}"
-    local canonical_request="${method}\n${canonical_resource}\n\n${canonical_headers}\n${signed_headers}\n"
-
-    # Calculate the hash of the canonical request
-    local hashed_canonical_request
-    hashed_canonical_request=$(echo -n "$canonical_request" | openssl dgst -sha256 -hex | sed 's/^.* //')
-
-    # Construct the string to sign
-    local string_to_sign="OSS4-HMAC-SHA256\n${date}\n${hashed_canonical_request}"
-
-    echo "Debug: String to sign: $string_to_sign" >&2
-
-    # Generate the signature
-    local signature
-    signature=$(echo -n "$string_to_sign" | openssl dgst -sha256 -hmac "$access_key_secret" -binary | base64)
-
-    echo "Debug: $access_key_id Generated signature: $signature" >&2
-    echo "$signature"
-}
-
-verify_domain_ownership() {
-    local bucket_name=$1
-    local domain=$2
-    local token=$3
-    echo "验证域名所有权："
-    local result
-    result=$(aliyun --profile "${profile:-}" ossutil put-cname-token --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" "$domain" "$token")
-    echo "$result"
 }
 
 generate_large_files_list() {
@@ -1155,7 +1094,7 @@ oss_set() {
         endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
         local result
         result=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}")
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ]; then
             echo "错误：无法获取 OSS 存储桶列表。" >&2
             return 1
@@ -1231,7 +1170,7 @@ public-read-write"
             endpoint_url="http://oss-${region:-cn-hangzhou}.aliyuncs.com"
             local result
             result=$(aliyun --profile "${profile:-}" ossutil set-acl --endpoint "$endpoint_url" --region "${region:-cn-hangzhou}" "oss://$bucket_name" --acl "$setting_value")
-            ret=$?
+            local ret=$?
             if [ $ret -eq 0 ]; then
                 echo "ACL 权限设置成功。"
                 echo "$result"

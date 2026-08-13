@@ -105,7 +105,7 @@ clb_list() {
 
     local result
     result=$(call_aliyun_api slb describe-load-balancers --biz-region-id "${region:-}" --api-version 2014-05-15)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取 CLB 实例列表。请检查您的凭证和权限。" >&2
         return 1
@@ -151,7 +151,7 @@ nlb_list() {
 
     local result
     result=$(call_aliyun_api nlb list-load-balancers --biz-region-id "${region:-}" --api-version 2022-04-30)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取 NLB 实例列表。请检查您的凭证和权限。" >&2
         return 1
@@ -179,7 +179,7 @@ alb_list() {
 
     local result
     result=$(call_aliyun_api alb list-load-balancers --biz-region-id "${region:-}" --api-version 2022-04-30)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取 ALB 实例列表。请检查您的凭证和权限。" >&2
         return 1
@@ -241,7 +241,7 @@ slb_create() {
             echo "正在获取可用的 CLB 规格..."
             local spec_result
             spec_result=$(call_aliyun_api slb describe-load-balancers --biz-region-id "${region:-}" --api-version 2014-05-15 2>/dev/null)
-            ret=$?
+            local ret=$?
             if [ $ret -eq 0 ] && [ -n "$spec_result" ]; then
                 spec_list="slb.s1.small
 slb.s1.medium
@@ -333,12 +333,20 @@ nlb_create() {
         return 1
     fi
 
+    # 获取交换机所属可用区（ZoneId 必填）
+    local zone_id
+    zone_id=$(call_aliyun_api vpc describe-vswitches --biz-region-id "${region:-}" --vswitch-id "$vswitch_id" 2>/dev/null | jq -r '.VSwitches.VSwitch[0].ZoneId // empty')
+    if [ -z "$zone_id" ]; then
+        echo "错误：无法获取交换机 $vswitch_id 的可用区。" >&2
+        return 1
+    fi
+
     echo "创建 NLB 实例："
     call_api_logged "nlb" "create" "错误：NLB 实例创建失败。" \
         -- nlb create-load-balancer --biz-region-id "${region:-}" --api-version 2022-04-30 \
         --load-balancer-name "$name" \
         --vpc-id "$vpc_id" \
-        --zone-mappings "[{\"VSwitchId\":\"$vswitch_id\",\"ZoneId\":\"${zone:-}\"}]" \
+        --zone-mappings "[{\"VSwitchId\":\"$vswitch_id\",\"ZoneId\":\"$zone_id\"}]" \
         --address-type Internet
 }
 
@@ -377,12 +385,22 @@ alb_create() {
         return 1
     fi
 
+    # 获取交换机所属可用区（ZoneId 必填）
+    local zone_id
+    zone_id=$(call_aliyun_api vpc describe-vswitches --biz-region-id "${region:-}" --vswitch-id "$vswitch_id" 2>/dev/null | jq -r '.VSwitches.VSwitch[0].ZoneId // empty')
+    if [ -z "$zone_id" ]; then
+        echo "错误：无法获取交换机 $vswitch_id 的可用区。" >&2
+        return 1
+    fi
+
     echo "创建 ALB 实例："
     call_api_logged "alb" "create" "错误：ALB 实例创建失败。" \
         -- alb create-load-balancer --biz-region-id "${region:-}" --api-version 2022-04-30 \
         --load-balancer-name "$name" \
+        --load-balancer-edition Standard \
+        --load-balancer-billing-config '{"PayType":"PostPay"}' \
         --vpc-id "$vpc_id" \
-        --zone-mappings "[{\"VSwitchId\":\"$vswitch_id\",\"ZoneId\":\"${zone:-}\"}]" \
+        --zone-mappings "[{\"VSwitchId\":\"$vswitch_id\",\"ZoneId\":\"$zone_id\"}]" \
         --address-type Internet
 }
 

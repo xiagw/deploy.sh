@@ -171,7 +171,7 @@ cas_create() {
         --name "$name" \
         --cert "$(cat "$cert_file")" \
         --key "$(cat "$key_file")")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "证书创建成功："
         echo "$result" | jq '.'
@@ -194,6 +194,7 @@ cas_create() {
     else
         echo "错误：证书创建失败。"
         echo "$result"
+        return 1
     fi
     log_result "${profile:-}" "${region:-}" "cas" "create" "$result"
 }
@@ -244,7 +245,7 @@ cas_batch_upload_deploy() {
     if [ ${#domains[@]} -eq 0 ]; then
         local cdn_result
         cdn_result=$(call_aliyun_api cdn describe-user-domains --api-version 2018-05-10 --region "${region:-}" 2>/dev/null)
-        ret=$?
+        local ret=$?
         if [ $ret -eq 0 ]; then
             readarray -t domains < <(echo "$cdn_result" |
                 jq -r '.Domains.PageData[].DomainName' |
@@ -320,7 +321,7 @@ cas_batch_upload_deploy() {
     echo "正在为CDN域名部署证书..."
     local cdn_result
     cdn_result=$(call_aliyun_api cdn describe-user-domains --api-version 2018-05-10 --region "${region:-}" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         local cdn_domains
         readarray -t cdn_domains < <(echo "$cdn_result" | jq -r '.Domains.PageData[].DomainName')

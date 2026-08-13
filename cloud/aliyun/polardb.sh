@@ -176,7 +176,7 @@ PostgreSQL"
                 --db-type "$db_type" \
                 --db-version "$db_version" \
                 --pay-type "Postpaid")
-            ret=$?
+            local ret=$?
             if [ $ret -eq 0 ] && [ -n "$class_result" ]; then
                 class_list=$(echo "$class_result" | jq -r '.Items[] | select(.ZoneId != null) | .SupportedDBNodeClasses[] | "\(.DBNodeClass)"' | sort -u)
 
@@ -323,6 +323,7 @@ polardb_account_create() {
     local result
     result=$(call_aliyun_api polardb create-account \
         --db-cluster-id "$cluster_id" \
+        --biz-region-id "${region:-}" \
         --account-name "$account_name" \
         --account-password "$password" \
         --account-description "$description" \
@@ -345,6 +346,7 @@ polardb_account_create() {
     else
         echo "错误：账号创建失败。"
         echo "$result"
+        return 1
     fi
     log_result "${profile:-}" "$region" "polardb" "account-create" "$result"
 }
@@ -386,7 +388,7 @@ polardb_account_list() {
     fi
 
     local result
-    result=$(call_aliyun_api polardb describe-accounts --db-cluster-id "$cluster_id")
+    result=$(call_aliyun_api polardb describe-accounts --db-cluster-id "$cluster_id" --biz-region-id "${region:-}")
 
     local table_header="账号名\t账号类型\t状态\t描述\t数据库\t权限\t权限详情"
     local jq_filter='.Accounts[] |
@@ -441,7 +443,7 @@ polardb_db_list() {
     fi
 
     local result
-    result=$(call_aliyun_api polardb describe-databases --db-cluster-id "$cluster_id")
+    result=$(call_aliyun_api polardb describe-databases --db-cluster-id "$cluster_id" --biz-region-id "${region:-}")
 
     local table_header="数据库名\t字符集\t状态\t描述"
     local jq_filter='.Databases.Database[] | [.DBName, .CharacterSetName, .DBStatus, .DBDescription] | @tsv'
@@ -587,8 +589,8 @@ polardb_ip_get() {
     echo "获取集群 $cluster_id 的IP白名单："
 
     local result
-    result=$(call_aliyun_api polardb describe-db-cluster-access-whitelist --db-cluster-id "$cluster_id")
-    ret=$?
+    result=$(call_aliyun_api polardb describe-db-cluster-access-whitelist --db-cluster-id "$cluster_id" --biz-region-id "${region:-}")
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取IP白名单信息。" >&2
         echo "$result"
@@ -626,8 +628,8 @@ polardb_ip_set() {
 
         # 显示当前IP白名单并让用户选择或输入新IP
         local current_whitelist
-        current_whitelist=$(call_aliyun_api polardb describe-db-cluster-access-whitelist --db-cluster-id "$cluster_id" 2>/dev/null)
-        ret=$?
+        current_whitelist=$(call_aliyun_api polardb describe-db-cluster-access-whitelist --db-cluster-id "$cluster_id" --biz-region-id "${region:-}" 2>/dev/null)
+        local ret=$?
         if [ $ret -eq 0 ] && [ -n "$current_whitelist" ]; then
             echo "当前集群的IP白名单："
             echo "$current_whitelist" | jq -r '.Items.DBClusterIPArray[]? | select(. != null) | "\(.DBClusterIPArrayName // "N/A")  \(.SecurityIps // "N/A")"' |
@@ -741,8 +743,8 @@ polardb_ip_set() {
         params+=(--db-cluster-ip-array-name "$ip_array_name")
     fi
 
-    result=$(call_aliyun_api polardb modify-db-cluster-access-whitelist "${params[@]}")
-    ret=$?
+    result=$(call_aliyun_api polardb modify-db-cluster-access-whitelist --biz-region-id "${region:-}" "${params[@]}")
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：设置IP白名单失败。" >&2
         echo "$result"
@@ -783,11 +785,12 @@ polardb_ip_append() {
 
     local result
     result=$(call_aliyun_api polardb modify-db-cluster-access-whitelist \
+        --biz-region-id "${region:-}" \
         --db-cluster-id "$cluster_id" \
         --security-ips "$ips" \
         --modify-mode "Append" \
        )
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：追加IP白名单失败。" >&2
         echo "$result"
@@ -815,11 +818,12 @@ polardb_ip_clear() {
     local result
     # 将IP白名单设置为本地localhost以保留基本访问能力
     result=$(call_aliyun_api polardb modify-db-cluster-access-whitelist \
+        --biz-region-id "${region:-}" \
         --db-cluster-id "$cluster_id" \
         --security-ips "127.0.0.1" \
         --modify-mode "Cover" \
        )
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：清空IP白名单失败。" >&2
         echo "$result"
@@ -856,7 +860,7 @@ _polardb_backup_time_range() {
 polardb_backup_list() {
     local cluster_id
     cluster_id=$(_polardb_resolve_cluster_id "$1" "选择要查看备份的 PolarDB 集群")
-    ret=$?
+    local ret=$?
     [ $ret -ne 0 ] && return 1
     local format=${2:-human}
 
@@ -867,12 +871,13 @@ polardb_backup_list() {
 
     local result
     result=$(call_aliyun_api polardb describe-backups \
+        --biz-region-id "${region:-}" \
         --db-cluster-id "$cluster_id" \
         --start-time "$start_time" \
         --end-time "$end_time" \
         --page-size 50 \
         --page-number 1)
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取备份列表。" >&2
         echo "$result" >&2
@@ -896,7 +901,7 @@ polardb_backup_list() {
 polardb_backup_delete() {
     local cluster_id
     cluster_id=$(_polardb_resolve_cluster_id "$1" "选择要清理备份的 PolarDB 集群")
-    ret=$?
+    local ret=$?
     [ $ret -ne 0 ] && return 1
     local backup_id=$2
 

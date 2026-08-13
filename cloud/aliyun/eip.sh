@@ -53,7 +53,7 @@ eip_list() {
 
     local result
     result=$(call_aliyun_api vpc describe-eip-addresses --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         format_output "$result" "$format" "eip" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 EIP。" "列出 EIP："
     else
@@ -73,7 +73,7 @@ eip_create() {
         echo "正在获取可用的 EIP 带宽选项..."
         local bandwidth_result bandwidth_list
         bandwidth_result=$(call_aliyun_api vpc describe-common-bandwidth-packages --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
-        ret=$?
+        local ret=$?
         if [ $ret -eq 0 ] && [ -n "$bandwidth_result" ]; then
             bandwidth_list="1
 2
@@ -127,7 +127,7 @@ eip_create() {
 
     generic_create \
         "vpc" \
-        "AllocateEipAddress" \
+        "allocate-eip-address" \
         "eip" \
         "EIP-${bandwidth}Mbps" \
         "${api_args[@]}"
@@ -154,7 +154,7 @@ eip_update() {
             echo "正在获取可用的 EIP 带宽选项..."
             local bandwidth_result bandwidth_list
             bandwidth_result=$(call_aliyun_api vpc describe-common-bandwidth-packages --biz-region-id "${region:-}" --region "${region:-}" 2>/dev/null)
-            ret=$?
+            local ret=$?
             if [ $ret -eq 0 ] && [ -n "$bandwidth_result" ]; then
                 bandwidth_list="1
 2
@@ -257,14 +257,31 @@ eip_delete() {
         local unbind_result
         unbind_result=$(call_aliyun_api vpc unassociate-eip-address --biz-region-id "${region:-}" --region "${region:-}" \
             --allocation-id "$eip_id")
-        ret=$?
-        if [ $ret -eq 0 ]; then
-            echo "$unbind_result" | jq '.'
-            log_result "${profile:-}" "$region" "eip" "unbind" "$unbind_result"
-            echo "等待解绑完成（10秒）..."
-            sleep 10
-        else
-            echo "警告：解绑失败，但将继续尝试删除。" >&2
+        local ret=$?
+        if [ $ret -ne 0 ]; then
+            echo "错误：解绑失败，无法删除 EIP。" >&2
+            echo "$unbind_result" >&2
+            return 1
+        fi
+        echo "$unbind_result" | jq '.'
+        log_result "${profile:-}" "$region" "eip" "unbind" "$unbind_result"
+
+        # 轮询等待解绑完成（状态变为 Available），最长 60 秒
+        echo "等待解绑完成..."
+        local unbind_status=""
+        for _ in {1..12}; do
+            sleep 5
+            unbind_status=$(call_aliyun_api vpc describe-eip-addresses --biz-region-id "${region:-}" --region "${region:-}" \
+                --allocation-id "$eip_id" 2>/dev/null | jq -r '.EipAddresses.EipAddress[0].Status // "未知"')
+            if [ "$unbind_status" = "Available" ]; then
+                echo "解绑完成。"
+                break
+            fi
+            echo "当前状态: $unbind_status"
+        done
+        if [ "$unbind_status" != "Available" ]; then
+            echo "错误：等待解绑超时（当前状态: $unbind_status）。" >&2
+            return 1
         fi
     fi
 

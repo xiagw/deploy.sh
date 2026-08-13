@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2034
+# shellcheck disable=SC2034,SC2016
 # -*- coding: utf-8 -*-
 
 # ACK (容器服务 Kubernetes 版) 相关函数 - 使用新框架重构
@@ -78,7 +78,7 @@ ack_list() {
 
     local result
     result=$(call_aliyun_api cs GET /clusters --region "${region:-}")
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取集群列表。请检查您的凭证和权限。" >&2
         return 1
@@ -211,15 +211,20 @@ ack_create() {
                 is_enterprise_security_group: true,
                 cloud_monitor_flags: 1
             }')")
-    ret=$?
+    local ret=$?
 
     if [ $ret -eq 0 ]; then
         echo "ACK 集群创建请求已提交："
         echo "$result" | jq '.'
 
-        # 获取集群ID
+        # 获取集群ID（CreateCluster 响应字段为 snake_case 的 cluster_id）
         local cluster_id
-        cluster_id=$(echo "$result" | jq -r '.ClusterId')
+        cluster_id=$(echo "$result" | jq -r '.cluster_id // empty')
+        if [ -z "$cluster_id" ]; then
+            echo "错误：集群创建请求已提交，但响应中未包含 cluster_id。" >&2
+            echo "$result" >&2
+            return 1
+        fi
 
         echo "等待集群创建完成..."
         local max_wait_time=1800 # 30分钟
@@ -238,16 +243,27 @@ ack_create() {
 
             local status
             status=$(call_aliyun_api cs GET "/clusters/$cluster_id" \
-                --region "$region" 2>/dev/null | jq -r '.state')
+                --region "$region" 2>/dev/null | jq -r '.state // empty')
 
-            echo "集群状态: $status"
-            if [ "$status" = "running" ]; then
+            echo "集群状态: ${status:-未知}"
+            case "$status" in
+            running)
                 echo "集群创建成功！"
                 break
-            elif [ "$status" = "failed" ]; then
-                echo "错误：集群创建失败。"
+                ;;
+            initial)
+                # 仍在创建中，继续等待
+                ;;
+            "")
+                echo "错误：无法获取集群状态。" >&2
                 break
-            fi
+                ;;
+            *)
+                # failed/inactive/unavailable/updating/deleting/delete_failed 等终态
+                echo "错误：集群进入终态 $status，创建失败。请在控制台检查集群状态。"
+                break
+                ;;
+            esac
 
             sleep 30
         done
@@ -346,7 +362,7 @@ ack_detail() {
 
     local result
     result=$(call_aliyun_api cs GET "/clusters/$cluster_id" --region "$region")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         case "$format" in
         json)
@@ -395,7 +411,7 @@ ack_node_list() {
 
     local result
     result=$(call_aliyun_api cs GET "/clusters/$cluster_id/nodes" --region "$region")
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取节点列表。" >&2
         return 1
@@ -413,7 +429,7 @@ ack_node_list() {
         "列出集群节点："
 }
 
-# 添加节点（使用框架函数）
+# 添加节点（扩容节点池；原 POST /clusters/{id}/nodes 实为 DeleteClusterNodes，语义错位已废弃）
 ack_node_add() {
     local cluster_id=$1
     local count=${2:-1}
@@ -431,18 +447,45 @@ ack_node_add() {
         return 1
     fi
 
-    echo "添加集群节点："
+    # 校验数量
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        echo "错误：节点数量必须是数字。" >&2
+        return 1
+    fi
+
+    # 获取节点池列表
+    local pools
+    pools=$(call_aliyun_api cs GET "/clusters/$cluster_id/nodepools" --region "${region:-}")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：无法获取节点池列表。" >&2
+        echo "$pools" >&2
+        return 1
+    fi
+
+    # 优先选择默认节点池，否则取第一个
+    local nodepool_id
+    nodepool_id=$(echo "$pools" | jq -r '.nodepools[]? | select(.nodepool_info.is_default == true) | .nodepool_info.nodepool_id' | head -1)
+    if [ -z "$nodepool_id" ]; then
+        nodepool_id=$(echo "$pools" | jq -r '.nodepools[0].nodepool_info.nodepool_id // empty')
+    fi
+    if [ -z "$nodepool_id" ]; then
+        echo "错误：集群没有可用节点池，无法扩容。" >&2
+        return 1
+    fi
+
+    echo "扩容集群节点池：$nodepool_id 增加 $count 个节点"
     local result
-    result=$(call_aliyun_api cs POST "/clusters/$cluster_id/nodes" \
-        --region "$region" \
+    result=$(call_aliyun_api cs POST "/clusters/$cluster_id/nodepools/$nodepool_id" \
+        --region "${region:-}" \
         --body "$(jq -nc --argjson count "$count" '{count: $count}')")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
-        echo "节点添加请求已提交："
+        echo "节点扩容请求已提交："
         echo "$result" | jq '.'
         log_result "${profile:-}" "$region" "ack" "add-node" "$result"
     else
-        echo "错误：节点添加请求失败。"
+        echo "错误：节点扩容请求失败。"
         echo "$result"
         return 1
     fi
@@ -464,7 +507,7 @@ ack_node_remove() {
     if [ -z "$node_id" ]; then
         local node_result node_candidates raw_node
         node_result=$(call_aliyun_api cs GET "/clusters/$cluster_id/nodes" --region "$region" 2>/dev/null)
-        ret=$?
+        local ret=$?
         if [ $ret -ne 0 ]; then
             echo "错误：无法获取节点列表。" >&2
             return 1
@@ -487,7 +530,7 @@ ack_node_remove() {
     result=$(call_aliyun_api cs DELETE "/clusters/$cluster_id/nodes" \
         --region "$region" \
         --body "$(jq -nc --arg node_id "$node_id" '{nodes: [$node_id], release_node: true}')")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "节点移除请求已提交："
         echo "$result" | jq '.'
@@ -515,7 +558,7 @@ ack_get_kubeconfig() {
     result=$(call_aliyun_api cs GET "/k8s/$cluster_id/user_config" \
         --region "$region" \
         --private_ip_address "$private")
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         echo "$result" | jq -r '.config'
         log_result "${profile:-}" "$region" "ack" "kubeconfig" "$result"

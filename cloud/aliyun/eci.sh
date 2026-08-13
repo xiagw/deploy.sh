@@ -53,7 +53,7 @@ eci_list() {
 
     local result
     result=$(call_aliyun_api eci DescribeContainerGroups --RegionId "${region:-}" 2>/dev/null)
-    ret=$?
+    local ret=$?
     if [ $ret -eq 0 ]; then
         format_output "$result" "$format" "eci" "list" "$table_header" "$jq_filter" "$status_mapper" "没有找到 ECI 实例。" "列出 ECI 实例："
     else
@@ -112,7 +112,7 @@ eci_delete() {
 
     local instance_info
     instance_info=$(call_aliyun_api eci DescribeContainerGroups --ContainerGroupIds "[\"$instance_id\"]" --RegionId "$region" 2>/dev/null)
-    ret=$?
+    local ret=$?
     local instance_name="未知"
     if [ $ret -eq 0 ]; then
         instance_name=$(echo "$instance_info" | jq -r '.ContainerGroups[0].ContainerGroupName // "未知"')
