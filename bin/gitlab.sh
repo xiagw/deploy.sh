@@ -303,7 +303,7 @@ check_large_repos() {
         return 1
     }
 
-    _msg time "Check repositories larger than ${size_threshold}MB (profile: ${gitlab_profile:-default}):" | tee -a "$ME_LOG"
+    _msg task "Check repositories larger than ${size_threshold}MB (profile: ${gitlab_profile:-default}):" | tee -a "$ME_LOG"
 
     # Get all project IDs directly with jq and process through stdin
     while read -r id; do
@@ -322,7 +322,7 @@ check_large_repos() {
         echo "repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB, ${id} https://git.flyh5.cn/${path}" | tee -a "$ME_LOG"
     done < <($cmd_gitlab project list --get-all | jq -r '.[].id')
 
-    _msg time "Results saved to $ME_LOG"
+    _msg task "Results saved to $ME_LOG"
 }
 
 # GitLab API 请求函数

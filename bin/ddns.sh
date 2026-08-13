@@ -41,8 +41,8 @@ get_config() {
 get_saved_ip() {
     ip4_last=$(awk 'END {print $4}' "$G_LOG")
     ip6_last=$(awk 'END {print $6}' "$G_LOG")
-    _msg yellow "get old IPv4 from log file: $ip4_last"
-    _msg yellow "get old IPv6 from log file: $ip6_last"
+    _msg warn "get old IPv4 from log file: $ip4_last"
+    _msg warn "get old IPv6 from log file: $ip6_last"
 }
 
 # address with netmask

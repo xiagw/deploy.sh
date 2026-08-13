@@ -8,28 +8,39 @@
 test_unit() {
     local test_scripts=("$G_REPO_DIR/tests/unit_test.sh" "$G_DATA/tests/unit_test.sh")
 
+    if ${G_DRY_RUN:-false}; then
+        dry_run_note "run unit tests: bash ${test_scripts[0]}"
+        return 0
+    fi
+
     for test_script in "${test_scripts[@]}"; do
         [[ -f "$test_script" ]] || continue
         echo "Executing unit test script: $test_script"
         if bash "$test_script"; then
-            _msg green "Unit tests passed successfully"
+            _msg ok "Unit tests passed successfully"
+            return 0
         else
             _msg error "Unit tests failed"
+            return 1
         fi
-        return
     done
 
-    _msg purple "No unit test script found. Skipping unit tests."
+    _msg note "No unit test script found. Skipping unit tests."
 }
 
 test_function() {
     local test_scripts=("$G_REPO_DIR/tests/func_test.sh" "$G_DATA/tests/func_test.sh")
 
+    if ${G_DRY_RUN:-false}; then
+        dry_run_note "run functional tests: bash ${test_scripts[0]}"
+        return 0
+    fi
+
     for test_script in "${test_scripts[@]}"; do
         [[ -f "$test_script" ]] || continue
         echo "Executing functional test script: $test_script"
         if bash "$test_script"; then
-            _msg green "Functional tests passed successfully"
+            _msg ok "Functional tests passed successfully"
             return 0
         else
             _msg error "Functional tests failed"
@@ -37,44 +48,45 @@ test_function() {
         fi
     done
 
-    _msg purple "No functional test script found. Skipping functional tests."
+    _msg note "No functional test script found. Skipping functional tests."
 }
 
 handle_test() {
-    local test_type="${1:-false}" test_arg="${2:-false}" test_result=0
+    local test_type="${1:-false}" test_arg="${2:-false}"
+    G_TEST_RESULT=0
 
     case "$test_type" in
     "unit")
-        _msg step "[unit-test] Running unit tests"
-        ## 在 gitlab 的 pipeline 配置环境变量 PP_UNIT_TEST ，true 启用，false 禁用[default]
-        echo "PP_UNIT_TEST: ${PP_UNIT_TEST:-false}"
-        if ${test_arg:-false} || ${PP_UNIT_TEST:-false}; then
+        _msg task "[unit-test] Running unit tests"
+        ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，true 启用，false 禁用[default]
+        [[ "${PIPELINE_UNIT_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_UNIT_TEST=false)"
+        if ${test_arg:-false} || ${PIPELINE_UNIT_TEST:-false}; then
             if test_unit; then
-                _msg green "Unit tests completed successfully"
+                _msg ok "Unit tests completed successfully"
             else
-                test_result=1
+                G_TEST_RESULT=1
                 _msg error "Unit tests failed"
             fi
         fi
         ;;
     "func")
-        _msg step "[test] Running functional tests"
-        ## 在 gitlab 的 pipeline 配置环境变量 PP_FUNCTION_TEST ，true 启用，false 禁用[default]
-        echo "PP_FUNCTION_TEST: ${PP_FUNCTION_TEST:-false}"
-        if ${test_arg:-false} || ${PP_FUNCTION_TEST:-false}; then
+        _msg task "[test] Running functional tests"
+        ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，true 启用，false 禁用[default]
+        [[ "${PIPELINE_FUNCTION_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_FUNCTION_TEST=false)"
+        if ${test_arg:-false} || ${PIPELINE_FUNCTION_TEST:-false}; then
             if test_function; then
-                _msg green "Functional tests completed successfully"
+                _msg ok "Functional tests completed successfully"
             else
-                test_result=1
+                G_TEST_RESULT=1
                 _msg error "Functional tests failed"
             fi
         fi
         ;;
     *)
         _msg error "Invalid test type: $test_type"
-        test_result=1
+        G_TEST_RESULT=1
         ;;
     esac
 
-    return "$test_result"
+    return "$G_TEST_RESULT"
 }

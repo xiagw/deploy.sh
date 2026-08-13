@@ -6,7 +6,7 @@
 # @param $1 G_DATA Directory containing data files
 # @return 0 on success, non-zero on failure
 repo_inject_file() {
-    local lang arg_disable_inject="${1:-false}"
+    local lang detected_lang arg_disable_inject="${1:-false}"
 
     ## ========================================================================
     ## 项目语言探测
@@ -14,12 +14,20 @@ repo_inject_file() {
     ## 返回固定三段式: "lang:ver:docker_flag"，字段缺失时留空
     ## (例如: "java:17:docker", "node::docker", "unknown::")
     ## ========================================================================
-    get_lang=$(repo_language_detect) # 完整语言标识: lang:ver:docker
-    lang=${get_lang%%:*}        # 仅语言类型: lang
+    detected_lang=$(detect_repo_language) # 完整语言标识: lang:ver:docker
+    lang=${detected_lang%%:*}        # 仅语言类型: lang
+
+    ## dry-run: 只展示注入计划，不写仓库（Dockerfile/root/.dockerignore 均跳过）
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] repo_inject_file (lang=${lang}):"
+        _msg note "  rsync inject/${G_REPO_NAME}/${G_NAMESPACE:-} -> ${G_REPO_DIR}"
+        _msg note "  generate Dockerfile / root/ / .dockerignore if missing"
+        return 0
+    fi
 
     command -v rsync >/dev/null || _install_packages rsync
 
-    _msg step "[inject] Initializing file injection"
+    _msg task "[inject] Initializing file injection"
 
     # Define paths for injection
     ## Priority 1: ${G_DATA} paths
@@ -51,7 +59,7 @@ repo_inject_file() {
     ## 存在 dockerfile 则跳过
     ## 不存在 dockerfile， 按照lang不同分开处理
     if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
-        _msg info "Found existing Dockerfile, skipping injection."
+        _msg note "Found existing Dockerfile, skipping injection."
         return 0
     fi
     local _single="${G_PATH}/conf/Dockerfile.single"
@@ -62,6 +70,7 @@ repo_inject_file() {
         ## 先判断 package.json 文件是否变动，有则生成 dockerfile.base（生成 base image 提高效率）
         ## 用 Dockerfile.single 作为 base image，再生成只含 FROM 的 Dockerfile
         echo "Checking package.json hash..."
+        local hash_now hash_saved base_tag
         hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
         mkdir -p "${G_DATA}/cache"
         hash_saved="$(cat "${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
@@ -94,6 +103,10 @@ repo_inject_file() {
         cp -f "${G_PATH}/conf/.dockerignore" "${G_REPO_DIR}/"
     fi
 
+    ## 注入可能改变了仓库（新增 Dockerfile/Dockerfile.base），使语言缓存失效，
+    ## 让后续 detect_repo_language 重新探测
+    unset G_REPO_LANG_CACHE G_REPO_LANG_CACHE_DIR
+
     ## 2. Dockerfile 所需 root/ 目录结构注入
     local conf_root="${G_PATH}/conf/root" repo_root="${G_REPO_DIR}/root"
     local rsync_opts="rsync -r --exclude=*.cnf"
@@ -115,7 +128,7 @@ repo_inject_file() {
 # Uses various project files to determine the language
 # Sets:
 #   lang_type: The detected programming language
-repo_language_detect() {
+detect_repo_language() {
     local lang_files=(
         "pom.xml" "build.gradle" "gradle.build" # Java
         "composer.json"                         # PHP
@@ -129,6 +142,13 @@ repo_language_detect() {
         "README.md" "readme.md" "README.txt" "readme.txt"
     )
     local file lang_type version
+
+    ## 结果缓存: 同一次运行内 detect 被调用 3+ 次（repo_inject / build_all / style_check），
+    ## 每次全仓 find 开销大；缓存到 G_REPO_LANG_CACHE 避免重复扫描。
+    if [[ -n "${G_REPO_LANG_CACHE:-}" && "${G_REPO_LANG_CACHE_DIR:-}" == "$G_REPO_DIR" ]]; then
+        echo "${G_REPO_LANG_CACHE}"
+        return 0
+    fi
 
     # 首先检查特定的项目文件
     for file in "${lang_files[@]}"; do
@@ -210,7 +230,7 @@ repo_language_detect() {
             ;;
         *.csproj)
             lang_type="dotnet"
-            version=$(grep -oP '(?<=TargetFramework>net)[^<]+' "${G_REPO_DIR}/${file}" 2>/dev/null)
+            version=$(grep -oE 'TargetFramework>net[^<]+' "${G_REPO_DIR}/${file}" 2>/dev/null | sed 's/.*>net//' | head -n 1)
             ;;
         Gemfile | *.gemspec)
             lang_type="ruby"
@@ -260,15 +280,18 @@ repo_language_detect() {
     done
 
     echo "${lang_type}:${version}:${docker_flag}"
+    ## 写入缓存（下次同 G_REPO_DIR 命中直接返回）
+    G_REPO_LANG_CACHE="${lang_type}:${version}:${docker_flag}"
+    G_REPO_LANG_CACHE_DIR="$G_REPO_DIR"
 }
 
 # Export the function
-# export -f repo_language_detect
+# export -f detect_repo_language
 
 # Detect repository languages using Docker and GitHub Linguist
 # Uses crazymax/linguist Docker image, fallback: "ghcr.io/crazy-max/linguist:latest"
 # @return String containing detected languages and their percentages
-repo_language_detect_docker() {
+detect_repo_language_docker() {
     local target_dir="${1:-.}" format="${2:-}" docker_image="crazymax/linguist:latest"
 
     # Run linguist in Docker container
@@ -286,7 +309,7 @@ repo_language_detect_docker() {
 }
 
 # Export the function
-# export -f repo_language_detect_docker
+# export -f detect_repo_language_docker
 
 # Version Control System Module
 # Handles operations for different version control systems:
@@ -357,14 +380,14 @@ setup_git_repo() {
     [ -d "${git_repo_dir}" ] || mkdir -p "$git_repo_dir"
 
     if [ -d "${git_repo_dir}/.git" ] && cd "$git_repo_dir" && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ "$(git rev-parse --git-dir)" = ".git" ]; then
-        _msg step "[repo] Updating existing repo: "
+        _msg task "[repo] Updating existing repo: "
         echo "  $git_repo_dir, branch: ${git_repo_branch}"
         git clean -fxd
         git fetch --quiet
         git checkout --quiet "${git_repo_branch}"
         git pull --quiet
     else
-        _msg step "[repo] Cloning git repo:"
+        _msg task "[repo] Cloning git repo:"
         echo "  $git_repo_url, branch: ${git_repo_branch}"
         git clone --quiet --depth 1 -b "${git_repo_branch}" "$git_repo_url" "$git_repo_dir" || {
             _msg error "Failed to clone git repo: $git_repo_url"
@@ -372,6 +395,46 @@ setup_git_repo() {
         }
         cd "$git_repo_dir" || return 1
     fi
+}
+
+# Switch an existing workspace repo to a target branch
+# Local changes are discarded by default (git clean -fxd), same as setup_git_repo.
+# - branch exists (local/remote): fetch + checkout + pull
+# - branch missing: create from the default branch (origin/HEAD, fallback main)
+# @param $1 branch name
+# @param $2 workspace dir
+setup_git_branch() {
+    local git_repo_branch="$1" git_repo_dir="$2" default_branch
+    command -v git >/dev/null || _install_packages git
+    [ -n "$git_repo_branch" ] || return 0
+    [ -n "$git_repo_dir" ] || return 0
+
+    if ! git -C "$git_repo_dir" rev-parse --git-dir >/dev/null 2>&1; then
+        _msg error "[repo] not a git repo: $git_repo_dir"
+        return 1
+    fi
+
+    _msg task "[repo] Switch workspace repo to branch: $git_repo_branch"
+    _msg note "[repo] discarding local changes in $git_repo_dir"
+    git -C "$git_repo_dir" reset --hard HEAD
+    git -C "$git_repo_dir" clean -fxd
+    git -C "$git_repo_dir" fetch --quiet
+
+    if git -C "$git_repo_dir" rev-parse --quiet --verify "refs/heads/${git_repo_branch}" >/dev/null ||
+        git -C "$git_repo_dir" rev-parse --quiet --verify "refs/remotes/origin/${git_repo_branch}" >/dev/null; then
+        git -C "$git_repo_dir" checkout --quiet "$git_repo_branch"
+        git -C "$git_repo_dir" pull --quiet
+    else
+        default_branch=$(git -C "$git_repo_dir" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)
+        default_branch=${default_branch#refs/remotes/origin/}
+        [ -z "$default_branch" ] && default_branch=main
+        _msg note "[repo] branch $git_repo_branch not found, creating from $default_branch"
+        git -C "$git_repo_dir" checkout --quiet -b "$git_repo_branch" "origin/${default_branch}"
+        git -C "$git_repo_dir" push --quiet -u origin "$git_repo_branch" || {
+            _msg warn "[repo] failed to push new branch $git_repo_branch upstream"
+        }
+    fi
+    _msg ok "[repo] $git_repo_dir @ $git_repo_branch"
 }
 
 get_git_branch() {
@@ -422,13 +485,13 @@ setup_svn_repo() {
 
     command -v svn >/dev/null || _install_packages subversion
     if [ -d "$svn_repo_dir/.svn" ]; then
-        _msg step "[repo] Updating existing repo: $svn_repo_dir"
+        _msg task "[repo] Updating existing repo: $svn_repo_dir"
         (cd "$svn_repo_dir" && svn update) || {
             _msg error "Failed to update svn repo: $svn_repo_url"
             return 1
         }
     else
-        _msg step "[repo] Checking out new repo: $svn_repo_url"
+        _msg task "[repo] Checking out new repo: $svn_repo_url"
         svn checkout "$svn_repo_url" "$svn_repo_dir" || {
             _msg error "Failed to checkout svn repo: $svn_repo_url"
             return 1

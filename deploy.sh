@@ -113,7 +113,7 @@ config_deploy_vars() {
     fi
     ## 处理定时任务执行
     ## 如果通过 crontab 执行，检查是否应该跳过本次执行（避免重复执行）
-    if ${run_with_crontab:-false}; then
+    if ${arg_cron:-false}; then
         check_crontab_execution "$G_DATA" "$CI_PROJECT_ID" "$G_REPO_SHORT_SHA" || exit 0
     fi
 }
@@ -133,26 +133,34 @@ Parameters:
     -v, --version            Show version info.
     -d, --debug              Run in debug mode.
     -l, --loop                 Run as a cron job.
-    --dry                    Preview mode: generate config and exit without executing.
+    --dry                      Preview mode: show all commands that would run, execute nothing.
 
     # Repository operations
     -w, --workspace DIR        Specify workspace directory (default: current directory).
-    -g, --git-clone URL          Clone git repo URL to builds/REPO_NAME.
-    -b, --git-branch NAME  Specify git branch (default: main).
-    -s, --svn-checkout URL       Checkout SVN repository.
+    -g, --git-clone URL        Clone git repo URL to builds/REPO_NAME.
+    -b, --git-branch NAME      Specify git branch (default: main).
+                               With -g: clone this branch. With -w: switch the
+                               workspace to this branch (create from main if missing).
+    -s, --svn-checkout URL     Checkout SVN repository.
 
     # Build operations
-    -B, --build [push|keep]       Build project (push: push to registry, keep: keep image locally).
-    --buildx-mode MODE            Select buildx builder mode: remote|context|kubernetes|auto.
-    -x, --build-base              Execute function build_base_image; append --dry for preview mode.
+    -B, --build [push|keep|remove]  Build project. Default: remove (build local, don't push).
+                                push: push to registry afterwards. keep: keep image locally.
+                                Override via ENV_IMAGE_RETAIN (push|keep|remove).
+    --buildx-mode MODE          Select buildx builder mode: remote|context|kubernetes|auto.
+    -x, --build-base            Execute function build_base_image; append --dry for preview mode.
+    --gen-dockerfile            Generate Dockerfile.<lang> from detected language.
+    --build-buildpacks          Build image with Cloud Native Buildpacks (needs pack CLI).
 
     # Deployment
     -k, --deploy-k8s             Deploy to Kubernetes.
     -f, --deploy-functions       Deploy to Aliyun Functions.
+    -o, --deploy-docker          Deploy with Docker Compose (rsync files + compose up over SSH).
+    -O, --deploy-oss             Deploy to Aliyun OSS (source/dest from project config or ENV_OSS_*).
     -R, --deploy-rsync-ssh       Deploy using rsync over SSH.
-    -y, --deploy-rsync           Deploy to rsync server.
-    -F, --deploy-ftp             Deploy to FTP server.
-    -S, --deploy-sftp            Deploy to SFTP server.
+    -y, --deploy-rsync           Deploy to rsync server (needs ENV_RSYNC_* or rsyncd.conf).
+    -F, --deploy-ftp             Deploy to FTP server (needs ENV_FTP_*).
+    -S, --deploy-sftp            Deploy to SFTP server (project hosts or ENV_SFTP_*).
 
     # Testing and quality
     -u, --test-unit              Run unit tests.
@@ -165,20 +173,20 @@ Parameters:
     # Kubernetes operations
     -H, --create-helm DIR        Create Helm chart in specified directory.
     -K, --create-k8s             Create K8s cluster with Terraform.
-    -P, --kube-pvc NAME             Create PVC with specified name.
+    -P, --kube-pvc NAME          Create PVC with specified name.
+    --create-storage-class       Create CNFS NAS storage class resources (needs ENV_NAS_URL).
 
     # Miscellaneous
     -D, --disable-inject         Disable file injection.
     -r, --renew-cert            Renew all the certs.
     --clean-tags REPO           Clean old tags from Docker registry.
                                REPO: Repository to clean (e.g., registry.example.com/myapp)
-    -c, --copy-image SRC [DEST] [KEEP]  Copy Docker image from source to target registry.
+    -c, --copy-image SRC [DEST]     Copy Docker image from source to target registry.
                             SRC: Source image (e.g., nginx:latest)
-                            DEST: Target registry (e.g., registry.example.com/ns)
-                            KEEP: Keep original tag format (true/false, default: true)
+                            DEST: Target registry (e.g., registry.example.com/ns).
+                                 Target must not already exist.
                             Examples:
                               -c nginx:latest registry.example.com/ns
-                              -c nginx:latest registry.example.com/ns false
 
     # Environment configuration
     set KEY=VALUE [KEY2=VALUE2 ...]  Set variable(s) in deploy.env.
@@ -197,7 +205,7 @@ EOF
 # 全局变量:
 #   - arg_flags: 关联数组，存储各个功能的启用标志（0=禁用, 1=启用）
 #   - G_DEBUG_ON: 调试模式标志
-#   - run_with_crontab: 定时任务执行标志
+#   - arg_cron: 定时任务执行标志
 #   - arg_*: 各种命令行参数的值
 #   - all_zero: 如果所有标志都为0，则设置为true（表示自动模式）
 ################################################################################
@@ -208,8 +216,9 @@ parse_command_args() {
         -h | --help) _usage && exit 0 ;;
         -v | --version) echo "Version: 5.0.0" && exit 0 ;;
         -d | --debug) G_DEBUG_ON=true && set -x ;;
-        -l | --cron | --loop) run_with_crontab=true ;;
-        --dry) export DRY_RUN=true ;;
+        -l | --cron | --loop) arg_cron=true ;;
+        --dry) export G_DRY_RUN=true ;;
+        -L | --lang) export G_MSG_LANG="${2:?usage: zh or en}" && shift ;;
         # Repository operations
         -w | --workspace) arg_workspace="${2:?empty workspace dir}" && shift ;;
         -g | --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
@@ -219,28 +228,30 @@ parse_command_args() {
         -x | --build-base) arg_flags["build_base"]=1 ;;
         -B | --build)
             arg_flags["build_all"]=1
-            image_retain="${2:-remove}"
+            arg_image_retain="${2:-remove}"
             [[ -z "$2" ]] || shift
             ;;
         --buildx-mode)
             arg_buildx_mode="${2:?empty buildx mode}"
             shift
             ;;
+        --gen-dockerfile) arg_gen_dockerfile=true ;;
+        --build-buildpacks) arg_build_buildpacks=true ;;
         # Deployment
-        -k | --deploy-k8s) arg_flags["deploy_k8s"]=1 deploy_method=deploy_k8s ;;
-        -f | --deploy-functions) arg_flags["deploy_aliyun_func"]=1 deploy_method=deploy_aliyun_func ;;
-        -R | --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 deploy_method=deploy_rsync_ssh ;;
-        -y | --deploy-rsync) arg_flags["deploy_rsync"]=1 deploy_method=deploy_rsync ;;
-        -F | --deploy-ftp) arg_flags["deploy_ftp"]=1 deploy_method=deploy_ftp ;;
-        -S | --deploy-sftp) arg_flags["deploy_sftp"]=1 deploy_method=deploy_sftp ;;
+        -k | --deploy-k8s) arg_flags["deploy_k8s"]=1 ;;
+        -f | --deploy-functions) arg_flags["deploy_aliyun_func"]=1 ;;
+        -o | --deploy-docker) arg_flags["deploy_docker"]=1 ;;
+        -O | --deploy-oss) arg_flags["deploy_aliyun_oss"]=1 ;;
+        -R | --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 ;;
+        -y | --deploy-rsync) arg_flags["deploy_rsync"]=1 ;;
+        -F | --deploy-ftp) arg_flags["deploy_ftp"]=1 ;;
+        -S | --deploy-sftp) arg_flags["deploy_sftp"]=1 ;;
         -c | --copy-image)
             arg_flags["copy_image"]=1
             arg_src="${2:?ERROR: example: nginx:stable-alpine}"
             arg_target="${3}"
-            arg_keep_tag="${4}"
             [ -z "$arg_src" ] || shift
             [ -z "$arg_target" ] || shift
-            [ -z "$arg_keep_tag" ] || shift
             ;;
         # Testing and quality
         -u | --test-unit) arg_flags["test_unit"]=1 ;;
@@ -250,9 +261,19 @@ parse_command_args() {
         -z | --security-zap) arg_flags["security_zap"]=1 ;;
         -m | --security-vulmap) arg_flags["security_vulmap"]=1 ;;
         # Kubernetes operations
-        -H | --create-helm) arg_create_helm=true && helm_dir="$2" && shift ;;
+        -H | --create-helm) arg_create_helm=true && arg_helm_dir="$2" && shift ;;
         -K | --create-k8s) create_k8s_with_terraform=true ;;
-        -P | --kube-pvc) arg_flags["kube_pvc"]=1 sub_path_name="${2:? pvc name required}" namespace="${3:-$G_NAMESPACE}" && shift 2 ;;
+        -P | --kube-pvc)
+            arg_flags["kube_pvc"]=1
+            arg_sub_path="${2:? pvc name required}"
+            if [[ "${3:-}" != -* && -n "${3:-}" ]]; then
+                arg_pvc_namespace="$3"
+            else
+                arg_pvc_namespace=""
+            fi
+            shift 2
+            ;;
+        --create-storage-class) arg_create_storage_class=true ;;
         # Miscellaneous
         -D | --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
@@ -361,8 +382,10 @@ main() {
     SECONDS=0
 
     unset G_REPO_DIR G_REPO_NAME G_REPO_NS G_REPO_GROUP_PATH G_REPO_GROUP_PATH_SLUG G_REPO_BRANCH
-    unset G_REPO_SHORT_SHA G_NAMESPACE G_IMAGE_TAG  G_DOCK G_RUN
-    unset EXIT_MAIN IS_CHINA G_DEBUG_ON run_with_crontab
+    unset G_REPO_SHORT_SHA G_NAMESPACE G_IMAGE_TAG G_DOCK G_RUN
+    unset IS_CHINA G_DEBUG_ON arg_cron arg_image_retain arg_sub_path
+    unset G_DRY_RUN G_MSG_LANG G_DEPLOY_RESULT G_TEST_RESULT
+    unset STAGE_NUM STAGE_TOTAL STAGE_START_MS
 
     ## 如果 GitLab CI 环境启用了调试跟踪，则启用详细输出
     if [[ ${CI_DEBUG_TRACE:-false} == true ]]; then
@@ -390,6 +413,7 @@ main() {
     ## 日志和配置文件路径
     G_ENV="${G_DATA}/deploy.env"         # 环境变量配置文件
     G_LOG="${G_DATA}/logs/${G_NAME}.log" # 日志文件路径
+    mkdir -p "$(dirname "$G_LOG")"
 
     ## ========================================================================
     ## 功能标志数组初始化
@@ -407,7 +431,6 @@ main() {
         ["deploy_ftp"]=0
         ["deploy_sftp"]=0
         ["test_unit"]=0
-        ["apidoc"]=0
         ["test_func"]=0
         ["code_style"]=0
         ["code_quality"]=0
@@ -446,7 +469,15 @@ main() {
     done
 
     ## 记录脚本开始执行
-    _msg time "BEGIN"
+    ## 阶段横幅累计耗时的锚点: 从此刻起算（脚本开始），勿改为阶段差值，见 _msg stage 注释
+    STAGE_START_MS=$(_now_ms)
+    export STAGE_START_MS
+    _msg anchor "$(_t '▸ 开始' '▸ BEGIN') ${G_NAME}"
+
+    ## dry-run 模式提示
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] ${G_NAME} run in preview mode, nothing will be executed beyond local ${G_DATA} state"
+    fi
 
     ## ========================================================================
     ## 配置文件初始化 + 加载环境变量
@@ -520,11 +551,41 @@ main() {
     fi
 
     ## ========================================================================
+    ## 仓库操作: 切换已有 workspace 到指定分支
+    ## -w workspace + -b branch: 自动 checkout/pull 指定分支
+    ## 分支不存在时从默认分支(main)创建；仅用于非克隆场景
+    ## (克隆场景的 -b 由 setup_git_repo 处理，Gitea 已按 GITHUB_REF_NAME 检出)
+    ## ========================================================================
+    if [ -n "${arg_git_clone_branch:-}" ] && [ -z "${arg_git_clone_url:-}" ]; then
+        setup_git_branch "${arg_git_clone_branch}" "${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
+    fi
+
+    ## ========================================================================
     ## 配置部署变量
     ## 设置仓库信息、分支映射、命名空间、镜像标签等全局变量
     ## 注意: 此步骤位置不要随意变动，后续步骤依赖这些变量
     ## ========================================================================
     config_deploy_vars
+
+    ## ========================================================================
+    ## 独立功能: 生成语言 Dockerfile
+    ## 如果指定了 --gen-dockerfile 参数，按检测到的语言写出 Dockerfile.<lang>
+    ## 这是一个独立功能，执行完成后直接返回
+    ## ========================================================================
+    if [[ ${arg_gen_dockerfile:-false} = true ]]; then
+        (cd "$G_REPO_DIR" && generate_lang_dockerfile "$(detect_repo_language | cut -d: -f1)")
+        return $?
+    fi
+
+    ## ========================================================================
+    ## 独立功能: 用 Buildpacks 构建镜像
+    ## 如果指定了 --build-buildpacks 参数，用 Cloud Native Buildpacks 打包镜像
+    ## 需要 pack CLI；这是一个独立功能，执行完成后直接返回
+    ## ========================================================================
+    if [[ ${arg_build_buildpacks:-false} = true ]]; then
+        detect_repo_language_and_build "$G_REPO_DIR"
+        return $?
+    fi
 
     ## ========================================================================
     ## 查找项目专用配置文件
@@ -547,7 +608,7 @@ main() {
     ## 如果指定了 --create-helm 参数，创建Helm Chart目录结构
     ## 这是一个独立功能，执行完成后直接返回
     ## ========================================================================
-    ${arg_create_helm:-false} && create_helm_chart "${helm_dir}" && return
+    ${arg_create_helm:-false} && create_helm_chart "${arg_helm_dir}" && return
 
     ## ========================================================================
     ## 独立功能: 复制Docker镜像
@@ -557,7 +618,7 @@ main() {
     if [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_src}" ]]; then
         [ -z "$arg_target" ] && arg_target="${ENV_DOCKER_MIRROR:-}"
         [ -z "$arg_target" ] && return 1
-        copy_docker_image "${arg_src}" "${arg_target}" "${arg_keep_tag:-true}"
+        copy_docker_image "${arg_src}" "${arg_target}"
         return
     fi
 
@@ -587,11 +648,21 @@ main() {
     kube_config_init "$G_NAMESPACE"
 
     ## ========================================================================
+    ## 独立功能: 创建 CNFS 存储类
+    ## 如果指定了 --create-storage-class 参数，创建 CNFS NAS StorageClass 资源
+    ## 这是一个独立功能，执行完成后直接返回
+    ## ========================================================================
+    if [[ ${arg_create_storage_class:-false} = true ]]; then
+        kube_create_storage_class
+        return $?
+    fi
+
+    ## ========================================================================
     ## 独立功能: 创建Kubernetes PVC
     ## 如果指定了 --kube-pvc 参数，创建持久化卷声明
     ## ========================================================================
-    if [[ ${arg_flags["kube_pvc"]} -eq 1 && -n "${sub_path_name}" ]]; then
-        kube_create_pv_pvc "${sub_path_name}" "${namespace}"
+    if [[ ${arg_flags["kube_pvc"]} -eq 1 && -n "${arg_sub_path}" ]]; then
+        kube_create_pv_pvc "${arg_sub_path}" "${arg_pvc_namespace:-${G_NAMESPACE:-default}}"
         return
     fi
 
@@ -599,8 +670,12 @@ main() {
     ## 部署环境配置
     ## 设置SSH配置、acme.sh、AWS、Kubernetes、阿里云、python-gitlab、
     ## Cloudflare、rsync等工具的配置文件
-    ## ========================================================================
-    config_deploy_setup >/dev/null
+    if ${G_DRY_RUN:-false}; then
+        config_deploy_setup >/dev/null 2>&1
+        dry_run_note "config_deploy_setup (ssh keys, $HOME symlinks) — skipped in preview"
+    else
+        config_deploy_setup >/dev/null
+    fi
 
     ## ========================================================================
     ## 独立功能: 更新SSL证书
@@ -635,8 +710,9 @@ main() {
     repo_inject_file "${arg_disable_inject:-false}"
 
     ## 重新探测语言（注入文件后可能需要重新检测）
-    get_lang=$(repo_language_detect)
-    echo "${get_lang}"
+    local detected_lang
+    detected_lang=$(detect_repo_language)
+    _msg note "detected language: ${detected_lang}"
 
     ## ========================================================================
     ## 任务执行阶段
@@ -648,89 +724,145 @@ main() {
     ## 任务执行顺序:
     ##   1. 代码质量检查 (code_quality, code_style)
     ##   2. 单元测试 (test_unit)
-    ##   3. API文档生成 (apidoc)
-    ##   4. 构建 (build_all)
-    ##   5. 部署 (deploy_*)
-    ##   6. 功能测试 (test_func)
-    ##   7. 安全扫描 (security_zap, security_vulmap)
+    ##   3. 构建 (build_all)
+    ##   4. 部署 (deploy_*)
+    ##   5. 功能测试 (test_func)
+    ##   6. 安全扫描 (security_zap, security_vulmap)
     ## ========================================================================
+
+    ## 部署方法单一来源: 每个 deploy_* 开关在此定义顺序与显示名
+    ## 迭代顺序即"多方法时的优先顺序"; 阶段 4 派生 deploy_method 与 spec 任务列表共用
+    local -a deploy_display=(
+        "deploy_k8s|-k/--deploy-k8s"
+        "deploy_rsync_ssh|-R/--deploy-rsync-ssh"
+        "deploy_rsync|-y/--deploy-rsync"
+        "deploy_ftp|-F/--deploy-ftp"
+        "deploy_sftp|-S/--deploy-sftp"
+        "deploy_aliyun_func|-f/--deploy-functions"
+        "deploy_aliyun_oss|-O/--deploy-oss"
+        "deploy_docker|-o/--deploy-docker"
+    )
+    local -a deploy_order=()
+    local deploy_item deploy_key deploy_method="" deploy_sum=0
+    for deploy_item in "${deploy_display[@]}"; do
+        deploy_order+=("${deploy_item%%|*}")
+    done
+
+    ## 检查是否有部署任务需要执行（阶段 4 与阶段计数共用，固定顺序统计）
+    for deploy_key in "${deploy_order[@]}"; do
+        deploy_sum=$((deploy_sum + arg_flags[$deploy_key]))
+    done
+
+    ## deploy_method 从 arg_flags 派生（R-3 单一来源，替代 parse 时双写）
+    ## auto 模式保持空 → handle_deploy 走 detect_deployment_method 探测链路
+    if ! $all_zero && [[ $deploy_sum -gt 0 ]]; then
+        local -a deploy_enabled=()
+        for deploy_key in "${deploy_order[@]}"; do
+            [[ ${arg_flags[$deploy_key]} -eq 1 ]] && deploy_enabled+=("$deploy_key")
+        done
+        if ((${#deploy_enabled[@]} > 1)); then
+            _msg warn "$(_t '检测到多个部署方式:' 'multiple deploy methods requested:') ${deploy_enabled[*]}"
+            _msg warn "$(_t '仅执行首个，多目标部署请走 GitLab 多 job' 'will run the first only; use separate jobs for multi-target deploy.')"
+        fi
+        deploy_method="${deploy_enabled[0]-}"
+    fi
+
+    ## 统计本次启用的阶段总数（stage 横幅序号自动计算）
+    export STAGE_NUM=0
+    export STAGE_TOTAL=0
+    [[ ${arg_flags["code_quality"]} -eq 1 || ${arg_flags["code_style"]} -eq 1 ]] && ((++STAGE_TOTAL))
+    [[ ${arg_flags["test_unit"]} -eq 1 ]] && ((++STAGE_TOTAL))
+    [[ ${arg_flags["build_all"]} -eq 1 ]] && ((++STAGE_TOTAL))
+    [[ $deploy_sum -gt 0 ]] && ((++STAGE_TOTAL))
+    [[ ${arg_flags["test_func"]} -eq 1 ]] && ((++STAGE_TOTAL))
+    [[ ${arg_flags["security_zap"]} -eq 1 || ${arg_flags["security_vulmap"]} -eq 1 ]] && ((++STAGE_TOTAL))
 
     ## 显示执行模式信息
     if $all_zero; then
-        _msg green "mode: auto [all tasks will be executed]"
+        _msg ok "$(_t '模式: 自动（执行全部任务）' 'mode: auto (all tasks enabled)')"
     else
-        _msg yellow "mode: spec [only specified tasks will be executed]"
-        _msg info "Enabled tasks:"
-        for key in "${!arg_flags[@]}"; do
-            [[ ${arg_flags[$key]} -eq 1 ]] && echo "  - ${key}"
+        _msg warn "$(_t '模式: 指定（仅执行所选任务）' 'mode: spec (only selected tasks)')"
+        _msg note "$(_t '已启用任务:' 'Enabled tasks:')"
+        ## 固定顺序显示已启用任务（${!arg_flags[@]} 关联数组迭代顺序不稳定）
+        ## 格式: 内部key|显示名（CLI参数）
+        local -a task_list=(
+            "code_quality|-Q/--code-quality"
+            "code_style|-C/--code-style"
+            "test_unit|-u/--test-unit"
+            "build_all|-B/--build"
+            "test_func|-t/--test-function"
+            "security_zap|-z/--security-zap"
+            "security_vulmap|-m/--security-vulmap"
+        )
+        local item
+        for item in "${task_list[@]}"; do
+            [[ ${arg_flags[${item%%|*}]} -eq 1 ]] && _msg note "- ${item#*|}"
+        done
+        for deploy_item in "${deploy_display[@]}"; do
+            [[ ${arg_flags[${deploy_item%%|*}]} -eq 1 ]] && _msg note "- ${deploy_item#*|}"
         done
     fi
 
     ## ========================================================================
     ## 阶段 1: 代码质量检查
     ## ========================================================================
+    if [[ ${arg_flags["code_quality"]} -eq 1 || ${arg_flags["code_style"]} -eq 1 ]]; then
+        _msg stage "$(_t '代码质量与风格' 'code quality & style')"
+    fi
     [[ ${arg_flags["code_quality"]} -eq 1 ]] && analysis_sonarqube
     [[ ${arg_flags["code_style"]} -eq 1 ]] && style_check
 
     ## ========================================================================
     ## 阶段 2: 单元测试
     ## ========================================================================
-    [[ ${arg_flags["test_unit"]} -eq 1 ]] && handle_test unit
+    [[ ${arg_flags["test_unit"]} -eq 1 ]] && _msg stage "$(_t '单元测试' 'unit test')" && handle_test unit
 
     ## ========================================================================
-    ## 阶段 3: API文档生成
-    ## ========================================================================
-    [[ ${arg_flags["apidoc"]} -eq 1 ]] && generate_apidoc
-
-    ## ========================================================================
-    ## 阶段 4: 构建
+    ## 阶段 3: 构建
     ## ========================================================================
     if [[ ${arg_flags["build_all"]} -eq 1 ]]; then
-        ## image_retain: 镜像保留策略
-        ##   - push: 推送到镜像仓库
-        ##   - keep: 本地保留
-        ##   - remove: 构建后删除（默认）
-        build_all "$get_lang" "${image_retain}"
-    fi
-
-    ## ========================================================================
-    ## 阶段 5: 部署
-    ## 执行条件:
-    ##   - 自动模式 (all_zero=true): 总是执行部署
-    ##   - 指定模式: 如果设置了任何部署相关的标志 (deploy_*)，则执行部署
-    ## 注意: deploy_method 变量在参数解析时已设置，表示具体的部署方式
-    ## ========================================================================
-    ## 检查是否有部署任务需要执行
-    ## 方法1: 检查 deploy_method 是否已设置（更直接）
-    ## 方法2: 检查是否有任何 deploy_* 标志被启用（更全面）
-    # 发布，最优雅的写法
-    deploy_sum=0
-    for key in "${!arg_flags[@]}"; do
-        if [[ $key == deploy_* ]]; then
-            deploy_sum=$((deploy_sum + arg_flags[$key]))
+        _msg stage "$(_t '构建' 'build')"
+        ## arg_image_retain: 镜像保留策略（R-2 统一默认 remove）
+        ##   - remove: 仅本地构建、不推送，构建结束后删除本地镜像（默认）
+        ##   - keep:   仅本地构建，保留本地镜像
+        ##   - push:   构建并推送到镜像仓库
+        ## ENV_IMAGE_RETAIN 可全局覆盖; auto 模式含部署，默认 push（后续部署需从 registry 拉取）
+        local effective_retain="${ENV_IMAGE_RETAIN:-${arg_image_retain:-remove}}"
+        if $all_zero && [[ -z "${ENV_IMAGE_RETAIN:-}" ]]; then
+            effective_retain=push
         fi
-    done
-    if [[ $deploy_sum -gt 0 ]] || $all_zero; then
-        handle_deploy "${deploy_method:-}" "${get_lang%%:*}" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG" "$G_IMAGE_TAG"
+        build_all "$detected_lang" "${effective_retain}"
     fi
 
-    ## 如果构建失败并设置了 EXIT_MAIN=true，则提前退出
-    [[ "${EXIT_MAIN:-false}" == "true" ]] && return 0
+    ## ========================================================================
+    ## 阶段 4: 部署
+    ## 执行条件:
+    ##   - 自动模式: 所有 deploy_* 开关置 1（deploy_sum>0），deploy_method 为空 → 探测链路
+    ##   - 指定模式: 设置了任何 deploy_* 标志则执行; deploy_method 由 arg_flags 派生（R-3 单一来源）
+    ## ========================================================================
+    ## 检查是否有部署任务需要执行（deploy_sum 已在模式信息处计算）
+    if [[ $deploy_sum -gt 0 ]]; then
+        _msg stage "$(_t '部署' 'deployment')"
+        handle_deploy "${deploy_method:-}" "${detected_lang%%:*}" "$G_REPO_GROUP_PATH_SLUG" "$G_CONF" "$G_LOG" "$G_IMAGE_TAG"
+    fi
 
     ## ========================================================================
-    ## 阶段 6: 功能测试（部署后验证）
+    ## 阶段 5: 功能测试（部署后验证）
     ## ========================================================================
-    [[ ${arg_flags["test_func"]} -eq 1 ]] && handle_test func
+    [[ ${arg_flags["test_func"]} -eq 1 ]] && _msg stage "$(_t '功能测试' 'functional test')" && handle_test func
 
     ## ========================================================================
-    ## 阶段 7: 安全扫描
+    ## 阶段 6: 安全扫描
     ## ========================================================================
     ## OWASP ZAP安全扫描
+    if [[ ${arg_flags["security_zap"]} -eq 1 || ${arg_flags["security_vulmap"]} -eq 1 ]]; then
+        _msg stage "$(_t '安全扫描' 'security scan')"
+    fi
     [[ ${arg_flags["security_zap"]} -eq 1 ]] && analysis_zap
     ## Vulmap安全扫描
     [[ ${arg_flags["security_vulmap"]} -eq 1 ]] && analysis_vulmap
 
-    _msg green "tasks execution completed"
+    _msg ok "$(_t '全部任务执行完成' 'tasks execution completed')"
     ## ========================================================================
 
     ## ========================================================================
@@ -740,13 +872,13 @@ main() {
     handle_notify
 
     ## 记录脚本执行结束时间
-    _msg time "END."
+    _msg anchor "$(_t '✓ 完成' '✓ completed') ${G_NAME} · $(_fmt_dur "$SECONDS") · $(_t '全部任务完成' 'all tasks done')"
 
     ## 返回部署结果状态码
     ## Exit codes:
     ## - 0: Deployment successful
     ## - 1: Deployment failed
-    return "${deploy_result:-0}"
+    return "${G_DEPLOY_RESULT:-0}"
 }
 
 main "$@"

@@ -83,47 +83,125 @@ _check_disk_space() {
     _log $LOG_LEVEL_INFO "Sufficient disk space available. Required: ${required_space_gb}GB, Available: $((available_space / 1024 / 1024))GB"
 }
 
+# Convert seconds to H/M/S cumulative duration (e.g. 0h01m05s)
+_fmt_dur() {
+    local s=$1
+    printf '%dh%02dm%02ds' $((s / 3600)) $(((s / 60) % 60)) $((s % 60))
+}
+
+# 当前时间毫秒数（整数）。bash>=5 用 EPOCHREALTIME；GNU date 支持 %3N；否则退化为整秒
+_now_ms() {
+    local out sec us
+    if [[ -n "${EPOCHREALTIME:-}" ]]; then
+        sec=${EPOCHREALTIME%.*}
+        us=${EPOCHREALTIME#*.}
+        printf '%d' "$((10#$sec * 1000 + 10#$us / 1000))"
+        return
+    fi
+    out="$(date +%s%3N 2>/dev/null)"
+    if [[ "$out" =~ ^[0-9]+$ ]]; then
+        printf '%s' "$out"
+        return
+    fi
+    printf '%d' "$((SECONDS * 1000))"
+}
+
+# dry-run 辅助（--dry）：打印将要执行的命令，不执行。
+# 用法: dry_run_note "<完整命令>"
+# 非 dry-run 下为空操作；dry-run 下输出统一前缀 [dry-run] 的 note。
+dry_run_note() {
+    ${G_DRY_RUN:-false} || return 0
+    _msg note "[dry-run] $*"
+}
+
+# dry-run 下仅打印命令预览并返回 0；否则执行命令并返回其退出码。
+# 参数: 命令及参数（不含管道/重定向，复杂命令请用 dry_run_note + if 结构）
+dry_run_or() {
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] $*"
+        return 0
+    fi
+    "$@"
+}
+
+# Output language: zh|en. Priority: CLI --lang (G_MSG_LANG) > ENV_LANG (deploy.env) > zh
+_msg_lang() {
+    printf '%s' "${G_MSG_LANG:-${ENV_LANG:-zh}}"
+}
+
+# Inline bilingual structural strings: _t "中文" "English"
+# Only for framework sentences we own; technical content stays single-language.
+_t() {
+    if [ "$(_msg_lang)" = zh ]; then
+        printf '%s' "$1"
+    else
+        printf '%s' "$2"
+    fi
+}
+
 _msg() {
-    local color_on color_off='\033[0m' time_hms timestamp log_file
-    case "${1:-none}" in
-    info) color_on='' ;;
-    warn | warning | yellow) color_on='\033[0;33m' ;;
-    error | err | red) color_on='\033[0;31m' ;;
-    question | ques | purple) color_on='\033[0;35m' ;;
-    success | ok | green) color_on='\033[0;32m' ;;
-    blue) color_on='\033[0;34m' ;;
-    cyan) color_on='\033[0;36m' ;;
-    orange) color_on='\033[1;33m' ;;
-    step)
-        ((++STEP))
-        time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
-        timestamp="$(date +%Y%m%d-%u-%T.%3N)"
-        color_on="\033[0;36m$timestamp - [$STEP] \033[0m"
-        color_off=" - [$time_hms]"
+    local level="${1:-none}" prefix color_on color_off='\033[0m' msg timestamp rule
+    case "$level" in
+    anchor)
+        ## 流程锚点: 唯一带时间戳的位置（BEGIN/END/里程碑）
+        color_on='\033[1;37m'
+        timestamp="$(date +%T)"
         ;;
-    time)
-        time_hms="$((SECONDS / 3600))h$(((SECONDS / 60) % 60))m$((SECONDS % 60))s"
-        timestamp="$(date +%Y%m%d-%u-%T.%3N)"
-        color_on="$timestamp - ${STEP:+[$STEP] }"
-        color_off=" - [$time_hms]"
+    stage)
+        ## 阶段横幅: 序号自动递增，右侧为从脚本开始（STAGE_START_MS 锚点）到当前的累计耗时。
+        ## 注意: 是"累计"不是"距上一阶段"。原始语义如此，勿改成阶段差值——差值会让快速阶段显示 +0s，
+        ## 且各阶段差值不直观。累计值单调递增，任何阶段都能直接看出脚本已运行多久。
+        ((++STAGE_NUM))
+        local cum_ms
+        cum_ms=$(( $(_now_ms) - STAGE_START_MS ))
+        shift
+        msg="$*"
+        printf -v rule '%*s' 62 ''
+        rule="${rule// /━}"
+        if [ "${silent_mode:-0}" -eq 0 ]; then
+            printf '\033[0;36m%s\033[0m\n' "$rule"
+            local left="▶ STAGE ${STAGE_NUM}/${STAGE_TOTAL:-?} · ${msg:0:40}"
+            local pad=$((58 - ${#left}))
+            ((pad < 1)) && pad=1
+            printf '\033[1;36m%s\033[0m\033[0;36m%*s\033[0m\n' "$left" "$pad" "$(_fmt_dur "$((cum_ms / 1000))")"
+            printf '\033[0;36m%s\033[0m\n' "$rule"
+        fi
+        return 0
         ;;
+    none) return 0 ;;
+    note) prefix='⋯ '; color_on='\033[2m' ;;
+    task) prefix='· '; color_on='' ;;
+    ok) prefix='✓ '; color_on='\033[0;32m' ;;
+    warn) prefix='! '; color_on='\033[0;33m' ;;
+    error) prefix='✗ '; color_on='\033[0;31m' ;;
+    question) color_on='\033[0;35m' ;;
     log)
-        timestamp="$(date +%Y%m%d-%u-%T.%3N)"
-        log_file="$2"
+        timestamp="$(date +%F\ %T)"
+        msg="$2"
         shift 2
-        if [ -d "$(dirname "$log_file")" ]; then
-            echo "$timestamp - $*" | tee -a "$log_file"
+        if [ -d "$(dirname "${msg}")" ]; then
+            echo "$timestamp - $*" | tee -a "$msg"
         else
             echo "$timestamp - $*"
         fi
         return
         ;;
-    *) unset color_on color_off ;;
+    *) return 0 ;;
     esac
 
-    [ "$#" -gt 1 ] && shift
+    if [[ "$level" == anchor ]]; then
+        [ "$#" -gt 1 ] && shift
+        msg="[$timestamp] $*"
+    else
+        [ "$#" -gt 1 ] && shift
+        msg="$*"
+        ## 任务行剥离前导 [tag]（调用点保留作 grep 锚点）
+        if [[ "$level" == task && "$msg" == \[*\]\ * ]]; then
+            msg="${msg#*] }"
+        fi
+    fi
     if [ "${silent_mode:-0}" -eq 0 ]; then
-        printf "%b%s%b\n" "${color_on}" "$*" "${color_off}"
+        printf "%b%s%s%b\n" "$color_on" "$prefix" "$msg" "$color_off"
     else
         return 0
     fi
@@ -157,7 +235,7 @@ _check_root() {
 }
 
 _check_distribution() {
-    _msg time "Check distribution..."
+    _msg task "Check distribution..."
     if [ -r /etc/os-release ]; then
         . /etc/os-release
         # lsb_dist="${ID,,}"
@@ -176,7 +254,7 @@ _check_distribution() {
         )
     fi
     lsb_dist="${lsb_dist:-unknown}"
-    _msg time "Your distribution is ${lsb_dist} ${VERSION_ID:-}, ARCH is $(uname -m)."
+    _msg task "Your distribution is ${lsb_dist} ${VERSION_ID:-}, ARCH is $(uname -m)."
 }
 
 _check_cmd() {
@@ -235,6 +313,10 @@ _set_package_manager() {
 
 _install_packages() {
     [ "$#" -eq 0 ] && return 0
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install packages: $*"
+        return 0
+    fi
     if ! _check_root >/dev/null; then
         _msg error "_install_packages: package manager initialization failed."
         return 1
@@ -260,11 +342,11 @@ _install_packages() {
 _check_timezone() {
     ## change UTC to CST
     local time_zone='Asia/Shanghai'
-    _msg step "Check timezone $time_zone."
+    _msg task "Check timezone $time_zone."
     if timedatectl show --property=Timezone --value | grep -q "^$time_zone$"; then
-        _msg time "Timezone is already set to $time_zone."
+        _msg task "Timezone is already set to $time_zone."
     else
-        _msg time "Setting timezone to $time_zone."
+        _msg task "Setting timezone to $time_zone."
         $use_sudo timedatectl set-timezone "$time_zone"
     fi
 }
@@ -323,22 +405,22 @@ _get_current_ip() {
         fi
         ;;
     esac
-    _msg green "get current IPv4: $ip4_current"
-    _msg green "get current IPv6: $ip6_current"
+    _msg ok "get current IPv4: $ip4_current"
+    _msg ok "get current IPv6: $ip6_current"
 }
 
 _install_jmeter() {
     if [ "$1" != "upgrade" ] && command -v jmeter >/dev/null; then
         return
     fi
-    _msg green "Installing JMeter..."
+    _msg ok "Installing JMeter..."
     local ver_jmeter='5.4.1'
     local temp_file
     temp_file=$(mktemp)
 
     ## 6. Asia, 31. Hong_Kong, 70. Shanghai
     if ! command -v java >/dev/null; then
-        _msg green "Installing Java..."
+        _msg ok "Installing Java..."
         export DEBIAN_FRONTEND=noninteractive
         export DEBCONF_NONINTERACTIVE_SEEN=true
         export TZ=Asia/Shanghai
@@ -388,6 +470,10 @@ _install_ossutil() {
     if [ "$1" != "upgrade" ] && command -v ossutil >/dev/null; then
         return
     fi
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install ossutil (download + install to /usr/local/bin)"
+        return 0
+    fi
 
     # 确定版本和命令
     local ver=2 cmd=/usr/local/bin/ossutil
@@ -406,15 +492,15 @@ _install_ossutil() {
     local url_down
     url_down=$(curl -fsSL "$url_doc" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${os}-amd64\.zip")
     curl -fLo ossu.zip "$url_down" && unzip -qq -o -j ossu.zip
-    _msg green "Installing to $cmd"
+    _msg ok "Installing to $cmd"
     $use_sudo install -m 0755 ossutil "$cmd"
 
     # 创建版本软链接
-    _msg green "Creating symlink /usr/local/bin/oss${ver:-1} to $cmd"
+    _msg ok "Creating symlink /usr/local/bin/oss${ver:-1} to $cmd"
     $use_sudo ln -sf "$cmd" "/usr/local/bin/oss${ver:-1}"
 
     # 清理并显示版本
-    _msg green "Showing version"
+    _msg ok "Showing version"
     if [[ "${ver:-2}" = 2 ]]; then
         $cmd version
     else
@@ -427,13 +513,17 @@ _install_aliyun_cli() {
     if [ "$1" != "upgrade" ] && command -v aliyun >/dev/null; then
         return
     fi
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install aliyun CLI (aliyuncli.alicdn.com/install.sh)"
+        return 0
+    fi
     _check_distribution
 
-    _msg green "Installing/Upgrading Alibaba Cloud CLI using official installer script"
+    _msg ok "Installing/Upgrading Alibaba Cloud CLI using official installer script"
 
     # Prefer official one-line installer (recommended by Alibaba Cloud)
     if /bin/bash -c "$(curl -fsSL https://aliyuncli.alicdn.com/install.sh)"; then
-        _msg green "Alibaba Cloud CLI installed/updated via official installer"
+        _msg ok "Alibaba Cloud CLI installed/updated via official installer"
         return 0
     else
         _msg warn "Official installer failed or is not usable; falling back to direct CDN download"
@@ -488,9 +578,9 @@ _install_aliyun_cli() {
     fi
 
     local cmd=/usr/local/bin/aliyun
-    _msg green "Installing to $cmd"
+    _msg ok "Installing to $cmd"
     $use_sudo install -m 0755 "$extracted" "$cmd"
-    _msg green "Showing version"
+    _msg ok "Showing version"
     "$cmd" version | head -n 1
     rm -rf "$temp_dir"
 }
@@ -499,7 +589,7 @@ _install_flarectl() {
     if [ "$1" != "upgrade" ] && command -v flarectl >/dev/null; then
         return
     fi
-    _msg green "Installing flarectl"
+    _msg ok "Installing flarectl"
     local temp_file
     temp_file="$(mktemp)"
 
@@ -520,7 +610,7 @@ _install_flarectl() {
     aarch64 | arm64) arch="arm64" ;;
     *)
         if [ "$arch" != "amd64" ]; then
-            _msg warning "Unknown architecture: $arch, using amd64"
+            _msg warn "Unknown architecture: $arch, using amd64"
             arch="amd64"
         fi
         ;;
@@ -534,12 +624,12 @@ _install_flarectl() {
     local url="https://github.com/cloudflare/cloudflare-go/releases/download/${ver}/flarectl_${ver#v}_${os}_${arch}.tar.gz"
 
     if curl -fsSLo "$temp_file" "$url"; then
-        _msg green "Extracting flarectl to /tmp"
+        _msg ok "Extracting flarectl to /tmp"
         tar -C /tmp -xzf "$temp_file" flarectl
-        _msg green "Installing to /usr/local/bin/flarectl"
+        _msg ok "Installing to /usr/local/bin/flarectl"
         sudo install -m 0755 /tmp/flarectl /usr/local/bin/flarectl
-        _msg success "flarectl installed successfully"
-        _msg green "Showing version"
+        _msg ok "flarectl installed successfully"
+        _msg ok "Showing version"
         flarectl -version
     else
         _msg error "failed to download and install flarectl"
@@ -552,16 +642,20 @@ _install_kubectl() {
     if [ "$1" != "upgrade" ] && command -v kubectl >/dev/null; then
         return
     fi
-    _msg green "Installing kubectl..."
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install kubectl (dl.k8s.io/release/stable.txt)"
+        return 0
+    fi
+    _msg ok "Installing kubectl..."
     local ver
     ver=$(curl -sL https://dl.k8s.io/release/stable.txt)
     local cmd=/usr/local/bin/kubectl
     curl -fsSLO "https://dl.k8s.io/release/${ver}/bin/linux/amd64/kubectl" \
         -fsSLO "https://dl.k8s.io/${ver}/bin/linux/amd64/kubectl.sha256"
     if echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check; then
-        _msg green "Installing to $cmd"
+        _msg ok "Installing to $cmd"
         $use_sudo install -m 0755 kubectl "$cmd"
-        _msg green "Showing version"
+        _msg ok "Showing version"
         "$cmd" version --client
         rm -f kubectl kubectl.sha256
     else
@@ -575,7 +669,7 @@ _install_shellcheck() {
     if [ "$flag" != "upgrade" ] && command -v shellcheck >/dev/null; then
         return
     fi
-    _msg green "Installing shellcheck..."
+    _msg ok "Installing shellcheck..."
     if command -v brew >/dev/null; then
         brew install shellcheck
         return
@@ -599,7 +693,7 @@ _install_shellcheck() {
         esac
     fi
 
-    _msg green "Installing shellcheck from GitHub release..."
+    _msg ok "Installing shellcheck from GitHub release..."
     local temp_file download_url os arch release_info tar_dir
     temp_file=$(mktemp)
     os=$(uname | tr '[:upper:]' '[:lower:]')
@@ -621,7 +715,7 @@ _install_shellcheck() {
     tar -xJf "$temp_file" -C "$tar_dir"
     $use_sudo install -m 0755 "$tar_dir"/*/shellcheck /usr/local/bin/shellcheck
     rm -rf "$temp_file" "$tar_dir"
-    _msg green "Showing version"
+    _msg ok "Showing version"
     shellcheck --version
 }
 
@@ -630,7 +724,7 @@ _install_shfmt() {
     if [ "$flag" != "upgrade" ] && command -v shfmt >/dev/null; then
         return
     fi
-    _msg green "Installing shfmt..."
+    _msg ok "Installing shfmt..."
     if command -v brew >/dev/null; then
         brew install shfmt
         return
@@ -654,7 +748,7 @@ _install_shfmt() {
         esac
     fi
 
-    _msg green "Installing shfmt from GitHub release..."
+    _msg ok "Installing shfmt from GitHub release..."
     local temp_file download_url os arch release_info tar_dir
     temp_file=$(mktemp)
     os=$(uname | tr '[:upper:]' '[:lower:]')
@@ -676,7 +770,7 @@ _install_shfmt() {
     tar -xzf "$temp_file" -C "$tar_dir"
     $use_sudo install -m 0755 "$tar_dir"/shfmt /usr/local/bin/shfmt
     rm -rf "$temp_file" "$tar_dir"
-    _msg green "Showing version"
+    _msg ok "Showing version"
     shfmt --version
 }
 
@@ -684,7 +778,11 @@ _install_helm() {
     if [ "$1" != "upgrade" ] && command -v helm >/dev/null; then
         return
     fi
-    _msg green "Installing helm..."
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install helm (get-helm-3)"
+        return 0
+    fi
+    _msg ok "Installing helm..."
     local temp_file
     temp_file="$(mktemp)"
     local cmd=/usr/local/bin/helm
@@ -692,7 +790,7 @@ _install_helm() {
     export HELM_INSTALL_DIR=/usr/local/bin
     $use_sudo bash "$temp_file"
     rm -f "$temp_file"
-    _msg green "Showing version"
+    _msg ok "Showing version"
     "$cmd" version
 }
 
@@ -701,12 +799,12 @@ _install_tencent_cli() {
     if [ "$flag" != "upgrade" ] && command -v tccli >/dev/null; then
         return
     fi
-    _msg green "install tencent cli..."
+    _msg ok "install tencent cli..."
     _set_mirror python
     python3 -m pip install tccli
-    _msg green "Showing version"
+    _msg ok "Showing version"
     if ! command -v tccli >/dev/null; then
-        _msg warning "tccli command not found in PATH after installation"
+        _msg warn "tccli command not found in PATH after installation"
         return 1
     fi
     tccli --version
@@ -718,14 +816,14 @@ _install_pipx() {
         command -v pipx >/dev/null 2>&1 && return
     fi
 
-    _msg green "Installing pipx..."
+    _msg ok "Installing pipx..."
     _set_mirror python
 
     if _check_root >/dev/null && [[ "${cmd_pkg:-}" == *"apt-get"* ]]; then
-        _msg green "Installing pipx via apt-get..."
+        _msg ok "Installing pipx via apt-get..."
         $cmd_pkg update -yqq
         if $cmd_pkg_install pipx; then
-            _msg green "pipx is installed successfully via apt-get"
+            _msg ok "pipx is installed successfully via apt-get"
             return 0
         fi
     fi
@@ -738,7 +836,7 @@ _install_terraform() {
     if [ "$1" != "upgrade" ] && command -v terraform >/dev/null; then
         return
     fi
-    _msg green "Installing terraform..."
+    _msg ok "Installing terraform..."
     $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
     curl -fsSL https://apt.releases.hashicorp.com/gpg |
         gpg --dearmor |
@@ -748,8 +846,8 @@ _install_terraform() {
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq terraform >/dev/null
     # terraform version
-    _msg green "terraform installed successfully!"
-    _msg green "Showing version"
+    _msg ok "terraform installed successfully!"
+    _msg ok "Showing version"
     terraform version
 }
 
@@ -757,7 +855,7 @@ _install_aws() {
     if [ "$1" != "upgrade" ] && command -v aws >/dev/null; then
         return
     fi
-    _msg green "Installing aws cli..."
+    _msg ok "Installing aws cli..."
     local temp_file
     temp_file=$(mktemp)
     curl -fsSLo "$temp_file" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
@@ -767,9 +865,9 @@ _install_aws() {
     ## install eksctl / 安装 eksctl
     local cmd=/usr/local/bin/eksctl
     curl -fsSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
-    _msg green "Installing to $cmd"
+    _msg ok "Installing to $cmd"
     $use_sudo install -m 0755 /tmp/eksctl "$cmd"
-    _msg green "Showing version"
+    _msg ok "Showing version"
     "$cmd" version
 }
 
@@ -784,11 +882,11 @@ _install_python_gitlab() {
             return
         fi
     fi
-    _msg green "Installing python3 gitlab api..."
+    _msg ok "Installing python3 gitlab api..."
     _set_mirror python
     _install_pipx
     if pipx install --force --python python3 --include-deps python-gitlab; then
-        _msg green "python-gitlab is installed successfully via pipx"
+        _msg ok "python-gitlab is installed successfully via pipx"
         return 0
     fi
     _msg error "failed to install python-gitlab"
@@ -801,11 +899,11 @@ _install_python_element() {
     if [ "$flag" != "upgrade" ] && python3 -m pip show --quiet matrix-nio >/dev/null 2>&1; then
         return
     fi
-    _msg green "Installing python3 element api..."
+    _msg ok "Installing python3 element api..."
     _set_mirror python
     _install_pipx
     if pipx install --force --python python3 --include-deps matrix-nio; then
-        _msg green "matrix-nio is installed successfully via pipx"
+        _msg ok "matrix-nio is installed successfully via pipx"
         return 0
     fi
     _msg error "failed to install matrix-nio"
@@ -816,7 +914,11 @@ _install_docker() {
     if [ "$1" != "upgrade" ] && command -v docker &>/dev/null; then
         return
     fi
-    _msg green "Installing docker"
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install docker (curl -fsSLo - https://get.docker.com)"
+        return 0
+    fi
+    _msg ok "Installing docker"
     local temp_file
     temp_file=$(mktemp)
     curl -fsSLo "$temp_file" https://get.docker.com
@@ -826,7 +928,7 @@ _install_docker() {
         $use_sudo bash "$temp_file"
     fi
 
-    _msg green "Showing version"
+    _msg ok "Showing version"
     docker --version
     rm -f "$temp_file"
 }
@@ -835,10 +937,14 @@ _install_podman() {
     if [ "$1" != "upgrade" ] && command -v podman &>/dev/null; then
         return
     fi
-    _msg green "Installing podman"
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install podman (apt-get install podman)"
+        return 0
+    fi
+    _msg ok "Installing podman"
     $use_sudo apt-get update -qq
     $use_sudo apt-get install -yqq podman >/dev/null
-    _msg green "Showing version"
+    _msg ok "Showing version"
     podman --version
 }
 
@@ -936,7 +1042,7 @@ get_github_latest_download() {
         source_only=*) source_only="${1#*=}" ;;
         arch=*) arch="${1#*=}" ;;
         os=*) os="${1#*=}" ;;
-        *) _msg warning "Unknown parameter: $1" ;;
+        *) _msg warn "Unknown parameter: $1" ;;
         esac
         shift
     done
@@ -949,7 +1055,7 @@ get_github_latest_download() {
     linux*) os="linux" ;;
     freebsd*) os="freebsd" ;;
     openbsd*) os="openbsd" ;;
-    *) _msg warning "Unknown OS: $os, using linux" && os="linux" ;;
+    *) _msg warn "Unknown OS: $os, using linux" && os="linux" ;;
     esac
 
     # 标准化架构名称
@@ -962,7 +1068,7 @@ get_github_latest_download() {
     armv*) ;;                        # 保持原样 armv6/armv7 等
     *)
         if [ "$arch" != "amd64" ]; then
-            _msg warning "Unknown architecture: $arch, using amd64"
+            _msg warn "Unknown architecture: $arch, using amd64"
             arch="amd64"
         fi
         ;;
@@ -977,7 +1083,7 @@ get_github_latest_download() {
     release_info=$(curl -sS -H "Accept: application/vnd.github.v3+json" "$api_url")
     ret=$?
     if [ $ret -ne 0 ] || [ -z "$release_info" ]; then
-        _msg warning "Failed to fetch release info from GitHub API"
+        _msg warn "Failed to fetch release info from GitHub API"
         echo "https://github.com/$repo/archive/refs/heads/master.tar.gz"
         return
     fi
@@ -985,7 +1091,7 @@ get_github_latest_download() {
     # 使用 grep 和 sed 来提取版本号，避免 JSON 解析问题
     latest_ver=$(echo "$release_info" | grep -o '"tag_name": *"[^"]*"' | sed 's/.*": *"//;s/"//')
     if [ -z "$latest_ver" ]; then
-        _msg warning "Failed to parse release version"
+        _msg warn "Failed to parse release version"
         echo "https://github.com/$repo/archive/refs/heads/master.tar.gz"
         return
     fi
@@ -1034,14 +1140,14 @@ _install_acme_official() {
         return
     fi
 
-    _msg green "Installing acme.sh..."
+    _msg ok "Installing acme.sh..."
     if ${IS_CHINA:-false}; then
         git clone --depth 1 https://gitee.com/neilpang/acme.sh.git
         cd acme.sh && ./acme.sh --install --accountemail deploy@deploy.sh
     else
         curl https://get.acme.sh | bash -s email=deploy@deploy.sh
     fi
-    _msg green "Showing version"
+    _msg ok "Showing version"
     "$cmd_acme" --version
 }
 
@@ -1051,7 +1157,7 @@ _install_acme_github() {
     if [ "$force" != "upgrade" ] && command -v acme.sh >/dev/null; then
         return
     fi
-    _msg green "Installing acme.sh..."
+    _msg ok "Installing acme.sh..."
     local temp_dir
     temp_dir=$(mktemp -d)
     local download_url
@@ -1065,7 +1171,7 @@ _install_acme_github() {
     rm -rf "$temp_dir"
 
     # 显示版本
-    _msg green "Showing version"
+    _msg ok "Showing version"
     "$HOME/.acme.sh/acme.sh" --version
 }
 
@@ -1082,7 +1188,7 @@ _compress_pdf_with_gs() {
     case "$compatibility" in
     1.4 | 1.5 | 1.6 | 1.7) ;;
     *)
-        _msg warning "Invalid compatibility level: $compatibility, using 1.4"
+        _msg warn "Invalid compatibility level: $compatibility, using 1.4"
         compatibility="1.4"
         ;;
     esac
@@ -1131,7 +1237,7 @@ _compress_pdf_with_gs() {
         mono_image_quality=100
         ;;
     *)
-        _msg warning "Invalid quality level: $quality, using ebook"
+        _msg warn "Invalid quality level: $quality, using ebook"
         resolution=150
         image_downsample=150
         color_image_quality=60
@@ -1203,7 +1309,7 @@ _compress_pdf_with_gs() {
         local compression_ratio
         compression_ratio=$(awk "BEGIN {printf \"%.2f\", ($compressed_bytes/$original_bytes)*100}")
 
-        _msg success "PDF compression completed:"
+        _msg ok "PDF compression completed:"
         echo "Time taken: $time_str"
         echo "Original size: $original_size"
         echo "Compressed size: $compressed_size"
@@ -1296,7 +1402,7 @@ _install_k9s() {
     if [ "$1" != "upgrade" ] && command -v k9s >/dev/null; then
         return
     fi
-    _msg green "Installing k9s..."
+    _msg ok "Installing k9s..."
 
     # 获取最新版本下载链接
     local download_url
@@ -1330,8 +1436,8 @@ _install_k9s() {
     rm -f "$temp_file"
 
     # 显示版本信息
-    _msg green "Showing version"
+    _msg ok "Showing version"
     k9s version
 
-    _msg success "k9s installed successfully!"
+    _msg ok "k9s installed successfully!"
 }

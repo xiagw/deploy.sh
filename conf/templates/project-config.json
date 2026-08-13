@@ -15,12 +15,12 @@
     "build": {
         "method": "auto",
         "prefer_docker": true,
-        "description": "构建方式配置: auto=自动检测, docker=强制Docker, system=强制系统命令"
+        "description": "构建方式配置: auto=自动检测, docker=强制Docker, system=强制系统命令; prefer_docker: 自动模式下是否优先 Docker 构建"
     },
     "deploy": {
         "method": "auto",
         "prefer_k8s": true,
-        "description": "部署方式配置: auto=自动检测, k8s=强制k8s, docker=强制docker-compose, rsync=强制rsync+ssh, fc=强制阿里云函数计算, ftp=强制FTP"
+        "description": "部署方式配置: auto=自动检测, k8s=强制k8s, docker=强制docker-compose, rsync=强制rsync+ssh, fc=强制阿里云函数计算, ftp=强制FTP, sftp=强制SFTP, oss=强制阿里云OSS; prefer_k8s: 自动模式下是否优先 k8s 部署"
     },
     "branches": [
         {
@@ -29,7 +29,7 @@
             "hosts": [
                 {
                     "user": "dev",
-                    "host": "192.168.100.102",
+                    "host": "192.0.2.2",
                     "port": "22",
                     "rsync_src": "dist",
                     "rsync_dest": "/www/develop/example",
@@ -46,7 +46,7 @@
             "hosts": [
                 {
                     "user": "prod",
-                    "host": "192.168.100.104",
+                    "host": "192.0.2.3",
                     "port": "2222",
                     "rsync_src": "dist",
                     "rsync_dest": "/www/main/example",

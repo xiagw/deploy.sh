@@ -22,6 +22,7 @@
 说明：运行时/项目配置文件
 - namespace/project-name.json：单项目部署配置（`find_project_config` 使用）
 - config.cfg、rsyncd.conf、aliyun.functions.json 等
+- aliyun.functions.json：FC 函数模板，`cp conf/templates/aliyun.functions.json data/conf/` 后改占位符（NAS/VPC/端口等）。存在即使用；删除则回退内置最小模板
 
 权限：运维部门/管理者/研发部门 可配置
 

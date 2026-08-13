@@ -10,7 +10,7 @@
 # 说明:
 #   - 仅使用项目专用配置: data/conf/namespace/project-name.json
 #   - 如果配置文件不存在且模板存在，自动从模板创建
-#   - 自动创建后必须修改配置才能继续部署
+#   - 自动创建后支持auto或修改配置后都可以继续部署
 #   优势:
 #     - 支持成千上万项目，每个项目独立配置文件
 #     - 避免单文件过大导致的性能问题
@@ -38,34 +38,75 @@ find_project_config() {
     ## 项目专用配置文件
     ## 路径格式: data/conf/namespace/project-name.json
     project_conf="${G_DATA}/conf/${namespace}/${project_name}.json"
+    local template_file="${G_PATH}/conf/templates/project-config.json"
     if [[ -f "${project_conf}" ]]; then
         G_CONF="${project_conf}"
         ## 读取构建和部署配置覆盖（如果存在）
         _load_project_build_deploy_config "${project_conf}"
-        return
-    fi
-
-    ## 如果项目专用配置文件不存在，自动创建默认配置
-    command -v jq || _install_packages jq
-
-    local template_file="${G_PATH}/conf/templates/project-config.json"
-    if [[ -f "${template_file}" ]]; then
+    elif [[ -f "${template_file}" ]]; then
+        ## 项目专用配置文件不存在，从模板创建默认配置
+        command -v jq || _install_packages jq
         ## 从模板创建配置文件，并替换项目路径
         jq --arg project_path "${project_path}" '.project = $project_path' \
             "${template_file}" >"${project_conf}"
 
         G_CONF="${project_conf}"
-        _msg info "Created default project config: ${G_CONF}"
-        _msg warning "Note: This is a template configuration. Modify it if you need rsync/ftp deployment."
+        _msg note "Created default project config: ${G_CONF}"
+        _msg warn "Note: This is a template configuration. Modify it if you need rsync/ftp deployment."
         ## 读取构建和部署配置覆盖（如果存在）
         _load_project_build_deploy_config "${project_conf}"
-        return
     else
         _msg error "Project config not found: ${project_conf}"
         _msg error "Template file not found: ${template_file}"
         _msg error "Please create the project configuration file manually."
         return 1
     fi
+
+    ## 拦截模板残留值：任何部署方式都不允许带示例 IP/域名上线
+    check_project_config_template "$G_CONF" || return 1
+}
+
+################################################################################
+# 函数: check_project_config_template
+# 描述: 校验项目配置文件中是否残留模板示例值
+# 说明:
+#   - 模板示例值使用 RFC 5737 文档保留地址 192.0.2.2/192.0.2.3（全球不可路由）
+#     与 RFC 2606 保留域名 *.example.com，物理上不可能被真实生产环境使用。
+#   - 递归扫描全量字符串字段，覆盖 .host/.db_host 等任意位置的残留。
+#   - 在 find_project_config 公共层拦截；当 deploy.method=auto 时降级为 warn（探测链路不读 hosts），
+#     仅显式指定部署方式（k8s/rsync/docker/fc/ftp/sftp/oss）时残留值阻断上线。
+# 参数:
+#   $1 - config_file: 项目配置文件路径
+# 返回: 模板残留时返回 1，否则返回 0
+################################################################################
+check_project_config_template() {
+    local config_file="${1:-}"
+    [[ -z "$config_file" || ! -f "$config_file" ]] && return 0
+
+    if jq -e '.. | strings | select(test("example\\.com|192\\.0\\.2\\.2|192\\.0\\.2\\.3"))' "$config_file" >/dev/null 2>&1; then
+        ## auto 模式由 detect_deployment_method 探测链路决定部署方式，不读 hosts[].* 字段，
+        ## 配置残留模板值不影响实际探测，仅警告提示，不阻断流程。
+        if [[ "${PROJECT_DEPLOY_METHOD:-auto}" == "auto" ]]; then
+            _msg warn "WARNING: Using default config (auto deployment, hosts ignored)"
+            return 0
+        fi
+        _msg error "================================================================"
+        _msg error "ERROR: Configuration file contains example/template values!"
+        _msg error "================================================================"
+        _msg error "The configuration file appears to be unmodified template:"
+        _msg error "  Configuration file: $config_file"
+        _msg error ""
+        _msg error "Please edit the configuration file and update:"
+        _msg error "  - hosts[].host: Replace example IPs (192.0.2.2/192.0.2.3) with real server IPs"
+        _msg error "  - hosts[].user: Replace example usernames with real SSH usernames"
+        _msg error "  - hosts[].rsync_dest: Replace example paths with real deployment paths"
+        _msg error "  - hosts[].db_host: Replace example database hosts with real ones"
+        _msg error ""
+        _msg error "Deployment cannot proceed with template configuration."
+        _msg error "After editing, run the deployment command again."
+        return 1
+    fi
+    return 0
 }
 
 ################################################################################
@@ -121,8 +162,8 @@ config_deploy_init() {
 # 全局变量:
 #   - PROJECT_BUILD_METHOD: 构建方式 (auto/docker/system)
 #   - PROJECT_DEPLOY_METHOD: 部署方式 (auto/k8s/docker/rsync)
-#   - PROJECT_PREFER_DOCKER: 是否优先使用 Docker (true/false)
-#   - PROJECT_PREFER_K8S: 是否优先使用 k8s (true/false)
+#   - PROJECT_PREFER_DOCKER: 自动构建时是否优先 Docker (true/false)
+#   - PROJECT_PREFER_K8S: 自动部署时是否优先 k8s (true/false)
 ################################################################################
 _load_project_build_deploy_config() {
     local config_file="${1:-}"
@@ -162,6 +203,11 @@ _load_project_build_deploy_config() {
 #   - 设置适当的文件权限
 ################################################################################
 config_deploy_setup() {
+    ## dry-run: 不生成SSH密钥、不创建符号链接（仅本地环境配置，预览无意义）
+    if ${G_DRY_RUN:-false}; then
+        return 0
+    fi
+
     ## 需要创建符号链接的配置目录列表
     local conf_dirs=(".ssh" ".acme.sh" ".aws" ".kube" ".aliyun")
     local file_python_gitlab="${G_DATA}/.python-gitlab.cfg"
@@ -174,7 +220,7 @@ config_deploy_setup() {
         ## 创建SSH目录并设置权限（仅所有者可访问）
         mkdir -m 700 "${ssh_dir}"
         _msg warn "Generate ssh key file for gitlab-runner: ${ssh_dir}/id_ed25519"
-        _msg purple "Please: cat $ssh_dir/id_ed25519.pub >> [dest_server]:~/.ssh/authorized_keys"
+        _msg note "Please: cat $ssh_dir/id_ed25519.pub >> [dest_server]:~/.ssh/authorized_keys"
         ## 生成ED25519 SSH密钥对（无密码）
         ssh-keygen -t ed25519 -N '' -f "${ssh_dir}/id_ed25519" || _msg error "Failed to generate SSH key"
     fi
@@ -201,7 +247,7 @@ config_deploy_setup() {
     ## 链接 python-gitlab 配置文件
     [[ ! -f "$HOME/.python-gitlab.cfg" && -f "${file_python_gitlab}" ]] && ln -sf "${file_python_gitlab}" "$HOME/"
 
-    _msg green "Deployment environment setup completed"
+    _msg ok "Deployment environment setup completed"
 }
 
 ################################################################################
@@ -229,33 +275,8 @@ env_file_set() {
     local tmp_file found=false
     tmp_file=$(mktemp)
 
-    local skip_array=false
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        if $skip_array; then
-            if [[ "$line" =~ ^[[:space:]]*\) ]]; then
-                skip_array=false
-            fi
-            continue
-        fi
-
-        if ! $found && { [[ "$line" =~ ^${key}= ]] || [[ "$line" =~ ^#[[:space:]]*${key}= ]]; }; then
-            # 写入新的键值（保持用户传入的原始 value，不自动添加或删除引号）
-            echo "${key}=${value}" >>"$tmp_file"
-            found=true
-            # 如果原文件中该行是数组的开始（以 "=(" 结尾），则跳过后续直到 ")"
-            if [[ "$line" =~ =\($ ]]; then
-                skip_array=true
-            fi
-        else
-            echo "$line" >>"$tmp_file"
-        fi
-    done <"$G_ENV" > /dev/null 2>&1 || true
-
-    # The above redirection consumed input; rewrite properly by reading again to tmp_file
     if [[ -f "$G_ENV" ]]; then
-        tmp_file=$(mktemp)
-        skip_array=false
-        found=false
+        local skip_array=false
         while IFS= read -r line || [[ -n "$line" ]]; do
             if $skip_array; then
                 if [[ "$line" =~ ^[[:space:]]*\) ]]; then
@@ -265,8 +286,10 @@ env_file_set() {
             fi
 
             if ! $found && { [[ "$line" =~ ^${key}= ]] || [[ "$line" =~ ^#[[:space:]]*${key}= ]]; }; then
+                # 写入新的键值（保持用户传入的原始 value，不自动添加或删除引号）
                 echo "${key}=${value}" >>"$tmp_file"
                 found=true
+                # 如果原文件中该行是数组的开始（以 "=(" 结尾），则跳过后续直到 ")"
                 if [[ "$line" =~ =\($ ]]; then
                     skip_array=true
                 fi
@@ -279,12 +302,11 @@ env_file_set() {
         fi
     else
         # If G_ENV doesn't exist, just create it with the key
-        tmp_file=$(mktemp)
         echo "${key}=${value}" >"$tmp_file"
     fi
 
     mv "$tmp_file" "$G_ENV"
-    _msg green "Set ${key}=${value}"
+    _msg ok "Set ${key}=${value}"
 }
 
 ################################################################################
@@ -314,10 +336,10 @@ env_file_get() {
         source "$G_ENV"
     fi
 
-    # 如果变量以数组形式存在，输出数组表示
+    # 如果变量以数组形式存在，输出数组表示，使用 nameref 避免 eval 注入
     if declare -p "$key" &>/dev/null; then
         if declare -p "$key" 2>/dev/null | grep -q 'declare -a'; then
-            eval "arr=(\"\${${key}[@]}\")"
+            local -n arr="$key"
             local first=true
             printf '('
             for item in "${arr[@]}"; do
@@ -375,8 +397,8 @@ env_file_list() {
             if declare -p "$var" &>/dev/null; then
                 # 数组类型处理
                 if declare -p "$var" 2>/dev/null | grep -q 'declare -a'; then
-                    # 将命名变量的数组内容读取到本地数组 arr
-                    eval "arr=(\"\${${var}[@]}\")"
+                    # 使用 nameref 读取命名数组，避免 eval 注入
+                    local -n arr="$var"
                     printf '%s=(' "$var"
                     local first=true
                     for item in "${arr[@]}"; do

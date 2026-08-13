@@ -1,5 +1,5 @@
 {
-    "functionName": "$TEMPLATE_NAME",
+    "functionName": "$TEMPLATE_FUNC_NAME",
     "runtime": "custom-container",
     "internetAccess": false,
     "cpu": 0.3,
@@ -8,8 +8,11 @@
     "handler": "index.handler",
     "instanceConcurrency": 200,
     "customContainerConfig": {
-        "image": "$TEMPLATE_REGISTRY/$TEMPLATE_NAME:$TEMPLATE_TAG",
-        "port": 8080
+        "image": "$TEMPLATE_REGISTRY/$TEMPLATE_IMAGE:$TEMPLATE_TAG",
+        "port": 8080,
+        "healthCheckConfig": {
+            "initialDelaySeconds": 5
+        }
     },
     "nasConfig": {
         "mountPoints": [

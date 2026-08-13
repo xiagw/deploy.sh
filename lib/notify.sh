@@ -41,9 +41,9 @@ notify_email() {
 
     [ -z "$project_root" ] || [ -z "$server" ] || [ -z "$from" ] || [ -z "$to" ] && return 1
 
-    send_email="$project_root/data/bin/sendEmail"
+    local send_email="$project_root/data/bin/sendEmail"
     if [ ! -x "$send_email" ]; then
-        curl -Lo "$send_email" https://github.com/zehm/sendEmail/raw/refs/heads/master/sendEmail.pl
+        curl -Lo "$send_email" https://github.com/zehm/sendEmail/raw/refs/heads/master/sendEmail.pl && chmod +x "$send_email"
     fi
     if [ ! -x "$send_email" ]; then
         return 1
@@ -77,23 +77,35 @@ notify_feishu() {
 # Main notification function that handles all channels
 handle_notify() {
     # Skip notification in GitHub Actions
-    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && deploy_result=0 && return 0
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && G_DEPLOY_RESULT=0 && return 0
 
-    _msg step "[notify] deployment result notification"
-    echo "PP_NOTIFY: ${PP_NOTIFY:-false}"
+    _msg task "[notify] deployment result notification"
+    [[ "${PIPELINE_NOTIFY:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_NOTIFY=false)"
 
     # Check global notification switch first
     ${ENV_DISABLE_NOTIFY:-false} && return 0
 
     local type=${ENV_NOTIFY_TYPE}
+    local exec_deploy_notify=true message
 
     # If notification type is not set, return early
     [ -z "$type" ] && return 0
 
-    # Disable notifications for specific branches (e.g. develop, testing branches)
-    [[ "${ENV_DISABLE_NOTIFY_BRANCH:-develop|testing}" =~ $G_REPO_BRANCH ]] && exec_deploy_notify=false
-    # Manual override: if PP_DISABLE_NOTIFY is true, force enable notification regardless of other settings
-    ${PP_DISABLE_NOTIFY:-false} && exec_deploy_notify=true
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] handle_notify: would send '${type}' notification"
+        return 0
+    fi
+
+    # Disable notifications for specific branches (pipe-separated list, e.g. develop|testing)
+    local disable_branch disable_list="${ENV_DISABLE_NOTIFY_BRANCH:-develop|testing}"
+    for disable_branch in ${disable_list//|/ }; do
+        if [[ "${G_REPO_BRANCH}" == "${disable_branch}" ]]; then
+            exec_deploy_notify=false
+            break
+        fi
+    done
+    # Manual override: if PIPELINE_DISABLE_NOTIFY is true, force enable notification regardless of other settings
+    ${PIPELINE_DISABLE_NOTIFY:-false} && exec_deploy_notify=true
 
     if ! ${exec_deploy_notify:-true}; then
         return 0
@@ -110,10 +122,10 @@ Branche = ${G_REPO_BRANCH}"
 
     # Append required fields
     message+=$'\nDescribe = ['"${G_REPO_SHORT_SHA}]/${msg_describe:-$(get_git_last_commit_message)}"
-    message+=$'\nResult = '"$([[ "$deploy_result" -eq 0 ]] && echo OK || echo FAIL)"
+    message+=$'\nResult = '"$([[ "$G_DEPLOY_RESULT" -eq 0 ]] && echo OK || echo FAIL)"
 
     # Append test result if it exists
-    [[ -n "$test_result" ]] && message+=$'\nTest_Result = '"${test_result}"
+    [[ -n "$G_TEST_RESULT" ]] && message+=$'\nTest_Result = '"${G_TEST_RESULT}"
 
     case "$type" in
     wecom)
@@ -146,5 +158,5 @@ Branche = ${G_REPO_BRANCH}"
         ;;
     esac
 
-    _msg success "Notification sent successfully"
+    _msg ok "Notification sent successfully"
 }

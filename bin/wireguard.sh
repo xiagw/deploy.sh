@@ -4,7 +4,7 @@
 
 _check_fzf() {
     command -v fzf >/dev/null 2>&1 || {
-        _msg red "fzf not found / 未安装 fzf: brew install fzf"
+        _msg error "fzf not found / 未安装 fzf: brew install fzf"
         return 1
     }
 }
@@ -20,7 +20,7 @@ _fzf_pick_wg_conf() {
     confs=(wg*.conf)
     shopt -u nullglob
     if [[ ${#confs[@]} -eq 0 ]]; then
-        _msg yellow "no wg*.conf in $G_DATA"
+        _msg warn "no wg*.conf in $G_DATA"
         return 1
     fi
     if [[ "$with_quit" == 1 ]]; then
@@ -48,10 +48,10 @@ set_peer() {
     local file="$1"
     ## 新建的client，直接选择对端配置文件
     if [[ "$NEW_FLAG" -eq 1 ]]; then
-        _msg green "is new key/是新建的密钥"
+        _msg ok "is new key/是新建的密钥"
     ## 不是新建的client，需要选择已存在的client
     else
-        _msg green "select exist conf/选择已存在的配置"
+        _msg ok "select exist conf/选择已存在的配置"
         file=$(_fzf_pick_wg_conf "select exist conf/选择已存在的配置" 1) || exit 1
         [[ "$file" == 'quit' ]] && exit
         client_key_pub=$(awk '/^### public_key:/ {print $3; exit}' "$file")
@@ -62,7 +62,7 @@ set_peer() {
         client_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$file")
     fi
     ## 选择对端配置文件
-    _msg red "select peer conf/选择对端配置文件"
+    _msg error "select peer conf/选择对端配置文件"
     cd "$G_DATA" || exit 1
     # select peer_conf in $G_DATA/wg{1,2,5,17,20,27,36,37,38}.conf quit; do
     while true; do
@@ -75,7 +75,7 @@ set_peer() {
         peer_ip_port=$(awk '/^ListenPort/ {print $3; exit}' "$peer_conf")
         peer_lan_cidr=$(awk '/^### add_route:/ {print $3; exit}' "$peer_conf")
 
-        _msg red "From $peer_conf to ${file##*/}"
+        _msg error "From $peer_conf to ${file##*/}"
         if ! grep -q "### ${peer_conf##*/} begin" "$file"; then
             {
                 echo ""
@@ -103,7 +103,7 @@ set_peer() {
             } >>"$file"
         fi
 
-        _msg green "From ${file##*/} to $peer_conf"
+        _msg ok "From ${file##*/} to $peer_conf"
         if ! grep -q "### ${file##*/} begin" "$peer_conf"; then
             {
                 echo ""
@@ -134,7 +134,7 @@ new_key() {
         ((num++))
         file="$G_DATA/wg${num}.conf"
     done
-    _msg green "info/信息: ${file} ${ip_net}${num} ${ip6_net}${num}"
+    _msg ok "info/信息: ${file} ${ip_net}${num} ${ip6_net}${num}"
     read -rp "Enter comment/输入可选项备注: username or hostname: " -e -i "host${num}" client_comment
     read -rp 'Enter Public IP/输入可选项公网IP，如果作为服务器: ' -e -i "wg${num}.vpn.lan" client_ip_public
 
@@ -175,7 +175,7 @@ get_qrcode() {
         elif uname -s | grep -q Darwin; then
             brew install qrencode
         else
-            _msg yellow "qrencode not exists"
+            _msg warn "qrencode not exists"
         fi
     fi
     local conf
@@ -183,50 +183,50 @@ get_qrcode() {
     while true; do
         conf=$(_fzf_pick_wg_conf "qrcode conf/选择配置" 1) || break
         [[ "${conf}" == 'quit' || ! -f "${conf}" ]] && break
-        _msg green "${conf}.png"
+        _msg ok "${conf}.png"
         qrencode -o "${conf}.png" -t PNG <"$conf"
     done
 }
 
 revoke_client() {
-    _msg green "Select conf to revoke/选择要撤销的配置文件"
+    _msg ok "Select conf to revoke/选择要撤销的配置文件"
     cd "$G_DATA" || exit 1
     local conf
     conf=$(_fzf_pick_wg_conf "revoke conf/撤销配置" 1) || return 1
     [[ "$conf" == 'quit' ]] && return 0
-    _msg green "Selected/已选择: $conf"
-    _msg yellow "revoke from all conf/撤销在所有配置文件中的引用: ${conf##*/}"
+    _msg ok "Selected/已选择: $conf"
+    _msg warn "revoke from all conf/撤销在所有配置文件中的引用: ${conf##*/}"
     grep --color "^### ${conf##*/} begin" "$G_DATA"/wg*.conf
     sed -i "/^### ${conf##*/} begin/,/^### ${conf##*/} end/d" "$G_DATA"/wg*.conf
-    _msg yellow "remove/删除: $conf"
+    _msg warn "remove/删除: $conf"
     rm -f "$conf"
-    _msg red "!!! DONT forget update conf to Server/Client and restart wireguard/不要忘记更新配置到服务器/客户端并重启 WireGuard !!!"
+    _msg error "!!! DONT forget update conf to Server/Client and restart wireguard/不要忘记更新配置到服务器/客户端并重启 WireGuard !!!"
 }
 
 restart_host() {
     local conf="$1" host="$2"
-    _msg yellow "scp $conf to root@$host:/etc/wireguard/wg0.conf"
+    _msg warn "scp $conf to root@$host:/etc/wireguard/wg0.conf"
     if scp "${conf}" root@"$host":/etc/wireguard/wg0.conf; then
-        _msg yellow "Setting up WireGuard with infinite DNS retries..."
+        _msg warn "Setting up WireGuard with infinite DNS retries..."
         if ssh root@"$host" "export WG_ENDPOINT_RESOLUTION_RETRIES=infinity && \
             wg syncconf wg0 <(wg-quick strip wg0); \
             echo sleep 2; sleep 2; wg show"; then
-            _msg green "Wireguard restarted on $host with infinite DNS retries"
+            _msg ok "Wireguard restarted on $host with infinite DNS retries"
         else
-            _msg red "Error restarting Wireguard on $host"
+            _msg error "Error restarting Wireguard on $host"
         fi
     else
-        _msg red "Error copying $conf to $host"
+        _msg error "Error copying $conf to $host"
     fi
 }
 
 reload_conf() {
     local conf host
-    _msg red "Please select conf/请选择配置文件"
+    _msg error "Please select conf/请选择配置文件"
     cd "$G_DATA" || exit 1
     conf=$(_fzf_pick_wg_conf "Please select conf/请选择配置文件" 1) || return 1
     [[ "${conf}" == 'quit' ]] && return 0
-    _msg red "selected/已选择配置文件: $conf"
+    _msg error "selected/已选择配置文件: $conf"
     if [ -f "$HOME/.ssh/config" ]; then
         host=$(
             {
@@ -237,7 +237,7 @@ reload_conf() {
         [[ "${host}" == 'quit' || -z "${host}" ]] && return 0
         restart_host "$conf" "$host"
     else
-        _msg yellow "not found/未找到: $HOME/.ssh/config"
+        _msg warn "not found/未找到: $HOME/.ssh/config"
         read -rp "Enter host IP/输入主机IP: " host
         restart_host "$conf" "$host"
     fi
@@ -283,7 +283,7 @@ What do you want to do?
     done
     [[ ${MENU_OPTION} == 6 ]] && return
 
-    _msg green "wireguard data path: $G_DATA"
+    _msg ok "wireguard data path: $G_DATA"
 
     case "${MENU_OPTION}" in
     1) new_key "$@" ;;

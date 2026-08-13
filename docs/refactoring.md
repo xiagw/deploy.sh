@@ -9,8 +9,7 @@ This document tracks the progress and steps of our code modularization efforts f
    - Functions include:
      - Repository management:
        - `repo_inject_file`: Injects files and configurations into repository
-       - `repo_language_detect`: Detects repository programming language
-       - `determine_deployment_method`: Determines deployment strategy
+       - `detect_repo_language`: Detects repository programming language
      - Version control operations:
        - `setup_git_repo`: Git repository setup and management
        - `setup_svn_repo`: SVN repository setup and management
@@ -20,7 +19,6 @@ This document tracks the progress and steps of our code modularization efforts f
    - Features:
      - Centralized repository configuration management
      - Language detection and setup
-     - Deployment method detection
      - Docker build configuration
      - Environment-specific file handling
      - Support for multiple VCS (Git, SVN)
@@ -28,25 +26,29 @@ This document tracks the progress and steps of our code modularization efforts f
      - Branch and commit management
      - Comprehensive error handling
    - Added proper error handling and logging
-
+  
 2. Notification System (`lib/notify.sh`)
    - Unified notification interface for multiple channels
-   - Supports WeChat Work, Telegram, Element, and Email
+   - Supports WeChat Work, Telegram, Element, Email, Zoom, and Feishu
    - Functions include:
      - `handle_notify`: Main interface for all channels
      - `notify_wecom`: WeChat Work notifications
      - `notify_telegram`: Telegram notifications
      - `notify_element`: Element notifications
      - `notify_email`: Email notifications
+     - `notify_zoom`: Zoom notifications
+     - `notify_feishu`: Feishu notifications
    - Added comprehensive documentation in `docs/notify.md`
 
 3. System Maintenance (`lib/system.sh`)
    - Centralized system maintenance and cleanup operations
    - Functions include:
-     - `system_clean_disk`: Clean up disk space when usage exceeds threshold
+     - `system_clean_disk`: Clean up disk space when usage exceeds threshold (`ENV_DISK_THRESHOLD`, default 80%)
      - `update_nginx_geoip_db`: Nginx GeoIP database updates
      - `system_check`: Check system requirements and install dependencies
      - `system_cert_renew`: Renew SSL certificates with acme.sh
+     - `system_install_tools`: Install project-required system tools and dependencies
+     - `check_docker_available` / `check_k8s_available` / `check_helm_charts_exist`: Availability probes
    - Handles:
      - Disk cleanup and Docker cleanup
      - System maintenance tasks
@@ -64,9 +66,10 @@ This document tracks the progress and steps of our code modularization efforts f
 4. Common Utilities (`lib/common.sh`)
    - Core utility functions and logging interface
    - Functions include:
-     - `_msg`: Core logging function with level-based filtering
-     - `is_demo_mode`: Check if running in demo mode
-     - `is_china`: Check if running in China region
+     - `_msg`: Core logging function with level-based filtering (`note/task/warn/error/stage/anchor/ok`)
+     - `_t` / `_msg_lang`: Bilingual (zh/en) message output, CLI `--lang` (`G_MSG_LANG`) > `ENV_LANG` > zh
+     - `_install_*`: Tool installation helpers (docker, kubectl, helm, ossutil, aliyun CLI, terraform, ...)
+     - `get_oom_score` / `get_github_latest_download`: Common utilities
    - Features:
      - Timestamp-based logging
      - Log level filtering
@@ -83,14 +86,18 @@ This document tracks the progress and steps of our code modularization efforts f
      - `analysis_gitleaks`: Security scanning for sensitive information
      - `analysis_zap`: Security scanning with OWASP ZAP
      - `analysis_vulmap`: Security scanning with Vulmap
-     - `generate_apidoc`: API documentation generation with apidoc
+     - `analysis_pmd` / `analysis_checkstyle` / `analysis_spotbugs`: Java analysis
+     - `analysis_codeclimate` / `analysis_pylint`: Python/CodeClimate analysis
 
 6. Kubernetes Management (`lib/kubernetes.sh`)
    - Handles Kubernetes cluster operations
    - Functions include:
      - `kube_config_init`: Initialize Kubernetes configuration
-     - `kube_setup`: Setup Kubernetes cluster using Terraform
+     - `kube_setup_terraform`: Setup Kubernetes cluster using Terraform
      - `create_helm_chart`: Creates and configures Helm charts
+     - `kube_create_storage_class`: Create CNFS NAS storage class resources
+     - `kube_create_pv_pvc`: Create PVC with specified name
+     - `build_base_image` / `select_image_tags`: Base image build helpers
    - Features:
      - Independent cluster creation logic
      - Terraform integration
@@ -106,15 +113,17 @@ This document tracks the progress and steps of our code modularization efforts f
 7. Deployment Operations (`lib/deployment.sh`)
    - Core deployment logic for multiple deployment methods
    - Functions include:
-     - `deploy`: Main deployment orchestration function
-     - `deploy_aliyun_functions`: Aliyun Functions deployment
+     - `handle_deploy`: Main deployment orchestration function
+     - `detect_deployment_method`: Determines deployment strategy
      - `deploy_to_kubernetes`: Kubernetes deployment with Helm
      - `deploy_via_rsync_ssh`: Rsync+SSH deployment
+     - `deploy_to_docker_compose`: Docker Compose deployment over SSH
      - `deploy_aliyun_oss`: Aliyun OSS deployment
-     - `deploy_rsync`: Rsync server deployment
-     - `deploy_ftp`: FTP deployment
-     - `deploy_sftp`: SFTP deployment
-     - `deploy_notify`: Deployment notifications
+     - `deploy_aliyun_functions`: Aliyun Functions deployment
+     - `deploy_via_rsync`: Rsync server (rsyncd) deployment
+     - `deploy_via_ftp` / `deploy_via_sftp`: FTP / SFTP deployment
+     - `copy_docker_image`: Copy image between registries
+     - `clean_old_tags`: Clean old registry tags (`ENV_CLEAN_TAGS_DAYS`, default 180)
    - Features:
      - Unified deployment interface
      - Multiple deployment methods support
@@ -128,6 +137,7 @@ This document tracks the progress and steps of our code modularization efforts f
    - Functions include:
      - `test_unit`: Executes unit tests
      - `test_function`: Executes functional tests
+     - `handle_test`: Test stage dispatcher (unit/functional), result in `G_TEST_RESULT`
    - Features:
      - Flexible test script location support
      - Clear success/failure reporting
@@ -135,50 +145,73 @@ This document tracks the progress and steps of our code modularization efforts f
      - Integration with project-specific and global test scripts
    - Added proper logging and status reporting
 
-9. Docker Operations (`lib/docker.sh`)
-    - Handles all Docker-related operations
+9. Build Operations (`lib/build.sh`)
+   - Handles Docker/Podman image building for all supported languages
+   - Functions include:
+     - `docker_login`: Manages Docker registry authentication
+     - `build_image` / `build_all`: Builds Docker images
+     - `build_java`/`build_node`/`build_python`/`build_go`/`build_php`/`build_ruby`/`build_android`/`build_ios`/`build_docker`: Language-specific builders
+     - `generate_bake_file` / `ensure_buildx_builder` / `enable_buildx_mode`: Buildx/Bake orchestration
+     - `generate_lang_dockerfile`: Writes `Dockerfile.<lang>` from detected language
+     - `detect_repo_language_and_build`: Cloud Native Buildpacks build (`pack build`)
+   - Features:
+     - Support for multiple registry types (Docker Hub, AWS ECR, Aliyun ACR)
+     - Context management for buildx modes
+     - Lock-based login caching
+     - Base image support
+     - Temporary image tagging support
+     - Retention control via `ENV_IMAGE_RETAIN` / `-B push|keep|remove`
+   - Added proper error handling and logging
+
+10. Configuration Management (`lib/config.sh`)
+    - Centralized environment and project configuration management
     - Functions include:
-      - `docker_login`: Manages Docker registry authentication
-      - `get_docker_context`: Handles Docker context selection and management
-      - `build_image`: Builds Docker images with support for base images
-      - `push_image`: Handles image pushing with error handling
+      - `find_project_config`: Locate and create project-specific config (`data/conf/namespace/project-name.json`)
+      - `check_project_config_template`: Reject template placeholder values before deployment
+      - `config_deploy_init`: Bootstrap data dir, PATH, and deploy.env
+      - `config_deploy_setup`: Symlink SSH keys / tool configs into `$HOME`
+      - `env_file_set` / `env_file_get` / `env_file_list`: `deploy.sh set/get/env` operations on deploy.env
     - Features:
-      - Support for multiple registry types (Docker Hub, AWS ECR)
-      - Context management with load balancing (round-robin/random)
-      - Comprehensive error handling and logging
-      - Lock-based login caching
-      - Base image support
-      - Temporary image tagging support
-    - Added proper error handling and logging
+      - Per-project config separation (no single oversized file)
+      - Template placeholder interception covering all deploy methods
+      - Environment variable CRUD against deploy.env
+
+11. Code Style Checking (`lib/style.sh`)
+    - Centralized code style checks per language
+    - Functions include:
+      - `style_check`: Style check dispatcher based on detected language
+      - `check_php_style` / `check_node_style` / `check_java_style` / `check_go_style` / ...: Language-specific checkers
+    - Features:
+      - Parallel style checking
+      - Detection-based dispatch (go/golang, etc.)
 
 ## Current Structure
 
 ```
 .
 ├── lib/
-│   ├── notify.sh       # Notification module
-│   ├── system.sh       # System maintenance module
 │   ├── common.sh       # Common utilities and logging module
-│   ├── analysis.sh     # Code analysis and quality checks module
-│   ├── kubernetes.sh   # Kubernetes management module
-│   ├── deployment.sh   # Deployment operations module
+│   ├── config.sh       # Configuration management module
+│   ├── system.sh       # System maintenance module
+│   ├── repo.sh         # Repository and VCS management module
 │   ├── test.sh         # Testing framework module
-│   ├── docker.sh       # Docker operations module
-│   └── repo.sh         # Repository and VCS management module
+│   ├── analysis.sh     # Code analysis and quality checks module
+│   ├── style.sh        # Code style checking module
+│   ├── build.sh        # Build and Docker operations module
+│   ├── deployment.sh   # Deployment operations module
+│   ├── kubernetes.sh   # Kubernetes management module
+│   └── notify.sh       # Notification module
 ├── docs/
 │   ├── notify.md       # Notification module documentation
+│   ├── architecture.md # Architecture overview
+│   ├── code-review.md  # Code audit findings and status
 │   └── refactoring.md  # This document
 └── deploy.sh           # Main deployment script
 ```
 
 ## Identified Modules for Refactoring
 
-Based on the current codebase analysis, these are the next potential modules to extract:
-
-1. Environment Management
-   - Environment variable handling
-   - Configuration loading
-   - Suggested module: `lib/config.sh`
+Configuration management has been extracted to `lib/config.sh` (see step 10 above); all remaining modules are already modularized. New functionality should be added to the existing per-domain module.
 
 ## Refactoring Guidelines
 
@@ -199,34 +232,22 @@ Based on the current codebase analysis, these are the next potential modules to 
    - Verify integration points
 
 4. Global Variable Standards
-   - Use `G` associative array for global configurations
-   - Implement clear namespace prefixes:
+   - Use plain global variables with a `G_*` prefix (no associative `G[...]` array). Current convention, see `AGENTS.md` and the variable comment at the top of `main()` in `deploy.sh`:
      ```bash
-     # Core program variables
-     G[core_name]="$(basename "${BASH_SOURCE[0]}")"
-     G[core_path]="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-     G[core_lib_path]="${G[core_path]}/lib"
-     G[core_data_path]="${G[core_path]}/data"
-     G[core_log_file]="${G[core_data_path]}/${G[core_name]}.log"
-     # Note: G_CONF is set by find_project_config() to project-specific config
-     # Format: data/conf/namespace/project-name.json
-     # G[core_conf_file] is no longer used (replaced by project-specific configs)
-     G[core_env_file]="${G[core_data_path]}/deploy.env"
-
-     # Module-specific variables
-     # kubernetes.sh
-     G[k8s_config]="${G[core_data_path]}/k8s/config"
-     G[k8s_namespace]="default"
-
-     # docker.sh
-     G[docker_file]="${G[core_path]}/Dockerfile"
-     G[docker_context]="${G[core_path]}"
-
-     # deployment.sh
-     G[deploy_target]="production"
-     G[deploy_log_path]="${G[core_data_path]}/deploy/logs"
+     G_NAME="$(basename "${BASH_SOURCE[0]}")"
+     G_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+     G_LIB="${G_PATH}/lib"
+     G_DATA="${G_PATH}/data"
+     G_ENV="${G_DATA}/deploy.env"
+     G_LOG="${G_DATA}/logs/${G_NAME}.log"
+     # Module-level globals: G_REPO_DIR, G_NAMESPACE, G_IMAGE_TAG, G_DOCK, ...
      ```
-
+   - Namespace prefixes:
+     - `G_*`   : cross-module shared globals
+     - `ENV_*` : configuration from deploy.env
+     - `arg_*` : command-line arguments
+     - `CI_*` / `GITHUB_*` : CI platform injected variables
+     - everything else must be `local` within a function
    - Follow naming conventions:
      - `*_path` or `*_dir` for directory paths
      - `*_file` for single files, `*_files` for file collections
@@ -238,12 +259,9 @@ Based on the current codebase analysis, these are the next potential modules to 
      # Example module header (kubernetes.sh)
      #
      # Uses following G variables:
-     # - G[k8s_config]      - K8s configuration file path
-     # - G[k8s_namespace]   - K8s namespace
-     # - G[k8s_deploy_path] - K8s deployment directory
-     #
-     # Depends on core variables:
-     # - G[core_data_path]  - Core data directory
+     # - G_K8S_CONFIG        - K8s configuration file path
+     # - G_K8S_NAMESPACE     - K8s namespace
+     # - G_DATA              - Core data directory
      ```
 
    - Benefits:
@@ -283,9 +301,10 @@ Based on the current codebase analysis, these are the next potential modules to 
 - [x] Kubernetes management modularization
 - [x] Deployment operations modularization
 - [x] Testing framework modularization
-- [x] Docker operations modularization
+- [x] Build/Docker operations modularization (`lib/build.sh`)
 - [x] Repository management modularization
 - [x] Configuration management modularization
+- [x] Code style checking modularization
 - [ ] Unit tests implementation
 - [ ] Module documentation completion
 - [ ] Usage examples creation
@@ -294,15 +313,18 @@ Based on the current codebase analysis, these are the next potential modules to 
 
 Current documentation coverage:
 - ✅ Notification module (`docs/notify.md`)
+- ✅ Architecture overview (`docs/architecture.md`)
+- ✅ Code audit findings (`docs/code-review.md`)
 - ❌ System maintenance module (including certificate management)
 - ❌ Common utilities module
 - ❌ Code analysis module
 - ❌ Kubernetes management module
 - ❌ Deployment operations module
 - ❌ Testing framework module
-- ❌ Docker operations module
+- ❌ Build/Docker operations module
 - ❌ Repository and VCS management module
 - ❌ Configuration management module
+- ❌ Code style checking module
 
 ## Container Build Solutions
 
@@ -413,12 +435,12 @@ CMD ["java", "-jar", "app.jar"]
 ### 5. Integration Example
 
 ```bash
-repo_language_detect_and_build() {
+detect_repo_language_and_build() {
     local target_dir="${1:-.}"
     local lang_type
 
     # Detect language
-    lang_type=$(repo_language_detect)
+    lang_type=$(detect_repo_language)
 
     # Select appropriate builder
     case "${lang_type%%:*}" in
@@ -440,7 +462,7 @@ repo_language_detect_and_build() {
     esac
 
     # Build using buildpack
-    pack build "${ENV_DOCKER_REGISTRY%/}/${G_IMAE_NAME}:${G_IMAGE_TAG}" \
+    pack build "${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}" \
         --builder "$builder" \
         --path "$target_dir"
 }

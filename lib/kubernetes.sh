@@ -154,9 +154,14 @@ EOF
 kube_setup_terraform() {
   local terraform_dir="${G_DATA}/terraform"
   [[ -d "$terraform_dir" ]] || return 0
+  if ${G_DRY_RUN:-false}; then
+    _msg note "[dry-run] kube_setup_terraform:"
+    _msg note "  cd ${terraform_dir} && terraform init -input=false && terraform apply -auto-approve"
+    return 0
+  fi
   _install_terraform
 
-  _msg step "[PaaS] create k8s cluster"
+  _msg task "[PaaS] create k8s cluster"
   cd "$terraform_dir" || return 1
 
   if terraform init -input=false && terraform apply -auto-approve; then
@@ -180,7 +185,7 @@ kube_create_storage_class() {
     return 1
   fi
 
-  _msg step "[k8s] Creating CNFS storage class resources"
+  _msg task "[k8s] Creating CNFS storage class resources"
 
   # Check if CNFS exists
   if ! $KUBECTL_OPT get cnfs "$cnfs_name" &>/dev/null; then
@@ -229,7 +234,13 @@ kube_create_pv_pvc() {
   pvc_name="pvc-${subpath}" pv_name="pv-${subpath}-${namespace}"
   cnfs_name="cnfs-01" sc_name="alicloud-cnfs-nas"
 
-  _msg step "[k8s] Creating PVC [$pvc_name] in namespace [$namespace]"
+  _msg task "[k8s] Creating PVC [$pvc_name] in namespace [$namespace]"
+
+  if ${G_DRY_RUN:-false}; then
+    _msg note "[dry-run] kube_create_pv_pvc:"
+    _msg note "  ${KUBECTL_OPT} apply -f - <<EOF (PV ${pv_name} / PVC ${pvc_name} / storageClass ${sc_name})"
+    return 0
+  fi
 
   # Check if PVC exists
   if ! $KUBECTL_OPT get pv "$pv_name" &>/dev/null; then
@@ -309,6 +320,7 @@ build_base_image() {
     extra_args="
         RUN_IMAGE = \"ubuntu\"
         RUN_TAG = \"24.04\"
+        RUN_SCRIPT_ARG = \"php\"
         PHP_VERSION = \"${tag_right}\"
         APP_PORTS = \"80 9000\""
     ;;
@@ -352,8 +364,10 @@ build_base_image() {
         APP_PORTS = \"80 443\"
         APP_CMD = \"\""
     local dk_file="${G_PATH}/conf/Dockerfile.nginx"
-    cp -vf "${G_PATH}/conf/Dockerfile.single" "${dk_file}"
-    sed -i -e "/^CMD/ s@^@#@" "$dk_file"
+    if ! ${G_DRY_RUN:-false}; then
+        cp -vf "${G_PATH}/conf/Dockerfile.single" "${dk_file}"
+        sed -i -e "/^CMD/ s@^@#@" "$dk_file"
+    fi
     ;;
   *)
     extra_args="
@@ -380,21 +394,29 @@ target "default" {
 }
 EOF
 
-  if ${DRY_RUN:-false}; then
-    echo "## base-bake.hcl: ${bake_file}"
-    docker buildx bake --file "${bake_file}" --progress=quiet --print
+  if ${G_DRY_RUN:-false}; then
+    _msg note "[dry-run] build_base_image (${image_tag}):"
+    _msg note "  bake file: ${bake_file}"
+    if docker buildx version >/dev/null 2>&1; then
+      docker buildx bake --file "${bake_file}" --progress=quiet --print
+    else
+      cat "${bake_file}"
+    fi
     rm -f "${dk_file}" 2>/dev/null || true
     return
   fi
 
   # https://docs.docker.com/build/building/multi-platform/#build-multi-platform-images
-  local image
-  if "${IS_CHINA:-false}"; then
-    image="docker.m.daocloud.io/tonistiigi/binfmt:latest"
-  else
-    image="tonistiigi/binfmt:latest"
-  fi
-  if ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64 >/dev/null 2>&1; then
+  ## macOS 用 Docker Desktop，QEMU 已内置在 VM 中，无需 binfmt 注册
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    :
+  elif ! ls /proc/sys/fs/binfmt_misc/qemu-aarch64 >/dev/null 2>&1; then
+    local image
+    if "${IS_CHINA:-false}"; then
+      image="docker.m.daocloud.io/tonistiigi/binfmt:latest"
+    else
+      image="tonistiigi/binfmt:latest"
+    fi
     docker run --privileged --rm "${image}" --install all || return 1
   fi
 
@@ -406,6 +428,10 @@ EOF
 # @param $@ Optional specific image tags to build
 select_image_tags() {
   local all_tags=() tags=()
+
+  if ${G_DRY_RUN:-false}; then
+    _msg note "[dry-run] select base image tags (interactive fzf), then build_base_image for each"
+  fi
 
   all_tags=(
     "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4" "php:8.5"

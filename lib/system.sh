@@ -41,7 +41,7 @@ check_crontab_execution() {
 #   0 if cleanup was successful or not needed
 #   1 if cleanup failed to free up space
 system_clean_disk() {
-    local disk_usage clean_disk_threshold=80 aggressive=false
+    local disk_usage clean_disk_threshold="${ENV_DISK_THRESHOLD:-80}" aggressive=false
 
     # Get disk usage more reliably
     disk_usage=$(df -P / | awk 'NR==2 {print int($5)}')
@@ -50,27 +50,27 @@ system_clean_disk() {
         return 0
     fi
 
-    _msg warning "Disk usage (${disk_usage}%) exceeds threshold (${clean_disk_threshold}%). Starting cleanup..."
+    _msg warn "Disk usage (${disk_usage}%) exceeds threshold (${clean_disk_threshold}%). Starting cleanup..."
 
     # Determine if we should use aggressive cleaning
     if ((disk_usage >= clean_disk_threshold + 10)); then
         aggressive=true
-        _msg warning "Disk usage is critically high. Using aggressive cleaning."
+        _msg warn "Disk usage is critically high. Using aggressive cleaning."
     fi
 
     # Show cleanup plan in dry-run mode
-    if ${DRY_RUN:-false}; then
-        _msg purple "[dry-run] system_clean_disk:"
-        _msg purple "   - docker image prune -f"
-        _msg purple "   - docker builder prune -f"
-        _msg purple "   - Remove images from ${ENV_DOCKER_REGISTRY}"
-        $aggressive && _msg purple "   - docker system prune -af --volumes (aggressive mode)"
-        _msg purple "2. Temporary files cleanup:"
-        _msg purple "   - Remove files older than 10 days from /tmp and /var/tmp"
-        _msg purple "3. Log files cleanup:"
-        _msg purple "   - Remove log files older than 30 days from /var/log"
-        $aggressive && _msg purple "4. Core dumps cleanup (aggressive mode):"
-        $aggressive && _msg purple "   - Remove all files from /var/crash"
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] system_clean_disk:"
+        _msg note "   - docker image prune -f"
+        _msg note "   - docker builder prune -f"
+        _msg note "   - Remove images from ${ENV_DOCKER_REGISTRY}"
+        $aggressive && _msg note "   - docker system prune -af --volumes (aggressive mode)"
+        _msg note "2. Temporary files cleanup:"
+        _msg note "   - Remove files older than 10 days from /tmp and /var/tmp"
+        _msg note "3. Log files cleanup:"
+        _msg note "   - Remove log files older than 30 days from /var/log"
+        $aggressive && _msg note "4. Core dumps cleanup (aggressive mode):"
+        $aggressive && _msg note "   - Remove all files from /var/crash"
         return 0
     fi
 
@@ -79,7 +79,7 @@ system_clean_disk() {
         echo "Cleaning up Docker resources..."
         docker image prune -f
         docker builder prune -f
-        docker image ls --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | xargs -r docker rmi 2>/dev/null || true
+        docker image ls --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | grep -v '^$' | xargs docker rmi 2>/dev/null || true
         if $aggressive; then
             docker system prune -af --volumes
         fi
@@ -107,61 +107,13 @@ system_clean_disk() {
     if ((disk_usage_after >= disk_usage)); then
         _msg error "Warning: Cleanup did not free up space. Further investigation may be needed."
     else
-        _msg success "Successfully freed up $((disk_usage - disk_usage_after))% of disk space."
+        _msg ok "Successfully freed up $((disk_usage - disk_usage_after))% of disk space."
     fi
-}
-
-# Update Nginx GeoIP database from Miyuru's mirror
-# Requires:
-#   - ENV_NGINX_IPS: Space-separated list of Nginx server IPs
-# Returns:
-#   0 if update was successful
-#   1 if update failed
-update_nginx_geoip_db() {
-    local tmp_dir country_url city_url
-    tmp_dir="$(mktemp -d)"
-    country_url="https://dl.miyuru.lk/geoip/maxmind/country/maxmind.dat.gz"
-    city_url="https://dl.miyuru.lk/geoip/maxmind/city/maxmind.dat.gz"
-
-    _msg step "[geoip] Updating Nginx GeoIP database"
-
-    _download_and_extract() {
-        local url="$1" output="$2"
-        if ! curl -LqsSf "$url" | gunzip -c >"$output"; then
-            _msg error "Failed to download or extract $url"
-            return 1
-        fi
-    }
-
-    _download_and_extract "$country_url" "$tmp_dir/maxmind-Country.dat" || return 1
-    _download_and_extract "$city_url" "$tmp_dir/maxmind-City.dat" || return 1
-
-    echo "GeoIP databases downloaded successfully"
-
-    _update_server() {
-        local ip="$1"
-        if rsync -av "${tmp_dir}/" "root@$ip:/etc/nginx/conf.d/"; then
-            _msg success "Updated GeoIP database on $ip"
-        else
-            _msg error "Failed to update GeoIP database on $ip"
-        fi
-    }
-
-    if [ -n "${ENV_NGINX_IPS[*]:-}" ]; then
-        _msg info "Updating GeoIP database on Nginx servers: ${ENV_NGINX_IPS[*]}"
-        for ip in "${ENV_NGINX_IPS[@]}"; do
-            _update_server "$ip" &
-        done
-    fi
-
-    wait
-
-    rm -rf "$tmp_dir"
-    _msg success "Nginx GeoIP database update completed"
 }
 
 # 系统环境检查和设置
 system_check() {
+    local -a pkgs
     _check_distribution
 
     pkgs=()
@@ -226,14 +178,14 @@ system_check() {
 system_proxy() {
     case "$1" in
     0 | off | disable)
-        _msg time "unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY"
+        _msg task "unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY"
         unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
         ;;
     *)
         if [ -z "$ENV_HTTP_PROXY" ] && [ -z "$ENV_HTTPS_PROXY" ] && [ -z "$ENV_SOCK_PROXY" ] && [ -z "$ENV_ALL_PROXY" ]; then
             _msg warn "ENV_HTTP_PROXY/ENV_SOCK_PROXY is empty, proxy not set."
         else
-            _msg time "set proxy environment variables"
+            _msg task "set proxy environment variables"
             if [ -n "$ENV_HTTP_PROXY" ]; then
                 export http_proxy="$ENV_HTTP_PROXY"
                 export HTTP_PROXY="$ENV_HTTP_PROXY"
@@ -281,13 +233,20 @@ system_cert_renew() {
     if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
         return 0
     fi
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] system_cert_renew:"
+        _msg note "  install acme.sh + loop renew all certs (${acme_home:-~/.acme.sh})"
+        return 0
+    fi
 
-    _msg step "[cert] renewing SSL certificates"
+    _msg task "[cert] renewing SSL certificates"
+    local exec_single_job=false
     exec_single_job=true
 
     local acme_home="${HOME}/.acme.sh"
     local acme_cmd="${acme_home}/acme.sh"
     local acme_cert_dest="${acme_home}/dest"
+    local run_hook domains=""
 
     ## install acme.sh / 安装 acme.sh
     command -v crontab &>/dev/null || _install_packages cron
@@ -306,7 +265,7 @@ system_cert_renew() {
     local dns_type
     for file in "${acme_home}"/account.conf.*.dns_*; do
         if [ -f "$file" ]; then
-            _msg blue "Found $file"
+            _msg note "Found $file"
         else
             continue
         fi
@@ -315,21 +274,21 @@ system_cert_renew() {
 
         case "${dns_type}" in
         dns_gd)
-            _msg yellow "dns type: Goddady"
+            _msg warn "dns type: Godaddy"
             api_head="Authorization: sso-key ${SAVED_GD_Key:-none}:${SAVED_GD_Secret:-none}"
-            api_goddady="https://api.godaddy.com/v1/domains"
+            api_godaddy="https://api.godaddy.com/v1/domains"
             if [[ -z "$SAVED_GD_Key" || -z "$SAVED_GD_Secret" ]]; then
-                _msg error "Missing Goddady credentials in $file"
+                _msg error "Missing Godaddy credentials in $file"
                 continue
             fi
             export GD_Key="${SAVED_GD_Key}"
             export GD_Secret="${SAVED_GD_Secret}"
             domains="$(
-                curl -fsSL -X GET -H "$api_head" "$api_goddady" | jq -r '.[].domain' || true
+                curl -fsSL -X GET -H "$api_head" "$api_godaddy" | jq -r '.[].domain' || true
             )"
             ;;
         dns_cf)
-            _msg yellow "dns type: cloudflare"
+            _msg warn "dns type: cloudflare"
             if [ -n "$SAVED_Ali_Key" ]; then
                 export Ali_Key=$SAVED_Ali_Key
             fi
@@ -352,7 +311,7 @@ system_cert_renew() {
             )"
             ;;
         dns_ali)
-            _msg yellow "dns type: aliyun"
+            _msg warn "dns type: aliyun"
             local profile_name="deploy_${profile_name:-$RANDOM}"
             _install_aliyun_cli
             aliyun configure set \
@@ -369,7 +328,7 @@ system_cert_renew() {
             )"
             ;;
         dns_tencent)
-            _msg yellow "dns type: tencent"
+            _msg warn "dns type: tencent"
             _install_tencent_cli
             tccli configure set secretId "${SAVED_Tencent_SecretId:-none}" secretKey "${SAVED_Tencent_SecretKey:-none}"
             domains="$(
@@ -377,13 +336,13 @@ system_cert_renew() {
             )"
             ;;
         dns_manual)
-            _msg yellow "get domains from account.conf.xxx.dns_manual file"
+            _msg warn "get domains from account.conf.xxx.dns_manual file"
             # "${acme_home}/account.conf.xxx.dns_manual" 内有 domains="example1.com example2.com example3.com"
             echo "$domains"
             # domains="$(grep -oP 'domains=\K.*' "${acme_home}/account.conf.xxx.dns_manual" 2>/dev/null || true)"
             ;;
         *)
-            _msg yellow "unknown dns type: $dns_type"
+            _msg warn "unknown dns type: $dns_type"
             continue
             ;;
         esac
@@ -395,7 +354,7 @@ system_cert_renew() {
         fi
         acme_cmd="${acme_cmd} --accountconf $file"
         for domain in ${domains}; do
-            _msg orange "Checking domain: $domain"
+            _msg note "Checking domain: $domain"
             if ${acme_cmd} --list | grep -qw "$domain"; then
                 ## renew cert / 续签证书
                 ${acme_cmd} --renew -d "${domain}" --reloadcmd "$run_hook" || true
@@ -408,40 +367,41 @@ system_cert_renew() {
                 --key-file "${acme_cert_dest}/${domain}.key" \
                 --fullchain-file "$acme_cert_dest/${domain}.pem" || true
             ## 随机停顿 5-30分钟
+            local random_minute
             random_minute=$((RANDOM % 26 + 5))
-            _msg green "sleep ${random_minute} minutes"
+            _msg ok "sleep ${random_minute} minutes"
             sleep "${random_minute}"m
         done
     done
     ## deploy with acme_deploy / 自定义部署方式
     if [[ -f "${acme_home}/custom_deploy.sh" ]]; then
-        _msg blue "Found ${acme_home}/custom_deploy.sh"
+        _msg note "Found ${acme_home}/custom_deploy.sh"
         bash "${acme_home}/custom_deploy.sh"
     fi
     ## deploy with gitlab CI/CD / gitlab CI/CD 部署方式（项目名包含 nginx 的项目）
     if [ -f "$reload_nginx" ]; then
         rm -f "$reload_nginx"
-        _msg green "found $reload_nginx"
+        _msg ok "found $reload_nginx"
         _install_python_gitlab ""
         ## 如果定义了变量数组 ENV_NGINX_PROJECT_ID，则使用该数组中的项目 ID 创建 GitLab pipeline
         if [[ -n "${ENV_NGINX_PROJECT_ID[*]:-}" ]]; then
             for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
-                _msg "create gitlab pipeline, project id is $id"
+                _msg note "create gitlab pipeline, project id is $id"
                 gitlab project-pipeline create --ref main --project-id "$id" || true
             done
         else
             ## 否则使用 gitlab 搜索 nginx 项目
-            _msg "search nginx project in gitlab project list"
+            _msg note "search nginx project in gitlab project list"
             local id
             while read -r id; do
-                _msg "create gitlab pipeline, project id is $id"
+                _msg note "create gitlab pipeline, project id is $id"
                 gitlab project-pipeline create --ref main --project-id "$id" || true
             done < <(gitlab -ojson project list --search "nginx" | jq -r '.[].id' || true)
         fi
     else
         _msg warn "not found $reload_nginx, skip create giltab pipeline"
     fi
-    _msg time "[cert] completed"
+    _msg task "[cert] completed"
     echo '================================================================'
 
     if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then

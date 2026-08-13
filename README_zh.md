@@ -55,11 +55,9 @@ project_lang=shell
 ### 可选方式 [1], 手动单独运行
 ```bash
 ## 如果您的项目 git 仓库已预先存在，进入到仓库目录直接运行 [deploy.sh]
-cd /path/to/<your_project.git>
-$HOME/runner/deploy.sh
-```
-
-```bash
+$HOME/runner/deploy.sh -w /path/to/<your_project.git>
+## 或者
+cd /path/to/<your_project.git> && $HOME/runner/deploy.sh
 ## 如果您的项目 git 仓库不存在，使用 [deploy.sh] 克隆 git 仓库
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
