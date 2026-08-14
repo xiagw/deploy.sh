@@ -182,41 +182,24 @@ system_proxy() {
         unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
         ;;
     *)
-        if [ -z "$ENV_HTTP_PROXY" ] && [ -z "$ENV_HTTPS_PROXY" ] && [ -z "$ENV_SOCK_PROXY" ] && [ -z "$ENV_ALL_PROXY" ]; then
-            _msg warn "ENV_HTTP_PROXY/ENV_SOCK_PROXY is empty, proxy not set."
+        local default_no_proxy="localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+        _msg task "set proxy environment variables"
+        [ -n "$ENV_HTTP_PROXY" ] && export http_proxy="$ENV_HTTP_PROXY" HTTP_PROXY="$ENV_HTTP_PROXY"
+        [ -n "$ENV_SOCK_PROXY" ] && export socks_proxy="$ENV_SOCK_PROXY" SOCKS_PROXY="$ENV_SOCK_PROXY"
+        if [ -n "$ENV_NO_PROXY" ]; then
+            export no_proxy="$ENV_NO_PROXY" NO_PROXY="$ENV_NO_PROXY"
         else
-            _msg task "set proxy environment variables"
-            if [ -n "$ENV_HTTP_PROXY" ]; then
-                export http_proxy="$ENV_HTTP_PROXY"
-                export HTTP_PROXY="$ENV_HTTP_PROXY"
-            fi
-            if [ -n "$ENV_SOCK_PROXY" ]; then
-                export socks_proxy="$ENV_SOCK_PROXY"
-                export SOCKS_PROXY="$ENV_SOCK_PROXY"
-            fi
-            if [ -n "$ENV_HTTPS_PROXY" ]; then
-                export https_proxy="$ENV_HTTPS_PROXY"
-                export HTTPS_PROXY="$ENV_HTTPS_PROXY"
-            elif [ -n "$ENV_HTTP_PROXY" ]; then
-                export https_proxy="$ENV_HTTP_PROXY"
-                export HTTPS_PROXY="$ENV_HTTP_PROXY"
-            fi
-            if [ -n "$ENV_ALL_PROXY" ]; then
-                export all_proxy="$ENV_ALL_PROXY"
-                export ALL_PROXY="$ENV_ALL_PROXY"
-            fi
-            if [ -n "$ENV_NO_PROXY" ]; then
-                export no_proxy="$ENV_NO_PROXY"
-                export NO_PROXY="$ENV_NO_PROXY"
-            fi
-            if [ -n "$ENV_HTTP_PROXY" ] && [ -z "$ENV_HTTPS_PROXY" ]; then
-                export https_proxy="$ENV_HTTP_PROXY"
-                export HTTPS_PROXY="$ENV_HTTP_PROXY"
-            fi
-            if [ -n "$ENV_HTTP_PROXY" ] && [ -z "$ENV_ALL_PROXY" ]; then
-                export all_proxy="$ENV_HTTP_PROXY"
-                export ALL_PROXY="$ENV_HTTP_PROXY"
-            fi
+            export no_proxy="$default_no_proxy" NO_PROXY="$default_no_proxy"
+        fi
+        if [ -n "$ENV_HTTPS_PROXY" ]; then
+            export https_proxy="$ENV_HTTPS_PROXY" HTTPS_PROXY="$ENV_HTTPS_PROXY"
+        elif [ -n "$ENV_HTTP_PROXY" ]; then
+            export https_proxy="$ENV_HTTP_PROXY" HTTPS_PROXY="$ENV_HTTP_PROXY"
+        fi
+        if [ -n "$ENV_ALL_PROXY" ]; then
+            export all_proxy="$ENV_ALL_PROXY" ALL_PROXY="$ENV_ALL_PROXY"
+        elif [ -n "$ENV_HTTP_PROXY" ]; then
+            export all_proxy="$ENV_HTTP_PROXY" ALL_PROXY="$ENV_HTTP_PROXY"
         fi
         ;;
     esac
