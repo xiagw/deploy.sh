@@ -13,7 +13,7 @@ analysis_gitleaks() {
     local path="$1"
     local config_file="$2"
 
-    _msg task "[security] checking for sensitive information leaks"
+    _msg task "Checking for sensitive information leaks"
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] analysis_gitleaks:"
@@ -30,12 +30,12 @@ analysis_gitleaks() {
         return 1
     }
 
-    _msg task "[security] Gitleaks scan completed"
+    _msg task "Gitleaks scan completed"
 }
 
 # Run OWASP ZAP security scan
 analysis_zap() {
-    _msg task "[security] ZAP scan"
+    _msg task "ZAP scan"
     [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SCAN_ZAP=false)"
     if [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]]; then
         return 0
@@ -46,7 +46,7 @@ analysis_zap() {
     local zap_report_file
     zap_report_file="zap_report_$(date +%Y%m%d_%H%M%S).html"
 
-    _msg task "[security] running ZAP security scan"
+    _msg task "Running ZAP security scan"
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] analysis_zap:"
@@ -61,7 +61,7 @@ analysis_zap() {
         _msg error "ZAP scan failed."
         return 1
     fi
-    _msg task "[security] ZAP scan completed"
+    _msg task "ZAP scan completed"
 }
 
 # Run Vulmap security scan
@@ -75,7 +75,7 @@ analysis_vulmap() {
     local config_file="$G_DATA/conf/config.cfg"
     local output_file="vulmap_report.html"
 
-    _msg task "[security] running Vulmap security scan"
+    _msg task "Running vulmap security scan"
 
     # Load environment variables from config file
     # shellcheck source=/dev/null
@@ -90,17 +90,17 @@ analysis_vulmap() {
     # Run vulmap scan
     $G_RUN -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/$output_file"
     if [[ -f "$output_file" ]]; then
-        _msg ok "Vulmap scan complete. Results saved to '$output_file'."
+        _msg ok "vulmap scan completed. Results saved to '$output_file'."
     else
-        _msg error "Vulmap scan failed or no vulnerabilities found."
+        _msg error "vulmap scan failed or no vulnerabilities found."
         return 1
     fi
 
-    _msg task "[security] Vulmap scan completed"
+    _msg task "vulmap scan completed"
 }
 
 analysis_sonarqube() {
-    _msg task "[quality] Checking code with sonarqube"
+    _msg task "Checking code with SonarQube"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
     [[ "${PIPELINE_SONAR:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SONAR=false)"
     if ! ${PIPELINE_SONAR:-false}; then
@@ -147,12 +147,12 @@ EOF
         return 1
     fi
 
-    _msg task "[quality] Code quality check with SonarQube completed"
+    _msg task "Code quality check with SonarQube completed"
 }
 
 # Run PMD code analysis
 analysis_pmd() {
-    _msg task "[quality] Running PMD code analysis"
+    _msg task "Running PMD code analysis"
     [[ "${PIPELINE_PMD:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_PMD=false)"
     if ! ${PIPELINE_PMD:-false}; then
         return 0
@@ -164,7 +164,7 @@ analysis_pmd() {
     local report_format="${ENV_PMD_REPORT_FORMAT:-html}"
     local report_file="pmd_report.${report_format}"
 
-    _msg task "[quality] Running PMD analysis with version ${pmd_version}"
+    _msg task "Running PMD analysis with version ${pmd_version}"
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] analysis_pmd:"
@@ -191,12 +191,12 @@ analysis_pmd() {
         return 1
     fi
 
-    _msg task "[quality] PMD code analysis completed"
+    _msg task "PMD code analysis completed"
 }
 
 # Run CodeClimate analysis
 analysis_codeclimate() {
-    _msg task "[quality] Running CodeClimate analysis"
+    _msg task "Running CodeClimate analysis"
     [[ "${PIPELINE_CODECLIMATE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CODECLIMATE=false)"
     if ! ${PIPELINE_CODECLIMATE:-false}; then
         return 0
@@ -259,7 +259,7 @@ $(echo "$exclude_patterns" | tr ',' '\n' | sed 's/^/  - "/;s/$/"/')
 EOF
     fi
 
-    _msg task "[quality] Running CodeClimate analysis with configuration from ${config_file}"
+    _msg task "Running CodeClimate analysis with configuration from ${config_file}"
 
     if ! $G_RUN \
         -v "${G_REPO_DIR}":/code \
@@ -297,12 +297,12 @@ EOF
         return 1
     fi
 
-    _msg task "[quality] CodeClimate analysis completed"
+    _msg task "CodeClimate analysis completed"
 }
 
 # Run Spotbugs analysis for Java code
 analysis_spotbugs() {
-    _msg task "[quality] Running Spotbugs analysis"
+    _msg task "Running Spotbugs analysis"
     [[ "${PIPELINE_SPOTBUGS:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SPOTBUGS=false)"
     if ! ${PIPELINE_SPOTBUGS:-false}; then
         return 0
@@ -336,7 +336,7 @@ analysis_spotbugs() {
 EOF
     fi
 
-    _msg task "[quality] Running Spotbugs analysis with version ${spotbugs_version}"
+    _msg task "Running Spotbugs analysis with version ${spotbugs_version}"
 
     if ! $G_RUN \
         -v "${G_REPO_DIR}:/src" \
@@ -356,12 +356,12 @@ EOF
         return 1
     fi
 
-    _msg task "[quality] Spotbugs analysis completed"
+    _msg task "Spotbugs analysis completed"
 }
 
 # Run Pylint analysis for Python code
 analysis_pylint() {
-    _msg task "[quality] Running Pylint analysis"
+    _msg task "Running Pylint analysis"
     [[ "${PIPELINE_PYLINT:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_PYLINT=false)"
     if ! ${PIPELINE_PYLINT:-false}; then
         return 0
@@ -384,7 +384,7 @@ analysis_pylint() {
         $G_RUN "python:${pylint_version}-slim" bash -c "pip install pylint==${pylint_version} && pylint --generate-rcfile" > "$config_file"
     fi
 
-    _msg task "[quality] Running Pylint analysis with version ${pylint_version}"
+    _msg task "Running Pylint analysis with version ${pylint_version}"
 
     if ! $G_RUN \
         -v "${G_REPO_DIR}:/code" \
@@ -403,12 +403,12 @@ analysis_pylint() {
         return 1
     fi
 
-    _msg task "[quality] Pylint analysis completed"
+    _msg task "Pylint analysis completed"
 }
 
 # Run Checkstyle analysis for Java code
 analysis_checkstyle() {
-    _msg task "[quality] Running Checkstyle analysis"
+    _msg task "Running Checkstyle analysis"
     [[ "${PIPELINE_CHECKSTYLE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CHECKSTYLE=false)"
     if ! ${PIPELINE_CHECKSTYLE:-false}; then
         return 0
@@ -461,7 +461,7 @@ analysis_checkstyle() {
 EOF
     fi
 
-    _msg task "[quality] Running Checkstyle analysis with version ${checkstyle_version}"
+    _msg task "Running Checkstyle analysis with version ${checkstyle_version}"
 
     if ! $G_RUN \
         -v "${G_REPO_DIR}:/src" \
@@ -481,5 +481,5 @@ EOF
         return 1
     fi
 
-    _msg task "[quality] Checkstyle analysis completed"
+    _msg task "Checkstyle analysis completed"
 }

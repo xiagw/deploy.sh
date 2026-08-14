@@ -79,7 +79,7 @@ handle_notify() {
     # Skip notification in GitHub Actions
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && G_DEPLOY_RESULT=0 && return 0
 
-    _msg task "[notify] deployment result notification"
+    _msg task "Sending deployment result notification"
     [[ "${PIPELINE_NOTIFY:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_NOTIFY=false)"
 
     # Check global notification switch first

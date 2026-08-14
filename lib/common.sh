@@ -195,10 +195,6 @@ _msg() {
     else
         [ "$#" -gt 1 ] && shift
         msg="$*"
-        ## 任务行剥离前导 [tag]（调用点保留作 grep 锚点）
-        if [[ "$level" == task && "$msg" == \[*\]\ * ]]; then
-            msg="${msg#*] }"
-        fi
     fi
     if [ "${silent_mode:-0}" -eq 0 ]; then
         printf "%b%s%s%b\n" "$color_on" "$prefix" "$msg" "$color_off"

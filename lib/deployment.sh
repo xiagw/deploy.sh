@@ -142,7 +142,7 @@ cleanup_evicted_pods() {
 
 # Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
-    _msg task "[deploy] Deploy to Kubernetes with Helm"
+    _msg task "Deploy to Kubernetes with Helm"
     local release_name previous_image bad_pod helm_dir helm_dirs revision
     release_name="$(format_release_name)"
 
@@ -255,7 +255,7 @@ deploy_aliyun_functions() {
     _install_aliyun_cli
 
     ## create FC
-    _msg task "[deploy] Creating/updating Aliyun Functions"
+    _msg task "Creating/updating Aliyun Functions"
     functions_conf="$(mktemp)"
     functions_conf_tmpl="$G_DATA/conf/aliyun.functions.json"
     if [[ -f "$functions_conf_tmpl" ]]; then
@@ -315,7 +315,7 @@ EOF
 # @param $1 lang The programming language of the project
 deploy_via_rsync_ssh() {
     local lang="${1:?'lang parameter is required'}"
-    _msg task "[deploy] Deploy files with Rsync+SSH"
+    _msg task "Deploy files with Rsync+SSH"
     local rsync_exclude ssh_user ssh_host_ip ssh_port rsync_src_from_conf rsync_dest
     local ssh_host ssh_opt rsync_src rsync_opt
     rsync_exclude="$(_rsync_exclude_file)"
@@ -428,7 +428,7 @@ deploy_aliyun_oss() {
         dry_run_note "ossutil cp ${source_path%/}/ ${oss_dest} --recursive --force"
         return 0
     fi
-    _msg task "[deploy] Deploy files to Aliyun OSS"
+    _msg task "Deploy files to Aliyun OSS"
     _oss_upload "${source_path}" "${oss_dest}"
     _msg task "Aliyun OSS deployment completed"
 }
@@ -453,7 +453,7 @@ _oss_upload() {
 # Deploy via Rsync (rsyncd daemon, module-based)
 # 连接参数读取顺序: data/conf/rsyncd.conf (旧配置) > ENV_RSYNC_* (deploy.env)
 deploy_via_rsync() {
-    _msg task "[deploy] Deploy files to Rsyncd server"
+    _msg task "Deploy files to Rsyncd server"
     local rsyncd_conf
     rsyncd_conf="$G_DATA/conf/rsyncd.conf"
     if [[ -f "$rsyncd_conf" ]]; then
@@ -487,7 +487,7 @@ deploy_via_rsync() {
 # Deploy via FTP
 # 凭据来自 deploy.env: ENV_FTP_HOST / ENV_FTP_USERNAME / ENV_FTP_PASSWORD / ENV_FTP_DIRECTORY
 deploy_via_ftp() {
-    _msg task "[deploy] Deploy files to FTP server"
+    _msg task "Deploy files to FTP server"
     local ftp_host="${ENV_FTP_HOST:-}" ftp_username="${ENV_FTP_USERNAME:-}"
     local ftp_password="${ENV_FTP_PASSWORD:-}" ftp_directory="${ENV_FTP_DIRECTORY:-}"
     if [[ -z "$ftp_host" || -z "$ftp_username" || -z "$ftp_password" ]]; then
@@ -531,7 +531,7 @@ EOF
 # 上传方式: tar 打包后 sftp 批量命令上传; 若设置 ENV_SFTP_PASSWORD 则使用 sshpass 密码认证
 deploy_via_sftp() {
     local lang="${1:-}"
-    _msg task "[deploy] Deploy files to SFTP server"
+    _msg task "Deploy files to SFTP server"
 
     local upload_file="${G_REPO_DIR}/sftp.tgz" upload_name
     upload_name="$(basename "$upload_file")"
@@ -617,7 +617,7 @@ EOF
 # @param $1 lang The programming language of the project
 deploy_to_docker_compose() {
     local lang="${1:-}"
-    _msg task "[deploy] Deploy with Docker Compose"
+    _msg task "Deploy with Docker Compose"
     local rsync_exclude ssh_user ssh_host_ip ssh_port rsync_src_from_conf rsync_dest service
     local ssh_host ssh_opt rsync_src rsync_opt hosts_found=false
     rsync_exclude="$(_rsync_exclude_file)"
@@ -678,7 +678,7 @@ detect_deployment_method() {
     # Get release name for Helm charts check
     release_name="$(format_release_name 2>/dev/null || echo "")"
 
-    _msg task "[detect] Determining deployment method" >&2
+    _msg task "Determining deployment method" >&2
 
     ## 检查配置文件中的部署方式覆盖
     if [[ -n "${PROJECT_DEPLOY_METHOD:-}" && "${PROJECT_DEPLOY_METHOD}" != "auto" ]]; then
@@ -729,7 +729,7 @@ detect_deployment_method() {
     # prefer_k8s=false: 跳过 k8s，顺延到 docker-compose / rsync
     if [[ "${PROJECT_PREFER_K8S:-true}" == true ]] && check_helm_charts_exist "${release_name}"; then
         if check_k8s_available; then
-            _msg note "Found Helm charts and k8s is available → deploy_k8s" >&2
+            _msg note "found Helm charts and k8s is available → deploy_k8s" >&2
             echo "deploy_k8s"
             return 0
         else
@@ -941,7 +941,7 @@ clean_old_tags() {
     local clean_days="${ENV_CLEAN_TAGS_DAYS:-180}"
     delete_force="${ENV_CLEAN_TAGS_FORCE:-false}"
 
-    _msg task "[clean] Cleaning old tags from registry"
+    _msg task "Cleaning old tags from registry"
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] clean_old_tags:"
         _msg note "  skopeo list-tags docker://${repository} + delete tags older than ${clean_days} days"

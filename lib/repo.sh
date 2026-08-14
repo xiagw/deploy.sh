@@ -27,7 +27,7 @@ repo_inject_file() {
 
     command -v rsync >/dev/null || _install_packages rsync
 
-    _msg task "[inject] Initializing file injection"
+    _msg task "Initializing file injection"
 
     # Define paths for injection
     ## Priority 1: ${G_DATA} paths
@@ -39,16 +39,16 @@ repo_inject_file() {
     ## 2. 如果命名空间目录不存在，从 ${G_DATA}/inject/${G_REPO_NAME} 注入（对应项目通用代码）
     ## 3. 使用 rsync 进行文件同步，保持文件属性并覆盖目标文件
     if [ -d "$inject_code_path_branch" ]; then
-        echo "Found files in $inject_code_path_branch/, syncing to ${G_REPO_DIR}/"
+        _msg note "inject code: ${inject_code_path_branch} -> ${G_REPO_DIR}"
         rsync -a "$inject_code_path_branch/" "${G_REPO_DIR}/"
     elif [ -d "$inject_code_path" ]; then
-        echo "Found files in $inject_code_path/, syncing to ${G_REPO_DIR}/"
+        _msg note "inject code: ${inject_code_path} -> ${G_REPO_DIR}"
         rsync -a "$inject_code_path/" "${G_REPO_DIR}/"
     fi
 
     ## arg_disable_inject 参数可强制跳过 Dockerfile 和 root/ 注入
     ${arg_disable_inject:-false} && {
-        echo "Inject disabled by argument."
+        _msg note "inject disabled by argument"
         return 0
     }
 
@@ -75,7 +75,7 @@ repo_inject_file() {
         mkdir -p "${G_DATA}/cache"
         hash_saved="$(cat "${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
         if [[ "$hash_now" != "$hash_saved" ]]; then
-            echo "Copying Dockerfile.single as Dockerfile.base..."
+            _msg note "generate Dockerfile.base: ${_single} -> ${G_REPO_DIR}/Dockerfile.base"
             cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
         else
             rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
@@ -85,13 +85,13 @@ repo_inject_file() {
         ;;
     java | go | golang | php | nginx)
         [[ -f "${_template}" ]] && {
-            echo "Copying Dockerfile.multi..."
+            _msg note "generate Dockerfile: ${_template} -> ${G_REPO_DIR}/Dockerfile"
             cp -f "${_template}" "${G_REPO_DIR}/Dockerfile"
         }
         ;;
     *)
         [[ -f "${_single}" ]] && {
-            echo "Copying Dockerfile.single..."
+            _msg note "generate Dockerfile: ${_single} -> ${G_REPO_DIR}/Dockerfile"
             cp -f "${_single}" "${G_REPO_DIR}/Dockerfile"
         }
         ;;
@@ -99,7 +99,7 @@ repo_inject_file() {
 
     ## 同时注入 .dockerignore（如果不存在）
     if [[ ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
-        echo "Copying .dockerignore..."
+        _msg note "inject .dockerignore: ${G_PATH}/conf/.dockerignore -> ${G_REPO_DIR}/"
         cp -f "${G_PATH}/conf/.dockerignore" "${G_REPO_DIR}/"
     fi
 
@@ -114,12 +114,12 @@ repo_inject_file() {
     mkdir -p "${repo_root}"
     ## 优先级1：从 conf/root/ 注入基础目录结构（如果不存在 root/opt）
     if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
-        echo "Injecting root/ directory structure from ${conf_root}..."
+        _msg note "inject root/: ${conf_root} -> ${repo_root}"
         ${rsync_opts} "${conf_root}/" "${repo_root}/"
     fi
     ## 优先级2：从 data/dockerfile/root/ 注入自定义目录结构
     if [[ -d "${G_DATA}/dockerfile/root" ]]; then
-        echo "Injecting root/ directory structure from ${G_DATA}/dockerfile/root..."
+        _msg note "inject root/: ${G_DATA}/dockerfile/root -> ${repo_root}"
         ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
     fi
 }
@@ -380,14 +380,14 @@ setup_git_repo() {
     [ -d "${git_repo_dir}" ] || mkdir -p "$git_repo_dir"
 
     if [ -d "${git_repo_dir}/.git" ] && cd "$git_repo_dir" && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && [ "$(git rev-parse --git-dir)" = ".git" ]; then
-        _msg task "[repo] Updating existing repo: "
+        _msg task "Updating existing repo: "
         echo "  $git_repo_dir, branch: ${git_repo_branch}"
         git clean -fxd
         git fetch --quiet
         git checkout --quiet "${git_repo_branch}"
         git pull --quiet
     else
-        _msg task "[repo] Cloning git repo:"
+        _msg task "Cloning git repo:"
         echo "  $git_repo_url, branch: ${git_repo_branch}"
         git clone --quiet --depth 1 -b "${git_repo_branch}" "$git_repo_url" "$git_repo_dir" || {
             _msg error "Failed to clone git repo: $git_repo_url"
@@ -414,7 +414,7 @@ setup_git_branch() {
         return 1
     fi
 
-    _msg task "[repo] Switch workspace repo to branch: $git_repo_branch"
+    _msg task "Switch workspace repo to branch: $git_repo_branch"
     _msg note "[repo] discarding local changes in $git_repo_dir"
     git -C "$git_repo_dir" reset --hard HEAD
     git -C "$git_repo_dir" clean -fxd
@@ -485,13 +485,13 @@ setup_svn_repo() {
 
     command -v svn >/dev/null || _install_packages subversion
     if [ -d "$svn_repo_dir/.svn" ]; then
-        _msg task "[repo] Updating existing repo: $svn_repo_dir"
+        _msg task "Updating existing repo: $svn_repo_dir"
         (cd "$svn_repo_dir" && svn update) || {
             _msg error "Failed to update svn repo: $svn_repo_url"
             return 1
         }
     else
-        _msg task "[repo] Checking out new repo: $svn_repo_url"
+        _msg task "Checking out new repo: $svn_repo_url"
         svn checkout "$svn_repo_url" "$svn_repo_dir" || {
             _msg error "Failed to checkout svn repo: $svn_repo_url"
             return 1

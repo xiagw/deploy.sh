@@ -31,7 +31,7 @@ style_check_php() {
 
 # Android Style Check
 style_check_android() {
-    _msg task "[style] Checking Android code style"
+    _msg task "Checking Android code style"
     echo "PIPELINE_ANDROID_CODE_STYLE: ${PIPELINE_ANDROID_CODE_STYLE:-0}"
     if [[ "${PIPELINE_ANDROID_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/project" openjdk:11 \
@@ -43,7 +43,7 @@ style_check_android() {
 
 # Python Style Check
 style_check_python() {
-    _msg task "[style] Checking Python code style"
+    _msg task "Checking Python code style"
     if [[ "${PIPELINE_PYTHON_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/code" python:3 \
             /bin/bash -c "cd /code && pip install pylint && pylint *.py"
@@ -54,7 +54,7 @@ style_check_python() {
 
 # Node.js Style Check
 style_check_node() {
-    _msg task "[style] Checking Node.js code style"
+    _msg task "Checking Node.js code style"
     if [[ "${PIPELINE_NODE_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/app" node:latest \
             /bin/bash -c "cd /app && npm install eslint && npx eslint ."
@@ -65,7 +65,7 @@ style_check_node() {
 
 # Java Style Check
 style_check_java() {
-    _msg task "[style] Checking Java code style"
+    _msg task "Checking Java code style"
     if [[ "${PIPELINE_JAVA_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/src" openjdk:11 \
             /bin/bash -c "cd /src && ./gradlew checkstyle"
@@ -76,7 +76,7 @@ style_check_java() {
 
 # Go Style Check
 style_check_go() {
-    _msg task "[style] Checking Go code style"
+    _msg task "Checking Go code style"
     if [[ "${PIPELINE_GO_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/go/src/app" golang:latest \
             /bin/bash -c "cd /go/src/app && go fmt ./... && golint ./..."
@@ -87,7 +87,7 @@ style_check_go() {
 
 # Ruby Style Check
 style_check_ruby() {
-    _msg task "[style] Checking Ruby code style"
+    _msg task "Checking Ruby code style"
     if [[ "${PIPELINE_RUBY_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/app" ruby:latest \
             /bin/bash -c "cd /app && gem install rubocop && rubocop"
@@ -98,7 +98,7 @@ style_check_ruby() {
 
 # C/C++ Style Check
 style_check_c() {
-    _msg task "[style] Checking C/C++ code style"
+    _msg task "Checking C/C++ code style"
     if [[ "${PIPELINE_C_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/src" gcc:latest \
             /bin/bash -c "cd /src && clang-format -i *.{c,h,cpp,hpp}"
@@ -109,7 +109,7 @@ style_check_c() {
 
 # Docker Style Check
 style_check_docker() {
-    _msg task "[style] Checking Dockerfile style"
+    _msg task "Checking Dockerfile style"
     if [[ "${PIPELINE_DOCKER_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/work" hadolint/hadolint:latest \
             hadolint /work/Dockerfile*
@@ -120,7 +120,7 @@ style_check_docker() {
 
 # iOS Style Check
 style_check_ios() {
-    _msg task "[style] Checking iOS code style"
+    _msg task "Checking iOS code style"
     if [[ "${PIPELINE_IOS_CODE_STYLE:-0}" -eq 1 ]]; then
         # Note: iOS style checking typically requires macOS environment
         # This is a placeholder for SwiftLint or similar tools
@@ -132,7 +132,7 @@ style_check_ios() {
 
 # Django Style Check
 style_check_django() {
-    _msg task "[style] Checking Django code style"
+    _msg task "Checking Django code style"
     if [[ "${PIPELINE_DJANGO_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/app" python:3 \
             /bin/bash -c "cd /app && pip install pylint-django && pylint --load-plugins pylint_django *.py"
@@ -162,7 +162,7 @@ parallel_style_check() {
 
 # Shell Style Check / Shell 风格校验（shellcheck + shfmt）
 style_check_shell() {
-    _msg task "[style] Running shell style check"
+    _msg task "Running shell style check"
     [[ "${G_DEBUG_ON:-false}" == true ]] && return 0
     _install_shellcheck
     _install_shfmt
@@ -193,7 +193,7 @@ style_check() {
     lang="$(detect_repo_language | cut -d':' -f1)" # 获取语言类型
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，true 启用，false 禁用[default]
-    _msg task "[style] Running code style checks"
+    _msg task "Running code style checks"
     [[ "${PIPELINE_CODE_STYLE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CODE_STYLE=false)"
     if ! ${PIPELINE_CODE_STYLE:-false}; then
         return 0

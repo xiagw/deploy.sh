@@ -342,7 +342,7 @@ DOCKERIGNORE
         _msg error "Full build log: $build_log"
         return 1
     fi
-    _msg task "[build] Image build completed"
+    _msg task "Image build completed"
 
     ## 不包含敏感信息的镜像可以推送到公开仓库 push to ttl.sh
     if [[ "${PIPELINE_TTL_SH:-false}" == "true" || "${ENV_IMAGE_TTL:-false}" == "true" ]]; then
@@ -386,7 +386,7 @@ build_all() {
     local has_dockerfile=false
     local docker_build_failed=false
 
-    _msg task "[build] Starting build process for ${lang}"
+    _msg task "Starting build process for ${lang}"
 
     ## 检查配置文件中的构建方式覆盖
     if [[ -n "${PROJECT_BUILD_METHOD:-}" && "${PROJECT_BUILD_METHOD}" != "auto" ]]; then
@@ -421,7 +421,7 @@ build_all() {
     # prefer_docker=false: 自动模式下直接走系统构建，跳过 Docker（由 Priority 2 承接）
     if [[ "${PROJECT_PREFER_DOCKER:-true}" == true ]] && [[ "$has_dockerfile" == true ]]; then
         if check_docker_available; then
-            _msg note "Found Dockerfile and dockerd is available → attempting Docker build"
+            _msg note "found Dockerfile and dockerd is available → attempting Docker build"
             # Check if lang already has :docker suffix, if not, try Docker build first
             if [[ "$lang" != *:docker ]]; then
                 # Try Docker build with fallback
@@ -476,10 +476,10 @@ build_java() {
     local jars_path="$G_REPO_DIR/build_output"
 
     if [[ -f "$G_REPO_DIR/build.gradle" ]]; then
-        _msg task "[build] Building with gradle"
+        _msg task "Building with gradle"
         gradle -q
     else
-        _msg task "[build] Building with maven"
+        _msg task "Building with maven"
         local maven_settings=""
         local maven_debug=""
 
@@ -562,7 +562,7 @@ build_node() {
 
     [ ! -d "${G_REPO_DIR}/node_modules" ] && yarn_install=true
 
-    _msg task "[build] Running yarn install"
+    _msg task "Running yarn install"
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
     # Custom build check
@@ -576,7 +576,7 @@ build_node() {
         $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash -c "yarn install" &&
             echo "$file_json_md5" >>"${me_log}"
     else
-        _msg task "skip yarn install..."
+        _msg task "Skip yarn install..."
     fi
 
     # Determine build option based on namespace
@@ -595,7 +595,7 @@ build_node() {
 
 # Python Build
 build_python() {
-    _msg task "[build] Running python build"
+    _msg task "Running python build"
     if [ -f "$G_REPO_DIR/requirements.txt" ]; then
         pip install -r requirements.txt
     fi
@@ -604,7 +604,7 @@ build_python() {
 
 # Android Build
 build_android() {
-    _msg task "[build] Running android build"
+    _msg task "Running android build"
     if [ -f "$G_REPO_DIR/gradlew" ]; then
         chmod +x "$G_REPO_DIR/gradlew"
         "$G_REPO_DIR/gradlew" clean assembleRelease
@@ -616,7 +616,7 @@ build_android() {
 
 # iOS Build
 build_ios() {
-    _msg task "[build] Running iOS build"
+    _msg task "Running iOS build"
     if [ -f "$G_REPO_DIR/Podfile" ]; then
         pod install
         ## 展开 *.xcworkspace 通配符（此前将字面量传给 xcodebuild 必然失败）
@@ -633,7 +633,7 @@ build_ios() {
 
 # Ruby Build
 build_ruby() {
-    _msg task "[build] Running ruby build"
+    _msg task "Running ruby build"
     if [ -f "$G_REPO_DIR/Gemfile" ]; then
         bundle install
     fi
@@ -642,14 +642,14 @@ build_ruby() {
 
 # Go Build
 build_go() {
-    _msg task "[build] Running go build"
+    _msg task "Running go build"
     go build -v ./...
     _msg note "[build] go build"
 }
 
 # C/C++ Build
 build_c() {
-    _msg task "[build] Running C/C++ build"
+    _msg task "Running C/C++ build"
     if [ -f "$G_REPO_DIR/CMakeLists.txt" ]; then
         mkdir -p build && cd build || exit
         cmake ..
@@ -663,7 +663,7 @@ build_c() {
 
 # Docker Build
 build_docker() {
-    _msg task "[build] Running docker build"
+    _msg task "Running docker build"
     if [ -f "$G_REPO_DIR/Dockerfile" ]; then
         docker build -t "${G_REPO_NAME}:latest" .
     fi
@@ -672,7 +672,7 @@ build_docker() {
 
 # Django Build
 build_django() {
-    _msg task "[build] Running django build"
+    _msg task "Running django build"
     if [ -f "$G_REPO_DIR/manage.py" ]; then
         python manage.py collectstatic --noinput
         python manage.py migrate
@@ -682,7 +682,7 @@ build_django() {
 
 # PHP Build
 build_php() {
-    _msg task "[build] Running php build"
+    _msg task "Running php build"
     if [ -f "$G_REPO_DIR/composer.json" ]; then
         composer install --no-dev
     fi
@@ -693,7 +693,7 @@ build_php() {
 # 用 shc 将仓库内 *.sh 编译为 native 可执行文件（混淆源码，防明文误读/复制篡改）。
 # shc 产物是 glibc/arch 绑定的 native 二进制，跨机器分发受限，但满足部署场景防护。
 build_shell() {
-    _msg task "[build] Running shell build with shc"
+    _msg task "Running shell build with shc"
     if ${G_DRY_RUN:-false}; then
         dry_run_note "run shc on shell scripts under ${G_REPO_DIR}"
         return 0
@@ -762,7 +762,7 @@ docker_login() {
         if [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]]; then
             return 0
         fi
-        _msg task "[login] aws ecr login [${ENV_DOCKER_LOGIN_TYPE:-aliyun}]..."
+        _msg task "AWS ECR login [${ENV_DOCKER_LOGIN_TYPE:-aliyun}]..."
         if aws ecr get-login-password --profile="${ENV_AWS_PROFILE}" --region "${ENV_REGION_ID:?undefine}" |
             $G_DOCK login --username AWS --password-stdin "${ENV_DOCKER_REGISTRY%%/*}" >/dev/null; then
             touch "$lock_login_registry"

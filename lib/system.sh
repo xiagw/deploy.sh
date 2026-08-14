@@ -183,7 +183,7 @@ system_proxy() {
         ;;
     *)
         local default_no_proxy="localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-        _msg task "set proxy environment variables"
+        _msg task "Set proxy environment variables"
         [ -n "$ENV_HTTP_PROXY" ] && export http_proxy="$ENV_HTTP_PROXY" HTTP_PROXY="$ENV_HTTP_PROXY"
         [ -n "$ENV_SOCK_PROXY" ] && export socks_proxy="$ENV_SOCK_PROXY" SOCKS_PROXY="$ENV_SOCK_PROXY"
         if [ -n "$ENV_NO_PROXY" ]; then
@@ -222,7 +222,7 @@ system_cert_renew() {
         return 0
     fi
 
-    _msg task "[cert] renewing SSL certificates"
+    _msg task "Renewing SSL certificates"
     local exec_single_job=false
     exec_single_job=true
 
@@ -384,7 +384,7 @@ system_cert_renew() {
     else
         _msg warn "not found $reload_nginx, skip create giltab pipeline"
     fi
-    _msg task "[cert] completed"
+    _msg task "Certificate renewal completed"
     echo '================================================================'
 
     if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then

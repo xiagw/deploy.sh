@@ -161,7 +161,7 @@ kube_setup_terraform() {
   fi
   _install_terraform
 
-  _msg task "[PaaS] create k8s cluster"
+  _msg task "Creating k8s cluster"
   cd "$terraform_dir" || return 1
 
   if terraform init -input=false && terraform apply -auto-approve; then
@@ -185,7 +185,7 @@ kube_create_storage_class() {
     return 1
   fi
 
-  _msg task "[k8s] Creating CNFS storage class resources"
+  _msg task "Creating CNFS storage class resources"
 
   # Check if CNFS exists
   if ! $KUBECTL_OPT get cnfs "$cnfs_name" &>/dev/null; then
@@ -234,7 +234,7 @@ kube_create_pv_pvc() {
   pvc_name="pvc-${subpath}" pv_name="pv-${subpath}-${namespace}"
   cnfs_name="cnfs01" sc_name="alicloud-cnfs-nas"
 
-  _msg task "[k8s] Creating PVC [$pvc_name] in namespace [$namespace]"
+  _msg task "Creating PVC [$pvc_name] in namespace [$namespace]"
 
   if ${G_DRY_RUN:-false}; then
     _msg note "[dry-run] kube_create_pv_pvc:"

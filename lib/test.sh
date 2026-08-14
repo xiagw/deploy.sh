@@ -57,7 +57,7 @@ handle_test() {
 
     case "$test_type" in
     "unit")
-        _msg task "[unit-test] Running unit tests"
+        _msg task "Running unit tests"
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，true 启用，false 禁用[default]
         [[ "${PIPELINE_UNIT_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_UNIT_TEST=false)"
         if ${test_arg:-false} || ${PIPELINE_UNIT_TEST:-false}; then
@@ -70,7 +70,7 @@ handle_test() {
         fi
         ;;
     "func")
-        _msg task "[test] Running functional tests"
+        _msg task "Running functional tests"
         ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，true 启用，false 禁用[default]
         [[ "${PIPELINE_FUNCTION_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_FUNCTION_TEST=false)"
         if ${test_arg:-false} || ${PIPELINE_FUNCTION_TEST:-false}; then
