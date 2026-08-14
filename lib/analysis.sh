@@ -255,7 +255,7 @@ checks:
   identical-code:
     enabled: true
 exclude_patterns:
-$(echo "$exclude_patterns" | tr ',' '\n' | sed 's/^/  - "/')
+$(echo "$exclude_patterns" | tr ',' '\n' | sed 's/^/  - "/;s/$/"/')
 EOF
     fi
 

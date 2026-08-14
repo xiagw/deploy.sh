@@ -338,8 +338,8 @@ system_cert_renew() {
         dns_manual)
             _msg warn "get domains from account.conf.xxx.dns_manual file"
             # "${acme_home}/account.conf.xxx.dns_manual" 内有 domains="example1.com example2.com example3.com"
+            domains="$(grep -oP 'domains=\K.*' "${acme_home}/account.conf.xxx.dns_manual" 2>/dev/null || true)"
             echo "$domains"
-            # domains="$(grep -oP 'domains=\K.*' "${acme_home}/account.conf.xxx.dns_manual" 2>/dev/null || true)"
             ;;
         *)
             _msg warn "unknown dns type: $dns_type"

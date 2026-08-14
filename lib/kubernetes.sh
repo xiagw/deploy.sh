@@ -232,7 +232,7 @@ kube_create_pv_pvc() {
   # Remove pvc- prefix if it exists in the input
   subpath="${subpath#pvc-}"
   pvc_name="pvc-${subpath}" pv_name="pv-${subpath}-${namespace}"
-  cnfs_name="cnfs-01" sc_name="alicloud-cnfs-nas"
+  cnfs_name="cnfs01" sc_name="alicloud-cnfs-nas"
 
   _msg task "[k8s] Creating PVC [$pvc_name] in namespace [$namespace]"
 

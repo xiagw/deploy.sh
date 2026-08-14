@@ -15,7 +15,7 @@ deploy.sh 是一个 CI/CD 工具，既可手动运行，也可被 GitLab/Gitea/G
 - **模块化功能库**：`lib/*.sh` 按关注点拆分为 11 个模块，由主脚本在运行时 `source`。
 - **双配置源**：环境变量存于 `data/deploy.env`（`ENV_*` 前缀）；项目级配置存于 `data/conf/<namespace>/<project>.json`（JSON）。
 - **两种运行模式**：`auto`（无参数，全流程）与 `spec`（带参数，只跑指定任务）。
-- **同一仓库、多目标**：单次运行只执行一种部署方法；多目标走 GitLab 多 job（见 docs/plan-task-dispatch.md 的决策）。
+- **同一仓库、多目标**：单次运行只执行一种部署方法；多目标走 GitLab 多 job。
 
 ### 目录布局
 
@@ -60,15 +60,15 @@ deploy.sh/
 
 ## 2. 功能（按模块）
 
-### 2.1 deploy.sh（主脚本）— 811 行
+### 2.1 deploy.sh（主脚本）— 897 行
 
 | 函数 | 行号 | 功能 |
 |---|---|---|
 | `config_deploy_vars` | 29 | 设定仓库信息、分支→命名空间映射、镜像标签等全局变量 |
 | `_usage` | 127 | 打印全部 CLI 参数帮助 |
-| `parse_command_args` | 206 | 解析参数，设置 `arg_flags`（关联数组）与 `deploy_method` |
-| `config_build_env` | 313 | 选择 docker/podman，配置 `G_DOCK`/`G_RUN`/`G_PROGRESS` |
-| `main` | 361 | 主流程编排（见第 3 节） |
+| `parse_command_args` | 212 | 解析参数，设置 `arg_flags`（关联数组）与 `deploy_method` |
+| `config_build_env` | 329 | 选择 docker/podman，配置 `G_DOCK`/`G_RUN`/`G_PROGRESS` |
+| `main` | 377 | 主流程编排（见第 3 节） |
 
 ### 2.2 lib/common.sh — 1443 行（基础设施）
 
@@ -81,41 +81,41 @@ deploy.sh/
 - **镜像切换**：`_set_mirror`（仅 `IS_CHINA` 时生效，os/composer/node/python 四类源）。
 - **其他**：`_notify_wecom`、`get_oom_score`、`clean_snap`、`clean_runtime`、`get_github_latest_download`（解析 GitHub API 最新 release，grep/sed 免 jq）、`_install_acme_official/_github`、`_compress_pdf_with_gs/_compress_document`（PDF/PPT 压缩）。
 
-### 2.3 lib/config.sh — 410 行（配置管理）
+### 2.3 lib/config.sh — 427 行（配置管理）
 
 | 函数 | 行号 | 功能 |
 |---|---|---|
 | `find_project_config` | 20 | 定位/从模板创建 `data/conf/<ns>/<project>.json`，设 `G_CONF` |
-| `config_deploy_init` | 85 | 初始化 `deploy.env`（无则复制模板）、建 data 目录、PATH 追加工具目录 |
-| `_load_project_build_deploy_config` | 127 | 用 jq 解析 JSON，导出 `PROJECT_BUILD_METHOD`/`PROJECT_DEPLOY_METHOD` 等覆盖项 |
-| `config_deploy_setup` | 164 | 生成 SSH ed25519 密钥、为 .ssh/.acme.sh/.aws/.kube/.aliyun 建 $HOME 符号链接 |
-| `env_file_set` | 224 | deploy.env 中设置/更新/取消注释 `KEY=VALUE`（mktemp+mv 原子替换） |
-| `env_file_get` | 302 | 读取变量值（优先 shell 环境，支持数组） |
-| `env_file_list` | 359 | 列出 deploy.env 已启用的 ENV_ 变量 |
+| `check_project_config_template` | 82 | 校验项目配置残留模板示例值（RFC 5737/保留域名） |
+| `config_deploy_init` | 126 | 初始化 `deploy.env`（无则复制模板）、建 data 目录、PATH 追加工具目录 |
+| `_load_project_build_deploy_config` | 168 | 用 jq 解析 JSON，导出 `PROJECT_BUILD_METHOD`/`PROJECT_DEPLOY_METHOD` 等覆盖项 |
+| `config_deploy_setup` | 205 | 生成 SSH ed25519 密钥、为 .ssh/.acme.sh/.aws/.kube/.aliyun 建 $HOME 符号链接 |
+| `env_file_set` | 265 | deploy.env 中设置/更新/取消注释 `KEY=VALUE`（mktemp+mv 原子替换） |
+| `env_file_get` | 319 | 读取变量值（优先 shell 环境，支持数组） |
+| `env_file_list` | 376 | 列出 deploy.env 已启用的 ENV_ 变量 |
 
-### 2.4 lib/system.sh — 553 行（系统维护）
+### 2.4 lib/system.sh — 508 行（系统维护）
 
 | 函数 | 行号 | 功能 |
 |---|---|---|
 | `check_crontab_execution` | 12 | cron 触发时按 `data/crontab.<project_id>.<sha>` 标记避免同 commit 重复执行 |
 | `system_clean_disk` | 43 | 根分区 ≥80% 触发清理：docker prune/registry 镜像、/tmp、/var/log，>90% 进 aggressive（+system prune、/var/crash） |
-| `update_nginx_geoip_db` | 120 | 下载 MaxMind GeoIP 库（dl.miyuru.lk）并 rsync 到各 Nginx 服务器 |
-| `system_check` | 164 | 识别发行版并按发行版补齐 git/git-lfs/curl/rsync/pip 等工具 |
-| `system_proxy` | 226 | 开/关 http(s)/socks/all/no_proxy 环境变量（带回退） |
-| `system_cert_renew` | 279 | acme.sh 多账号续签全部证书 + 触发 gitlab nginx 流水线 |
-| `system_install_tools` | 468 | 装 jq；CI 模式装全量工具 |
-| `check_docker_available` | 489 | 检测 docker 命令与 daemon |
-| `check_k8s_available` | 505 | 检测 kubectl + 集群连通（helm 可选） |
-| `check_helm_charts_exist` | 530 | 检查 6 个候选 helm charts 目录 |
+| `system_check` | 115 | 识别发行版并按发行版补齐 git/git-lfs/curl/rsync/pip 等工具 |
+| `system_proxy` | 178 | 开/关 http(s)/socks/all/no_proxy 环境变量（带回退） |
+| `system_cert_renew` | 231 | acme.sh 多账号续签全部证书 + 触发 gitlab nginx 流水线 |
+| `system_install_tools` | 423 | 装 jq；CI 模式装全量工具 |
+| `check_docker_available` | 444 | 检测 docker 命令与 daemon |
+| `check_k8s_available` | 460 | 检测 kubectl + 集群连通（helm 可选） |
+| `check_helm_charts_exist` | 485 | 检查 6 个候选 helm charts 目录 |
 
-### 2.5 lib/repo.sh — 445 行（仓库操作）
+### 2.5 lib/repo.sh — 500 行（仓库操作）
 
-- `repo_inject_file`：把 `data/inject/<仓库名>/[<命名空间>/]` 下的文件 rsync 进仓库；缺失时注入 Dockerfile/.dockerignore/root/ 结构。
-- `detect_repo_language`：按文件表探测语言/版本/Docker 标志，输出 `lang:ver:docker`；兜底扩展名统计；可走 Docker Linguist。
-- `setup_git_repo` / `setup_svn_repo`：clone/checkout 或更新已有仓库。
-- `get_git_branch` / `get_git_commit_sha` / `get_git_last_commit_message`：从 CI 环境变量或 git 命令取信息，带多级回退。
+- `repo_inject_file`（8）：把 `data/inject/<仓库名>/[<命名空间>/]` 下的文件 rsync 进仓库；缺失时注入 Dockerfile/.dockerignore/root/ 结构。
+- `detect_repo_language`（131）：按文件表探测语言/版本/Docker 标志，输出 `lang:ver:docker`；兜底扩展名统计；可走 Docker Linguist。
+- `setup_git_repo`（321） / `setup_svn_repo`（480）：clone/checkout 或更新已有仓库。
+- `get_git_branch`（440） / `get_git_commit_sha`（455） / `get_git_last_commit_message`（470）：从 CI 环境变量或 git 命令取信息，带多级回退。
 
-### 2.6 lib/test.sh — 90 行（测试）
+### 2.6 lib/test.sh — 92 行（测试）
 
 执行项目自带脚本 `tests/unit_test.sh` / `tests/func_test.sh`（候选：仓库内 → `$G_DATA/tests/`）。受 `PP_UNIT_TEST` / `PP_FUNCTION_TEST` 开关控制。
 
@@ -135,11 +135,11 @@ deploy.sh/
 
 统一模式：开关未启用输出 `⋯ 跳过 (PP_XX=false)`；失败 `✗ ... failed` return 1（pylint 例外，仅 warn）。
 
-### 2.8 lib/style.sh — 196 行（代码风格）
+### 2.8 lib/style.sh — 221 行（代码风格）
 
 每个语言一个 `check_<lang>_style`（phpcs/ktlint/pylint/eslint/checkstyle/gofmt/golint/rubocop/clang-format/hadolint），全部走 Docker 容器执行，由 `PIPELINE_*_CODE_STYLE` 开关控制。`style_check` 总调度 → `parallel_style_check` 并行。
 
-### 2.9 lib/build.sh — 895 行（构建）
+### 2.9 lib/build.sh — 922 行（构建）
 
 | 函数 | 行号 | 功能 |
 |---|---|---|
@@ -148,33 +148,35 @@ deploy.sh/
 | `enable_buildx_mode` | 55 | 按 `ENV_BUILDX_MODE`（auto/kubernetes/remote）选 builder |
 | `generate_bake_file` | 90 | 生成 `docker-bake.hcl`（default + base 双 target） |
 | `build_image` | 195 | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略 |
-| `build_all` | 380 | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
-| `build_<lang>` | 471+ | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建 |
-| `docker_login` | 714 | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
-| `generate_base_dockerfile` / `generate_lang_dockerfile` | 757/784 | 生成基础/语言 Dockerfile |
-| `detect_repo_language_and_build` | 809 | 用 Cloud Native Buildpacks（pack）构建 |
+| `build_all` | 382 | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
+| `build_<lang>` | 475+ | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建 |
+| `docker_login` | 741 | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
+| `generate_base_dockerfile` / `generate_lang_dockerfile` | 784/811 | 生成基础/语言 Dockerfile |
+| `detect_repo_language_and_build` | 836 | 用 Cloud Native Buildpacks（pack）构建 |
 
-### 2.10 lib/deployment.sh — 1017 行（部署）
+### 2.10 lib/deployment.sh — 1020 行（部署）
 
 | 函数 | 行号 | 功能 |
 |---|---|---|
 | `format_release_name` | 8 | 规范化 helm release 名 |
+| `execute_custom_deploy_hook` | 41 | 执行项目自定义部署钩子 |
 | `_project_hosts` / `_rsync_exclude_file` / `_project_rsync_src` | 50/58/65 | 从项目配置取主机/排除规则/上传源目录 |
-| `record_deployed_image` | 76 | 记录当前镜像，成功后用 skopeo/aliyun 删旧镜像 |
-| `cleanup_evicted_pods` | 122 | 后台清理 Evicted pod |
-| `deploy_to_kubernetes` | 134 | helm upgrade/install + rollout 探活 + 回滚 |
-| `deploy_aliyun_functions` | 233 | 阿里云函数计算创建/更新 + HTTP trigger |
-| `deploy_via_rsync_ssh` | 307 | 逐台主机 rsync+ssh（含模板配置校验、oss:// 分流） |
-| `deploy_aliyun_oss` | 430 | ossutil 递归上传 |
+| `_project_oss_dest` | 75 | 从项目配置取 OSS 目标路径 |
+| `record_deployed_image` | 86 | 记录当前镜像，成功后用 skopeo/aliyun 删旧镜像 |
+| `cleanup_evicted_pods` | 132 | 后台清理 Evicted pod |
+| `deploy_to_kubernetes` | 144 | helm upgrade/install + rollout 探活 + 回滚 |
+| `deploy_aliyun_functions` | 242 | 阿里云函数计算创建/更新 + HTTP trigger |
+| `deploy_via_rsync_ssh` | 316 | 逐台主机 rsync+ssh（含模板配置校验、oss:// 分流） |
+| `deploy_aliyun_oss` | 421 | ossutil 递归上传 |
 | `deploy_via_rsync` | 453 | rsyncd daemon 模式 |
 | `deploy_via_ftp` / `deploy_via_sftp` | 487/530 | tar 打包后 ftp/sftp 批量上传 |
-| `deploy_to_docker_compose` | 613 | rsync + ssh 执行 `compose up -d --build` |
-| `detect_deployment_method` | 669 | 自动探测部署方式（见 4.4） |
-| `handle_deploy` | 791 | 部署入口分发，返回 `G_DEPLOY_RESULT` |
-| `copy_docker_image` | 858 | skopeo 多架构镜像跨 registry 复制 |
-| `clean_old_tags` | 934 | 删除 180 天前的旧 tag（含无时间戳处理） |
+| `deploy_to_docker_compose` | 616 | rsync + ssh 执行 `compose up -d --build` |
+| `detect_deployment_method` | 672 | 自动探测部署方式（见 4.4） |
+| `handle_deploy` | 795 | 部署入口分发，返回 `G_DEPLOY_RESULT` |
+| `copy_docker_image` | 860 | skopeo 多架构镜像跨 registry 复制 |
+| `clean_old_tags` | 936 | 删除 180 天前的旧 tag（含无时间戳处理） |
 
-### 2.11 lib/kubernetes.sh — 447 行（K8s）
+### 2.11 lib/kubernetes.sh — 450 行（K8s）
 
 | 函数 | 行号 | 功能 |
 |---|---|---|
@@ -184,11 +186,11 @@ deploy.sh/
 | `kube_create_storage_class` | 177 | 阿里云 CNFS NAS + StorageClass |
 | `kube_create_pv_pvc` | 230 | NAS subpath 的 PV/PVC |
 | `build_base_image` | 298 | buildx bake 多平台构建基础镜像（tag 加 `-base`） |
-| `select_image_tags` | 425 | fzf 交互选择基础镜像 tag |
+| `select_image_tags` | 429 | fzf 交互选择基础镜像 tag |
 
-### 2.12 lib/notify.sh — 155 行（通知）
+### 2.12 lib/notify.sh — 162 行（通知）
 
-`handle_notify` 构造消息（Repo/Branche/Pipeline/Who/Describe/Result/Test_Result），按 `ENV_NOTIFY_TYPE` 分发到 wecom/telegram/element/email/zoom/feishu。受 `PP_NOTIFY`、`ENV_DISABLE_NOTIFY`、`ENV_DISABLE_NOTIFY_BRANCH`（默认 develop|testing）控制。
+`handle_notify` 构造消息（Repo/Branche/Pipeline/Who/Describe/Result/Test_Result），按 `ENV_NOTIFY_TYPE` 分发到 wecom/telegram/element/email/zoom/feishu。受 `PIPELINE_NOTIFY`、`ENV_DISABLE_NOTIFY`、`ENV_DISABLE_NOTIFY_BRANCH`（默认 develop|testing）控制。
 
 ---
 
@@ -211,8 +213,9 @@ main "$@"
 ├─ （环境变量操作 set/get/env → 立即返回）
 ├─ （build_base 独立功能 → select_image_tags 后返回）
 ├─ system_check               # 系统检查（kube_pvc 时静默）
-├─ setup_git_repo / setup_svn_repo       # 按参数克隆/检出
+├─ setup_git_repo / setup_svn_repo / setup_git_branch  # 按参数克隆/检出/切分支
 ├─ config_deploy_vars         # 设置 G_REPO_* / G_NAMESPACE / G_IMAGE_TAG 等（位置勿动）
+├─ （gen_dockerfile / build_buildpacks 独立功能 → 返回）
 ├─ find_project_config        # 定位项目 JSON 配置 → G_CONF
 ├─ IS_CHINA && system_proxy on
 ├─ （create_helm / copy_image 独立功能 → 返回）
@@ -220,6 +223,7 @@ main "$@"
 ├─ system_install_tools       # 按需装工具
 ├─ （create_k8s 独立功能）
 ├─ kube_config_init           # 初始化 kubectl 上下文（位置勿动）
+├─ （create_storage_class 独立功能）
 ├─ （kube_pvc 独立功能 → 返回）
 ├─ config_deploy_setup        # dotfile/SSH 密钥
 ├─ （renew_cert / clean_tags 独立功能 → 返回）
@@ -254,7 +258,7 @@ main "$@"
 
 ## 4. 关键逻辑
 
-### 4.1 变量命名规范（deploy.sh:382 注释）
+### 4.1 变量命名规范（deploy.sh:399 注释）
 
 | 前缀 | 含义 | 来源 |
 |---|---|---|
@@ -267,9 +271,9 @@ main "$@"
 ### 4.2 优先级链（重要注释）
 
 - **仓库目录**：`-w/--workspace` > `CI_PROJECT_DIR` > `$PWD`（deploy.sh:32）。
-- **仓库名**：`GITHUB_REPOSITORY` > `CI_PROJECT_NAME` > 目录名（deploy.sh:42）。
-- **命名空间**：`GITHUB_REPOSITORY_OWNER` > `CI_PROJECT_NAMESPACE` > `root`（deploy.sh:52）。
-- **容器构建工具**：`podman` > `docker`（deploy.sh:320）。
+- **仓库名**：`GITHUB_REPOSITORY` > `CI_PROJECT_NAME` > 目录名（deploy.sh:45）。
+- **命名空间**：`GITHUB_REPOSITORY_OWNER` > `CI_PROJECT_NAMESPACE` > `root`（deploy.sh:53）。
+- **容器构建工具**：`podman` > `docker`（deploy.sh:338）。
 - **语言**：`-L/--lang` > `ENV_LANG` > `zh`（common.sh:127）。
 - **项目配置 vs deploy.env**：JSON 中的 `build.method`/`deploy.method` 覆盖自动探测（config.sh）。
 
@@ -363,7 +367,7 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 `_t "中文" "English"` 双语结构句；`G_MSG_LANG` 决定取哪个。优先级：`--lang` (CLI) > `ENV_LANG` > `zh`。仅框架自有句子双语，技术内容保持单语。
 
-### 5.3 消息措辞规范（来自 message-output-redesign.md）
+### 5.3 消息措辞规范
 
 - 单条消息不混中英文；task 用动名词（`detecting language`），note 用陈述句，stage 标题用名词。
 - 句尾不带句号；`!`/`✗` 后空一格再跟消息。
@@ -375,16 +379,16 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 这些注释是历史踩坑后的结论，改动前务必先读：
 
-1. **`deploy.sh:538`** config_deploy_vars 位置勿动——后续步骤依赖这些变量。
-2. **`deploy.sh:598`** kube_config_init 位置不可调整——后续 K8s 操作依赖。
-3. **`deploy.sh:544-547`** 只使用项目专用配置（`data/conf/<ns>/<project>.json`），替代单文件：避免单文件过大、减少版本冲突、更好权限控制。
-4. **`deploy.sh:93-95`** G_IMAGE_TAG 已简化为纯时间戳（旧格式注释保留）。
-5. **`deploy.sh:700`** 任务列表用固定顺序数组（关联数组迭代顺序不稳定）。
+1. **`deploy.sh:566`** config_deploy_vars 位置勿动——后续步骤依赖这些变量。
+2. **`deploy.sh:652`** kube_config_init 位置不可调整——后续 K8s 操作依赖。
+3. **`deploy.sh:591-593`** 只使用项目专用配置（`data/conf/<ns>/<project>.json`），替代单文件：避免单文件过大、减少版本冲突、更好权限控制。
+4. **`deploy.sh:95`** G_IMAGE_TAG 已简化为纯时间戳（旧格式注释保留）。
+5. **`deploy.sh:790`** 任务列表用固定顺序数组（关联数组迭代顺序不稳定）。
 6. **common.sh:1-3** 需兼容 sh/bash/zsh，尽量少用不兼容命令/数组/subshell。
 7. **`_msg stage`** 累计耗时语义（见 5.1），勿改成差值。
-8. **plan-task-dispatch.md 决策**：同一次运行只执行一种部署方法；多目标走 GitLab 多 job。`deploy_method` 已改为阶段 4 从 `deploy_display` 顺序表单一派生（R-3，2026-08-12），不再在 parse 双写；多方法同传 `_msg warn` 后取顺序表首个。
+8. **部署分发决策**：同一次运行只执行一种部署方法；多目标走 GitLab 多 job。`deploy_method` 已改为阶段 4 从 `deploy_display` 顺序表单一派生（R-3，2026-08-12），不再在 parse 双写；多方法同传 `_msg warn` 后取顺序表首个。
 9. **AGENTS.md 约定**：不保留向后兼容；用成熟库；`bash -n` + `shellcheck -S warning` 必须零输出。
-10. **refactoring.md**：变量用 `G_*` 前缀 + `*_path/*_dir/*_file` 命名后缀；模块需自带文档。
+10. **命名规范**：变量用 `G_*` 前缀 + `*_path/*_dir/*_file` 命名后缀；模块需自带文档。
 
 ---
 
@@ -392,9 +396,4 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 | 文档 | 内容 |
 |---|---|
-| [refactoring.md](refactoring.md) | 模块化改造记录、模块结构与变量规范 |
-| [message-output-redesign.md](message-output-redesign.md) | 消息系统重设计（_msg 类型表、stage 自动计数、时间戳策略） |
-| [plan-task-dispatch.md](plan-task-dispatch.md) | 任务调度与部署分发优化计划（deploy 判定、多方法决策） |
-| [implementation-plan-smart-detection.md](implementation-plan-smart-detection.md) | 语言/构建/部署智能检测 + 优雅降级实现 |
-| [k8s-build.md](k8s-build.md) | K8s 内构建镜像两种方案（buildx kubernetes/remote driver） |
-| [notify.md](notify.md) | 通知模块接口与参数 |
+| [../AGENTS.md](../AGENTS.md) | 项目开发约定：核心范围、命名规范、模块前缀 |

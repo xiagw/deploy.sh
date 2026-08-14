@@ -338,7 +338,9 @@ deploy_via_rsync_ssh() {
 
     ## 验证配置是否存在
     if ! _project_hosts | grep -q "."; then
-        _msg warn "No host configuration found for project '${G_REPO_GROUP_PATH}' branch '${G_NAMESPACE}' in $G_CONF"
+        _msg error "No host configuration found for project '${G_REPO_GROUP_PATH}' branch '${G_NAMESPACE}' in $G_CONF"
+        _msg error "Nothing was deployed. Add hosts[] for this branch in the project config, or use a different deploy method."
+        return 1
     fi
 
     while read -r line; do

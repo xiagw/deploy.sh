@@ -42,10 +42,15 @@ git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 
 | 语言 | 探测方式 |
 |------|----------|
-| node | 存在`package.json`或README.md包含`project_lang=node` |
+| java | 存在`pom.xml`/`build.gradle`/`gradle.build`或README.md包含`project_lang=java` |
 | php | 存在`composer.json`或README.md包含`project_lang=php` |
-| java | 存在`pom.xml`或README.md包含`project_lang=java` |
-| python | 存在`requirements.txt`或README.md包含`project_lang=python` |
+| node | 存在`package.json`或README.md包含`project_lang=node` |
+| python | 存在`requirements.txt`/`setup.py`/`Pipfile`或README.md包含`project_lang=python` |
+| golang | 存在`go.mod`或README.md包含`project_lang=golang` |
+| rust | 存在`Cargo.toml`或README.md包含`project_lang=rust` |
+| dotnet | 存在`*.csproj`或README.md包含`project_lang=dotnet` |
+| ruby | 存在`Gemfile`/`*.gemspec`或README.md包含`project_lang=ruby` |
+| elixir | 存在`mix.exs`或README.md包含`project_lang=elixir` |
 | 其他 | README.md包含`project_lang=[other]` |
 
 project_lang=shell
@@ -128,9 +133,10 @@ cp conf/templates/deploy.env data/deploy.env        ## 修改为你的自定义�
 
 # FAQ
 ### 如何创建 helm 项目文件
-如果你使用 helm 来部署到 k8s, 可以修改 helm-new.sh 匹配你的需求 （默认开启 8080 和 8081 端口）
+如果你使用 helm 来部署到 k8s, 使用 `--create-helm` 生成 chart （默认开启 8080 和 8081 端口）
 ```bash
-bash $HOME/runner/bin/helm-new.sh
+cd <your_project.git>
+$HOME/runner/deploy.sh --create-helm $HOME/runner/data/helm/<your_project>
 ## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
 

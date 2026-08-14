@@ -50,10 +50,15 @@ git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 # How to automatically detect the programming language
 | Language | Detection Method |
 |----------|------------------|
-| node     | Exists package.json or include `project_lang=node` in README.md |
-| php      | Exists composer.json or include `project_lang=php` in README.md |
-| java     | Exists pom.xml or include `project_lang=java` in README.md |
-| python   | Exists requirements.txt or include `project_lang=python` in README.md |
+| java     | Exists pom.xml / build.gradle / gradle.build, or include `project_lang=java` in README.md |
+| php      | Exists composer.json, or include `project_lang=php` in README.md |
+| node     | Exists package.json, or include `project_lang=node` in README.md |
+| python   | Exists requirements.txt / setup.py / Pipfile, or include `project_lang=python` in README.md |
+| golang   | Exists go.mod, or include `project_lang=golang` in README.md |
+| rust     | Exists Cargo.toml, or include `project_lang=rust` in README.md |
+| dotnet   | Exists \*.csproj, or include `project_lang=dotnet` in README.md |
+| ruby     | Exists Gemfile / \*.gemspec, or include `project_lang=ruby` in README.md |
+| elixir   | Exists mix.exs, or include `project_lang=elixir` in README.md |
 | other    | Include `project_lang=[other]` in README.md |
 
 project_lang=shell
@@ -138,9 +143,10 @@ Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 
 # FAQ
 ### How to create Helm files for applications project
-If you use helm to deploy to k8s, change helm-new.sh for yours (default open port 8080 and 8081)
+If you use helm to deploy to k8s, use `--create-helm` to generate the chart (default open port 8080 and 8081):
 ```
-bash $HOME/runner/bin/helm-new.sh
+cd <your_project.git>
+$HOME/runner/deploy.sh --create-helm $HOME/runner/data/helm/<your_project>
 ## change to yours [$HOME/runner/data/helm/<your_project>]
 ```
 

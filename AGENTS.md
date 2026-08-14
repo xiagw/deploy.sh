@@ -2,6 +2,22 @@
 
 deploy.sh 部署系统开发约定。
 
+## 核心范围
+
+本仓库是「单入口 + 模块库」结构的 CI/CD 部署系统。**核心代码仅三处**，总体评估、修改、测试都聚焦于此：
+
+- `deploy.sh`：主入口，负责参数解析、功能标志、模块加载、CI/CD 流程编排
+- `lib/*.sh`：功能模块，按 deploy.sh 的加载顺序即 `common → config → system → repo → test → analysis → style → build → deployment → kubernetes → notify`
+- `conf/`：部署模板与示例（Dockerfile.*、deploy.env、templates/、conf/root/ 内的目标机器脚本），供 deploy.sh 及各模块引用
+
+以下目录是独立工具、模板或运行数据，**不做总体评估，默认不评审、不主动修改**：
+
+- `bin/`：独立运维脚本（backup/ddns/gitea/gitlab/mysql/openwrt/ops/pve/wireguard/weixin/zentao），不经过 deploy.sh 流程
+- `cloud/`：各云厂商 CLI 封装与 Terraform（aliyun/aws/huawei/tencent/terraform），独立体系
+- `ansible/`：Ansible playbook 与 roles
+- `docs/`：文档与临时示例脚本（docs/eda、docs/pxe、docs/utils）
+- `data/`：运行时数据（deploy.env 实际值、日志、项目配置），已 gitignore，不入评审
+
 ## 命名规范
 
 - 变量前缀（全局共享，文档见 deploy.sh main 注释）:

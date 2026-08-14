@@ -229,7 +229,7 @@ build_image() {
     dockerfile_base_path="${G_REPO_DIR}/Dockerfile.base"
     dockerfile_path="${G_REPO_DIR}/Dockerfile"
     if [[ -f "${dockerfile_base_path}" ]]; then
-        base_image_tag="${ENV_DOCKER_REGISTRY%/}/aa:${G_REPO_NAME}-${G_REPO_BRANCH}"
+        base_image_tag="${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
         if ${G_DRY_RUN:-false}; then
             dry_run_note "write 'FROM ${base_image_tag}' to ${dockerfile_path#"${G_REPO_DIR}"/} (base image)"
         else
@@ -473,7 +473,7 @@ build_all() {
 
 # Java Build
 build_java() {
-    local jars_path="$G_REPO_DIR/jars"
+    local jars_path="$G_REPO_DIR/build_output"
 
     if [[ -f "$G_REPO_DIR/build.gradle" ]]; then
         _msg task "[build] Building with gradle"
@@ -516,7 +516,7 @@ build_java() {
     for jar in "${jar_files[@]}"; do
         [ -f "$jar" ] || continue
         case "$jar" in
-        framework*.jar | gdp-module*.jar | sdk*.jar | *-commom-*.jar) echo 'skip' ;;
+        framework*.jar | gdp-module*.jar | sdk*.jar | *commom*.jar) echo 'skip' ;;
         *-dao-*.jar | lop-opensdk*.jar | core-*.jar) echo 'skip' ;;
         *) mv -vf "$jar" "$jars_path"/ ;;
         esac
@@ -619,7 +619,14 @@ build_ios() {
     _msg task "[build] Running iOS build"
     if [ -f "$G_REPO_DIR/Podfile" ]; then
         pod install
-        xcodebuild -workspace "*.xcworkspace" -scheme "Release" build
+        ## 展开 *.xcworkspace 通配符（此前将字面量传给 xcodebuild 必然失败）
+        local workspace
+        workspace=$(find "$G_REPO_DIR" -maxdepth 1 -name "*.xcworkspace" -print -quit)
+        if [ -n "$workspace" ]; then
+            xcodebuild -workspace "$workspace" -scheme "Release" build
+        else
+            _msg warn "No .xcworkspace found in $G_REPO_DIR, skipping xcodebuild"
+        fi
     fi
     _msg note "[build] iOS build"
 }
