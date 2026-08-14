@@ -1,0 +1,45 @@
+
+concurrent = 5
+check_interval = 0
+shutdown_timeout = 0
+
+[session_server]
+  session_timeout = 1800
+
+[[runners]]
+  name = "gitlab"
+  url = "https://git.xxx.com/"
+  id = 6
+  request_concurrency = 3
+  token = "xxx"
+  environment = ["GIT_SSL_NO_VERIFY=true"]
+  token_obtained_at = 2022-12-02T01:45:21Z
+  token_expires_at = 0001-01-01T00:00:00Z
+  executor = "shell"
+
+  ## 白名单守卫：pre_build_script 在 script 之前运行，工作目录是已 checkout 的项目。
+  ## 规则：项目自己的 .gitlab-ci.yml 必须是标准模板格式（gitlab-ci.yml 注释 #5-8）：
+  ##     include:
+  ##       - project: 'root/pms'
+  ##         ref: main
+  ##         file: 'templates/gitlab-ci.yml'
+  ##   去掉注释/空行、忽略空白与引号差异后必须逐 token 一致，其它任何内容一律拒绝执行。
+  pre_build_script = """
+    CI_FILE=".gitlab-ci.yml"
+
+    EXPECTED="include: - project: root/pms ref: main file: templates/gitlab-ci.yml"
+
+    ACTUAL=$(grep -vE "^[[:space:]]*#|^[[:space:]]*$" "$CI_FILE" 2>/dev/null | xargs)
+
+    if [ "$ACTUAL" != "$EXPECTED" ]; then
+      echo "❌ .gitlab-ci.yml 非标准模板，放弃执行"
+      exit 1
+    fi
+  """
+
+  [runners.custom_build_dir]
+  [runners.cache]
+    MaxUploadedArchiveSize = 0
+    [runners.cache.s3]
+    [runners.cache.gcs]
+    [runners.cache.azure]
