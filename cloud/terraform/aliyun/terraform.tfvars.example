@@ -1,0 +1,17 @@
+# 复制为 terraform.tfvars 后按需修改。
+# provider 凭据需在此配置 access_key/secret_key，
+# 或用环境变量：
+# export ALICLOUD_ACCESS_KEY=xxx
+# export ALICLOUD_SECRET_KEY=xxx
+region                     = "cn-hangzhou"
+instance_name              = "web"
+instance_count             = 2
+instance_type              = "ecs.g7.large"
+image_id                   = "ubuntu_24_04_x64_20G_alibase_20250101.vhd"
+subnet_id                  = "vsw-xxxx"
+security_group_ids         = ["sg-xxxx"]
+key_name                   = "xkk"
+internet_max_bandwidth_out = 100
+
+# 用密码登录时改配：
+# password = "YourPassword123"

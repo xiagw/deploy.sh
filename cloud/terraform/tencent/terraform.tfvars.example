@@ -1,0 +1,18 @@
+# 复制为 terraform.tfvars 后按需修改。
+# 腾讯云 provider 凭据仅支持 secret_id/secret_key 或环境变量：
+# export TENCENTCLOUD_SECRET_ID=xxx
+# export TENCENTCLOUD_SECRET_KEY=xxx
+region                 = "ap-guangzhou"
+instance_name          = "web"
+instance_count         = 1
+instance_type          = "S5.LARGE8"
+image_id               = "img-xxxx"
+vpc_id                 = "vpc-xxxx"
+subnet_id              = "subnet-xxxx"
+security_group_ids     = ["sg-xxxx"]
+key_ids                = ["skey-xxxx"]
+system_disk_type       = "CLOUD_SSD"
+internet_max_bandwidth_out = 100
+
+# 用密码登录时改配：
+# password = "YourPassword123"

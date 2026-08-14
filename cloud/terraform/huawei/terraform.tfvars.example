@@ -1,0 +1,14 @@
+# 复制为 terraform.tfvars 后按需修改。
+region               = "cn-north-1"
+instance_name        = "web"
+instance_count       = 1
+instance_type        = "c7.large.2"
+image_id             = "xxxx-xxxx"
+subnet_id            = "xxxx-xxxx"
+security_group_ids   = ["xxxx-xxxx"]
+key_name             = "xkk"
+system_disk_type     = "GPSSD"
+
+# 用密码登录时改配：
+# password = "YourPassword123"
+# 注意：本配置不自动分配公网 IP，需要公网请另建 huaweicloud_vpc_eip 并绑定。
