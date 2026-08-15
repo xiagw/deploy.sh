@@ -381,11 +381,15 @@ main() {
     ## 记录脚本开始执行的时间（用于计算总执行时间）
     SECONDS=0
 
-    ## 探测当前项目: 若为公共模板仓库 pms，则跳过部署流程直接退出（pms 只是模板仓库，不需要部署）
-    if [[ "${CI_PROJECT_NAME:-${CI_PROJECT_DIR##*/}}" == "pms" ]]; then
-        echo "pms 为公共模板仓库，跳过部署"
-        return 0
-    fi
+    ## 探测当前项目: 白名单（pms、devops）内的仓库直接执行其 ci.sh，跳过部署流程（模板仓库不需要部署）
+    case "${CI_PROJECT_NAME:-${CI_PROJECT_DIR##*/}}" in
+    pms | devops)
+        if [[ -f "${CI_PROJECT_DIR}/ci.sh" ]]; then
+            bash "${CI_PROJECT_DIR}/ci.sh"
+            return 0
+        fi
+        ;;
+    esac
 
     unset G_REPO_DIR G_REPO_NAME G_REPO_NS G_REPO_GROUP_PATH G_REPO_GROUP_PATH_SLUG G_REPO_BRANCH
     unset G_REPO_SHORT_SHA G_NAMESPACE G_IMAGE_TAG G_DOCK G_RUN

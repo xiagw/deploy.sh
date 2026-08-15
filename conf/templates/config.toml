@@ -27,6 +27,12 @@ shutdown_timeout = 0
   pre_build_script = """
     CI_FILE=".gitlab-ci.yml"
 
+    # 0. CI 配置必须走默认的 .gitlab-ci.yml，防止 ci_config_path 指向其它文件/URL/仓库绕过白名单
+    if [[ "${CI_CONFIG_PATH:-.gitlab-ci.yml}" != ".gitlab-ci.yml" ]]; then
+      echo "❌ 使用了非默认 CI 配置路径: ${CI_CONFIG_PATH}，放弃执行"
+      exit 1
+    fi
+
     EXPECTED="include: - project: root/pms ref: main file: templates/gitlab-ci.yml"
 
     ACTUAL=$(grep -vE "^[[:space:]]*#|^[[:space:]]*$" "$CI_FILE" 2>/dev/null | xargs)
