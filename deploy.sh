@@ -381,9 +381,10 @@ main() {
     ## 记录脚本开始执行的时间（用于计算总执行时间）
     SECONDS=0
 
-    ## 探测当前项目: 白名单（pms、devops）内的仓库直接执行其 ci.sh，跳过部署流程（模板仓库不需要部署）
-    case "${CI_PROJECT_NAME:-${CI_PROJECT_DIR##*/}}" in
-    pms | devops)
+    ## 探测当前项目: 白名单（root/pms、root/devops 等 namespace/path）内的仓库直接执行其 ci.sh，跳过部署流程
+    local ci_project_path="${CI_PROJECT_PATH:-${GITHUB_REPOSITORY:-${CI_PROJECT_NAMESPACE:-root}/${CI_PROJECT_NAME:-${CI_PROJECT_DIR##*/}}}}"
+    case "${ci_project_path}" in
+    root/pms | root/devops)
         if [[ -f "${CI_PROJECT_DIR}/ci.sh" ]]; then
             bash "${CI_PROJECT_DIR}/ci.sh"
             return 0
