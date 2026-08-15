@@ -3,7 +3,7 @@
 - **审计对象**：`cloud/aliyun/` 全部 25 个 `.sh` 脚本（约 30 万字节）
 - **审计维度**：设计、功能、逻辑、函数/变量命名、bug
 - **方法**：静态逐行审查 + 本机 `aliyun 3.4.x --help`/`--cli-dry-run` 实测混合标注（标「实测」者为 dry-run/help 验证结论）
-- **结论摘要**：~~存在 **3 个创建类操作必挂**（eip add / kvstore add / nat add）~~ **已修复（§2.1）**；剩余 **2 个 P0**（oss batch-copy / rds add 缺必填）、2 个模块因文件覆盖导致功能错位（config CRUD）、以及系统性裸全局变量、GNU/BSD 兼容、`select_with_fzf` 杀死进程等架构问题。详见下文。
+- **结论摘要**：~~存在 **3 个创建类操作必挂**（eip add / kvstore add / nat add）~~ **已修复（§2.1）**；~~2 个模块因文件覆盖导致功能错位（config CRUD）~~ **已修复（§1.1）**；剩余 **2 个 P0**（oss batch-copy / rds add 缺必填）、以及系统性裸全局变量、GNU/BSD 兼容、`select_with_fzf` 杀死进程等架构问题。详见下文。
 
 ---
 
@@ -11,20 +11,22 @@
 
 ### 1.1 三重函数覆盖冲突（高优先级）
 
-`main.sh:49` 用 glob 把 `SCRIPT_DIR/*.sh` 全部 source 进同一命名空间，无同名告警机制，源码顺序（字母序）决定覆盖关系：
+> **已解决**（本次修订）：utils.sh 的 `create_profile`/`update_profile`/`delete_profile` 三份已删除，config.sh 的 `aliyun configure set` 版本成为唯一实现，覆盖冲突消除。
 
 | 函数 | config.sh | utils.sh | 实际生效 |
 |---|---|---|---|
-| `create_profile` | `:42`（`aliyun configure set`） | `:233`（jq 直写 `~/.aliyun/config.json`） | utils.sh 版本（u 在 c 后 source） |
-| `update_profile` | `:64` | `:265` | utils.sh 版本 |
-| `delete_profile` | `:86` | `:285` | utils.sh 版本 |
+| `create_profile` | `:42`（`aliyun configure set`） | ~~`:233`（jq 直写 `~/.aliyun/config.json`）~~ **已删** | config.sh 版本 |
+| `update_profile` | `:64` | ~~`:265`~~ **已删** | config.sh 版本 |
+| `delete_profile` | `:86` | ~~`:285`~~ **已删** | config.sh 版本 |
 
-**影响**：`config add/set/del` 表面上走 config.sh CRUD，实际执行的是 utils.sh 直接改 JSON 文件的版本，绕过 CLI 校验与插件兼容逻辑。`utils.sh` 的这三个函数应删除或改名（config.sh 的 `aliyun configure set` 才是正确实现）。
+**影响**：原 config add/set/del 表面上走 config.sh CRUD，实际执行的是 utils.sh 直接改 JSON 文件的版本，绕过 CLI 校验与插件兼容逻辑；现统一走 config.sh 的 `aliyun configure set` 实现。
 
 ### 1.2 模块加载机制是死代码
 
-- `main.sh:21-40` 的 `load_module`（含 `stat -c %Y` 变更检测）**从未被调用**——`main.sh:49` 已一次性 source 所有模块，`load_module` 整体死代码，且 `stat -c` 是 GNU-only，macOS `< /usr/bin/stat` 实测 `illegal option -- c`。
-- 既然模块全部提前 source，任何「按需加载/热重载」承诺都不成立。
+> **已解决**（本次修订）：`load_module` 整体已删除，main.sh 直接循环 source 所有模块，不再存在按需加载/热重载的无效承诺。
+
+- ~~`main.sh:21-40` 的 `load_module`（含 `stat -c %Y` 变更检测）**从未被调用**——`main.sh:49` 已一次性 source 所有模块，`load_module` 整体死代码，且 `stat -c` 是 GNU-only，macOS `< /usr/bin/stat` 实测 `illegal option -- c`。~~
+- ~~既然模块全部提前 source，任何「按需加载/热重载」承诺都不成立。~~
 
 ### 1.3 `select_with_fzf` 取消即杀死整个进程（跨文件系统性）
 
@@ -164,7 +166,7 @@ ecs.sh 与 vpc.sh 同名为 `ret`，跨函数互相踩踏，嵌套调用后判�
 
 ### 4.1 同名函数互相覆盖（最高优先）
 
-- `create_profile`/`update_profile`/`delete_profile`：config.sh 与 utils.sh 双重定义，utils.sh 覆盖生效（见 §1.1）。**必须删掉 utils.sh 的三份**。
+- ~~`create_profile`/`update_profile`/`delete_profile`：config.sh 与 utils.sh 双重定义，utils.sh 覆盖生效（见 §1.1）。**必须删掉 utils.sh 的三份**。~~ **已删**（见 §1.1）
 
 ### 4.2 裸全局变量（非 local）
 
@@ -239,7 +241,7 @@ ecs.sh 与 vpc.sh 同名为 `ret`，跨函数互相踩踏，嵌套调用后判�
 | # | 位置 | 问题 |
 |---|---|---|
 | 34 | base.sh:402-421 | `validate_required_params` 用「末参含空格」判定错误消息且用负下标，bash<4.x 崩溃；末参本身含空格时误吞 |
-| 35 | main.sh:34 | `load_module` 死代码 + `stat -c %Y` GNU-only |
+| 35 | main.sh:34 | ~~`load_module` 死代码 + `stat -c %Y` GNU-only~~ **已修**（`load_module` 已删除） |
 | 36 | main.sh:64 | profile 探测依赖表格格式；`region` 失败仅回退 cn-hangzhou 不读真实 region |
 | 37 | ecs.sh:1071/1111/1292/1328/505 | ~~create-snapshot/start/stop/describe-attribute 等缺 `--biz-region-id`~~ **已修**（本次修订补齐） |
 | 38 | vpc.sh:552/667/1104/1091 | ~~多个 delete 只传 `--biz-region-id` 缺 `--region`~~ **已修**（`call_aliyun_api` 自动补 `--region`） |
@@ -279,7 +281,7 @@ ecs.sh 与 vpc.sh 同名为 `ret`，跨函数互相踩踏，嵌套调用后判�
 ## 七、建议实施顺序
 
 1. **P0 修复**（当前必挂功能）：eip/kvstore/nat/dts/rds add 参数修正；oss batch-copy 去掉多余 `ls`；ack create 读 `cluster_id`；vpc set-sg-rule 补 `sg_id`；cas 部署域名推导统一。
-2. **删死代码与冲突**：删除 utils.sh 的 `create_profile/update_profile/delete_profile`（保留 config.sh 版本）；删除各死函数；`load_module` 并入 source 流程或删除。
+2. **删死代码与冲突**：~~删除 utils.sh 的 `create_profile/update_profile/delete_profile`（保留 config.sh 版本）~~ **已完成**；删除各死函数；~~`load_module` 并入 source 流程或删除~~ **已完成**。
 3. **系统治理**：全部 `ret`/`result` 加 `local`；`select_with_fzf` 空选改为 `return 1`、`check_fzf` 失败改为 `return`；GNU 工具统一 gdate/gstat 探测；~~region 语义统一为「`--biz-region-id` + `--region` 处处同传」~~ **已完成**（见 §1.5，`call_aliyun_api` 自动补 `--region` + 各区域调用补齐 `--biz-region-id`）。
 4. **功能落地**：oss set 剩余设置、nas 改名说明、cdn 规格选择/冷却修复、dts 状态轮询字段、sms 换用存在命令。
 5. **安全**：rds 默认公网放行必须删除或改 Intranet；ak/token/私钥不进日志与命令行；ram 高危回退改显式确认。

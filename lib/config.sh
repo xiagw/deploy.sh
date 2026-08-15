@@ -87,7 +87,7 @@ check_project_config_template() {
         ## auto 模式由 detect_deployment_method 探测链路决定部署方式，不读 hosts[].* 字段，
         ## 配置残留模板值不影响实际探测，仅警告提示，不阻断流程。
         if [[ "${PROJECT_DEPLOY_METHOD:-auto}" == "auto" ]]; then
-            _msg warn "WARNING: Using default config (auto deployment, hosts ignored)"
+            # _msg warn "WARNING: Using default config (auto deployment, hosts ignored)"
             return 0
         fi
         _msg error "================================================================"

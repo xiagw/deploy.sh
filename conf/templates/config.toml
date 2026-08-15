@@ -23,7 +23,9 @@ shutdown_timeout = 0
   ##       - project: 'root/pms'
   ##         ref: main
   ##         file: 'templates/gitlab-ci.yml'
-  ##   去掉注释/空行、忽略空白与引号差异后必须逐 token 一致，其它任何内容一律拒绝执行。
+  ##   去掉注释/空行、忽略空白与引号差异后，必须匹配白名单模式：
+  ##     include: - project: root/pms ref: main file: templates/gitlab-ci*.yml
+  ##   gitlab-ci 文件名可带任意后缀（如 gitlab-ci-2.yml），其它任何内容一律拒绝执行。
   pre_build_script = """
     CI_FILE=".gitlab-ci.yml"
 
@@ -33,11 +35,11 @@ shutdown_timeout = 0
       exit 1
     fi
 
-    EXPECTED="include: - project: root/pms ref: main file: templates/gitlab-ci.yml"
+    EXPECTED_RE='^include: - project: root/pms ref: main file: templates/gitlab-ci[A-Za-z0-9._-]*\\.yml$'
 
     ACTUAL=$(grep -vE "^[[:space:]]*#|^[[:space:]]*$" "$CI_FILE" 2>/dev/null | xargs)
 
-    if [ "$ACTUAL" != "$EXPECTED" ]; then
+    if ! printf '%s' "$ACTUAL" | grep -qE "$EXPECTED_RE"; then
       echo "❌ .gitlab-ci.yml 非标准模板，放弃执行"
       exit 1
     fi
