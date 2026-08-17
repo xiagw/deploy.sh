@@ -143,12 +143,7 @@ Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
 
 # FAQ
 ### How to create Helm files for applications project
-If you use helm to deploy to k8s, use `--create-helm` to generate the chart (default open port 8080 and 8081):
-```
-cd <your_project.git>
-$HOME/runner/deploy.sh --create-helm $HOME/runner/data/helm/<your_project>
-## change to yours [$HOME/runner/data/helm/<your_project>]
-```
+If you use helm to deploy to k8s, the chart is auto-generated during the helm deployment (default open port 8080 and 8081) when missing.
 
 ### How to resolve gitlab-runner fail
 If you use Ubuntu, just `rm -f $HOME/.bash_logout`

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC2154
 # -*- coding: utf-8 -*-
 #
 # System maintenance and cleanup operations module
@@ -41,7 +41,7 @@ check_crontab_execution() {
 #   0 if cleanup was successful or not needed
 #   1 if cleanup failed to free up space
 system_clean_disk() {
-    local disk_usage clean_disk_threshold="${ENV_DISK_THRESHOLD:-80}" aggressive=false
+    local disk_usage clean_disk_threshold="${ENV_DISK_THRESHOLD:-80}" aggressive=false disk_usage_after
 
     # Get disk usage more reliably
     disk_usage=$(df -P / | awk 'NR==2 {print int($5)}')
@@ -212,24 +212,24 @@ system_proxy() {
 # Internal function to renew SSL certificates
 # This function handles the actual certificate renewal process
 system_cert_renew() {
+    ## 独立功能入口: 未指定 -r/--renew-cert 时直接返回，不阻断主流程
+    [[ ${arg_renew_cert:-false} = true ]] || return 0
     # Check if certificate renewal is needed
     if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
-        return 0
+        exit 0
     fi
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] system_cert_renew:"
         _msg note "  install acme.sh + loop renew all certs (${acme_home:-~/.acme.sh})"
-        return 0
+        exit 0
     fi
 
     _msg task "Renewing SSL certificates"
-    local exec_single_job=false
-    exec_single_job=true
 
     local acme_home="${HOME}/.acme.sh"
     local acme_cmd="${acme_home}/acme.sh"
     local acme_cert_dest="${acme_home}/dest"
-    local run_hook domains=""
+    local run_hook domains="" file dns_type random_minute api_head api_godaddy
 
     ## install acme.sh / 安装 acme.sh
     command -v crontab &>/dev/null || _install_packages cron
@@ -245,7 +245,6 @@ system_cert_renew() {
     ## According to multiple different account files, loop renewal / 根据多个不同的账号文件,循环续签
     ## support multiple account.conf.* / 支持多账号
     ## 多个账号用文件名区分，例如： account.conf.xxx.dns_ali, account.conf.yyy.dns_cf
-    local dns_type
     for file in "${acme_home}"/account.conf.*.dns_*; do
         if [ -f "$file" ]; then
             _msg note "Found $file"
@@ -319,9 +318,10 @@ system_cert_renew() {
             )"
             ;;
         dns_manual)
-            _msg warn "get domains from account.conf.xxx.dns_manual file"
-            # "${acme_home}/account.conf.xxx.dns_manual" 内有 domains="example1.com example2.com example3.com"
-            domains="$(grep -oP 'domains=\K.*' "${acme_home}/account.conf.xxx.dns_manual" 2>/dev/null || true)"
+            _msg warn "get domains from ${file}"
+            ## "${file}" 内有 domains="example1.com example2.com example3.com"
+            ## 用 sed 提取，避免 grep -oP 在 BSD/macOS grep 上不可用
+            domains="$(sed -n 's/^[[:space:]]*domains=[[:space:]]*//p' "$file" 2>/dev/null || true)"
             echo "$domains"
             ;;
         *)
@@ -335,7 +335,7 @@ system_cert_renew() {
             _msg warn "No domains found, skipping."
             continue
         fi
-        acme_cmd="${acme_cmd} --accountconf $file"
+        acme_cmd="${acme_home}/acme.sh --accountconf ${file}"
         for domain in ${domains}; do
             _msg note "Checking domain: $domain"
             if ${acme_cmd} --list | grep -qw "$domain"; then
@@ -388,11 +388,13 @@ system_cert_renew() {
     echo '================================================================'
 
     if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
-        return 0
+        exit 0
     fi
     if ${exec_single_job:-false}; then
         exit 0
     fi
+    ## 续签成功即返回 0；此前 `exit $?` 会取到最后一个 if 条件（false）的状态恒为 1
+    exit 0
 }
 
 # Install base tools (jq) unconditionally.
@@ -414,8 +416,8 @@ system_install_tools() {
         _install_terraform
         _install_kubectl
         _install_helm
-        _install_python_element "$@"
-        _install_python_gitlab "$@"
+        _install_python_element
+        _install_python_gitlab
     fi
 }
 

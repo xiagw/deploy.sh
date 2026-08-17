@@ -6,7 +6,7 @@
 # @param $1 G_DATA Directory containing data files
 # @return 0 on success, non-zero on failure
 repo_inject_file() {
-    local lang detected_lang arg_disable_inject="${1:-false}"
+    local lang detected_lang arg_disable_inject="${arg_disable_inject:-false}"
 
     ## ========================================================================
     ## 项目语言探测
@@ -143,7 +143,7 @@ detect_repo_language() {
     )
     local file lang_type version
 
-    ## 结果缓存: 同一次运行内 detect 被调用 3+ 次（repo_inject / build_all / style_check），
+    ## 结果缓存: 同一次运行内 detect 被调用 3+ 次（repo_inject / stage_build / stage_code_style），
     ## 每次全仓 find 开销大；缓存到 G_REPO_LANG_CACHE 避免重复扫描。
     if [[ -n "${G_REPO_LANG_CACHE:-}" && "${G_REPO_LANG_CACHE_DIR:-}" == "$G_REPO_DIR" ]]; then
         echo "${G_REPO_LANG_CACHE}"
@@ -156,6 +156,8 @@ detect_repo_language() {
         if [[ $file == *"*"* ]]; then
             file=$(find "${G_REPO_DIR}" -maxdepth 1 -name "${file##*/}" -print -quit)
             [[ -z "$file" ]] && continue
+            ## 归一化为相对文件名，避免后续 "${G_REPO_DIR}/${file}" 双重拼接
+            file="${file##*/}"
         else
             [[ -f "${G_REPO_DIR}/${file}" ]] || continue
         fi
@@ -285,9 +287,6 @@ detect_repo_language() {
     G_REPO_LANG_CACHE_DIR="$G_REPO_DIR"
 }
 
-# Export the function
-# export -f detect_repo_language
-
 # Detect repository languages using Docker and GitHub Linguist
 # Uses crazymax/linguist Docker image, fallback: "ghcr.io/crazy-max/linguist:latest"
 # @return String containing detected languages and their percentages
@@ -308,9 +307,6 @@ detect_repo_language_docker() {
     esac
 }
 
-# Export the function
-# export -f detect_repo_language_docker
-
 # Version Control System Module
 # Handles operations for different version control systems:
 # - Git repository management
@@ -319,7 +315,11 @@ detect_repo_language_docker() {
 # GITHUB_WORKSPACE=/home/ops/.cache/act/1298bce48350a805/hostexecutor
 # Git related functions
 setup_git_repo() {
-    local is_gitea="${1:-false}" git_repo_url="$2" git_repo_branch="${3:-main}" git_repo_group git_repo_name git_repo_dir
+    ## 仓库操作入口: 未指定 -g/--git-clone 且非 Gitea Actions 时跳过
+    local is_gitea="${GITEA_ACTIONS:-false}" git_repo_url="${arg_git_clone_url:-}" git_repo_branch="${arg_git_clone_branch:-main}"
+    $is_gitea || [ -n "$git_repo_url" ] || return 0
+    local git_repo_group git_repo_name git_repo_dir
+    local gitea_server git_repo_full_path
     command -v git >/dev/null || _install_packages git
 
     # Handle Gitea parameter
@@ -404,10 +404,11 @@ setup_git_repo() {
 # @param $1 branch name
 # @param $2 workspace dir
 setup_git_branch() {
-    local git_repo_branch="$1" git_repo_dir="$2" default_branch
+    ## 仓库操作入口: 仅 -w workspace + -b branch（非克隆场景）时切换分支
+    local git_repo_branch="${arg_git_clone_branch:-}" git_repo_dir="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
+    [ -n "$git_repo_branch" ] && [ -z "${arg_git_clone_url:-}" ] || return 0
+    local default_branch
     command -v git >/dev/null || _install_packages git
-    [ -n "$git_repo_branch" ] || return 0
-    [ -n "$git_repo_dir" ] || return 0
 
     if ! git -C "$git_repo_dir" rev-parse --git-dir >/dev/null 2>&1; then
         _msg error "[repo] not a git repo: $git_repo_dir"
@@ -478,8 +479,10 @@ get_git_last_commit_message() {
 
 # SVN related functions
 setup_svn_repo() {
-    [ -z "$1" ] && return
-    local svn_repo_url="${1:-}" svn_repo_name svn_repo_dir
+    ## 仓库操作入口: 未指定 -s/--svn-checkout 时跳过
+    local svn_repo_url="${arg_svn_checkout_url:-}"
+    [ -n "$svn_repo_url" ] || return 0
+    local svn_repo_name svn_repo_dir
     svn_repo_name=$(basename "$svn_repo_url")
     svn_repo_dir="${G_PATH}/builds/${svn_repo_name}"
 

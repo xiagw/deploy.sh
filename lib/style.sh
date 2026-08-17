@@ -141,25 +141,6 @@ style_check_django() {
     fi
 }
 
-# 添加并行处理
-parallel_style_check() {
-    local languages=("$@")
-    local pids=()
-
-    for lang in "${languages[@]}"; do
-        style_check "$lang" &
-        pids+=($!)
-    done
-
-    # 等待所有检查完成
-    for pid in "${pids[@]}"; do
-        wait "$pid"
-    done
-}
-
-# 使用示例
-# parallel_style_check php python node
-
 # Shell Style Check / Shell 风格校验（shellcheck + shfmt）
 style_check_shell() {
     _msg task "Running shell style check"
@@ -188,7 +169,10 @@ style_check_shell() {
 }
 
 # Main style check function that determines which specific checker to run
-style_check() {
+stage_code_style() {
+    _msg stage "$(_t '代码风格' 'code style')"
+    ## 阶段守卫: 未指定 -C/--code-style 时直接返回，不阻断主流程
+    [[ ${arg_flags["code_style"]} -eq 1 ]] || return 0
     local lang
     lang="$(detect_repo_language | cut -d':' -f1)" # 获取语言类型
 

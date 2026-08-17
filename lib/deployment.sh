@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=1090,1091
+# shellcheck disable=1090,1091,2154
 # -*- coding: utf-8 -*-
 #
 # Deployment module for handling various deployment methods
@@ -75,7 +75,7 @@ _project_rsync_src() {
 _project_oss_dest() {
     local dest
     dest=$(jq -r --arg branch "${G_NAMESPACE:-}" \
-        '.branches[] | select(.branch == $branch) | .hosts[]? | select(.rsync_dest | startswith("oss://")) | .rsync_dest' \
+        '.branches[] | select(.branch == $branch) | .hosts[]? | select((.rsync_dest // "") | startswith("oss://")) | .rsync_dest' \
         "${G_CONF:-}" 2>/dev/null | head -n 1)
     [[ -n "$dest" ]] || dest="${ENV_OSS_DEST:-}"
     printf '%s' "$dest"
@@ -193,7 +193,7 @@ deploy_to_kubernetes() {
     if [ "${G_NAMESPACE}" != main ]; then
         helm_args+=("--set" "replicaCount=1")
     fi
-    if [[ "$G_DRY_RUN" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    if ${G_DRY_RUN:-false} || [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
         _msg note "[dry-run] skip helm upgrade/install, showing command only"
         _msg note "  ${helm_args[*]}"
         return 0
@@ -211,6 +211,24 @@ deploy_to_kubernetes() {
         G_DEPLOY_RESULT=1
         _msg error "Deployment probe timed out. Please check container status and logs in Kubernetes"
         _msg error "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
+        _msg task "Fetching pod status and logs for [${release_name}] to diagnose"
+        local diag_pods=()
+        mapfile -t diag_pods < <($KUBECTL_OPT -n "${G_NAMESPACE}" get pods -l "app.kubernetes.io/instance=${release_name}" --no-headers 2>/dev/null | awk '{print $1}')
+        if [[ "${#diag_pods[@]}" -eq 0 ]]; then
+            _msg warn "No pods found by instance label, falling back to name grep"
+            mapfile -t diag_pods < <($KUBECTL_OPT -n "${G_NAMESPACE}" get pods --no-headers 2>/dev/null | grep "${release_name}" | awk '{print $1}')
+        fi
+        if [[ "${#diag_pods[@]}" -eq 0 ]]; then
+            _msg warn "Still no pods matched, listing all pods in namespace ${G_NAMESPACE}"
+            $KUBECTL_OPT -n "${G_NAMESPACE}" get pods 2>&1 || true
+        else
+            for pod in "${diag_pods[@]}"; do
+                _msg task "=== Pod ${pod} ==="
+                $KUBECTL_OPT -n "${G_NAMESPACE}" get pod "${pod}" 2>&1 || true
+                _msg task "--- Logs (last 50 lines) ---"
+                $KUBECTL_OPT -n "${G_NAMESPACE}" logs --tail=50 "${pod}" 2>&1 || true
+            done
+        fi
     fi
     # Display rollback cmd on failure / 部署失败时显示回滚命令
     if [[ "${G_DEPLOY_RESULT:-0}" -eq 1 ]]; then
@@ -219,9 +237,9 @@ deploy_to_kubernetes() {
         ## helm rollback to previous revision / 回滚到上一个版本
         echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))"
         ## kubectl rollback to previous revision / 回滚到上一个版本
-        echo "$KUBECTL_OPT -n ${G_NAMESPACE} rollout undo deployment/${release_name}"
+        echo "kubectl -n ${G_NAMESPACE} rollout undo deployment/${release_name}"
         ## Scale down deployment to 0 replicas / 将部署缩减为 0 个副本
-        echo "$KUBECTL_OPT -n ${G_NAMESPACE} scale deployment/${release_name} --replicas=0"
+        echo "kubectl -n ${G_NAMESPACE} scale deployment/${release_name} --replicas=0"
         return 1
     fi
 
@@ -240,7 +258,7 @@ deploy_to_kubernetes() {
 # Deploy to Aliyun Functions
 # @param $1 lang The programming language of the project
 deploy_aliyun_functions() {
-    local release_name lang functions_conf
+    local release_name lang functions_conf functions_conf_tmpl
     lang="${1:?'lang parameter is required'}"
     release_name="$(format_release_name)"
 
@@ -794,9 +812,25 @@ detect_deployment_method() {
 }
 
 # Main deployment function
-handle_deploy() {
-    local type="${1:-}"
-    shift
+stage_deploy() {
+    _msg stage "$(_t '部署' 'deployment')"
+    ## 部署方式单一来源: 按优先级取首个启用项；spec 模式用之，auto 留空走探测链路
+    local -a deploy_order=(deploy_k8s deploy_rsync_ssh deploy_rsync deploy_ftp deploy_sftp deploy_aliyun_func deploy_aliyun_oss deploy_docker)
+    local deploy_key deploy_first="" type=""
+    for deploy_key in "${deploy_order[@]}"; do
+        [[ -z "$deploy_first" && ${arg_flags[$deploy_key]} -eq 1 ]] && deploy_first="$deploy_key"
+    done
+    ## 阶段守卫: 未启用任何部署方式时直接返回，不阻断主流程
+    [[ -n "$deploy_first" ]] || return 0
+    if ! $all_zero; then
+        type="$deploy_first"
+    fi
+
+    ## 语言类型由部署流程内部探测（detect_repo_language 有缓存，重复调用廉价）
+    local lang
+    lang="$(detect_repo_language | cut -d: -f1)"
+    ## 保持 $@ 首位为 lang（下游 deploy_* 函数读取 $1）
+    set -- "${lang}"
 
     # 如果没有指定部署方法，先进行探测
     if [ -z "$type" ]; then
@@ -850,7 +884,9 @@ handle_deploy() {
         _msg error "Unknown or invalid deployment method: $type"
         ;;
     esac
-    return "${G_DEPLOY_RESULT:-0}"
+    ## 部署结果写入 G_DEPLOY_RESULT 供通知与最终退出码使用；main 是裸调用，
+    ## 此处固定返回 0，避免 set -e 中断流水线导致 handle_notify 被跳过
+    return 0
 }
 
 # Export the function
@@ -860,16 +896,23 @@ handle_deploy() {
 # @param $1 source_image Source image name (e.g., nginx:latest)
 # @param $2 target_registry Target registry (e.g., registry.example.com)
 copy_docker_image() {
-    local source_image="$1" target_registry="$2" image_name tag target
+    ## 独立功能入口: 未指定 -c/--copy-image 时直接返回，不阻断主流程
+    [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_src}" ]] || return 0
+    local source_image="${arg_src}" target_registry image_name tag target base_name
+
+    ## 目标 registry 缺省回退到镜像源地址，仍为空则终止
+    [ -z "$arg_target" ] && arg_target="${ENV_DOCKER_MIRROR:-}"
+    [ -z "$arg_target" ] && exit 1
+    target_registry="${arg_target}"
 
     if ${G_DRY_RUN:-false}; then
         dry_run_note "skopeo --override-os linux copy --multi-arch all docker://${source_image} docker://${target_registry%/}/..."
-        return 0
+        exit 0
     fi
 
     if ! command -v skopeo >/dev/null 2>&1; then
         _msg error "skopeo command not found. Please install skopeo first."
-        return 1
+        exit 1
     fi
 
     # 1. image:tag --> mirror/ns/image:tag
@@ -902,7 +945,7 @@ copy_docker_image() {
     # 检查目标镜像是否已存在
     if skopeo inspect "docker://${target}" &>/dev/null; then
         _msg error "Target image already exists: ${target}"
-        return 1
+        exit 1
     fi
 
     echo "Copying multi-arch image to custom registry..."
@@ -912,10 +955,10 @@ copy_docker_image() {
         "docker://${source_image}" \
         "docker://${target}"; then
         _msg ok "Successfully copied image to ${target}"
-        return 0
+        exit 0
     else
         _msg error "Failed to copy image to ${target}"
-        return 1
+        exit 1
     fi
 }
 
@@ -936,16 +979,19 @@ copy_docker_image() {
 # Example usage / 使用示例:
 # clean_old_tags "registry.example.com/myapp"
 clean_old_tags() {
+    ## 独立功能入口: 未指定 --clean-tags 时直接返回，不阻断主流程
+    [[ -n "${arg_clean_tags:-}" ]] || return 0
     # Required parameter validation / 必需参数验证
-    local repository="${1:?'repository parameter is required'}" cutoff_time current_time tags_file tags_to_delete=() delete_force=false tag tag_timestamp
+    local repository="${arg_clean_tags:?'repository parameter is required'}" cutoff_time current_time tags_file tags_to_delete=() delete_force=false tag tag_timestamp
     local clean_days="${ENV_CLEAN_TAGS_DAYS:-180}"
+    local total_tags
     delete_force="${ENV_CLEAN_TAGS_FORCE:-false}"
 
     _msg task "Cleaning old tags from registry"
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] clean_old_tags:"
         _msg note "  skopeo list-tags docker://${repository} + delete tags older than ${clean_days} days"
-        return 0
+        exit 0
     fi
 
     # Calculate cutoff time (6 months ago in seconds) / 计算截止时间（N 天前的秒数）
@@ -958,7 +1004,7 @@ clean_old_tags() {
     if ! skopeo list-tags "docker://${repository}" >"$tags_file"; then
         _msg error "Failed to get tags from registry / 从注册表获取标签失败"
         rm -f "$tags_file"
-        return 1
+        exit 1
     fi
 
     # Parse tags and check timestamps / 解析标签并检查时间戳
@@ -1019,4 +1065,5 @@ clean_old_tags() {
     else
         _msg task "No old tags to delete / 没有需要删除的旧标签"
     fi
+    exit $?
 }

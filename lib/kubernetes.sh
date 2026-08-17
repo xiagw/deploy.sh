@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
+# shellcheck disable=2154
 #
 # Kubernetes management module for deployment script
 # Handles Kubernetes cluster operations using Terraform
 
 # kubectl config 配置初始化
 kube_config_init() {
-  local ns="$1" kubectl_conf
+  local ns="${G_NAMESPACE}" kubectl_conf
   _install_kubectl
   _install_helm
   ## 当 deploy.env 已配置则返回
@@ -152,29 +153,34 @@ EOF
 # Setup Kubernetes cluster using Terraform
 # This function is independent and non-blocking for the main process
 kube_setup_terraform() {
+  ## 独立功能入口: 未指定 -K/--create-k8s 时直接返回，不阻断主流程
+  ${create_k8s_with_terraform:-false} || return 0
   local terraform_dir="${G_DATA}/terraform"
-  [[ -d "$terraform_dir" ]] || return 0
+  [[ -d "$terraform_dir" ]] || exit 0
   if ${G_DRY_RUN:-false}; then
     _msg note "[dry-run] kube_setup_terraform:"
     _msg note "  cd ${terraform_dir} && terraform init -input=false && terraform apply -auto-approve"
-    return 0
+    exit 0
   fi
   _install_terraform
 
   _msg task "Creating k8s cluster"
-  cd "$terraform_dir" || return 1
+  cd "$terraform_dir" || exit 1
 
   if terraform init -input=false && terraform apply -auto-approve; then
     echo "Kubernetes cluster created successfully"
   else
     _msg error "Failed to create Kubernetes cluster"
-    return 1
+    exit 1
   fi
+  exit 0
 }
 
 # Create CNFS storage class and related resources
 # @param $1 namespace The namespace to create resources in
 kube_create_storage_class() {
+  ## 独立功能入口: 未指定 --create-storage-class 时直接返回，不阻断主流程
+  [[ ${arg_create_storage_class:-false} = true ]] || return 0
   local cnfs_name="cnfs01"
   local sc_name="alicloud-cnfs-nas"
   local namespace="${G_NAMESPACE}"
@@ -182,7 +188,7 @@ kube_create_storage_class() {
 
   if [ -z "$nas_url" ]; then
     _msg error "ENV_NAS_URL is required but not set"
-    return 1
+    exit 1
   fi
 
   _msg task "Creating CNFS storage class resources"
@@ -222,13 +228,16 @@ reclaimPolicy: Retain
 allowVolumeExpansion: true
 EOF
   fi
+  exit $?
 }
 
 # Create PV and PVC for a specific subpath, or ensure PVC exists
 # @param $1 namespace The namespace to create resources in
 # @param $2 subpath The NAS subpath to use (optional)
 kube_create_pv_pvc() {
-  local subpath="$1" namespace="${2:-$G_NAMESPACE}" pvc_name cnfs_name
+  ## 独立功能入口: 未指定 -P/--kube-pvc 时直接返回，不阻断主流程
+  [[ ${arg_flags["kube_pvc"]} -eq 1 && -n "${arg_sub_path}" ]] || return 0
+  local subpath="${arg_sub_path}" namespace="${arg_pvc_namespace:-${G_NAMESPACE:-default}}" pvc_name cnfs_name
   # Remove pvc- prefix if it exists in the input
   subpath="${subpath#pvc-}"
   pvc_name="pvc-${subpath}" pv_name="pv-${subpath}-${namespace}"
@@ -239,7 +248,7 @@ kube_create_pv_pvc() {
   if ${G_DRY_RUN:-false}; then
     _msg note "[dry-run] kube_create_pv_pvc:"
     _msg note "  ${KUBECTL_OPT} apply -f - <<EOF (PV ${pv_name} / PVC ${pvc_name} / storageClass ${sc_name})"
-    return 0
+    exit 0
   fi
 
   # Check if PVC exists
@@ -291,6 +300,7 @@ spec:
   volumeName: $pv_name
 EOF
   fi
+  exit $?
 }
 
 # Build base Docker images for the project
@@ -426,12 +436,12 @@ EOF
 
 # Build selected base images
 # @param $@ Optional specific image tags to build
-select_image_tags() {
+build_base_image_select() {
+  ## 独立功能入口: 未指定 -x/--build-base 时直接返回，不阻断主流程
+  [[ ${arg_flags["build_base"]} -eq 1 ]] || return 0
   local all_tags=() tags=()
 
-  if ${G_DRY_RUN:-false}; then
-    _msg note "[dry-run] select base image tags (interactive fzf), then build_base_image for each"
-  fi
+  dry_run_note "select base image tags"
 
   all_tags=(
     "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4" "php:8.5"
@@ -447,4 +457,5 @@ select_image_tags() {
   for i in "${tags[@]}"; do
     build_base_image "$i"
   done
+  exit $?
 }

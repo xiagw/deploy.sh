@@ -130,31 +130,30 @@ Branche = ${G_REPO_BRANCH}"
     case "$type" in
     wecom)
         echo "Sending WeChat Work notification..."
-        notify_wecom "${ENV_WECOM_KEY}" "$message"
+        notify_wecom "${ENV_WECOM_KEY}" "$message" || _msg warn "WeChat Work notification failed"
         ;;
     telegram)
         echo "Sending Telegram notification..."
-        notify_telegram "${ENV_TG_API_KEY}" "${ENV_TG_GROUP_ID}" "$message"
+        notify_telegram "${ENV_TG_API_KEY}" "${ENV_TG_GROUP_ID}" "$message" || _msg warn "Telegram notification failed"
         ;;
     element)
         echo "Sending Element notification..."
-        notify_element "$G_LIB" "${ENV_ELM_SERVER}" "${ENV_ELM_USERID}" "${ENV_ELM_PASSWORD}" "${ENV_ELM_ROOMID}" "$message"
+        notify_element "$G_LIB" "${ENV_ELM_SERVER}" "${ENV_ELM_USERID}" "${ENV_ELM_PASSWORD}" "${ENV_ELM_ROOMID}" "$message" || _msg warn "Element notification failed"
         ;;
     email)
         echo "Sending Email notification..."
-        notify_email "${G_PATH:-}" "${ENV_EMAIL_SERVER}" "${ENV_EMAIL_FROM}" "${ENV_EMAIL_TO}" "${ENV_EMAIL_SUBJECT:-Deployment Notification}" "$message"
+        notify_email "${G_PATH:-}" "${ENV_EMAIL_SERVER}" "${ENV_EMAIL_FROM}" "${ENV_EMAIL_TO}" "${ENV_EMAIL_SUBJECT:-Deployment Notification}" "$message" || _msg warn "Email notification failed"
         ;;
     zoom)
         echo "Sending Zoom notification..."
-        notify_zoom "${ENV_ZOOM_CHANNEL}" "$message"
+        notify_zoom "${ENV_ZOOM_CHANNEL}" "$message" || _msg warn "Zoom notification failed"
         ;;
     feishu)
         echo "Sending Feishu notification..."
-        notify_feishu "${ENV_WEBHOOK_URL}" "$message"
+        notify_feishu "${ENV_WEBHOOK_URL}" "$message" || _msg warn "Feishu notification failed"
         ;;
     *)
-        _msg error "Unknown notification type: $type"
-        return 1
+        _msg warn "Unknown notification type: $type"
         ;;
     esac
 

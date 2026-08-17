@@ -133,12 +133,7 @@ cp conf/templates/deploy.env data/deploy.env        ## 修改为你的自定义�
 
 # FAQ
 ### 如何创建 helm 项目文件
-如果你使用 helm 来部署到 k8s, 使用 `--create-helm` 生成 chart （默认开启 8080 和 8081 端口）
-```bash
-cd <your_project.git>
-$HOME/runner/deploy.sh --create-helm $HOME/runner/data/helm/<your_project>
-## change to yours [$HOME/runner/data/helm/<your_project>]
-```
+如果使用 helm 部署到 k8s，chart 会在 helm 部署过程中缺失时自动生成（默认开启 8080 和 8081 端口）。
 
 ### 如何解决 gitlab-runner 运行失败
 假如你使用 Ubuntu, just `rm -f $HOME/.bash_logout`

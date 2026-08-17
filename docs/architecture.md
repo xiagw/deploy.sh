@@ -123,21 +123,21 @@ deploy.sh/
 
 | 函数 | 行号 | 工具（Docker） | 开关 |
 |---|---|---|---|
-| `analysis_gitleaks` | 12 | zricethezav/gitleaks:v7.5.0 | — |
-| `analysis_zap` | 37 | owasp/zap2docker-stable | `PP_SCAN_ZAP` |
-| `analysis_vulmap` | 68 | 本地 vulmap | `PP_SCAN_VULMAP` |
-| `analysis_sonarqube` | 102 | sonarsource/sonar-scanner-cli | `PP_SONAR` |
-| `analysis_pmd` | 154 | pmd/pmd:6.55.0 | `PP_PMD` |
-| `analysis_codeclimate` | 198 | codeclimate/codeclimate | `PP_CODECLIMATE` |
-| `analysis_spotbugs` | 304 | spotbugs/spotbugs:4.7.3 | `PP_SPOTBUGS` |
-| `analysis_pylint` | 363 | python:2.17.5-slim | `PP_PYLINT` |
-| `analysis_checkstyle` | 410 | checkstyle/checkstyle:10.12.4 | `PP_CHECKSTYLE` |
+| `analysis_gitleaks` | 13 | zricethezav/gitleaks:v7.5.0 | — |
+| `stage_security_zap` | 38 | owasp/zap2docker-stable | `PP_SCAN_ZAP` |
+| `stage_security_vulmap` | 72 | 本地 vulmap | `PP_SCAN_VULMAP` |
+| `stage_code_quality` | 109 | sonarsource/sonar-scanner-cli | `PP_SONAR` |
+| `analysis_pmd` | 164 | pmd/pmd:6.55.0 | `PP_PMD` |
+| `analysis_codeclimate` | 208 | codeclimate/codeclimate | `PP_CODECLIMATE` |
+| `analysis_spotbugs` | 314 | spotbugs/spotbugs:4.7.3 | `PP_SPOTBUGS` |
+| `analysis_pylint` | 373 | python:2.17.5-slim | `PP_PYLINT` |
+| `analysis_checkstyle` | 420 | checkstyle/checkstyle:10.12.4 | `PP_CHECKSTYLE` |
 
 统一模式：开关未启用输出 `⋯ 跳过 (PP_XX=false)`；失败 `✗ ... failed` return 1（pylint 例外，仅 warn）。
 
 ### 2.8 lib/style.sh — 221 行（代码风格）
 
-每个语言一个 `check_<lang>_style`（phpcs/ktlint/pylint/eslint/checkstyle/gofmt/golint/rubocop/clang-format/hadolint），全部走 Docker 容器执行，由 `PIPELINE_*_CODE_STYLE` 开关控制。`style_check` 总调度 → `parallel_style_check` 并行。
+每个语言一个 `check_<lang>_style`（phpcs/ktlint/pylint/eslint/checkstyle/gofmt/golint/rubocop/clang-format/hadolint），全部走 Docker 容器执行，由 `PIPELINE_*_CODE_STYLE` 开关控制。`stage_code_style` 总调度。
 
 ### 2.9 lib/build.sh — 922 行（构建）
 
@@ -148,7 +148,7 @@ deploy.sh/
 | `enable_buildx_mode` | 55 | 按 `ENV_BUILDX_MODE`（auto/kubernetes/remote）选 builder |
 | `generate_bake_file` | 90 | 生成 `docker-bake.hcl`（default + base 双 target） |
 | `build_image` | 195 | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略 |
-| `build_all` | 382 | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
+| `stage_build` | 370 | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
 | `build_<lang>` | 475+ | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建 |
 | `docker_login` | 741 | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
 | `generate_base_dockerfile` / `generate_lang_dockerfile` | 784/811 | 生成基础/语言 Dockerfile |
@@ -172,7 +172,7 @@ deploy.sh/
 | `deploy_via_ftp` / `deploy_via_sftp` | 487/530 | tar 打包后 ftp/sftp 批量上传 |
 | `deploy_to_docker_compose` | 616 | rsync + ssh 执行 `compose up -d --build` |
 | `detect_deployment_method` | 672 | 自动探测部署方式（见 4.4） |
-| `handle_deploy` | 795 | 部署入口分发，返回 `G_DEPLOY_RESULT` |
+| `stage_deploy` | 815 | 部署入口分发，返回 `G_DEPLOY_RESULT` |
 | `copy_docker_image` | 860 | skopeo 多架构镜像跨 registry 复制 |
 | `clean_old_tags` | 936 | 删除 180 天前的旧 tag（含无时间戳处理） |
 
@@ -186,7 +186,7 @@ deploy.sh/
 | `kube_create_storage_class` | 177 | 阿里云 CNFS NAS + StorageClass |
 | `kube_create_pv_pvc` | 230 | NAS subpath 的 PV/PVC |
 | `build_base_image` | 298 | buildx bake 多平台构建基础镜像（tag 加 `-base`） |
-| `select_image_tags` | 429 | fzf 交互选择基础镜像 tag |
+| `build_base_image_select` | 429 | fzf 交互选择基础镜像 tag |
 
 ### 2.12 lib/notify.sh — 162 行（通知）
 
@@ -211,20 +211,19 @@ main "$@"
 ├─ _msg anchor BEGIN
 ├─ config_deploy_init && source $G_ENV   # 初始化并加载 ENV_*
 ├─ （环境变量操作 set/get/env → 立即返回）
-├─ （build_base 独立功能 → select_image_tags 后返回）
+├─ （build_base 独立功能 → build_base_image_select 后返回）
 ├─ system_check               # 系统检查（kube_pvc 时静默）
 ├─ setup_git_repo / setup_svn_repo / setup_git_branch  # 按参数克隆/检出/切分支
 ├─ config_deploy_vars         # 设置 G_REPO_* / G_NAMESPACE / G_IMAGE_TAG 等（位置勿动）
 ├─ （gen_dockerfile / build_buildpacks 独立功能 → 返回）
 ├─ find_project_config        # 定位项目 JSON 配置 → G_CONF
 ├─ IS_CHINA && system_proxy on
-├─ （create_helm / copy_image 独立功能 → 返回）
-├─ system_clean_disk          # 磁盘清理
-├─ system_install_tools       # 按需装工具
-├─ （create_k8s 独立功能）
-├─ kube_config_init           # 初始化 kubectl 上下文（位置勿动）
+├─ （create_helm / copy_image / create_k8s 独立功能 → 返回）
+├─ kube_config_init           # 初始化 kubectl/helm 上下文（须在一切 KUBECTL_OPT 用法前）
 ├─ （create_storage_class 独立功能）
 ├─ （kube_pvc 独立功能 → 返回）
+├─ system_clean_disk          # 磁盘清理
+├─ system_install_tools       # 按需装工具
 ├─ config_deploy_setup        # dotfile/SSH 密钥
 ├─ （renew_cert / clean_tags 独立功能 → 返回）
 ├─ config_build_env           # 选 docker/podman → G_DOCK/G_RUN
@@ -238,17 +237,19 @@ main "$@"
 - **auto（无参数）**：`parse_command_args` 检测到所有开关为 0 → 全部置 1。各阶段守卫条件恒真，全流程执行。`deploy_method` 保持空 → 走 `detect_deployment_method` 自动探测。
 - **spec（带参数）**：只跑被置 1 的开关对应阶段；`deploy_method` 由 deploy 参数显式指定（单一方法）。
 
-阶段总数 `STAGE_TOTAL` 在执行前按开关统计（quality/style、test_unit、build、deploy、test_func、security 最多 6 段）；横幅序号由 `_msg stage` 自动递增。
+阶段总数 `STAGE_TOTAL` 已在精简中移除；阶段横幅序号由 `_msg stage` 自动递增（`▶ STAGE N`）。
 
 ```
-阶段 1: 代码质量与风格    code_quality|code_style → analysis_sonarqube / style_check
-阶段 2: 单元测试          test_unit → handle_test unit
-阶段 3: 构建              build_all → build_all "$detected_lang" "$arg_image_retain"
-阶段 4: 部署              deploy_sum>0 || all_zero → handle_deploy "${deploy_method:-}" ...
-阶段 5: 功能测试          test_func → handle_test func
-阶段 6: 安全扫描          security_zap|vulmap → analysis_zap / analysis_vulmap
+阶段 1: 代码质量与风格    code_quality|code_style → stage_code_quality / stage_code_style
+阶段 2: 单元测试          test_unit → stage_unit_test
+阶段 3: 构建              stage_build（内部探测语言，构建并推送 registry）
+阶段 4: 部署              deploy_first 非空 → stage_deploy "${deploy_method:-}" ...
+阶段 5: 功能测试          test_func → stage_functional_test
+阶段 6: 安全扫描          security_zap|vulmap → stage_security_zap / stage_security_vulmap
 收尾:   handle_notify → _msg anchor END（累计耗时）
 ```
+
+> 阶段横幅（`_msg stage`）由各 `stage_*` 函数自打印并自守卫，main 仅做顺序编排。
 
 ### 3.3 分支→命名空间映射
 
@@ -285,7 +286,7 @@ main "$@"
 4. Docker 标志：仓库根有 `Dockerfile*` → `docker`。
 5. 输出 `lang:ver:docker` 三段式，供 build/style/deploy 使用。
 
-### 4.4 构建方法探测（build_all）
+### 4.4 构建方法探测（stage_build）
 
 ```
 PROJECT_BUILD_METHOD 覆盖（docker|system）
@@ -380,7 +381,7 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 这些注释是历史踩坑后的结论，改动前务必先读：
 
 1. **`deploy.sh:566`** config_deploy_vars 位置勿动——后续步骤依赖这些变量。
-2. **`deploy.sh:652`** kube_config_init 位置不可调整——后续 K8s 操作依赖。
+2. **`deploy.sh`** kube_config_init 须在一切 `KUBECTL_OPT`/`HELM_OPT` 用法（含 create_storage_class / kube_pvc / 部署阶段）之前。
 3. **`deploy.sh:591-593`** 只使用项目专用配置（`data/conf/<ns>/<project>.json`），替代单文件：避免单文件过大、减少版本冲突、更好权限控制。
 4. **`deploy.sh:95`** G_IMAGE_TAG 已简化为纯时间戳（旧格式注释保留）。
 5. **`deploy.sh:790`** 任务列表用固定顺序数组（关联数组迭代顺序不稳定）。
@@ -392,7 +393,25 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 ---
 
-## 7. 关联文档
+## 7. 已知问题 / 待办（未处理，仅记录）
+
+> 2026-08-20 审查发现，暂不修改，先留档。GNU 兼容类与 README 相关约定见 AGENTS.md「GNU 工具链」。
+
+### C. GNU/macOS 兼容（GNU 专属命令/参数，BSD 报错）
+
+1. **repo.sh:74** `md5sum`：GNU coreutils，macOS 为 `md5`（输出格式也不同）。node 分支 `repo_inject_file` 会走到。
+2. **system.sh:356** `sleep "${random_minute}"m`：`m` 后缀是 GNU sleep 扩展，BSD/macOS 不支持。
+
+### D. 小瑕疵（行为边界）
+
+1. **deployment.sh:617** `_sftp_upload_one` 缺 sshpass 时 `return 1`，调用方裸调用 → errexit 中断整条流水线；同函数 626-628 失败分支只设 `G_DEPLOY_RESULT` 不 return，不一致。
+2. **analysis.sh:89** `stage_security_vulmap` 中 `source "$config_file"`，`config.cfg` 缺失时 errexit 硬中断。
+3. **style.sh:159-160** `$sc && shellcheck "$script" || exit_code=$?`：`sc=false`（shellcheck 未装到）时 `$?` 取到 `false` 的 1，误记失败。
+4. **kubernetes.sh:455** `build_base_image_select` 依赖 fzf，缺失时静默空跑退出 0。
+
+---
+
+## 8. 关联文档
 
 | 文档 | 内容 |
 |---|---|

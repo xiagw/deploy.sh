@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
+# shellcheck disable=2154
 
 ################################################################################
 # 函数: find_project_config
@@ -18,7 +19,7 @@
 #     - 更好的权限控制和安全性
 ################################################################################
 find_project_config() {
-    local project_path="${1:-}"
+    local project_path="${G_REPO_GROUP_PATH:-}"
     local namespace project_name
     local project_conf
 
@@ -47,8 +48,12 @@ find_project_config() {
         ## 项目专用配置文件不存在，从模板创建默认配置
         command -v jq || _install_packages jq
         ## 从模板创建配置文件，并替换项目路径
-        jq --arg project_path "${project_path}" '.project = $project_path' \
-            "${template_file}" >"${project_conf}"
+        if ! jq --arg project_path "${project_path}" '.project = $project_path' \
+            "${template_file}" >"${project_conf}"; then
+            _msg error "Failed to create project config from template: ${template_file}"
+            rm -f "${project_conf}"
+            return 1
+        fi
 
         G_CONF="${project_conf}"
         _msg note "Created default project config: ${G_CONF}"
@@ -87,7 +92,6 @@ check_project_config_template() {
         ## auto 模式由 detect_deployment_method 探测链路决定部署方式，不读 hosts[].* 字段，
         ## 配置残留模板值不影响实际探测，仅警告提示，不阻断流程。
         if [[ "${PROJECT_DEPLOY_METHOD:-auto}" == "auto" ]]; then
-            # _msg warn "WARNING: Using default config (auto deployment, hosts ignored)"
             return 0
         fi
         _msg error "================================================================"
@@ -125,9 +129,12 @@ check_project_config_template() {
 ################################################################################
 config_deploy_init() {
     ## 初始化环境变量配置文件
-    mkdir -p "${G_DATA}"
     mkdir -p "${G_DATA}/conf"
     [[ -f "${G_ENV}" ]] || cp -v "${G_PATH}/conf/templates/deploy.env" "${G_ENV}"
+
+    ## 从 deploy.env 加载所有 ENV_* 环境变量
+    # shellcheck disable=SC1090
+    source "$G_ENV"
 
     ## ========================================================================
     ## PATH 环境变量配置
@@ -146,7 +153,7 @@ config_deploy_init() {
         "/home/linuxbrew/.linuxbrew/bin"    # Linuxbrew 二进制文件
     )
     for p in "${paths_append[@]}"; do
-        if [[ -d "$p" && ! ":$PATH:" =~ :$p: ]]; then
+        if [[ -d "$p" && ":$PATH:" != *":$p:"* ]]; then
             PATH="${PATH:+"$PATH:"}$p"
         fi
     done
@@ -171,8 +178,8 @@ _load_project_build_deploy_config() {
 
     ## 读取构建配置
     if jq -e '.build' "$config_file" >/dev/null 2>&1; then
-        PROJECT_BUILD_METHOD=$(jq -r '.build.method // "auto"' "$config_file")
-        PROJECT_PREFER_DOCKER=$(jq -r '.build.prefer_docker // true' "$config_file")
+        PROJECT_BUILD_METHOD=$(jq -r 'if .build.method == null then "auto" else .build.method end' "$config_file")
+        PROJECT_PREFER_DOCKER=$(jq -r 'if .build.prefer_docker == null then true else .build.prefer_docker end' "$config_file")
         export PROJECT_BUILD_METHOD PROJECT_PREFER_DOCKER
     else
         PROJECT_BUILD_METHOD="auto"
@@ -182,8 +189,8 @@ _load_project_build_deploy_config() {
 
     ## 读取部署配置
     if jq -e '.deploy' "$config_file" >/dev/null 2>&1; then
-        PROJECT_DEPLOY_METHOD=$(jq -r '.deploy.method // "auto"' "$config_file")
-        PROJECT_PREFER_K8S=$(jq -r '.deploy.prefer_k8s // true' "$config_file")
+        PROJECT_DEPLOY_METHOD=$(jq -r 'if .deploy.method == null then "auto" else .deploy.method end' "$config_file")
+        PROJECT_PREFER_K8S=$(jq -r 'if .deploy.prefer_k8s == null then true else .deploy.prefer_k8s end' "$config_file")
         export PROJECT_DEPLOY_METHOD PROJECT_PREFER_K8S
     else
         PROJECT_DEPLOY_METHOD="auto"
@@ -205,6 +212,7 @@ _load_project_build_deploy_config() {
 config_deploy_setup() {
     ## dry-run: 不生成SSH密钥、不创建符号链接（仅本地环境配置，预览无意义）
     if ${G_DRY_RUN:-false}; then
+        dry_run_note "config_deploy_setup (ssh keys, $HOME symlinks) — skipped in preview"
         return 0
     fi
 
@@ -229,12 +237,14 @@ config_deploy_setup() {
     [[ -d "$HOME/.ssh" ]] || mkdir -m 700 "$HOME/.ssh"
 
     ## 将SSH密钥文件链接到用户主目录（如果不存在）
-    for file in "$ssh_dir"/*; do
-        [[ -f "$HOME/.ssh/$(basename "${file}")" ]] && continue
-        echo "Link $file to $HOME/.ssh/"
-        chmod 600 "${file}" # 设置适当的权限
-        ln -s "${file}" "$HOME/.ssh/"
-    done
+    if compgen -G "${ssh_dir}/*" >/dev/null; then
+        for file in "$ssh_dir"/*; do
+            [[ -f "$HOME/.ssh/$(basename "${file}")" ]] && continue
+            echo "Link $file to $HOME/.ssh/"
+            chmod 600 "${file}" # 设置适当的权限
+            ln -s "${file}" "$HOME/.ssh/"
+        done
+    fi
 
     ## ========================================================================
     ## 配置文件目录链接
@@ -246,8 +256,6 @@ config_deploy_setup() {
 
     ## 链接 python-gitlab 配置文件
     [[ ! -f "$HOME/.python-gitlab.cfg" && -f "${file_python_gitlab}" ]] && ln -sf "${file_python_gitlab}" "$HOME/"
-
-    _msg ok "Deployment environment setup completed"
 }
 
 ################################################################################
@@ -263,50 +271,61 @@ config_deploy_setup() {
 #   - 含空格的值请自行加引号: deploy.sh set "ENV_FOO='bar baz'"
 ################################################################################
 env_file_set() {
-    local input="$1"
-    local key="${input%%=*}"
-    local value="${input#*=}"
+    ## 独立功能入口: 未执行 set 操作时直接返回，不阻断主流程
+    [[ ${#arg_env_set[@]} -gt 0 ]] || return 0
+    local input key value tmp_file found skip_array line
+    for input in "$@"; do
+        key="${input%%=*}"
+        value="${input#*=}"
 
-    if [[ "$key" == "$input" || -z "$key" ]]; then
-        _msg error "Invalid format. Use: $0 set KEY=VALUE"
-        return 1
-    fi
-
-    local tmp_file found=false
-    tmp_file=$(mktemp)
-
-    if [[ -f "$G_ENV" ]]; then
-        local skip_array=false
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            if $skip_array; then
-                if [[ "$line" =~ ^[[:space:]]*\) ]]; then
-                    skip_array=false
-                fi
-                continue
-            fi
-
-            if ! $found && { [[ "$line" =~ ^${key}= ]] || [[ "$line" =~ ^#[[:space:]]*${key}= ]]; }; then
-                # 写入新的键值（保持用户传入的原始 value，不自动添加或删除引号）
-                echo "${key}=${value}" >>"$tmp_file"
-                found=true
-                # 如果原文件中该行是数组的开始（以 "=(" 结尾），则跳过后续直到 ")"
-                if [[ "$line" =~ =\($ ]]; then
-                    skip_array=true
-                fi
-            else
-                echo "$line" >>"$tmp_file"
-            fi
-        done <"$G_ENV"
-        if ! $found; then
-            echo "${key}=${value}" >>"$tmp_file"
+        if [[ "$key" == "$input" || -z "$key" ]]; then
+            _msg error "Invalid format. Use: $0 set KEY=VALUE"
+            exit 1
         fi
-    else
-        # If G_ENV doesn't exist, just create it with the key
-        echo "${key}=${value}" >"$tmp_file"
-    fi
 
-    mv "$tmp_file" "$G_ENV"
-    _msg ok "Set ${key}=${value}"
+        ## 仅允许合法变量名，防止 key 中的正则元字符注入
+        if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            _msg error "Invalid variable name: ${key}"
+            exit 1
+        fi
+
+        tmp_file=$(mktemp)
+        found=false
+        skip_array=false
+
+        if [[ -f "$G_ENV" ]]; then
+            while IFS= read -r line || [[ -n "$line" ]]; do
+                if $skip_array; then
+                    if [[ "$line" =~ ^[[:space:]]*\) ]]; then
+                        skip_array=false
+                    fi
+                    continue
+                fi
+
+                if ! $found && { [[ "$line" =~ ^${key}= ]] || [[ "$line" =~ ^#[[:space:]]*${key}= ]]; }; then
+                    # 写入新的键值（保持用户传入的原始 value，不自动添加或删除引号）
+                    echo "${key}=${value}" >>"$tmp_file"
+                    found=true
+                    # 如果原文件中该行是数组的开始（以 "=(" 结尾），则跳过后续直到 ")"
+                    if [[ "$line" =~ =\($ ]]; then
+                        skip_array=true
+                    fi
+                else
+                    echo "$line" >>"$tmp_file"
+                fi
+            done <"$G_ENV"
+            if ! $found; then
+                echo "${key}=${value}" >>"$tmp_file"
+            fi
+        else
+            # If G_ENV doesn't exist, just create it with the key
+            echo "${key}=${value}" >"$tmp_file"
+        fi
+
+        mv "$tmp_file" "$G_ENV"
+        _msg ok "Set ${key}=${value}"
+    done
+    exit 0
 }
 
 ################################################################################
@@ -317,18 +336,26 @@ env_file_set() {
 # 返回: 0=成功（输出值到 stdout）, 1=变量不存在
 ################################################################################
 env_file_get() {
+    ## 独立功能入口: 未执行 get 操作时直接返回，不阻断主流程
+    [[ -n "${arg_env_get:-}" ]] || return 0
     local key="$1"
 
     if [[ -z "$key" ]]; then
         _msg error "Key name required. Use: $0 get KEY"
-        return 1
+        exit 1
+    fi
+
+    ## 仅允许合法变量名，防止 key 中的正则元字符注入
+    if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        _msg error "Invalid variable name: ${key}"
+        exit 1
     fi
 
     local value="${!key:-}"
 
     if [[ -n "$value" ]]; then
         echo "$value"
-        return 0
+        exit 0
     fi
 
     if [[ -f "$G_ENV" ]]; then
@@ -351,20 +378,20 @@ env_file_get() {
                 printf '%q' "$item"
             done
             printf ')\n'
-            return 0
+            exit 0
         else
             echo "${!key}"
-            return 0
+            exit 0
         fi
     fi
 
     if grep -q "^${key}=" "$G_ENV"; then
         echo ""
-        return 0
+        exit 0
     fi
 
     _msg error "Variable ${key} not found"
-    return 1
+    exit 1
 }
 
 ################################################################################
@@ -374,8 +401,9 @@ env_file_get() {
 # 返回: 无（输出到标准输出）
 ################################################################################
 env_file_list() {
+    ## 独立功能入口: 未执行 list 操作时直接返回，不阻断主流程
+    [[ "${arg_env_list:-false}" == true ]] || return 0
     local line var in_array=false
-    local -a arr
 
     if [[ -f "$G_ENV" ]]; then
         # shellcheck disable=SC1090
@@ -424,4 +452,5 @@ env_file_list() {
     done < <(
         grep -vE '^[[:space:]]*#' "$G_ENV" | grep -vE '^[[:space:]]*$'
     )
+    exit $?
 }

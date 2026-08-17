@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
-# shellcheck disable=1090,1091,2086
+# shellcheck disable=1090,1091,2086,2154,2034
 
 # Test module for deploy.sh
 # Contains unit testing and functional testing capabilities
@@ -51,42 +51,44 @@ test_function() {
     _msg note "No functional test script found. Skipping functional tests."
 }
 
-handle_test() {
-    local test_type="${1:-false}" test_arg="${2:-false}"
+stage_unit_test() {
     G_TEST_RESULT=0
-
-    case "$test_type" in
-    "unit")
-        _msg task "Running unit tests"
-        ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，true 启用，false 禁用[default]
-        [[ "${PIPELINE_UNIT_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_UNIT_TEST=false)"
-        if ${test_arg:-false} || ${PIPELINE_UNIT_TEST:-false}; then
-            if test_unit; then
-                _msg ok "Unit tests completed successfully"
-            else
-                G_TEST_RESULT=1
-                _msg error "Unit tests failed"
-            fi
+    _msg stage "$(_t '单元测试' 'unit test')"
+    ## 阶段守卫: 未启用对应测试类型时直接返回，不阻断主流程
+    [[ ${arg_flags["test_unit"]} -eq 1 ]] || return 0
+    _msg task "Running unit tests"
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，true 启用，false 禁用[default]
+    [[ "${PIPELINE_UNIT_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_UNIT_TEST=false)"
+    if ${PIPELINE_UNIT_TEST:-false}; then
+        if test_unit; then
+            _msg ok "Unit tests completed successfully"
+        else
+            G_TEST_RESULT=1
+            _msg error "Unit tests failed"
         fi
-        ;;
-    "func")
-        _msg task "Running functional tests"
-        ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，true 启用，false 禁用[default]
-        [[ "${PIPELINE_FUNCTION_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_FUNCTION_TEST=false)"
-        if ${test_arg:-false} || ${PIPELINE_FUNCTION_TEST:-false}; then
-            if test_function; then
-                _msg ok "Functional tests completed successfully"
-            else
-                G_TEST_RESULT=1
-                _msg error "Functional tests failed"
-            fi
-        fi
-        ;;
-    *)
-        _msg error "Invalid test type: $test_type"
-        G_TEST_RESULT=1
-        ;;
-    esac
+    fi
+    ## 测试结果写入 G_TEST_RESULT 供通知使用；main 是裸调用，
+    ## 固定返回 0 避免 set -e 中断流水线导致 handle_notify 被跳过
+    return 0
+}
 
-    return "$G_TEST_RESULT"
+stage_functional_test() {
+    G_TEST_RESULT=0
+    _msg stage "$(_t '功能测试' 'functional test')"
+    ## 阶段守卫: 未启用对应测试类型时直接返回，不阻断主流程
+    [[ ${arg_flags["test_func"]} -eq 1 ]] || return 0
+    _msg task "Running functional tests"
+    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，true 启用，false 禁用[default]
+    [[ "${PIPELINE_FUNCTION_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_FUNCTION_TEST=false)"
+    if ${PIPELINE_FUNCTION_TEST:-false}; then
+        if test_function; then
+            _msg ok "Functional tests completed successfully"
+        else
+            G_TEST_RESULT=1
+            _msg error "Functional tests failed"
+        fi
+    fi
+    ## 测试结果写入 G_TEST_RESULT 供通知使用；main 是裸调用，
+    ## 固定返回 0 避免 set -e 中断流水线导致 handle_notify 被跳过
+    return 0
 }

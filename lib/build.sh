@@ -75,6 +75,11 @@ enable_buildx_mode() {
     kubernetes)
         ensure_buildx_builder_kubernetes
         ;;
+    context)
+        ## 使用本机 docker context（默认 builder），不创建远端 builder
+        _msg note "Using local docker context for buildx (mode=context)"
+        unset G_BUILDER
+        ;;
     remote | "")
         ensure_buildx_builder
         ;;
@@ -194,9 +199,8 @@ EOF
 
 build_image() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
-    local retention_mode="${1}" lang="${2:-}"
-    local keep_image="${retention_mode}"
-    local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror ret
+    local lang="${1:-}"
+    local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror ret debug_flag
     local custom_build_ret
 
     ## Ensure buildx builder is available
@@ -216,14 +220,9 @@ build_image() {
         fi
     fi
 
-    ## 根据参数决定是否需要 push 镜像。统一默认 remove（R-2）:
-    ## --load 本地构建，不推 registry；仅显式 push 才 docker_login + --push
-    if [[ "${retention_mode}" == 'push' ]]; then
-        docker_login
-        buildx_push_option="--push"
-    else
-        buildx_push_option="--load"
-    fi
+    ## 构建并推送镜像到 registry（部署流程需从 registry 拉取）
+    docker_login
+    buildx_push_option="--push"
 
     ## 如果存在 Dockerfile.base，则生成 base 镜像的 tag
     dockerfile_base_path="${G_REPO_DIR}/Dockerfile.base"
@@ -359,29 +358,22 @@ DOCKERIGNORE
         echo "  $G_DOCK tag $image_uuid laradock-spring"
     fi
 
-    # auto mode:            push=1, keep=0, keep_image=push   （main 按 all_zero 显式传 push）
-    # arg build:            push=0, keep=0, keep_image=remove
-    # arg build keep:       push=0, keep=1, keep_image=keep
-    # arg build push:       push=1, keep=0, keep_image=push
-
-    # 根据参数决定是否保留当前镜像，区分本地和远程仓库
-    if [[ -z "${keep_image}" || "${keep_image}" =~ ^(remove|push)$ ]]; then
-        if $G_DOCK image inspect "${target_image_tag}" >/dev/null 2>&1; then
-            $G_DOCK rmi "${target_image_tag}" >/dev/null &
-            _msg task "Remove image: ${target_image_tag}"
-        fi
-    else
-        _msg task "Keep image: ${target_image_tag}"
+    ## 构建完成后删除本地镜像（已推送到 registry）
+    if $G_DOCK image inspect "${target_image_tag}" >/dev/null 2>&1; then
+        $G_DOCK rmi "${target_image_tag}" >/dev/null &
+        _msg task "Remove image: ${target_image_tag}"
     fi
 }
 
 # Main build function that determines which specific builder to run
 # Priority: Docker build (if available) > System command build
-# @param $1 lang The programming language
-# @param $2 keep_image Optional parameter for image retention
-build_all() {
-    local lang="${1:?'lang parameter is required'}"
-    local keep_image="${2:-}"
+stage_build() {
+    _msg stage "$(_t '构建' 'build')"
+    ## 阶段守卫: 未指定 -B/--build 时直接返回，不阻断主流程
+    [[ ${arg_flags["build_all"]} -eq 1 ]] || return 0
+    local lang
+    ## 语言由构建流程内部探测（detect_repo_language 有缓存，重复调用廉价）
+    lang="$(detect_repo_language)"
     local lang_type="${lang%%:*}" # Extract language type without version/docker suffix
     local has_dockerfile=false
     local docker_build_failed=false
@@ -394,7 +386,7 @@ build_all() {
         docker)
             if check_docker_available; then
                 _msg note "Using configured build method: docker"
-                build_image "${keep_image}" "${lang}"
+                build_image "${lang}"
                 return $?
             else
                 _msg error "Configured build method 'docker' but Docker is not available"
@@ -425,7 +417,7 @@ build_all() {
             # Check if lang already has :docker suffix, if not, try Docker build first
             if [[ "$lang" != *:docker ]]; then
                 # Try Docker build with fallback
-                if build_image "${keep_image}" "${lang}"; then
+                if build_image "${lang}"; then
                     _msg ok "Docker build completed successfully"
                     return 0
                 else
@@ -434,7 +426,7 @@ build_all() {
                 fi
             else
                 # Lang already marked as docker, use Docker build directly
-                build_image "${keep_image}" "${lang}"
+                build_image "${lang}"
                 return $?
             fi
         else
@@ -776,7 +768,7 @@ docker_login() {
         if [[ -f "$lock_login_registry" ]]; then
             return 0
         fi
-        if echo "${ENV_DOCKER_PASSWORD}" |
+        if printf '%s\n' "${ENV_DOCKER_PASSWORD}" |
             $G_DOCK login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"; then
             touch "$lock_login_registry"
         else
@@ -816,8 +808,11 @@ EOF
 
 # Language specific layers
 generate_lang_dockerfile() {
-    local lang="$1"
-    local dockerfile="Dockerfile.${lang}"
+    ## 独立功能入口: 未指定 --gen-dockerfile 时直接返回，不阻断主流程
+    [[ ${arg_gen_dockerfile:-false} = true ]] || return 0
+    local lang dockerfile
+    lang="$(detect_repo_language | cut -d: -f1)"
+    dockerfile="Dockerfile.${lang}"
 
     generate_base_dockerfile "$lang" >"$dockerfile"
 
@@ -838,11 +833,14 @@ EOF
         ;;
         # 其他语言的特定配置...
     esac
+    exit $?
 }
 
 detect_repo_language_and_build() {
-    local target_dir="${1:-.}"
-    local lang_type
+    ## 独立功能入口: 未指定 --build-buildpacks 时直接返回，不阻断主流程
+    [[ ${arg_build_buildpacks:-false} = true ]] || return 0
+    local target_dir="${G_REPO_DIR:-.}"
+    local lang_type builder
 
     # 首先检测语言
     lang_type=$(detect_repo_language)
@@ -926,4 +924,5 @@ EOF
         --builder "$builder" \
         --env BP_INCLUDE_FILES="project.toml" \
         --path "$target_dir"
+    exit $?
 }

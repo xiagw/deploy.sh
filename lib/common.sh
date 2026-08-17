@@ -124,10 +124,15 @@ dry_run_or() {
     "$@"
 }
 
-# Output language: zh|en. Priority: CLI --lang (G_MSG_LANG) > ENV_LANG (deploy.env) > zh
+# Output language: zh|en. Priority: CLI --lang (_msg_lang_val) > ENV_LANG (deploy.env) > zh
+# _msg_lang_val 由 deploy.sh parse_command_args 直接赋值（模块加载晚于参数解析，勿在此初始化）
 _msg_lang() {
-    printf '%s' "${G_MSG_LANG:-${ENV_LANG:-zh}}"
+    printf '%s' "${_msg_lang_val:-${ENV_LANG:-zh}}"
 }
+
+# 阶段横幅状态（common 模块私有；_stage_start_ms 由 deploy.sh 在脚本开始时初始化）
+_stage_start_ms=0
+_stage_num=0
 
 # Inline bilingual structural strings: _t "中文" "English"
 # Only for framework sentences we own; technical content stays single-language.
@@ -148,19 +153,19 @@ _msg() {
         timestamp="$(date +%T)"
         ;;
     stage)
-        ## 阶段横幅: 序号自动递增，右侧为从脚本开始（STAGE_START_MS 锚点）到当前的累计耗时。
+        ## 阶段横幅: 序号自动递增，右侧为从脚本开始（_stage_start_ms 锚点）到当前的累计耗时。
         ## 注意: 是"累计"不是"距上一阶段"。原始语义如此，勿改成阶段差值——差值会让快速阶段显示 +0s，
         ## 且各阶段差值不直观。累计值单调递增，任何阶段都能直接看出脚本已运行多久。
-        ((++STAGE_NUM))
+        ((++_stage_num))
         local cum_ms
-        cum_ms=$(( $(_now_ms) - STAGE_START_MS ))
+        cum_ms=$(( $(_now_ms) - _stage_start_ms ))
         shift
         msg="$*"
         printf -v rule '%*s' 62 ''
         rule="${rule// /━}"
         if [ "${silent_mode:-0}" -eq 0 ]; then
             printf '\033[0;36m%s\033[0m\n' "$rule"
-            local left="▶ STAGE ${STAGE_NUM}/${STAGE_TOTAL:-?} · ${msg:0:40}"
+            local left="▶ STAGE ${_stage_num} · ${msg:0:40}"
             local pad=$((58 - ${#left}))
             ((pad < 1)) && pad=1
             printf '\033[1;36m%s\033[0m\033[0;36m%*s\033[0m\n' "$left" "$pad" "$(_fmt_dur "$((cum_ms / 1000))")"
@@ -1137,7 +1142,7 @@ _install_acme_official() {
     fi
 
     _msg ok "Installing acme.sh..."
-    if ${IS_CHINA:-false}; then
+    if "${IS_CHINA:-false}"; then
         git clone --depth 1 https://gitee.com/neilpang/acme.sh.git
         cd acme.sh && ./acme.sh --install --accountemail deploy@deploy.sh
     else

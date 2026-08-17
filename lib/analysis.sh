@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
+# shellcheck disable=2154
 
 # Code Analysis Module
 # Handles all code analysis operations including:
@@ -34,7 +35,10 @@ analysis_gitleaks() {
 }
 
 # Run OWASP ZAP security scan
-analysis_zap() {
+stage_security_zap() {
+    _msg stage "$(_t '安全扫描zap' 'security scan with zap')"
+    ## 独立功能入口: 未指定 -z/--security-zap 时直接返回，不阻断主流程
+    [[ ${arg_flags["security_zap"]} -eq 1 ]] || return 0
     _msg task "ZAP scan"
     [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SCAN_ZAP=false)"
     if [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]]; then
@@ -49,7 +53,7 @@ analysis_zap() {
     _msg task "Running ZAP security scan"
 
     if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] analysis_zap:"
+        _msg note "[dry-run] stage_security_zap:"
         _msg note "  ${G_RUN} -v $(pwd):/zap/wrk ${zap_image} zap-full-scan.sh ${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
         return 0
     fi
@@ -65,7 +69,10 @@ analysis_zap() {
 }
 
 # Run Vulmap security scan
-analysis_vulmap() {
+stage_security_vulmap() {
+    _msg stage "$(_t '安全扫描vulmap' 'security scan with vulmap')"
+    ## 独立功能入口: 未指定 -m/--security-vulmap 时直接返回，不阻断主流程
+    [[ ${arg_flags["security_vulmap"]} -eq 1 ]] || return 0
     _msg task "vulmap scan"
     [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SCAN_VULMAP=false)"
     if [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]]; then
@@ -82,7 +89,7 @@ analysis_vulmap() {
     source "$config_file"
 
     if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] analysis_vulmap:"
+        _msg note "[dry-run] stage_security_vulmap:"
         _msg note "  ${G_RUN} -v ${PWD}:/work vulmap -u ${ENV_TARGET_URL} -o /work/${output_file}"
         return 0
     fi
@@ -99,7 +106,10 @@ analysis_vulmap() {
     _msg task "vulmap scan completed"
 }
 
-analysis_sonarqube() {
+stage_code_quality() {
+    _msg stage "$(_t '代码质量' 'code quality')"
+    ## 阶段守卫: 未指定 -Q/--code-quality 时直接返回，不阻断主流程
+    [[ ${arg_flags["code_quality"]} -eq 1 ]] || return 0
     _msg task "Checking code with SonarQube"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
     [[ "${PIPELINE_SONAR:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SONAR=false)"
@@ -111,7 +121,7 @@ analysis_sonarqube() {
     local sonar_conf="$G_REPO_DIR/sonar-project.properties"
 
     if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] analysis_sonarqube:"
+        _msg note "[dry-run] stage_code_quality:"
         _msg note "  ${G_RUN} -u 1000:1000 -e SONAR_TOKEN=*** -v ${G_REPO_DIR}:/usr/src sonarsource/sonar-scanner-cli"
         _msg note "  write ${sonar_conf#${G_REPO_DIR}/} if missing"
         return 0
