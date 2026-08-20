@@ -1,4 +1,5 @@
 @echo off
+:: GBK编码，CRLF换行  curl.exe -Lo child.cmd https://gitee.com/xiagw/deploy.sh/raw/main/docs/utils/child.cmd
 :: ============================================================
 ::  child.cmd - 定时限制儿童使用电脑
 ::
@@ -25,6 +26,7 @@ set "DISABLE_FILE=%BASE_PATH%_disable.txt"
 set "BYPASS_FILE=%BASE_PATH%_bypass_workday.txt"
 set "DAILY_FILE=%BASE_PATH%_daily.txt"
 set "HOLIDAY_CACHE=%BASE_PATH%_holiday.txt"
+set "HOLIDAY_TMP=%BASE_PATH%_holiday_tmp.txt"
 set "PLAY_MIN=60"
 set "REST_MIN=90"
 set "DELAY_SECONDS=90"
@@ -52,6 +54,21 @@ set /a HOUR=(1%HOUR2%-100)
 set /a MINUTE=(1%MINU2%-100)
 set /a NOW_MIN=%HOUR%*60+%MINUTE%
 
+if not exist "%STATE_FILE%" call :INIT_STATE
+call :READ_STATE
+
+:: ============================================================
+::  计算 已用/休息 分钟数 (HH:MM -> 当日分钟)
+:: ============================================================
+set /a PLAY_REF=(1%PLAY_HH%-100)*60+(1%PLAY_MM%-100)
+set /a REST_REF=(1%REST_HH%-100)*60+(1%REST_MM%-100)
+set /a PLAY_ELAPSED=%NOW_MIN%-%PLAY_REF%
+if %PLAY_ELAPSED% LSS 0 set /a PLAY_ELAPSED+=1440
+
+set /a REST_ELAPSED=%NOW_MIN%-%REST_REF%
+if %REST_ELAPSED% LSS 0 set /a REST_ELAPSED+=1440
+
+
 :: ============================================================
 ::  规则 1: 21:00-08:00 禁用 (纯 CMD)
 :: ============================================================
@@ -76,19 +93,6 @@ if %WEEKDAY% LSS 5 (
 :: ============================================================
 ::  初始化/读取 状态文件 (单文件 两行 PLAY/REST)
 :: ============================================================
-if not exist "%STATE_FILE%" call :INIT_STATE
-call :READ_STATE
-
-:: ============================================================
-::  计算 已用/休息 分钟数 (HH:MM -> 当日分钟)
-:: ============================================================
-set /a PLAY_REF=(1%PLAY_HH%-100)*60+(1%PLAY_MM%-100)
-set /a REST_REF=(1%REST_HH%-100)*60+(1%REST_MM%-100)
-set /a PLAY_ELAPSED=%NOW_MIN%-%PLAY_REF%
-if %PLAY_ELAPSED% LSS 0 set /a PLAY_ELAPSED+=1440
-
-set /a REST_ELAPSED=%NOW_MIN%-%REST_REF%
-if %REST_ELAPSED% LSS 0 set /a REST_ELAPSED+=1440
 
 :: ============================================================
 ::  规则 4: 关机冷却
@@ -117,46 +121,63 @@ if %PLAY_ELAPSED% GEQ %PLAY_MIN% (
     exit /b 0
 )
 
-if "%DEBUG_MODE%"=="1" (
-    echo [debug] play=%PLAY_ELAPSED% rest=%REST_ELAPSED% wd=%WEEKDAY% hol=%HOLIDAY%
-)
+call :DBG_DUMP "未触发关机"
 exit /b 0
 
 :: ============================================================
 ::  ---- 每日缓存: 星期/节假日 ----
 ::  ============================================================
 :ENSURE_DAILY
-:: 当天缓存还存在且 TAG 匹配今天 -> 直接复用
 call :TODAY
+call :CALC_WEEKDAY
 set "CACHE_TAG="
 for /f "tokens=1,2 delims==" %%a in ('type "%DAILY_FILE%" 2^>nul') do (
     if "%%a"=="TAG" set "CACHE_TAG=%%b"
 )
-if "%CACHE_TAG%"=="%TODAY%" goto :READ_DAILY
-
-:: 缓存过期 -> 启动一次 PowerShell
-call :GEN_DAILY
-
-:READ_DAILY
-set "WEEKDAY=7"
+if "%CACHE_TAG%"=="%TODAY%" goto :READ_HOLIDAY
+call :GEN_HOLIDAY
+:READ_HOLIDAY
 set "HOLIDAY=0"
 for /f "tokens=1,* delims==" %%a in ('type "%DAILY_FILE%" 2^>nul') do (
-    if "%%a"=="WEEKDAY" set "WEEKDAY=%%b"
     if "%%a"=="HOLIDAY" set "HOLIDAY=%%b"
 )
 goto :eof
 
+:CALC_WEEKDAY
+:: 蔡勒公式纯 CMD 计算星期，每次运行实时算，不依赖缓存
+set "WD_Y=%TODAY:~0,4%"
+set "WD_M=%TODAY:~4,2%"
+set "WD_D=%TODAY:~6,2%"
+set /a WD_Y=%WD_Y%
+set /a WD_M=(1%WD_M%-100)
+set /a WD_D=(1%WD_D%-100)
+if %WD_M% LSS 3 ( set /a WD_M+=12 & set /a WD_Y-=1 )
+set /a WD_J=%WD_Y%/100
+set /a WD_K=%WD_Y%%%100
+set /a WD_H=(%WD_D% + (13*(%WD_M%+1))/5 + %WD_K% + %WD_K%/4 + %WD_J%/4 - 2*%WD_J%) %% 7
+if %WD_H% LSS 0 set /a WD_H+=7
+set /a WEEKDAY=(%WD_H% + 5) %% 7 + 1
+goto :eof
 :TODAY
 set "TODAY="
-for /f "tokens=1-3 delims=/ " %%a in ("%DATE%") do set "TODAY=%%a%%b%%c"
+for /f "tokens=1-4 delims=/- " %%a in ("%DATE%") do (
+    set "T1=%%a"
+    set "T2=%%b"
+    set "T3=%%c"
+    set "T4=%%d"
+)
+set "Y=%T1%"
+echo.%T1%| findstr /r "^[0-9][0-9][0-9][0-9]$" >nul || set "Y=%T4%"
+set "M=%T2%"
+set "D=%T3%"
+if "%M:~1%"=="" set "M=0%M%"
+if "%D:~1%"=="" set "D=0%D%"
+set "TODAY=%Y%%M%%D%"
 goto :eof
-
-:GEN_DAILY
-:: 一次性 PowerShell: 取星期并同步节假日表; 失败时用内置默认节假日
+:GEN_HOLIDAY
+set "HOLIDAY=0"
 powershell -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass -Command ^
 "$y=Get-Date; ^
-$tag=$y.ToString('yyyy')+$y.ToString('MM')+$y.ToString('dd'); ^
-$w=[int]$y.DayOfWeek; if($w -eq 0){$w=7}; ^
 $mmdd=$y.ToString('MM')+$y.ToString('dd'); ^
 $cache='%HOLIDAY_CACHE%'; ^
 $holiday=''; ^
@@ -166,7 +187,7 @@ if(Test-Path $cache){ ^
     if($ln -match '^YEAR=.+'){ $h=$ln.Substring(5).Trim() } ^
     if($ln -match '^LIST=.+'){ $holiday=$ln.Substring(5).Trim() } ^
   } ^
-  if($h -ne $tag.Substring(0,4)){ $holiday='' } ^
+  if($h -ne [string]$y.Year){ $holiday='' } ^
 } ^
 if(-not $holiday){ ^
   try{ ^
@@ -181,13 +202,14 @@ if(-not $holiday){ ^
 } ^
 if(-not $holiday){ $holiday='0100 0101 0102 0103 0405 0501 0502 0503 0504 0505 0624 0625 0626 1001 1002 1003 1004 1005 1006 1007' }; ^
 $is=0; if(($holiday -split ' ') -contains $mmdd){ $is=1 }; ^
-Set-Content -Path '%DAILY_FILE%' -Value @('TAG='+$tag, 'WEEKDAY='+$w, 'HOLIDAY='+$is) -Encoding Default; ^
+Set-Content -Path "%HOLIDAY_TMP%" -Value ([string]$is) -Encoding Default; ^
 " >nul 2>&1
+set /p HOLIDAY=<"%HOLIDAY_TMP%"
+if "%HOLIDAY%"=="" set "HOLIDAY=0"
+:: 每日缓存只存节假日，weekday 每次实时算
+>  "%DAILY_FILE%" echo TAG=%TODAY%
+>> "%DAILY_FILE%" echo HOLIDAY=%HOLIDAY%
 goto :eof
-
-:: ============================================================
-::  工具函数
-::  ============================================================
 :INIT_STATE
 :: 首启: PLAY=现在, REST=现在-REST_MIN 分钟 (允许立即计时, 而非立刻关机)
 set "PLAY_HH=%HOUR2%"
@@ -226,9 +248,38 @@ goto :eof
 echo [%DATE% %TIME%] %~1 >> "%LOGFILE%"
 goto :eof
 
+:DBG_DUMP
+if not "%DEBUG_MODE%"=="1" goto :eof
+set "DBG_BYPASS=0"
+if exist "%BYPASS_FILE%" set "DBG_BYPASS=1"
+set "DBG_DISABLE=0"
+if exist "%DISABLE_FILE%" set "DBG_DISABLE=1"
+echo [debug] 现在：%HOUR2%:%MINU2%
+if defined WEEKDAY (
+    set "DBG_WD_TEXT=日"
+    if "%WEEKDAY%"=="1" set "DBG_WD_TEXT=一"
+    if "%WEEKDAY%"=="2" set "DBG_WD_TEXT=二"
+    if "%WEEKDAY%"=="3" set "DBG_WD_TEXT=三"
+    if "%WEEKDAY%"=="4" set "DBG_WD_TEXT=四"
+    if "%WEEKDAY%"=="5" set "DBG_WD_TEXT=五"
+    if "%WEEKDAY%"=="6" set "DBG_WD_TEXT=六"
+    set "DBG_HOL_TEXT=非节假日"
+    if "%HOLIDAY%"=="1" set "DBG_HOL_TEXT=节假日"
+    echo [debug] 星期!DBG_WD_TEXT!，!DBG_HOL_TEXT!
+)
+if defined PLAY_ELAPSED (
+    set "DBG_BYP_TEXT=否"
+    if "%DBG_BYPASS%"=="1" set "DBG_BYP_TEXT=是"
+    set "DBG_DIS_TEXT=否"
+    if "%DBG_DISABLE%"=="1" set "DBG_DIS_TEXT=是"
+    echo [debug] 已玩/上限 !PLAY_ELAPSED!/%PLAY_MIN% 分钟，距上次关机/冷却 !REST_ELAPSED!/%REST_MIN% 分钟，绕过工作日：!DBG_BYP_TEXT!，已禁用：!DBG_DIS_TEXT!
+)
+echo [debug] %~1
+goto :eof
+
 :DO_SHUTDOWN
 call :LOG "关机: %~1"
-if "%DEBUG_MODE%"=="1" echo [debug] shutdown skip: %~1 & goto :eof
+if "%DEBUG_MODE%"=="1" call :DBG_DUMP "将关机，原因：%~1" & goto :eof
 shutdown /s /t %DELAY_SECONDS% /c "%~1"
 goto :eof
 
