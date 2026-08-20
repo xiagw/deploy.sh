@@ -184,13 +184,6 @@ Parameters:
                                  Target must not already exist.
                             Examples:
                               -c nginx:latest registry.example.com/ns
-
-    # Environment configuration
-    set KEY=VALUE [KEY2=VALUE2 ...]  Set variable(s) in deploy.env.
-                                     Updates existing, uncomments commented, or appends new.
-                                     Values with spaces need quotes: set "ENV_FOO='bar baz'"
-    get KEY                          Get variable value from deploy.env.
-    env | list                       List all active ENV_ variables in deploy.env.
 EOF
 }
 
@@ -289,19 +282,6 @@ parse_command_args() {
             arg_clean_tags="${2:?ERROR: repository parameter is required}"
             shift
             ;;
-        # Environment configuration
-        set)
-            shift
-            arg_env_set=("$@")
-            break
-            ;;
-        get)
-            arg_env_get="${2:?ERROR: key name required}"
-            shift
-            ;;
-        env | list)
-            arg_env_list=true
-            ;;
         *) _usage && exit 1 ;;
         esac
         shift
@@ -313,11 +293,9 @@ parse_command_args() {
         RUN_STAGES+=(stage_deploy)
     fi
 
-    ## 自动模式: 未请求任何功能且未执行环境变量操作时填充全部阶段
-    ## 独立功能不进自动模式，避免 -r/-K/--clean-tags 等单独执行时误跑完整流水线；
-    ## env 操作（set/get/list）提前执行且命中即退出，同样不触发自动模式
-    if [[ ${#RUN_REPO[@]} -eq 0 && ${#RUN_TASKS[@]} -eq 0 && ${#RUN_STAGES[@]} -eq 0 ]] &&
-        [[ ${#arg_env_set[@]} -eq 0 && -z "${arg_env_get:-}" && "${arg_env_list:-false}" != true ]]; then
+    ## 自动模式: 未请求任何功能时填充全部阶段
+    ## 独立功能不进自动模式，避免 -r/-K/--clean-tags 等单独执行时误跑完整流水线
+    if [[ ${#RUN_REPO[@]} -eq 0 && ${#RUN_TASKS[@]} -eq 0 && ${#RUN_STAGES[@]} -eq 0 ]]; then
         RUN_STAGES=(stage_code_quality stage_code_style stage_unit_test stage_build stage_deploy stage_functional_test stage_security_zap stage_security_vulmap)
     fi
 
@@ -501,13 +479,6 @@ main() {
     ## source deploy.env 加载 ENV_* 变量，均在 config_deploy_init 内完成
     ## ========================================================================
     config_deploy_init
-
-    ## 独立功能: 环境变量 set/get/env 操作
-    ## 提前于 setup 链执行（仅依赖 config_deploy_init 就绪的 G_ENV），命中即 exit 终止，
-    ## 未命中守卫直接返回，不阻断主流程
-    env_file_set
-    env_file_get
-    env_file_list
 
     ## ========================================================================
     ## 系统环境检查
