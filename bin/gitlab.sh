@@ -274,7 +274,7 @@ select_action() {
         "project get   List all projects"
         "project size  Check large repositories"
         "project del   Delete a project"
-        "project dp    Delete pipeline history"
+        "project cls   Clean pipelines (keep 5)"
         "runner add    Install gitlab runner"
     )
     printf '%s\n' "${actions[@]}" | fzf --prompt="Select action: " --height=40% | awk '{print $1, $2}'
@@ -346,15 +346,27 @@ delete_project_path() {
     $cmd_gitlab project delete --id "${id:? ERROR: empty id}"
 }
 
-delete_project_pipeline_history() {
+# Clean GitLab pipelines, keep the newest N pipelines per project
+# Ported from bin/clean.sh handle_gitlab
+cleanup_pipelines() {
+    ## 只保留 N 个 pipeline（默认 5）
+    local keep="${1:-5}" pid project_list
+    project_list="${ME_DATA}/logs/${ME_NAME}.project.id.list.log"
+
+    ## project_list 文件不存在或超过7天，重新获取所有项目 ID 列表
+    if [[ ! -f "$project_list" || "$(find "$project_list" -mtime +7 -print)" ]]; then
+        _msg log "$ME_LOG" "获取 GitLab 所有项目 ID 列表"
+        $cmd_gitlab project list --get-all | jq -r '.[].id' | sort -n >"$project_list"
+    fi
+
+    _msg log "$ME_LOG" "开始清理 GitLab 流水线，保留最新的 $keep 个"
     while read -r pid; do
-        echo "$pid"
-        $cmd_gitlab project-pipeline list --project-id "$pid" --get-all |
-            jq -r '.[].id' | sort -n | head -n -10 |
-            xargs -r -t -I {} gitlab project-pipeline delete --project-id "$pid" --id {}
-    done < <(
-        $cmd_gitlab project list --get-all | jq -r '.[].id' | sort -n
-    )
+        $cmd_gitlab project-pipeline list --project-id "${pid}" --get-all |
+            jq -r '.[].id' | sort -n | head -n "-$keep" |
+            xargs -r -P10 -I% $cmd_gitlab project-pipeline delete --project-id "${pid}" --id %
+        sleep "$keep"
+    done <"$project_list"
+    _msg log "$ME_LOG" "完成清理 gitlab pipeline"
 }
 
 # Execute the saved command
@@ -474,8 +486,8 @@ execute_command() {
             }
             delete_project_path "$project_path"
             ;;
-        dp)
-            delete_project_pipeline_history
+        cls)
+            cleanup_pipelines
             ;;
         esac
         ;;
