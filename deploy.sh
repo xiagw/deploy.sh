@@ -113,7 +113,7 @@ config_deploy_vars() {
     ## 处理定时任务执行
     ## 如果通过 crontab 执行，检查是否应该跳过本次执行（避免重复执行）
     if ${arg_cron:-false}; then
-        check_crontab_execution "$G_DATA" "$CI_PROJECT_ID" "$G_REPO_SHORT_SHA" || exit 0
+        check_crontab_execution "$G_DATA" "${CI_PROJECT_ID:-}" "$G_REPO_SHORT_SHA" || exit 0
     fi
 }
 
