@@ -7,11 +7,11 @@ shutdown_timeout = 0
   session_timeout = 1800
 
 [[runners]]
-  name = "gitlab"
-  url = "https://git.xxx.com/"
-  id = 6
+  name = "gitlabrunner"
+  url = "https://git.example.com/"
+  token = "xxxxxxxxxxxxxx"
+  id = 2
   request_concurrency = 3
-  token = "xxx"
   environment = ["GIT_SSL_NO_VERIFY=true"]
   token_obtained_at = 2022-12-02T01:45:21Z
   token_expires_at = 0001-01-01T00:00:00Z

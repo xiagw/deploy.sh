@@ -171,14 +171,20 @@ PostgreSQL"
         if [ -z "$db_node_class" ]; then
             echo "正在获取 $db_type $db_version 的可用 PolarDB 节点规格..."
             local class_result class_list
-            class_result=$(call_aliyun_api polardb describe-db-node-classes \
+            local class_prefix
+            case "$db_type" in
+            MySQL) class_prefix="polar.mysql." ;;
+            PostgreSQL) class_prefix="polar.pg." ;;
+            *) class_prefix="polar." ;;
+            esac
+
+            class_result=$(call_aliyun_api polardb describe-class-list \
                 --biz-region-id "${region:-}" \
-                --db-type "$db_type" \
-                --db-version "$db_version" \
-                --pay-type "Postpaid")
+                --commodity-code polardb_payg \
+                --master-ha cluster)
             local ret=$?
             if [ $ret -eq 0 ] && [ -n "$class_result" ]; then
-                class_list=$(echo "$class_result" | jq -r '.Items[] | select(.ZoneId != null) | .SupportedDBNodeClasses[] | "\(.DBNodeClass)"' | sort -u)
+                class_list=$(echo "$class_result" | jq -r --arg p "$class_prefix" '.Items[].ClassCode | select(startswith($p))' | sort -u)
 
                 if [ -z "$class_list" ]; then
                     echo "警告：无法从 API 获取节点规格，使用备用列表。" >&2
@@ -200,7 +206,7 @@ polar.pg.c2.large"
                     esac
                 fi
             else
-                echo "警告：调用 DescribeDBNodeClasses API 失败，使用备用列表。" >&2
+                echo "警告：调用 describe-class-list API 失败，使用备用列表。" >&2
                 case "$db_type" in
                 MySQL)
                     class_list="polar.mysql.x8.small
