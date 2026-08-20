@@ -271,10 +271,10 @@ config_deploy_setup() {
 #   - 含空格的值请自行加引号: deploy.sh set "ENV_FOO='bar baz'"
 ################################################################################
 env_file_set() {
-    ## 独立功能入口: 未执行 set 操作时直接返回，不阻断主流程
+    ## CLI `set` 时由 parse 加入 RUN_TASKS 执行；防御性守卫 arg_env_set 为空则返回
     [[ ${#arg_env_set[@]} -gt 0 ]] || return 0
     local input key value tmp_file found skip_array line
-    for input in "$@"; do
+    for input in "${arg_env_set[@]}"; do
         key="${input%%=*}"
         value="${input#*=}"
 
@@ -336,9 +336,9 @@ env_file_set() {
 # 返回: 0=成功（输出值到 stdout）, 1=变量不存在
 ################################################################################
 env_file_get() {
-    ## 独立功能入口: 未执行 get 操作时直接返回，不阻断主流程
+    ## CLI `get` 时由 parse 加入 RUN_TASKS 执行；防御性守卫 arg_env_get 为空则返回
     [[ -n "${arg_env_get:-}" ]] || return 0
-    local key="$1"
+    local key="${arg_env_get}"
 
     if [[ -z "$key" ]]; then
         _msg error "Key name required. Use: $0 get KEY"
@@ -401,7 +401,7 @@ env_file_get() {
 # 返回: 无（输出到标准输出）
 ################################################################################
 env_file_list() {
-    ## 独立功能入口: 未执行 list 操作时直接返回，不阻断主流程
+    ## CLI `env|list` 时由 parse 加入 RUN_TASKS 执行；防御性守卫 arg_env_list 未置则返回
     [[ "${arg_env_list:-false}" == true ]] || return 0
     local line var in_array=false
 

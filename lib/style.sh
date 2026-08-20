@@ -171,8 +171,6 @@ style_check_shell() {
 # Main style check function that determines which specific checker to run
 stage_code_style() {
     _msg stage "$(_t '代码风格' 'code style')"
-    ## 阶段守卫: 未指定 -C/--code-style 时直接返回，不阻断主流程
-    [[ ${arg_flags["code_style"]} -eq 1 ]] || return 0
     local lang
     lang="$(detect_repo_language | cut -d':' -f1)" # 获取语言类型
 

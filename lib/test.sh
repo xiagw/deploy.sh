@@ -54,8 +54,6 @@ test_function() {
 stage_unit_test() {
     G_TEST_RESULT=0
     _msg stage "$(_t '单元测试' 'unit test')"
-    ## 阶段守卫: 未启用对应测试类型时直接返回，不阻断主流程
-    [[ ${arg_flags["test_unit"]} -eq 1 ]] || return 0
     _msg task "Running unit tests"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_UNIT_TEST ，true 启用，false 禁用[default]
     [[ "${PIPELINE_UNIT_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_UNIT_TEST=false)"
@@ -75,8 +73,6 @@ stage_unit_test() {
 stage_functional_test() {
     G_TEST_RESULT=0
     _msg stage "$(_t '功能测试' 'functional test')"
-    ## 阶段守卫: 未启用对应测试类型时直接返回，不阻断主流程
-    [[ ${arg_flags["test_func"]} -eq 1 ]] || return 0
     _msg task "Running functional tests"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_FUNCTION_TEST ，true 启用，false 禁用[default]
     [[ "${PIPELINE_FUNCTION_TEST:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_FUNCTION_TEST=false)"

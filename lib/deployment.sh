@@ -814,15 +814,14 @@ detect_deployment_method() {
 # Main deployment function
 stage_deploy() {
     _msg stage "$(_t '部署' 'deployment')"
-    ## 部署方式单一来源: 按优先级取首个启用项；spec 模式用之，auto 留空走探测链路
+    ## 部署方式单一来源: 用户显式指定（RUN_DEPLOY 非空）时按优先级取首个启用项；
+    ## 自动模式（RUN_DEPLOY 为空）留空 type，走下方 detect_deployment_method 探测链路
     local -a deploy_order=(deploy_k8s deploy_rsync_ssh deploy_rsync deploy_ftp deploy_sftp deploy_aliyun_func deploy_aliyun_oss deploy_docker)
     local deploy_key deploy_first="" type=""
-    for deploy_key in "${deploy_order[@]}"; do
-        [[ -z "$deploy_first" && ${arg_flags[$deploy_key]} -eq 1 ]] && deploy_first="$deploy_key"
-    done
-    ## 阶段守卫: 未启用任何部署方式时直接返回，不阻断主流程
-    [[ -n "$deploy_first" ]] || return 0
-    if ! $all_zero; then
+    if [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
+        for deploy_key in "${deploy_order[@]}"; do
+            [[ -z "$deploy_first" && "${RUN_DEPLOY[*]}" == *"$deploy_key"* ]] && deploy_first="$deploy_key"
+        done
         type="$deploy_first"
     fi
 
@@ -896,8 +895,9 @@ stage_deploy() {
 # @param $1 source_image Source image name (e.g., nginx:latest)
 # @param $2 target_registry Target registry (e.g., registry.example.com)
 copy_docker_image() {
-    ## 独立功能入口: 未指定 -c/--copy-image 时直接返回，不阻断主流程
-    [[ ${arg_flags["copy_image"]} -eq 1 && -n "${arg_src}" ]] || return 0
+    ## RUN_TASKS 成员（-c/--copy-image 触发，parse 加入数组并必填校验 arg_src）
+    ## 守卫: 防御性校验 arg_src（parse 的 ${2:?} 已保证非空）
+    [[ -n "${arg_src:-}" ]] || return 0
     local source_image="${arg_src}" target_registry image_name tag target base_name
 
     ## 目标 registry 缺省回退到镜像源地址，仍为空则终止
@@ -979,7 +979,8 @@ copy_docker_image() {
 # Example usage / 使用示例:
 # clean_old_tags "registry.example.com/myapp"
 clean_old_tags() {
-    ## 独立功能入口: 未指定 --clean-tags 时直接返回，不阻断主流程
+    ## RUN_TASKS 成员（--clean-tags 触发，parse 加入数组并必填校验 arg_clean_tags）
+    ## 守卫: 防御性校验 arg_clean_tags（parse 的 ${2:?} 已保证非空）
     [[ -n "${arg_clean_tags:-}" ]] || return 0
     # Required parameter validation / 必需参数验证
     local repository="${arg_clean_tags:?'repository parameter is required'}" cutoff_time current_time tags_file tags_to_delete=() delete_force=false tag tag_timestamp

@@ -196,15 +196,17 @@ EOF
 
 ################################################################################
 # 函数: parse_command_args
-# 描述: 解析命令行参数并设置相应的标志变量
+# 描述: 解析命令行参数，将用户请求的功能以函数名填入三个执行数组
 # 参数: "$@" - 所有命令行参数
-# 返回: 无（设置全局变量 arg_flags 和相关变量）
+# 返回: 无（填充 RUN_REPO/RUN_TASKS/RUN_STAGES/RUN_DEPLOY 及相关 arg_* 变量）
 # 全局变量:
-#   - arg_flags: 关联数组，存储各个功能的启用标志（0=禁用, 1=启用）
+#   - RUN_REPO:   仓库准备函数名数组（循环点1: 必须在 config_deploy_vars 之前）
+#   - RUN_TASKS:  独立功能函数名数组（循环点2: 在 config_build_env 之后统一执行）
+#   - RUN_STAGES: 阶段函数名数组（循环点3: 阶段区）
+#   - RUN_DEPLOY: 部署方式 key 数组，供 stage_deploy 按优先级选型（非循环）
 #   - G_DEBUG_ON: 调试模式标志
 #   - arg_cron: 定时任务执行标志
 #   - arg_*: 各种命令行参数的值
-#   - all_zero: 如果所有标志都为0，则设置为true（表示自动模式）
 ################################################################################
 parse_command_args() {
     while [[ "$#" -gt 0 ]]; do
@@ -218,46 +220,58 @@ parse_command_args() {
         -L | --lang) _msg_lang_val="${2:?usage: zh or en}" && shift ;;
         # Repository operations
         -w | --workspace) arg_workspace="${2:?empty workspace dir}" && shift ;;
-        -g | --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
-        -b | --git-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
-        -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
+        -g | --git-clone)
+            RUN_REPO+=(setup_git_repo)
+            arg_git_clone_url="${2:?empty git clone url}"
+            shift
+            ;;
+        -b | --git-branch)
+            RUN_REPO+=(setup_git_branch)
+            arg_git_clone_branch="${2:?empty git clone branch}"
+            shift
+            ;;
+        -s | --svn-checkout)
+            RUN_REPO+=(setup_svn_repo)
+            arg_svn_checkout_url="${2:?empty svn url}"
+            shift
+            ;;
         # Build operations
-        -x | --build-base) arg_flags["build_base"]=1 ;;
-        -B | --build) arg_flags["build_all"]=1 ;;
+        -x | --build-base) RUN_TASKS+=(build_base_image_select) ;;
+        -B | --build) RUN_STAGES+=(stage_build) ;;
         --buildx-mode)
             arg_buildx_mode="${2:-auto}"
             export ENV_BUILDX_MODE="${arg_buildx_mode}"
             shift
             ;;
-        --gen-dockerfile) arg_gen_dockerfile=true ;;
-        --build-buildpacks) arg_build_buildpacks=true ;;
+        --gen-dockerfile) RUN_TASKS+=(generate_lang_dockerfile) ;;
+        --build-buildpacks) RUN_TASKS+=(detect_repo_language_and_build) ;;
         # Deployment
-        -k | --deploy-k8s) arg_flags["deploy_k8s"]=1 ;;
-        -f | --deploy-functions) arg_flags["deploy_aliyun_func"]=1 ;;
-        -o | --deploy-docker) arg_flags["deploy_docker"]=1 ;;
-        -O | --deploy-oss) arg_flags["deploy_aliyun_oss"]=1 ;;
-        -R | --deploy-rsync-ssh) arg_flags["deploy_rsync_ssh"]=1 ;;
-        -y | --deploy-rsync) arg_flags["deploy_rsync"]=1 ;;
-        -F | --deploy-ftp) arg_flags["deploy_ftp"]=1 ;;
-        -S | --deploy-sftp) arg_flags["deploy_sftp"]=1 ;;
+        -k | --deploy-k8s) RUN_DEPLOY+=(deploy_k8s) ;;
+        -f | --deploy-functions) RUN_DEPLOY+=(deploy_aliyun_func) ;;
+        -o | --deploy-docker) RUN_DEPLOY+=(deploy_docker) ;;
+        -O | --deploy-oss) RUN_DEPLOY+=(deploy_aliyun_oss) ;;
+        -R | --deploy-rsync-ssh) RUN_DEPLOY+=(deploy_rsync_ssh) ;;
+        -y | --deploy-rsync) RUN_DEPLOY+=(deploy_rsync) ;;
+        -F | --deploy-ftp) RUN_DEPLOY+=(deploy_ftp) ;;
+        -S | --deploy-sftp) RUN_DEPLOY+=(deploy_sftp) ;;
         -c | --copy-image)
-            arg_flags["copy_image"]=1
+            RUN_TASKS+=(copy_docker_image)
             arg_src="${2:?ERROR: example: nginx:stable-alpine}"
             arg_target="${3}"
             [ -z "$arg_src" ] || shift
             [ -z "$arg_target" ] || shift
             ;;
         # Testing and quality
-        -u | --test-unit) arg_flags["test_unit"]=1 ;;
-        -t | --test-function) arg_flags["test_func"]=1 ;;
-        -C | --code-style) arg_flags["code_style"]=1 ;;
-        -Q | --code-quality) arg_flags["code_quality"]=1 ;;
-        -z | --security-zap) arg_flags["security_zap"]=1 ;;
-        -m | --security-vulmap) arg_flags["security_vulmap"]=1 ;;
+        -u | --test-unit) RUN_STAGES+=(stage_unit_test) ;;
+        -t | --test-function) RUN_STAGES+=(stage_functional_test) ;;
+        -C | --code-style) RUN_STAGES+=(stage_code_style) ;;
+        -Q | --code-quality) RUN_STAGES+=(stage_code_quality) ;;
+        -z | --security-zap) RUN_STAGES+=(stage_security_zap) ;;
+        -m | --security-vulmap) RUN_STAGES+=(stage_security_vulmap) ;;
         # Kubernetes operations
-        -K | --create-k8s) create_k8s_with_terraform=true ;;
+        -K | --create-k8s) RUN_TASKS+=(kube_setup_terraform) ;;
         -P | --kube-pvc)
-            arg_flags["kube_pvc"]=1
+            RUN_TASKS+=(kube_create_pv_pvc)
             arg_sub_path="${2:? pvc name required}"
             if [[ "${3:-}" != -* && -n "${3:-}" ]]; then
                 arg_pvc_namespace="$3"
@@ -266,45 +280,51 @@ parse_command_args() {
             fi
             shift 2
             ;;
-        --create-storage-class) arg_create_storage_class=true ;;
+        --create-storage-class) RUN_TASKS+=(kube_create_storage_class) ;;
         # Miscellaneous
         -D | --disable-inject) arg_disable_inject=true ;;
-        -r | --renew-cert) arg_renew_cert=true ;;
-        --clean-tags) arg_clean_tags="${2:?ERROR: repository parameter is required}" && shift ;;
+        -r | --renew-cert) RUN_TASKS+=(system_cert_renew) ;;
+        --clean-tags)
+            RUN_TASKS+=(clean_old_tags)
+            arg_clean_tags="${2:?ERROR: repository parameter is required}"
+            shift
+            ;;
         # Environment configuration
         set)
             shift
             arg_env_set=("$@")
             break
             ;;
-        get) arg_env_get="${2:?ERROR: key name required}" && shift ;;
-        env | list) arg_env_list=true ;;
+        get)
+            arg_env_get="${2:?ERROR: key name required}"
+            shift
+            ;;
+        env | list)
+            arg_env_list=true
+            ;;
         *) _usage && exit 1 ;;
         esac
         shift
     done
 
-    ## 检查是否有任何功能标志被启用
-    ## 如果所有标志都为0，表示用户没有指定任何参数，将启用自动模式（所有任务）
-    all_zero=true
-    for key in "${!arg_flags[@]}"; do
-        if [[ "${arg_flags[$key]}" -eq 1 ]]; then
-            all_zero=false
-            break
-        fi
-    done
-
-    ## 环境变量操作 (set/get/env) 不属于 CI/CD 任务，不触发自动模式
-    if [[ ${#arg_env_set[@]} -gt 0 || -n "${arg_env_get:-}" || "${arg_env_list:-false}" == true ]]; then
-        all_zero=false
+    ## 任一部署 flag 使 RUN_DEPLOY 非空时，把阶段 stage_deploy 加入 RUN_STAGES（仅一次，
+    ## 多个部署方式由 stage_deploy 内部按优先级取一）
+    if [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
+        RUN_STAGES+=(stage_deploy)
     fi
 
-    ## 自动模式: 如果没有任何参数，则启用所有功能标志
-    ## 这样用户可以直接运行 ./deploy.sh 执行完整的CI/CD流程
-    if $all_zero; then
-        for key in "${!arg_flags[@]}"; do
-            arg_flags[$key]=1
-        done
+    ## 自动模式: 未请求任何功能且未执行环境变量操作时填充全部阶段
+    ## 独立功能不进自动模式，避免 -r/-K/--clean-tags 等单独执行时误跑完整流水线；
+    ## env 操作（set/get/list）提前执行且命中即退出，同样不触发自动模式
+    if [[ ${#RUN_REPO[@]} -eq 0 && ${#RUN_TASKS[@]} -eq 0 && ${#RUN_STAGES[@]} -eq 0 ]] &&
+        [[ ${#arg_env_set[@]} -eq 0 && -z "${arg_env_get:-}" && "${arg_env_list:-false}" != true ]]; then
+        RUN_STAGES=(stage_code_quality stage_code_style stage_unit_test stage_build stage_deploy stage_functional_test stage_security_zap stage_security_vulmap)
+    fi
+
+    ## Gitea Actions: 仓库代码由 runner 注入，无论是否显式传参都要做仓库准备，
+    ## 故独立于自动模式之外无条件加入 RUN_REPO
+    if [[ "${GITEA_ACTIONS:-false}" == true ]]; then
+        RUN_REPO+=(setup_git_repo)
     fi
 }
 
@@ -430,29 +450,16 @@ main() {
     mkdir -p "$(dirname "$G_LOG")"
 
     ## ========================================================================
-    ## 功能标志数组初始化
-    ## 使用关联数组跟踪各个功能的启用状态（0=禁用, 1=启用）
-    ## 如果用户没有指定任何参数，所有标志将被设置为1（自动模式）
+    ## 执行数组初始化
+    ## 由 parse_command_args 按 CLI 请求填充函数名，main 在对应循环点执行数组值:
+    ##   RUN_REPO:   仓库准备函数，循环点1（config_deploy_vars 之前，因后者读仓库分支）
+    ##   RUN_TASKS:  独立功能函数，循环点2（config_build_env 之后，kube/cert 依赖已就绪）
+    ##   RUN_STAGES: 各个阶段函数，循环点3（阶段区）
+    ##   RUN_DEPLOY: 部署方式 key，供 stage_deploy 按优先级选型（非循环）
+    ## 三个执行数组全空时自动模式填充全部阶段，见 parse_command_args
     ## ========================================================================
-    declare -A arg_flags=(
-        ["build_all"]=0
-        ["deploy_k8s"]=0
-        ["deploy_docker"]=0
-        ["deploy_aliyun_func"]=0
-        ["deploy_aliyun_oss"]=0
-        ["deploy_rsync_ssh"]=0
-        ["deploy_rsync"]=0
-        ["deploy_ftp"]=0
-        ["deploy_sftp"]=0
-        ["test_unit"]=0
-        ["test_func"]=0
-        ["code_style"]=0
-        ["code_quality"]=0
-        ["security_zap"]=0
-        ["security_vulmap"]=0
-        ["copy_image"]=0
-        ["kube_pvc"]=0
-    )
+    declare -a RUN_REPO=() RUN_TASKS=() RUN_STAGES=() RUN_DEPLOY=()
+
     ## ========================================================================
     ## 命令行参数解析
     ## ========================================================================
@@ -496,13 +503,11 @@ main() {
     config_deploy_init
 
     ## 独立功能: 环境变量 set/get/env 操作
-    ## 各函数内部自守卫触发条件，命中则 exit 终止，未命中继续主流程
-    env_file_set "${arg_env_set[@]}"
-    env_file_get "${arg_env_get}"
+    ## 提前于 setup 链执行（仅依赖 config_deploy_init 就绪的 G_ENV），命中即 exit 终止，
+    ## 未命中守卫直接返回，不阻断主流程
+    env_file_set
+    env_file_get
     env_file_list
-
-    ## 独立功能: 构建基础镜像
-    build_base_image_select
 
     ## ========================================================================
     ## 系统环境检查
@@ -511,58 +516,39 @@ main() {
     system_check
 
     ## ========================================================================
-    ## 仓库操作: Git克隆 / SVN检出 / 分支切换
-    ## 各函数内部自守卫触发条件，未命中直接返回，不阻断主流程
+    ## 独立功能: 仓库准备（RUN_REPO 循环点1）
+    ## 位置: 必须在 config_deploy_vars 之前——后者经 get_git_branch 读取仓库分支，
+    ##       setup_git_branch 切换的是 G_REPO_DIR（repo.sh:408）内的分支
     ## ========================================================================
-    setup_git_repo
-    setup_svn_repo
-    setup_git_branch
+    for fn in "${RUN_REPO[@]}"; do "$fn"; done
 
     ## ========================================================================
     ## 配置部署变量
     ## 设置仓库信息、分支映射、命名空间、镜像标签等全局变量
-    ## 注意: 此步骤位置不要随意变动，后续步骤依赖这些变量
     ## ========================================================================
     config_deploy_vars
-
-    ## 独立功能: 生成语言 Dockerfile
-    generate_lang_dockerfile
-
-    ## 独立功能: 用 Buildpacks 构建镜像
-    detect_repo_language_and_build
 
     ## ========================================================================
     ## 查找项目专用配置文件
     ## 仅使用项目专用配置，解决大量项目时的性能和维护问题:
     ##   项目专用配置: data/conf/namespace/project-name.json
     ## 优势: 避免单文件过大、减少版本冲突、更好的权限控制
-    ## 注意: 如果配置文件不存在，会自动从模板创建，但必须修改后才能继续部署
+    ## 注意: 如果配置文件不存在，会自动从模板创建，不修改则执行自动部署，修改后执行定义部署
     ## ========================================================================
     find_project_config
 
     ## ========================================================================
     ## 中国地区特殊配置
     ## 如果处于中国区环境，启用 deploy.env 中的代理设置
+    ## ========================================================================
     system_proxy
-
-    ## 独立功能: 复制 Docker 镜像
-    copy_docker_image
-
-    ## 独立功能: 使用 Terraform 创建 Kubernetes 集群
-    kube_setup_terraform
 
     ## ========================================================================
     ## Kubernetes配置初始化
-    ## 初始化Kubernetes连接配置，设置kubectl上下文等
-    ## 注意: 此步骤必须在所有 kubectl/helm 操作之前（KUBECTL_OPT/HELM_OPT）
+    ## 初始化kubectl连接配置（KUBECTL_OPT/HELM_OPT）
+    ## 注意: kube_create_* 独立功能依赖此处设置的 KUBECTL_OPT，位置不可后移
     ## ========================================================================
     kube_config_init
-
-    ## 独立功能: 创建 CNFS 存储类
-    kube_create_storage_class
-
-    ## 独立功能: 创建 Kubernetes PVC
-    kube_create_pv_pvc
 
     ## ========================================================================
     ## 磁盘空间清理
@@ -584,18 +570,21 @@ main() {
     ## ========================================================================
     config_deploy_setup
 
-    ## 独立功能: 更新 SSL 证书
-    ## 注意: 位置勿前移——依赖上方 config_deploy_setup 建立的 ~/.acme.sh 链接
-    system_cert_renew
-
-    ## 独立功能: 清理旧的 Docker 标签
-    clean_old_tags
-
     ## ========================================================================
     ## 构建环境配置
-    ## 根据项目语言配置Docker/Podman构建参数
+    ## 根据项目语言配置Docker/Podman构建参数（G_DOCK/G_RUN）
     ## ========================================================================
     config_build_env
+
+    ## ========================================================================
+    ## 独立功能（RUN_TASKS 循环点2）
+    ## 位置约束（按函数真实依赖）:
+    ##   - kube_create_*:      依赖 kube_config_init 设置的 KUBECTL_OPT
+    ##   - system_cert_renew:  依赖 config_deploy_setup 可能创建的 $HOME/.acme.sh 链接
+    ##   - build_base_image:   依赖 config_build_env 设置的 G_DOCK
+    ##   - 仍在 repo_inject_file 之前，保持 generate_lang_dockerfile / buildpacks 先于配置注入
+    ## ========================================================================
+    for fn in "${RUN_TASKS[@]}"; do "$fn"; done
 
     ## ========================================================================
     ## 配置文件注入
@@ -606,12 +595,10 @@ main() {
     repo_inject_file
 
     ## ========================================================================
-    ## 任务执行阶段
+    ## 任务执行阶段（RUN_STAGES 循环点3）
     ##
-    ## 每个阶段函数自打印阶段横幅（_msg stage，序号自动递增）并自守卫触发条件。
-    ## 此处只做顺序编排，main 保持纯调用序列。
-    ##
-    ## 任务执行顺序:
+    ## 每个阶段函数自打印阶段横幅（_msg stage，序号自动递增）。
+    ## 执行顺序即 RUN_STAGES 数组顺序:
     ##   1. 代码质量检查 (stage_code_quality, stage_code_style)
     ##   2. 单元测试 (stage_unit_test)
     ##   3. 构建 (stage_build)
@@ -619,14 +606,7 @@ main() {
     ##   5. 功能测试 (stage_functional_test)
     ##   6. 安全扫描 (stage_security_zap, stage_security_vulmap)
     ## ========================================================================
-    stage_code_quality
-    stage_code_style
-    stage_unit_test
-    stage_build
-    stage_deploy
-    stage_functional_test
-    stage_security_zap
-    stage_security_vulmap
+    for fn in "${RUN_STAGES[@]}"; do "$fn"; done
 
     ## ========================================================================
     ## 通知阶段: 发送部署结果通知（邮件、钉钉、企业微信、Slack等）

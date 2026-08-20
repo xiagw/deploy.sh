@@ -369,8 +369,6 @@ DOCKERIGNORE
 # Priority: Docker build (if available) > System command build
 stage_build() {
     _msg stage "$(_t '构建' 'build')"
-    ## 阶段守卫: 未指定 -B/--build 时直接返回，不阻断主流程
-    [[ ${arg_flags["build_all"]} -eq 1 ]] || return 0
     local lang
     ## 语言由构建流程内部探测（detect_repo_language 有缓存，重复调用廉价）
     lang="$(detect_repo_language)"
@@ -808,8 +806,7 @@ EOF
 
 # Language specific layers
 generate_lang_dockerfile() {
-    ## 独立功能入口: 未指定 --gen-dockerfile 时直接返回，不阻断主流程
-    [[ ${arg_gen_dockerfile:-false} = true ]] || return 0
+    ## RUN_TASKS 成员（--gen-dockerfile 触发，parse 加入数组），无守卫直接执行
     local lang dockerfile
     lang="$(detect_repo_language | cut -d: -f1)"
     dockerfile="Dockerfile.${lang}"
@@ -837,8 +834,7 @@ EOF
 }
 
 detect_repo_language_and_build() {
-    ## 独立功能入口: 未指定 --build-buildpacks 时直接返回，不阻断主流程
-    [[ ${arg_build_buildpacks:-false} = true ]] || return 0
+    ## RUN_TASKS 成员（--build-buildpacks 触发，parse 加入数组），无守卫直接执行
     local target_dir="${G_REPO_DIR:-.}"
     local lang_type builder
 

@@ -37,8 +37,6 @@ analysis_gitleaks() {
 # Run OWASP ZAP security scan
 stage_security_zap() {
     _msg stage "$(_t '安全扫描zap' 'security scan with zap')"
-    ## 独立功能入口: 未指定 -z/--security-zap 时直接返回，不阻断主流程
-    [[ ${arg_flags["security_zap"]} -eq 1 ]] || return 0
     _msg task "ZAP scan"
     [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SCAN_ZAP=false)"
     if [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]]; then
@@ -71,8 +69,6 @@ stage_security_zap() {
 # Run Vulmap security scan
 stage_security_vulmap() {
     _msg stage "$(_t '安全扫描vulmap' 'security scan with vulmap')"
-    ## 独立功能入口: 未指定 -m/--security-vulmap 时直接返回，不阻断主流程
-    [[ ${arg_flags["security_vulmap"]} -eq 1 ]] || return 0
     _msg task "vulmap scan"
     [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SCAN_VULMAP=false)"
     if [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]]; then
@@ -108,8 +104,6 @@ stage_security_vulmap() {
 
 stage_code_quality() {
     _msg stage "$(_t '代码质量' 'code quality')"
-    ## 阶段守卫: 未指定 -Q/--code-quality 时直接返回，不阻断主流程
-    [[ ${arg_flags["code_quality"]} -eq 1 ]] || return 0
     _msg task "Checking code with SonarQube"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
     [[ "${PIPELINE_SONAR:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SONAR=false)"
