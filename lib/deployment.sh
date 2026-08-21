@@ -140,6 +140,101 @@ cleanup_evicted_pods() {
     } &
 }
 
+# Convert k8s-style duration ("120s"/"5m"/"1h30m") or bare seconds into seconds.
+_duration_to_seconds() {
+    local d="${1:-}" num unit total=0
+    [[ "$d" =~ ^[0-9]+$ ]] && { printf '%s' "$d"; return 0; }
+    while [[ -n "$d" ]]; do
+        [[ "$d" =~ ^([0-9]+)([smhd])(.*)$ ]] || break
+        num="${BASH_REMATCH[1]}"
+        unit="${BASH_REMATCH[2]}"
+        d="${BASH_REMATCH[3]}"
+        case "$unit" in
+            s) total=$((total + num)) ;;
+            m) total=$((total + num * 60)) ;;
+            h) total=$((total + num * 3600)) ;;
+            d) total=$((total + num * 86400)) ;;
+        esac
+    done
+    [[ "$total" -gt 0 ]] || total=180
+    printf '%s' "$total"
+}
+
+# Collect and print pod status + logs to diagnose a failed rollout.
+_rollout_diagnostics() {
+    local release_name="${1:?release_name is required}"
+    local diag_pods=()
+    _msg task "Fetching pod status and logs for [${release_name}] to diagnose"
+    mapfile -t diag_pods < <($KUBECTL_OPT -n "${G_NAMESPACE}" get pods -l "app.kubernetes.io/instance=${release_name}" --no-headers 2>/dev/null | awk '{print $1}')
+    if [[ "${#diag_pods[@]}" -eq 0 ]]; then
+        _msg warn "No pods found by instance label, falling back to name grep"
+        mapfile -t diag_pods < <($KUBECTL_OPT -n "${G_NAMESPACE}" get pods --no-headers 2>/dev/null | grep "${release_name}" | awk '{print $1}')
+    fi
+    if [[ "${#diag_pods[@]}" -eq 0 ]]; then
+        _msg warn "Still no pods matched, listing all pods in namespace ${G_NAMESPACE}"
+        $KUBECTL_OPT -n "${G_NAMESPACE}" get pods 2>&1 || true
+    else
+        for pod in "${diag_pods[@]}"; do
+            _msg task "=== Pod ${pod} ==="
+            $KUBECTL_OPT -n "${G_NAMESPACE}" get pod "${pod}" 2>&1 || true
+            _msg task "--- Logs (last 50 lines) ---"
+            $KUBECTL_OPT -n "${G_NAMESPACE}" logs --tail=50 "${pod}" 2>&1 || true
+        done
+    fi
+}
+
+# Poll the rollout until Ready (fast return), a terminal pod error (fail fast),
+# or the overall deadline (fail with diagnostics). Returns 0 on success, 1 on failure.
+#
+# 滚动更新期间旧 pod 一直健康，deployment 的 Available 条件恒为 True，
+# 不能用 pod/condition 判断完成状态，只有 `kubectl rollout status` 才能准确反馈。
+# 因此这里用 rollout status 短超时轮询：返回 0 即就绪，非 0 且仍在进展则继续等，
+# 命中终态错误/进度卡死则快速失败。
+_wait_kubernetes_rollout() {
+    local release_name="${1:?release_name is required}"
+    local timeout="${2:-180}" poll_interval="${3:-5}"
+    local deadline bad_pod current ret status_out
+    deadline=$(( $(date +%s) + timeout ))
+
+    _msg task "Monitoring [${release_name}] on branch [${G_NAMESPACE}] (timeout: ${timeout}s)"
+    while :; do
+        # Authoritative rolling-rollout check: blocks up to poll_interval, exits 0
+        # only when the new RS is fully ready; non-zero while still in progress.
+        status_out="$($KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout "${poll_interval}s" 2>&1)"
+        ret=$?
+        if [ $ret -eq 0 ]; then
+            _msg task "[${release_name}] is ready"
+            return 0
+        fi
+
+        # 进度卡死: rollout status 直接报错, 无需再查 deployment conditions
+        if [[ "${status_out}" == *"exceeded its progress deadline"* ]]; then
+            _msg error "[${release_name}] rollout stuck (progress deadline exceeded)"
+            _rollout_diagnostics "${release_name}"
+            return 1
+        fi
+
+        # Terminal pod state → fail fast
+        bad_pod="$($KUBECTL_OPT -n "${G_NAMESPACE}" get pods -l "app.kubernetes.io/instance=${release_name}" --no-headers 2>/dev/null | grep -E 'CrashLoopBackOff|ImagePullBackOff|ErrImagePull|Error|OOMKilled|RunContainerError|CreateContainerConfigError|CreateContainerError|DeadlineExceeded|ContainerCannotRun|InvalidImageName')"
+        if [[ -n "${bad_pod}" ]]; then
+            _msg error "[${release_name}] pod in terminal state:"
+            echo "${bad_pod}"
+            _rollout_diagnostics "${release_name}"
+            return 1
+        fi
+
+        current="$(date +%s)"
+        if [[ "${current}" -ge "${deadline}" ]]; then
+            _msg error "$(_t "此处探测超时（${timeout}s），无法判断应用是否正常，请检查k8s内容器状态和日志" "Deployment probe timed out after ${timeout}s. Please check container status and logs in Kubernetes")"
+            _rollout_diagnostics "${release_name}"
+            return 1
+        fi
+
+        # rollout status 未完成时已阻塞 poll_interval; 仅在它快速返回(如 NotFound)时防空转
+        sleep 1
+    done
+}
+
 # Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
     _msg task "Deploy to Kubernetes with Helm"
@@ -202,33 +297,14 @@ deploy_to_kubernetes() {
     echo "helm upgrade/install command (reusable):"
     echo "${helm_args[@]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
 
-    ## helm install / helm 安装  --atomic
+    ## helm 部署
     "${helm_args[@]}" >/dev/null || return 1
 
     # Pod health check / Pod 健康检查
-    _msg task "Monitoring [${release_name}] on branch [${G_NAMESPACE}] (timeout: ${ENV_HELM_TIMEOUT:-120s})"
-    if ! $KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout "${ENV_HELM_TIMEOUT:-120s}" >/dev/null; then
+    local rollout_timeout
+    rollout_timeout="$(_duration_to_seconds "${ENV_HELM_TIMEOUT:-180s}")"
+    if ! _wait_kubernetes_rollout "${release_name}" "${rollout_timeout}"; then
         G_DEPLOY_RESULT=1
-        _msg error "Deployment probe timed out. Please check container status and logs in Kubernetes"
-        _msg error "此处探测超时，无法判断应用是否正常，请检查k8s内容器状态和日志"
-        _msg task "Fetching pod status and logs for [${release_name}] to diagnose"
-        local diag_pods=()
-        mapfile -t diag_pods < <($KUBECTL_OPT -n "${G_NAMESPACE}" get pods -l "app.kubernetes.io/instance=${release_name}" --no-headers 2>/dev/null | awk '{print $1}')
-        if [[ "${#diag_pods[@]}" -eq 0 ]]; then
-            _msg warn "No pods found by instance label, falling back to name grep"
-            mapfile -t diag_pods < <($KUBECTL_OPT -n "${G_NAMESPACE}" get pods --no-headers 2>/dev/null | grep "${release_name}" | awk '{print $1}')
-        fi
-        if [[ "${#diag_pods[@]}" -eq 0 ]]; then
-            _msg warn "Still no pods matched, listing all pods in namespace ${G_NAMESPACE}"
-            $KUBECTL_OPT -n "${G_NAMESPACE}" get pods 2>&1 || true
-        else
-            for pod in "${diag_pods[@]}"; do
-                _msg task "=== Pod ${pod} ==="
-                $KUBECTL_OPT -n "${G_NAMESPACE}" get pod "${pod}" 2>&1 || true
-                _msg task "--- Logs (last 50 lines) ---"
-                $KUBECTL_OPT -n "${G_NAMESPACE}" logs --tail=50 "${pod}" 2>&1 || true
-            done
-        fi
     fi
     # Display rollback cmd on failure / 部署失败时显示回滚命令
     if [[ "${G_DEPLOY_RESULT:-0}" -eq 1 ]]; then
