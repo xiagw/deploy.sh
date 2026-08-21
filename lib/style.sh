@@ -10,23 +10,27 @@
 
 # PHP Style Check
 style_check_php() {
-    _msg task '[style] Running PHP Code Sniffer (PSR12)'
+    _msg task '[style] Running PHP Code Sniffer (PSR12) + php-cs-fixer'
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
-    ## 使用社区维护的 PHP 质量工具镜像（含 phpcs），替代仓库内已不存在的 Dockerfile.phpcs 本地构建
-    local phpcs_image="jakzal/phpqa:latest"
+    ## 使用社区维护的 PHP 质量工具镜像（含 phpcs、php-cs-fixer），替代仓库内已不存在的 Dockerfile.phpcs 本地构建
+    local php_image="jakzal/phpqa:latest"
 
-    local phpcs_result=0
+    local style_result=0
     for i in $(git --no-pager diff --name-only HEAD | awk '/\.php$/{if (NR>0){print $0}}'); do
         if [ ! -f "$G_REPO_DIR/$i" ]; then
             _msg warn "$G_REPO_DIR/$i not exists."
             continue
         fi
-        if ! ${G_RUN} -v "$G_REPO_DIR":/project "$phpcs_image" phpcs -n --standard=PSR12 --colors --report=full "/project/$i"; then
-            phpcs_result=$((phpcs_result + 1))
+        if ! ${G_RUN} -v "$G_REPO_DIR":/project "$php_image" phpcs -n --standard=PSR12 --colors --report=full "/project/$i"; then
+            style_result=$((style_result + 1))
+        fi
+        ## php-cs-fixer --dry-run: 只读检查（返回 1 表示需要格式化），不原地改文件
+        if ! ${G_RUN} -v "$G_REPO_DIR":/project "$php_image" php-cs-fixer fix --dry-run --diff --using-cache=no "/project/$i"; then
+            style_result=$((style_result + 1))
         fi
     done
-    return "$phpcs_result"
+    return "$style_result"
 }
 
 # Android Style Check
@@ -43,10 +47,10 @@ style_check_android() {
 
 # Python Style Check
 style_check_python() {
-    _msg task "Checking Python code style"
+    _msg task "Checking Python code style (pylint + black + isort)"
     if [[ "${PIPELINE_PYTHON_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/code" python:3 \
-            /bin/bash -c "cd /code && pip install pylint && pylint *.py"
+            /bin/bash -c "cd /code && pip install pylint black isort && black --check . && isort --check-only . && pylint *.py"
     else
         _msg note '<skip>'
     fi
@@ -54,10 +58,10 @@ style_check_python() {
 
 # Node.js Style Check
 style_check_node() {
-    _msg task "Checking Node.js code style"
+    _msg task "Checking Node.js code style (eslint + prettier)"
     if [[ "${PIPELINE_NODE_CODE_STYLE:-0}" -eq 1 ]]; then
         ${G_RUN} -v "$G_REPO_DIR:/app" node:latest \
-            /bin/bash -c "cd /app && npm install eslint && npx eslint ."
+            /bin/bash -c "cd /app && npx --yes eslint . && npx --yes prettier --check ."
     else
         _msg note '<skip>'
     fi
@@ -76,10 +80,33 @@ style_check_java() {
 
 # Go Style Check
 style_check_go() {
-    _msg task "Checking Go code style"
+    _msg task "Checking Go code style (gofmt + golangci-lint)"
     if [[ "${PIPELINE_GO_CODE_STYLE:-0}" -eq 1 ]]; then
-        ${G_RUN} -v "$G_REPO_DIR:/go/src/app" golang:latest \
-            /bin/bash -c "cd /go/src/app && go fmt ./... && golint ./..."
+        ## gofmt -l 只读列出未格式化文件；golangci-lint 取代已废弃的 golint
+        ${G_RUN} -v "$G_REPO_DIR:/app" golangci/golangci-lint:latest \
+            /bin/bash -c 'cd /app && files=$(gofmt -l .); if [ -n "$files" ]; then echo "gofmt needed:"; echo "$files"; exit 1; fi; golangci-lint run ./...'
+    else
+        _msg note '<skip>'
+    fi
+}
+
+# Rust Style Check
+style_check_rust() {
+    _msg task "Checking Rust code style (rustfmt + clippy)"
+    if [[ "${PIPELINE_RUST_CODE_STYLE:-0}" -eq 1 ]]; then
+        ${G_RUN} -v "$G_REPO_DIR:/app" rust:latest \
+            /bin/bash -c "cd /app && cargo fmt --check && cargo clippy -- -D warnings"
+    else
+        _msg note '<skip>'
+    fi
+}
+
+# .NET Style Check
+style_check_dotnet() {
+    _msg task "Checking .NET code style (dotnet format)"
+    if [[ "${PIPELINE_DOTNET_CODE_STYLE:-0}" -eq 1 ]]; then
+        ${G_RUN} -v "$G_REPO_DIR:/app" mcr.microsoft.com/dotnet/sdk:8.0 \
+            /bin/bash -c "cd /app && dotnet format --verify-no-changes --no-restore"
     else
         _msg note '<skip>'
     fi
@@ -193,11 +220,13 @@ stage_code_style() {
     node) style_check_node ;;
     java) style_check_java ;;
     go | golang) style_check_go ;;
+    rust) style_check_rust ;;
     ruby) style_check_ruby ;;
     c) style_check_c ;;
     docker) style_check_docker ;;
     ios) style_check_ios ;;
     django) style_check_django ;;
+    dotnet) style_check_dotnet ;;
     *) _msg warn "No style checker available for language: $lang" ;;
     esac
 }
