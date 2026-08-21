@@ -439,6 +439,51 @@ _install_jmeter() {
     source /etc/profile.d/jmeter.sh
 }
 
+# 安装或升级 k6（性能测试工具，单二进制）
+_install_k6() {
+    if [ "$1" != "upgrade" ] && command -v k6 >/dev/null; then
+        return
+    fi
+    _msg ok "Installing k6"
+    local temp_file
+    temp_file="$(mktemp)"
+
+    local os arch
+    case "$OSTYPE" in
+    darwin*) os="darwin" ;;
+    linux*) os="linux" ;;
+    *) _msg error "Unsupported operating system: $OSTYPE" && return 1 ;;
+    esac
+    arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
+    case "$arch" in
+    x86_64 | x64 | amd64) arch="amd64" ;;
+    aarch64 | arm64) arch="arm64" ;;
+    *) _msg warn "Unknown architecture: $arch, using amd64" && arch="amd64" ;;
+    esac
+
+    local ver url
+    ver="$(curl -fsSL https://api.github.com/repos/grafana/k6/releases/latest |
+        grep -o '"tag_name": *"[^"]*"' | sed 's/.*": *"//;s/"//')"
+    if [ -z "$ver" ]; then
+        _msg error "Failed to fetch k6 latest version"
+        rm -f "$temp_file"
+        return 1
+    fi
+    url="https://github.com/grafana/k6/releases/download/${ver}/k6-${ver}-${os}-${arch}.tar.gz"
+
+    if curl -fsSLo "$temp_file" "$url"; then
+        _msg ok "Extracting k6"
+        tar -C "$(dirname "$temp_file")" -xzf "$temp_file" k6
+        ${use_sudo:-sudo} install -m 0755 "$(dirname "$temp_file")/k6" /usr/local/bin/k6
+        _msg ok "k6 installed successfully"
+    else
+        _msg error "failed to download and install k6"
+        rm -f "$temp_file"
+        return 1
+    fi
+    rm -f "$temp_file"
+}
+
 _install_wg() {
     if [ "$1" != "upgrade" ] && command -v wg >/dev/null; then
         return

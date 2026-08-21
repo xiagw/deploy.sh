@@ -163,7 +163,7 @@ Parameters:
     # Testing and quality
     -u, --test-unit              Run unit tests.
     -t, --test-function          Run functional tests.
-    -p, --test-performance       Run performance tests (JMeter *.jmx).
+    -p, --test-performance       Run performance tests (JMeter *.jmx / k6 scripts).
     -C, --code-style             Check code style.
     -Q, --code-quality           Check code quality.
     -z, --security-zap           Run ZAP security scan.

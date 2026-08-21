@@ -4,9 +4,21 @@
 
 # Test module for deploy.sh
 # Contains unit testing, functional testing and performance testing capabilities
+#
+# 触发方式（auto 模式默认全部跳过，需显式触发其一）:
+#   --test-unit (-u)          CLI 标志
+#   --test-function (-t)      CLI 标志
+#   --test-performance (-p)   CLI 标志
+#   PIPELINE_UNIT_TEST=true    CI 平台注入
+#   PIPELINE_FUNCTION_TEST=true CI 平台注入
+#   PIPELINE_PERF_TEST=true   CI 平台注入
+#
+# 产物目录（均在 data/reports 下）:
+#   coverage/  单元测试覆盖率报告（文本）
+#   perf/      性能测试报告（jmeter html / k6 json + 基线）
+#   perf/history/ 性能历史结果（按时间戳归档）
 
 ## 按语言解析单元测试框架命令；无可用框架/工具时输出空
-## 触发: CLI --test-unit 或 PIPELINE_UNIT_TEST=true，见 stage_unit_test
 _framework_unit_cmd() {
     local lang="${1:-}" cmd=""
     case "$lang" in
@@ -63,7 +75,44 @@ _framework_unit_cmd() {
     return 0
 }
 
-## 单元测试: 先跑项目自带脚本，再按语言调用测试框架
+## 按语言解析带覆盖率的单元测试命令；语言/驱动不支持时输出空（走普通框架命令）
+## 覆盖率报告输出到 $G_DATA/reports/coverage/
+_framework_unit_cov() {
+    local lang="${1:-}" cov_dir="$G_DATA/reports/coverage" cmd="" base=""
+    case "$lang" in
+    golang)
+        if command -v go >/dev/null 2>&1; then
+            cmd="go test -coverprofile=${cov_dir}/${G_REPO_NAME}-go.out ./... && go tool cover -func=${cov_dir}/${G_REPO_NAME}-go.out"
+        fi
+        ;;
+    python)
+        if command -v python3 >/dev/null 2>&1 && python3 -c 'import pytest_cov' >/dev/null 2>&1; then
+            cmd="python3 -m pytest --cov=. --cov-report=term-missing"
+        fi
+        ;;
+    node)
+        if [[ -f "$G_REPO_DIR/package.json" ]] && command -v npm >/dev/null 2>&1 \
+            && grep -q '"test"' "$G_REPO_DIR/package.json"; then
+            cmd="npm test -- --coverage"
+        fi
+        ;;
+    php)
+        if php -m 2>/dev/null | grep -qiE 'xdebug|pcov'; then
+            base="$(_framework_unit_cmd php)"
+            [[ -n "$base" ]] && cmd="$base --coverage-text"
+        fi
+        ;;
+    dotnet)
+        if command -v dotnet >/dev/null 2>&1; then
+            cmd="dotnet test --collect:\"XPlat Code Coverage\""
+        fi
+        ;;
+    esac
+    printf '%s' "$cmd"
+    return 0
+}
+
+## 单元测试: 先跑项目自带脚本，再按语言调用测试框架（优先带覆盖率）
 test_unit() {
     local test_scripts=("$G_REPO_DIR/tests/unit_test.sh" "$G_DATA/tests/unit_test.sh")
     local script found=false
@@ -82,8 +131,26 @@ test_unit() {
         done
     fi
 
-    local lang framework_cmd
+    local lang cov_cmd framework_cmd cov_log
     lang="$(detect_repo_language | cut -d: -f1)"
+    cov_cmd="$(_framework_unit_cov "$lang")"
+    if [[ -n "$cov_cmd" ]]; then
+        cov_log="$G_DATA/reports/coverage/${G_REPO_NAME}-${lang}.txt"
+        mkdir -p "$(dirname "$cov_log")"
+        if ${G_DRY_RUN:-false}; then
+            dry_run_note "run: (cd $G_REPO_DIR && bash -lc \"$cov_cmd\" | tee $cov_log)"
+            return 0
+        fi
+        _msg task "Running framework unit tests with coverage: $cov_cmd"
+        if (cd "$G_REPO_DIR" && bash -lc "$cov_cmd" 2>&1 | tee "$cov_log"); then
+            _msg ok "Coverage report: $cov_log"
+        else
+            _msg error "Framework unit tests failed: $cov_cmd"
+            return 1
+        fi
+        return 0
+    fi
+
     framework_cmd="$(_framework_unit_cmd "$lang")"
     if [[ -z "$framework_cmd" ]]; then
         if [[ "$found" != true ]]; then
@@ -93,11 +160,11 @@ test_unit() {
     fi
 
     if ${G_DRY_RUN:-false}; then
-        dry_run_note "run: (cd $G_REPO_DIR && $framework_cmd)"
+        dry_run_note "run: (cd $G_REPO_DIR && bash -lc \"$framework_cmd\")"
         return 0
     fi
     _msg task "Running framework unit tests: $framework_cmd"
-    if (cd "$G_REPO_DIR" && $framework_cmd); then
+    if (cd "$G_REPO_DIR" && bash -lc "$framework_cmd"); then
         _msg ok "Framework unit tests passed"
     else
         _msg error "Framework unit tests failed: $framework_cmd"
@@ -132,42 +199,121 @@ test_function() {
     return 0
 }
 
-## 性能测试: 用 JMeter 执行仓库内的 *.jmx 测试计划
-test_performance() {
-    local jmx_files=()
+## 性能测试计划探测: 输出 engine<TAB>path
+##   jmeter: 仓库内 *.jmx
+##   k6:     tests/perf/*.js 或 *.k6.js
+_perf_find_plans() {
+    local f
     while IFS= read -r f; do
-        jmx_files+=("$f")
+        [[ -n "$f" ]] && printf 'jmeter\t%s\n' "$f"
     done < <(find "$G_REPO_DIR" -maxdepth 2 -type f -name '*.jmx' 2>/dev/null)
+    while IFS= read -r f; do
+        [[ -n "$f" ]] && printf 'k6\t%s\n' "$f"
+    done < <(find "$G_REPO_DIR" -maxdepth 3 -type f \( -path '*/tests/perf/*.js' -o -name '*.k6.js' \) 2>/dev/null)
+}
 
-    if [[ ${#jmx_files[@]} -eq 0 ]]; then
-        _msg note "No *.jmx test plan found. Skipping performance tests."
+## k6 基线对比: 用 http_req_duration 的 p95 与上次基线比较，
+## 超过 20% 视为回归；结果写入 data/reports/perf/<name>.baseline.json
+_k6_baseline_check() {
+    local json="$1" baseline_file="$2" name="$3"
+    local p95 prev
+    p95="$(jq -s -r '[.[] | select(.type=="Trend" and .metric=="http_req_duration")] | last | .data["p(95)"] // empty' "$json" 2>/dev/null)"
+    if [[ -z "$p95" || "$p95" == "null" ]]; then
+        _msg note "k6 baseline: no http_req_duration metric in ${name}, skip comparison"
+        return 0
+    fi
+    if [[ -f "$baseline_file" ]]; then
+        prev="$(jq -r '.p95' "$baseline_file" 2>/dev/null)"
+    fi
+    if [[ -n "$prev" ]]; then
+        if awk "BEGIN{exit ($p95 > $prev * 1.2)}"; then
+            _msg ok "k6 baseline OK: ${name} p95=${p95} (baseline ${prev})"
+        else
+            _msg warn "k6 regression: ${name} p95=${p95} vs baseline p95=${prev} (>20% slower)"
+        fi
+    else
+        _msg note "k6 baseline saved for ${name}: p95=${p95}"
+    fi
+    jq -n --argjson p95 "$p95" --arg time "$(date -u +%FT%TZ)" --arg name "$name" '{p95: $p95, time: $time, name: $name}' >"$baseline_file"
+    return 0
+}
+
+## 单条 k6 计划: 运行 + json 报告 + 历史归档 + 基线对比
+_run_k6() {
+    local script="$1" out_dir="$2" name="$3"
+    local json="$out_dir/${name}.json" baseline="$out_dir/${name}.baseline.json"
+    local ts
+    ts="$(date +%Y%m%d-%H%M%S)"
+    _msg task "Running k6: $script"
+    if k6 run --out "json=$json" "$script"; then
+        _msg ok "k6 report: $json"
+        mkdir -p "$out_dir/history"
+        cp -f "$json" "$out_dir/history/${name}-${ts}.json"
+        _k6_baseline_check "$json" "$baseline" "$name"
+        return 0
+    fi
+    _msg error "k6 test failed: $script"
+    return 1
+}
+
+## 性能测试: JMeter (*.jmx) + k6 (tests/perf/*.js、*.k6.js)
+test_performance() {
+    local out_dir="$G_DATA/reports/perf"
+    mkdir -p "$out_dir/history"
+
+    local -a plan_list=()
+    local engine f
+    while IFS=$'\t' read -r engine f; do
+        plan_list+=("$engine|$f")
+    done < <(_perf_find_plans)
+
+    if [[ ${#plan_list[@]} -eq 0 ]]; then
+        _msg note "No *.jmx or k6 test plan found. Skipping performance tests."
         return 0
     fi
 
     if ${G_DRY_RUN:-false}; then
-        dry_run_note "run JMeter: ${jmx_files[*]}"
+        dry_run_note "run performance tests: ${plan_list[*]}"
         return 0
     fi
 
-    if ! command -v jmeter >/dev/null 2>&1; then
-        _install_jmeter
-    fi
-    if ! command -v jmeter >/dev/null 2>&1; then
-        _msg error "JMeter not available, cannot run performance tests"
-        return 1
-    fi
-
-    local out_dir="$G_DATA/reports/perf" jmx name ret=0
-    mkdir -p "$out_dir"
-    for jmx in "${jmx_files[@]}"; do
-        name="$(basename "$jmx" .jmx)"
-        _msg task "Running JMeter: $jmx"
-        if jmeter -n -t "$jmx" -l "$out_dir/${name}.jtl" -e -o "$out_dir/${name}"; then
-            _msg ok "JMeter report: $out_dir/${name}"
-        else
-            _msg error "JMeter test failed: $jmx"
-            ret=1
-        fi
+    local plan name ret=0
+    for plan in "${plan_list[@]}"; do
+        engine="${plan%%|*}"
+        f="${plan#*|}"
+        case "$engine" in
+        jmeter)
+            name="$(basename "$f" .jmx)"
+            if ! command -v jmeter >/dev/null 2>&1; then
+                _install_jmeter
+            fi
+            if command -v jmeter >/dev/null 2>&1; then
+                _msg task "Running JMeter: $f"
+                if jmeter -n -t "$f" -l "$out_dir/${name}.jtl" -e -o "$out_dir/${name}"; then
+                    _msg ok "JMeter report: $out_dir/${name}"
+                else
+                    _msg error "JMeter test failed: $f"
+                    ret=1
+                fi
+            else
+                _msg error "JMeter not available, cannot run: $f"
+                ret=1
+            fi
+            ;;
+        k6)
+            name="$(basename "$f" .k6.js)"
+            name="${name%.js}"
+            if ! command -v k6 >/dev/null 2>&1; then
+                _install_k6
+            fi
+            if command -v k6 >/dev/null 2>&1; then
+                _run_k6 "$f" "$out_dir" "$name" || ret=1
+            else
+                _msg error "k6 not available, cannot run: $f"
+                ret=1
+            fi
+            ;;
+        esac
     done
     return $ret
 }

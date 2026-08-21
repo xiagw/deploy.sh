@@ -26,6 +26,8 @@ stages:
   - deploy
   ## 冒烟验收：部署完成后对目标环境做功能/冒烟测试
   - smoke
+  ## 性能验收：发布后手动触发性能测试（JMeter / k6）
+  - perf
 
 cache:
   # untracked: true
@@ -124,3 +126,12 @@ deploy:
 #     - testing
 #     - uat
 #     - release
+
+# perf:
+#   stage: perf
+#   script:
+#     - bash $HOME/runner/deploy.sh --test-performance
+#   when: manual
+#   only:
+#     - main
+#     - prod
