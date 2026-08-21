@@ -829,7 +829,7 @@ _install_terraform() {
     fi
     _msg ok "Installing terraform..."
     $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
-    curl -fsSL https://apt.releases.hashicorp.com/gpg |
+    curl -fsSL --retry 3 --retry-delay 2 https://apt.releases.hashicorp.com/gpg |
         gpg --dearmor |
         $use_sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null 2>&1
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
@@ -855,7 +855,7 @@ _install_aws() {
     rm -rf /tmp/aws "$temp_file"
     ## install eksctl / 安装 eksctl
     local cmd=/usr/local/bin/eksctl
-    curl -fsSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+    curl -fsSL --retry 3 --retry-delay 2 "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
     _msg ok "Installing to $cmd"
     $use_sudo install -m 0755 /tmp/eksctl "$cmd"
     _msg ok "Showing version"
