@@ -306,7 +306,8 @@ EOF
 # @param $1 image_tag The tag of the base image to build (e.g. mysql:8.0, amazoncorretto:17)
 build_base_image() {
   local image_tag="$1" mirror registry proxy_url bake_target tag_left tag_right
-  local bake_file="${G_DATA}/base-bake.hcl"
+  local bake_file="${G_DATA}/cache/base-bake.hcl"
+  mkdir -p "${G_DATA}/cache"
   mirror="${ENV_DOCKER_MIRROR:+${ENV_DOCKER_MIRROR%/}/}"
   registry="${ENV_DOCKER_REGISTRY:+${ENV_DOCKER_REGISTRY%/}/}"
   proxy_url="${ENV_HTTP_PROXY:-}"
@@ -412,6 +413,7 @@ EOF
       cat "${bake_file}"
     fi
     rm -f "${dk_file}" 2>/dev/null || true
+    rm -f "${bake_file}" 2>/dev/null || true
     return
   fi
 
@@ -431,6 +433,7 @@ EOF
 
   docker buildx bake --file "${bake_file}" --progress=plain
   rm -f "${dk_file}" 2>/dev/null || true
+  rm -f "${bake_file}" 2>/dev/null || true
 }
 
 # Build selected base images
