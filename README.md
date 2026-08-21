@@ -61,6 +61,8 @@ git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 | elixir   | Exists mix.exs, or include `project_lang=elixir` in README.md |
 | other    | Include `project_lang=[other]` in README.md |
 
+> Note: the marker line below lets deploy.sh detect this repo as a shell project:
+
 project_lang=shell
 
 # Quickstart
@@ -88,58 +90,14 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 ```
 
 ### option [3]. deploy.sh with GitLab-Runner
-1. Prepare a gitlab-server and gitlab-runner-server
-1. [Install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register to gitlab-server, and start gitlab-runner
-1. cd $HOME/runner
-1. cp conf/templates/deploy.env data/deploy.env        ## !!!change to yours!!!
-1. Refer to conf/templates/gitlab-ci.yml of this project, setup \<your_project.git\>/.gitlab-ci.yml
-1. **Note**: Project configuration files will be auto-created on first deployment at `data/conf/namespace/project-name.json`, and must be modified before deployment can proceed
+1. Prepare a gitlab-server and gitlab-runner-server; [install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register it to gitlab-server (shell executor), and verify with `sudo gitlab-runner status`
+1. Refer to `conf/templates/gitlab-ci.yml` to setup `\<your_project.git\>/.gitlab-ci.yml`
+1. **Note**: `data/deploy.env` and the project config `data/conf/namespace/project-name.json` are auto-generated from templates on first run — **edit the customization fields (hosts, user, port, rsync_dest, etc.)** before deployment can proceed
 
 ### option [4]. deploy.sh with Jenkins
 1. Create job,
 1. setup job, run custom shell, `bash $HOME/runner/deploy.sh`
 
-
-# Examples (with GitLab Server and GitLab-Runner)
-
-### Step 1: Prepair Gitlab server
-There is already a gitlab server (if not, you can refer to [xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) to start one with docker-compose)
-
-### Step 2: Prepair Gitlab Runner server
-There is already a server that has installed gitlab-runner and register to Gitlab server, (executer is shell)
-
-and make sure gitlab-runner is running properly. `sudo gitlab-runner status`
-
-### Step 3: Prepair Application server (Linux/k8s/microk8s/k3s)
-if use rsync+ssh to deploy: The ssh key file had been prepared, and you can login to the Application server without a password from the gitlab-runner server (the key file can be in $HOME/.ssh/, or in the $HOME/runner/data/.ssh/)
-
-if use k8s to deploy: on the gitlab-runner server, prepare ~/.kube/config
-
-### Step 4: install, git clone deploy.sh
-SSH login to the gitlab-runner server
-```
-git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
-```
-
-### Step 5: Update $HOME/runner/data/deploy.env
-Refer to the conf/templates/deploy.env, change to yours configure
-```
-cd $HOME/runner
-cp conf/templates/deploy.env data/deploy.env        ## change to yours
-```
-
-**Note**: Project configuration files will be auto-created on first deployment:
-- Configuration location: `data/conf/namespace/project-name.json`
-- Auto-created from template on first deployment, but **must modify hosts, user, port, rsync_dest, etc.** before deployment can proceed
-- Template reference: `conf/templates/project-config.json`
-
-### Step 6: Create Gitlab project on gitlab server
-Example: created `project-A` under the root account on gitlab-server (root/project-A)
-
-### Step 7: Create root/project-A/.gitlab-ci.yml on gitlab server
-Create and submit `.gitlab-ci.yml` on Gitlab `project-A`
-
-### Step 8: Enjoy CI/CD
 
 # FAQ
 ### How to create Helm files for applications project

@@ -53,17 +53,19 @@ git clone --depth 1 https://github.com/xiagw/deploy.sh.git $HOME/runner
 | elixir | 存在`mix.exs`或README.md包含`project_lang=elixir` |
 | 其他 | README.md包含`project_lang=[other]` |
 
+> 说明：以下标记行供 deploy.sh 将本仓库识别为 shell 项目：
+
 project_lang=shell
 
 ## 快速开始
 
 ### 可选方式 [1], 手动单独运行
 ```bash
-## 如果您的项目 git 仓库已预先存在，进入到仓库目录直接运行 [deploy.sh]
+## 如果您的项目 git 仓库已预先存在，进入到仓库目录直接运行 deploy.sh
 $HOME/runner/deploy.sh -w /path/to/<your_project.git>
 ## 或者
 cd /path/to/<your_project.git> && $HOME/runner/deploy.sh
-## 如果您的项目 git 仓库不存在，使用 [deploy.sh] 克隆 git 仓库
+## 如果您的项目 git 仓库不存在，使用 deploy.sh 克隆 git 仓库
 $HOME/runner/deploy.sh --git-clone https://github.com/<some_name>/<some_project>.git
 ```
 
@@ -78,58 +80,14 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 ```
 
 ### 可选方式 [3], 配合 GitLab-Runner 运行
-1. 准备 Gitlab 服务器和 Gitlab-runner 服务器
-1. [安装 Gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), 按照文档注册 Gitlab-runner 到 Gitlab 服务器，并启动 Gitlab-runner
-1. cd $HOME/runner
-1. cp conf/templates/deploy.env data/deploy.env        ## ！！！修改为你的自定义配置！！！
-1. 参考本项目的配置文件 conf/templates/gitlab-ci.yml， 设置你的应用 git 仓库当中的文件 \<your_project.git\>/.gitlab-ci.yml
-1. **注意**: 项目配置文件会在首次部署时自动创建，位于 `data/conf/namespace/project-name.json`，必须修改后才能继续部署
+1. 准备 Gitlab 服务器和 Gitlab-runner 服务器，[安装并注册 Gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html)（executor 为 shell），`sudo gitlab-runner status` 确认运行
+1. 参考 `conf/templates/gitlab-ci.yml`，在你的应用仓库中创建 `.gitlab-ci.yml`
+1. **注意**：环境配置 `data/deploy.env` 与项目配置 `data/conf/namespace/project-name.json` 会在首次运行时自动从模板生成，**必须修改其中的自定义配置（hosts、user、port、rsync_dest 等）**后才能继续部署
 
 ### 可选方式 [4], 配合 Jenkins 运行
 1. Create job,
 1. 设置任务, run custom shell, `bash $HOME/runner/deploy.sh`
 
-
-# 实际案例 (配合 GitLab Server and GitLab-Runner)
-
-### Step 1: 准备 Gitlab 服务器
-已经准备好 Gitlab 服务器 (如果没有？可以参考[xiagw/docker-gitlab](https://github.com/xiagw/docker-gitlab) 启动一个新服务器)
-
-### Step 2: 准备 Gitlab-runner 服务器
-已经安装准备 Gitlab-runner 服务器，已注册到 Gitlab 服务器，并启动 Gitlab-runner(executer is shell)
-
-并且确认一下运行状态。 `sudo gitlab-runner status`
-
-### Step 3: 准备应用程序服务器 (*nix/k8s/microk8s/k3s)
-如果您打算使用 rsync+ssh 的方式发布：准备好 ssh public key, 并可以无密码登录到应用程序服务器 (ssh private key 可以存放于 $HOME/.ssh/ 或 $HOME/runner/data/.ssh/)
-
-如果您打算使用 k8s 的方式发布：准备好 ~/.kube/config 等配置文件
-
-### Step 4: 安装 deploy.sh
-ssh 登录进入 Gitlab-runner 服务器，并执行以下命令用来安装 deploy.sh
-```
-git clone https://github.com/xiagw/deploy.sh.git $HOME/runner
-```
-
-### Step 5: 更新配置文件 data/deploy.env
-参考 conf/templates/deploy.env, 修改为你的自定义配置
-```
-cd $HOME/runner
-cp conf/templates/deploy.env data/deploy.env        ## 修改为你的自定义配置
-```
-
-**注意**: 项目配置文件会在首次部署时自动创建：
-- 配置文件位置: `data/conf/namespace/project-name.json`
-- 首次部署时会从模板自动创建，但**必须修改配置中的 hosts、user、port、rsync_dest 等字段**后才能继续部署
-- 参考模板: `conf/templates/project-config.json`
-
-### Step 6: 创建 Gitlab git 仓库
-登录进入 Gitlab 服务器，并创建一个 git 仓库 `project-A` (例如 root/project-A)
-
-### Step 7: 创建 .gitlab-ci.yml
-创建并提交一个文件 `.gitlab-ci.yml` 在 git 仓库 `project-A`
-
-### Step 8: 享受 CI/CD
 
 # FAQ
 ### 如何创建 helm 项目文件
