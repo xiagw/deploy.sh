@@ -83,7 +83,7 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. cd $HOME/runner
 1. cp conf/templates/deploy.env data/deploy.env        ## ！！！修改为你的自定义配置！！！
 1. 参考本项目的配置文件 conf/templates/gitlab-ci.yml， 设置你的应用 git 仓库当中的文件 \<your_project.git\>/.gitlab-ci.yml
-1. **注意**: 项目配置文件会在首次部署时自动创建，位于 `data/projects/namespace/project-name.json`，必须修改后才能继续部署
+1. **注意**: 项目配置文件会在首次部署时自动创建，位于 `data/conf/namespace/project-name.json`，必须修改后才能继续部署
 
 ### 可选方式 [4], 配合 Jenkins 运行
 1. Create job,
@@ -119,7 +119,7 @@ cp conf/templates/deploy.env data/deploy.env        ## 修改为你的自定义�
 ```
 
 **注意**: 项目配置文件会在首次部署时自动创建：
-- 配置文件位置: `data/projects/namespace/project-name.json`
+- 配置文件位置: `data/conf/namespace/project-name.json`
 - 首次部署时会从模板自动创建，但**必须修改配置中的 hosts、user、port、rsync_dest 等字段**后才能继续部署
 - 参考模板: `conf/templates/project-config.json`
 

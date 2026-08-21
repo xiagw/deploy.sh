@@ -93,7 +93,7 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 1. cd $HOME/runner
 1. cp conf/templates/deploy.env data/deploy.env        ## !!!change to yours!!!
 1. Refer to conf/templates/gitlab-ci.yml of this project, setup \<your_project.git\>/.gitlab-ci.yml
-1. **Note**: Project configuration files will be auto-created on first deployment at `data/projects/namespace/project-name.json`, and must be modified before deployment can proceed
+1. **Note**: Project configuration files will be auto-created on first deployment at `data/conf/namespace/project-name.json`, and must be modified before deployment can proceed
 
 ### option [4]. deploy.sh with Jenkins
 1. Create job,
@@ -129,7 +129,7 @@ cp conf/templates/deploy.env data/deploy.env        ## change to yours
 ```
 
 **Note**: Project configuration files will be auto-created on first deployment:
-- Configuration location: `data/projects/namespace/project-name.json`
+- Configuration location: `data/conf/namespace/project-name.json`
 - Auto-created from template on first deployment, but **must modify hosts, user, port, rsync_dest, etc.** before deployment can proceed
 - Template reference: `conf/templates/project-config.json`
 

@@ -27,7 +27,7 @@
 权限：运维部门/管理者/研发部门 可配置
 
 ### cache/
-说明：运行时缓存（构建 hash 缓存、image_records 镜像记录等），可安全清理
+说明：运行时缓存（构建 hash 缓存、image_records 镜像记录、docker login 锁文件、base-bake.hcl 等），可安全清理
 
 ### .acme.sh/
 说明：使用 acme.sh 自动生产/更新 ssl 证书的程序和配置文件，例如 dns api， 软链接到 ~/.acme.sh

@@ -38,15 +38,15 @@
 
 
 # # 网卡默认是在public的zone内，也是默认zone。永久添加源地址转换功能
-# $ firewall-cmd --add-masquerade --permanent
-# $ firewall-cmd --reload
+# firewall-cmd --add-masquerade --permanent
+# firewall-cmd --reload
 
 # 添加网卡的ip转发功能，添加如下配置到文件最后
-# $ vim /etc/sysctl.conf
+# vim /etc/sysctl.conf
 # net.ipv4.ip_forward=1
 
 # 重载网络配置生效
-# $ sysctl -p
+# sysctl -p
 
 # ubuntu ufw
 # https://cloud.tencent.com/developer/article/1626255
