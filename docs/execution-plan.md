@@ -85,7 +85,7 @@ config_deploy_init ────────────────────�
    │                       └── config_build_env ──► IS_CHINA
    │                             ├── build_base_image_select  依赖 IS_CHINA + ENV_DOCKER_*
    │                             └── repo_inject_file ──► G_REPO_DIR 注入
-    │                                   └── stage_*（9 个阶段）──► handle_notify
+    │                                   └── stage_*（13 个阶段）──► handle_notify
 ```
 
 ---
@@ -132,7 +132,7 @@ parse_command_args "$@"     # while 解析参数 → 设 arg_* 布尔/参数 + R
 
 组装开始时预计算 `auto_mode`：对全部 `arg_*` 触发条件与 `RUN_DEPLOY` 做一次判定，
 用户未请求任何功能（如仅 `-w` 等修饰参数、或完全无参数）时 `auto_mode=true`。
-组装结束若 `auto_mode` 为 true，追加全部 9 个阶段；`find_project_config` 的进入条件
+组装结束若 `auto_mode` 为 true，追加全部 13 个阶段；`find_project_config` 的进入条件
 也依赖它（auto 模式含 stage_build/stage_deploy，需要项目配置）。
 
 - Gitea Actions 的 `setup_git_repo` 属环境驱动，**不计入**用户请求，不会抑制自动模式。
@@ -186,15 +186,19 @@ stage_code_quality            # arg_code_quality
 stage_code_style              # arg_code_style
 stage_unit_test               # arg_test_unit
 stage_build                   # arg_build
+stage_security_image          # arg_security_image（扫构建产物镜像，须在 build 后）
 stage_deploy                  # RUN_DEPLOY 非空；自动模式下走 detect_deployment_method
 stage_functional_test         # arg_test_func
 stage_performance_test        # arg_test_perf
 stage_security_zap            # arg_security_zap
 stage_security_vulmap         # arg_security_vulmap
+stage_security_semgrep        # arg_security_semgrep（SAST）
+stage_security_sca            # arg_security_sca（依赖漏洞）
+stage_security_gitleaks       # arg_security_gitleaks（密钥）
 handle_notify                 # 恒执行（末尾）
 ```
 
-自动模式（auto_mode=true）时 `stage_code_quality .. stage_security_vulmap`（含 `stage_performance_test`）全部加入。
+自动模式（auto_mode=true）时 `stage_code_quality .. stage_security_gitleaks` 全部阶段加入。
 
 ---
 

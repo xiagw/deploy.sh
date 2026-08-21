@@ -38,8 +38,8 @@ analysis_gitleaks() {
 stage_security_zap() {
     _msg stage "$(_t '安全扫描zap' 'security scan with zap')"
     _msg task "ZAP scan"
-    [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SCAN_ZAP=false)"
-    if [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]]; then
+    if ! ${arg_security_zap:-false} && [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]]; then
+        _msg note "$(_t '跳过' 'skipped') (--security-zap / PIPELINE_SCAN_ZAP=true)"
         return 0
     fi
 
@@ -70,8 +70,8 @@ stage_security_zap() {
 stage_security_vulmap() {
     _msg stage "$(_t '安全扫描vulmap' 'security scan with vulmap')"
     _msg task "vulmap scan"
-    [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SCAN_VULMAP=false)"
-    if [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]]; then
+    if ! ${arg_security_vulmap:-false} && [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]]; then
+        _msg note "$(_t '跳过' 'skipped') (--security-vulmap / PIPELINE_SCAN_VULMAP=true)"
         return 0
     fi
 
@@ -104,31 +104,28 @@ stage_security_vulmap() {
 
 stage_code_quality() {
     _msg stage "$(_t '代码质量' 'code quality')"
+
+    ## SonarQube（平台级质量门禁，PIPELINE_SONAR）
     _msg task "Checking code with SonarQube"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
     [[ "${PIPELINE_SONAR:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SONAR=false)"
-    if ! ${PIPELINE_SONAR:-false}; then
-        return 0
-    fi
+    if ${PIPELINE_SONAR:-false}; then
+        local sonar_url="${ENV_SONAR_URL:?empty}"
+        local sonar_conf="$G_REPO_DIR/sonar-project.properties"
 
-    local sonar_url="${ENV_SONAR_URL:?empty}"
-    local sonar_conf="$G_REPO_DIR/sonar-project.properties"
+        if ${G_DRY_RUN:-false}; then
+            _msg note "[dry-run] stage_code_quality:"
+            _msg note "  ${G_RUN} -u 1000:1000 -e SONAR_TOKEN=*** -v ${G_REPO_DIR}:/usr/src sonarsource/sonar-scanner-cli"
+            _msg note "  write ${sonar_conf#${G_REPO_DIR}/} if missing"
+        else
+            if ! curl --silent --head --fail --connect-timeout 5 "$sonar_url" >/dev/null 2>&1; then
+                _msg warn "SonarQube server not found, exiting."
+                return 1
+            fi
 
-    if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] stage_code_quality:"
-        _msg note "  ${G_RUN} -u 1000:1000 -e SONAR_TOKEN=*** -v ${G_REPO_DIR}:/usr/src sonarsource/sonar-scanner-cli"
-        _msg note "  write ${sonar_conf#${G_REPO_DIR}/} if missing"
-        return 0
-    fi
-
-    if ! curl --silent --head --fail --connect-timeout 5 "$sonar_url" >/dev/null 2>&1; then
-        _msg warn "SonarQube server not found, exiting."
-        return 1
-    fi
-
-    if [[ ! -f "$sonar_conf" ]]; then
-        _msg ok "Creating $sonar_conf"
-        cat >"$sonar_conf" <<EOF
+            if [[ ! -f "$sonar_conf" ]]; then
+                _msg ok "Creating $sonar_conf"
+                cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
 sonar.projectKey=${G_REPO_NS}_${G_REPO_NAME}
 sonar.qualitygate.wait=true
@@ -142,16 +139,34 @@ test/**/*
 sonar.projectVersion=1.0
 sonar.import_unknown_files=true
 EOF
+            fi
+
+            if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+                if ! $G_RUN -u 1000:1000 -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$G_REPO_DIR":/usr/src sonarsource/sonar-scanner-cli; then
+                    _msg error "SonarQube scan failed"
+                    return 1
+                fi
+            fi
+        fi
+        _msg task "Code quality check with SonarQube completed"
     fi
 
-    [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
-
-    if ! $G_RUN -u 1000:1000 -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$G_REPO_DIR":/usr/src sonarsource/sonar-scanner-cli; then
-        _msg error "SonarQube scan failed"
-        return 1
-    fi
-
-    _msg task "Code quality check with SonarQube completed"
+    ## 语言级静态质量分析（各自 PIPELINE_* 开关自守卫；失败仅告警，不中断流水线）
+    _msg task "Running language-level code analysis"
+    local lang
+    lang="$(detect_repo_language | cut -d: -f1)"
+    if ! analysis_codeclimate; then _msg warn "CodeClimate issues found"; fi
+    case "$lang" in
+    java)
+        if ! analysis_pmd; then _msg warn "PMD issues found"; fi
+        if ! analysis_spotbugs; then _msg warn "SpotBugs issues found"; fi
+        if ! analysis_checkstyle; then _msg warn "Checkstyle issues found"; fi
+        ;;
+    python)
+        if ! analysis_pylint; then _msg warn "Pylint issues found"; fi
+        ;;
+    esac
+    return 0
 }
 
 # Run PMD code analysis
@@ -486,4 +501,121 @@ EOF
     fi
 
     _msg task "Checkstyle analysis completed"
+}
+
+# Run Semgrep SAST scan（静态应用安全测试，多语言通用规则）
+stage_security_semgrep() {
+    _msg stage "$(_t 'SAST扫描' 'SAST scan (semgrep)')"
+    _msg task "Semgrep SAST scan"
+    if ! ${arg_security_semgrep:-false} && [[ "${PIPELINE_SEMGREP:-false}" != true ]]; then
+        _msg note "$(_t '跳过' 'skipped') (--scan-semgrep / PIPELINE_SEMGREP=true)"
+        return 0
+    fi
+
+    if ${G_DRY_RUN:-false}; then
+        dry_run_note "run semgrep: docker ... semgrep/semgrep scan --config=auto --json"
+        return 0
+    fi
+
+    local out="$G_DATA/reports/security" ret=0
+    mkdir -p "$out"
+    $G_RUN -v "$G_REPO_DIR:/src" -v "$out:/out" semgrep/semgrep scan \
+        --config=auto --json -o /out/semgrep.json /src || ret=$?
+    if [ "$ret" -eq 0 ]; then
+        _msg ok "Semgrep report: $out/semgrep.json"
+    elif [ "$ret" -eq 1 ]; then
+        _msg warn "Semgrep found issues: $out/semgrep.json"
+    else
+        _msg error "Semgrep scan failed (exit $ret)"
+        return 1
+    fi
+    return 0
+}
+
+# Run Trivy SCA scan（软件成分分析，依赖漏洞）
+stage_security_sca() {
+    _msg stage "$(_t '依赖漏洞扫描' 'dependency scan (SCA)')"
+    _msg task "Trivy SCA scan (dependency vulnerabilities)"
+    if ! ${arg_security_sca:-false} && [[ "${PIPELINE_SCA:-false}" != true ]]; then
+        _msg note "$(_t '跳过' 'skipped') (--scan-sca / PIPELINE_SCA=true)"
+        return 0
+    fi
+
+    if ${G_DRY_RUN:-false}; then
+        dry_run_note "run trivy fs: docker ... aquasec/trivy fs --scanners vuln --exit-code 1"
+        return 0
+    fi
+
+    local out="$G_DATA/reports/security" ret=0
+    mkdir -p "$out"
+    $G_RUN -v "$G_REPO_DIR:/repo" -v "$out:/out" aquasec/trivy:latest fs \
+        --scanners vuln --exit-code 1 --ignore-unfixed \
+        --format json --output /out/trivy-fs.json /repo || ret=$?
+    if [ "$ret" -eq 0 ]; then
+        _msg ok "Trivy SCA report: $out/trivy-fs.json"
+    elif [ "$ret" -eq 1 ]; then
+        _msg warn "Trivy SCA found vulnerabilities: $out/trivy-fs.json"
+    else
+        _msg error "Trivy SCA scan failed (exit $ret)"
+        return 1
+    fi
+    return 0
+}
+
+# Run Trivy image scan（构建后镜像漏洞扫描，须在 stage_build 之后）
+stage_security_image() {
+    _msg stage "$(_t '镜像漏洞扫描' 'image scan (trivy)')"
+    _msg task "Trivy image scan"
+    if ! ${arg_security_image:-false} && [[ "${PIPELINE_SCAN_IMAGE:-false}" != true ]]; then
+        _msg note "$(_t '跳过' 'skipped') (--scan-image / PIPELINE_SCAN_IMAGE=true)"
+        return 0
+    fi
+
+    local image_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
+    if ${G_DRY_RUN:-false}; then
+        dry_run_note "run trivy image $image_tag"
+        return 0
+    fi
+
+    local out="$G_DATA/reports/security" ret=0
+    mkdir -p "$out"
+    $G_RUN \
+        -e TRIVY_USERNAME="${ENV_DOCKER_USERNAME:-}" \
+        -e TRIVY_PASSWORD="${ENV_DOCKER_PASSWORD:-}" \
+        -v "$out:/out" \
+        aquasec/trivy:latest image \
+        --exit-code 1 --ignore-unfixed \
+        --format json --output /out/trivy-image.json "$image_tag" || ret=$?
+    if [ "$ret" -eq 0 ]; then
+        _msg ok "Trivy image report: $out/trivy-image.json"
+    elif [ "$ret" -eq 1 ]; then
+        _msg warn "Trivy image found vulnerabilities: $out/trivy-image.json"
+    else
+        _msg error "Trivy image scan failed (exit $ret)"
+        return 1
+    fi
+    return 0
+}
+
+# Run Gitleaks secret scan（密钥泄露扫描）
+stage_security_gitleaks() {
+    _msg stage "$(_t '密钥扫描' 'secret scan (gitleaks)')"
+    _msg task "Gitleaks secret scan"
+    if ! ${arg_security_gitleaks:-false} && [[ "${PIPELINE_GITLEAKS:-false}" != true ]]; then
+        _msg note "$(_t '跳过' 'skipped') (--scan-gitleaks / PIPELINE_GITLEAKS=true)"
+        return 0
+    fi
+
+    if ${G_DRY_RUN:-false}; then
+        dry_run_note "run gitleaks: docker ... gitleaks --path=$G_REPO_DIR --config=conf/templates/config.toml"
+        return 0
+    fi
+
+    local config_file="$G_PATH/conf/templates/config.toml"
+    if analysis_gitleaks "$G_REPO_DIR" "$config_file"; then
+        _msg ok "Gitleaks scan completed, no secrets found"
+    else
+        _msg warn "Gitleaks found potential secrets (report above)"
+    fi
+    return 0
 }

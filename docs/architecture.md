@@ -119,21 +119,26 @@ deploy.sh/
 
 执行项目自带脚本 `tests/unit_test.sh` / `tests/func_test.sh`（候选：仓库内 → `$G_DATA/tests/`）。受 `PP_UNIT_TEST` / `PP_FUNCTION_TEST` 开关控制。
 
-### 2.7 lib/analysis.sh — 485 行（代码分析/安全）
+### 2.7 lib/analysis.sh — 621 行（代码分析/安全）
 
 | 函数 | 行号 | 工具（Docker） | 开关 |
 |---|---|---|---|
 | `analysis_gitleaks` | 13 | zricethezav/gitleaks:v7.5.0 | — |
-| `stage_security_zap` | 38 | owasp/zap2docker-stable | `PP_SCAN_ZAP` |
-| `stage_security_vulmap` | 72 | 本地 vulmap | `PP_SCAN_VULMAP` |
-| `stage_code_quality` | 109 | sonarsource/sonar-scanner-cli | `PP_SONAR` |
-| `analysis_pmd` | 164 | pmd/pmd:6.55.0 | `PP_PMD` |
-| `analysis_codeclimate` | 208 | codeclimate/codeclimate | `PP_CODECLIMATE` |
-| `analysis_spotbugs` | 314 | spotbugs/spotbugs:4.7.3 | `PP_SPOTBUGS` |
-| `analysis_pylint` | 373 | python:2.17.5-slim | `PP_PYLINT` |
-| `analysis_checkstyle` | 420 | checkstyle/checkstyle:10.12.4 | `PP_CHECKSTYLE` |
+| `stage_security_zap` | 38 | owasp/zap2docker-stable | `PP_SCAN_ZAP` / `-z` |
+| `stage_security_vulmap` | 70 | 本地 vulmap | `PP_SCAN_VULMAP` / `-m` |
+| `stage_code_quality` | 105 | sonar + 语言分析分发 | `PP_SONAR` + `PP_PMD/CODECLIMATE/SPOTBUGS/PYLINT/CHECKSTYLE` |
+| `analysis_pmd` | 173 | pmd/pmd:6.55.0 | `PP_PMD` |
+| `analysis_codeclimate` | 217 | codeclimate/codeclimate | `PP_CODECLIMATE` |
+| `analysis_spotbugs` | 323 | spotbugs/spotbugs:4.7.3 | `PP_SPOTBUGS` |
+| `analysis_pylint` | 382 | python:2.17.5-slim | `PP_PYLINT` |
+| `analysis_checkstyle` | 429 | checkstyle/checkstyle:10.12.4 | `PP_CHECKSTYLE` |
+| `stage_security_semgrep` | 507 | semgrep/semgrep（SAST） | `PP_SEMGREP` / `--scan-semgrep` |
+| `stage_security_sca` | 536 | aquasec/trivy（SCA fs） | `PP_SCA` / `--scan-sca` |
+| `stage_security_image` | 566 | aquasec/trivy（镜像，build 后） | `PP_SCAN_IMAGE` / `--scan-image` |
+| `stage_security_gitleaks` | 601 | gitleaks（密钥） | `PP_GITLEAKS` / `--scan-gitleaks` |
 
 统一模式：开关未启用输出 `⋯ 跳过 (PP_XX=false)`；失败 `✗ ... failed` return 1（pylint 例外，仅 warn）。
+报告统一落在 `data/reports/security/`（semgrep.json / trivy-fs.json / trivy-image.json）。
 
 ### 2.8 lib/style.sh — 221 行（代码风格）
 

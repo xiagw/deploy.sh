@@ -168,6 +168,10 @@ Parameters:
     -Q, --code-quality           Check code quality.
     -z, --security-zap           Run ZAP security scan.
     -m, --security-vulmap        Run Vulmap security scan.
+    --scan-semgrep               Run Semgrep SAST scan.
+    --scan-sca                   Run Trivy SCA dependency scan.
+    --scan-image                 Run Trivy image scan (after build).
+    --scan-gitleaks              Run Gitleaks secret scan.
 
     # Kubernetes operations
     -K, --create-k8s             Create K8s cluster with Terraform.
@@ -249,6 +253,10 @@ parse_command_args() {
         -Q | --code-quality) arg_code_quality=true ;;
         -z | --security-zap) arg_security_zap=true ;;
         -m | --security-vulmap) arg_security_vulmap=true ;;
+        --scan-semgrep) arg_security_semgrep=true ;;
+        --scan-sca) arg_security_sca=true ;;
+        --scan-image) arg_security_image=true ;;
+        --scan-gitleaks) arg_security_gitleaks=true ;;
         # Kubernetes operations
         -K | --create-k8s) arg_create_k8s=true ;;
         -P | --kube-pvc)
@@ -287,6 +295,8 @@ parse_command_args() {
         [[ "${arg_build:-false}" == true || "${arg_test_unit:-false}" == true || "${arg_test_func:-false}" == true ]] ||
         [[ "${arg_test_perf:-false}" == true || "${arg_code_style:-false}" == true || "${arg_code_quality:-false}" == true ]] ||
         [[ "${arg_security_zap:-false}" == true || "${arg_security_vulmap:-false}" == true ]] ||
+        [[ "${arg_security_semgrep:-false}" == true || "${arg_security_sca:-false}" == true ]] ||
+        [[ "${arg_security_image:-false}" == true || "${arg_security_gitleaks:-false}" == true ]] ||
         [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
         auto_mode=false
     fi
@@ -382,6 +392,10 @@ parse_command_args() {
     if [[ "${arg_build:-false}" == true ]]; then
         RUN+=(stage_build)
     fi
+    ## 镜像扫描须在 stage_build 之后（扫构建产物镜像）
+    if [[ "${arg_security_image:-false}" == true ]]; then
+        RUN+=(stage_security_image)
+    fi
     ## 多个部署方式由 stage_deploy 内部按优先级取一
     if [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
         RUN+=(stage_deploy)
@@ -398,11 +412,20 @@ parse_command_args() {
     if [[ "${arg_security_vulmap:-false}" == true ]]; then
         RUN+=(stage_security_vulmap)
     fi
+    if [[ "${arg_security_semgrep:-false}" == true ]]; then
+        RUN+=(stage_security_semgrep)
+    fi
+    if [[ "${arg_security_sca:-false}" == true ]]; then
+        RUN+=(stage_security_sca)
+    fi
+    if [[ "${arg_security_gitleaks:-false}" == true ]]; then
+        RUN+=(stage_security_gitleaks)
+    fi
 
     ## 自动模式: 未请求任何功能 → 追加全部阶段
     ## 独立功能不进自动模式，避免 -r/-K/--clean-tags 等单独执行时误跑完整流水线
     if $auto_mode; then
-        RUN+=(stage_code_quality stage_code_style stage_unit_test stage_build stage_deploy stage_functional_test stage_performance_test stage_security_zap stage_security_vulmap)
+        RUN+=(stage_code_quality stage_code_style stage_unit_test stage_build stage_security_image stage_deploy stage_functional_test stage_performance_test stage_security_zap stage_security_vulmap stage_security_semgrep stage_security_sca stage_security_gitleaks)
     fi
 
     RUN+=(handle_notify)
@@ -500,6 +523,7 @@ main() {
     ## 先于 config_build_env 运行，父环境残留 IS_CHINA 会在 ENV_IS_CHINA=false 时误配中国镜像。
     unset G_DEBUG_ON arg_cron arg_sub_path
     unset arg_test_unit arg_test_func arg_test_perf
+    unset arg_security_semgrep arg_security_sca arg_security_image arg_security_gitleaks
     unset IS_CHINA _msg_lang_val G_DRY_RUN G_DEPLOY_RESULT G_TEST_RESULT
 
     ## 如果 GitLab CI 环境启用了调试跟踪，则启用详细输出
