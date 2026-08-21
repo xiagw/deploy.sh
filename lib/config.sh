@@ -256,4 +256,6 @@ config_deploy_setup() {
 
     ## 链接 python-gitlab 配置文件
     [[ ! -f "$HOME/.python-gitlab.cfg" && -f "${file_python_gitlab}" ]] && ln -sf "${file_python_gitlab}" "$HOME/"
+
+    return 0
 }
