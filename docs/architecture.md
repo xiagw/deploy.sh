@@ -137,22 +137,22 @@ deploy.sh/
 
 ### 2.8 lib/style.sh — 221 行（代码风格）
 
-每个语言一个 `check_<lang>_style`（phpcs/ktlint/pylint/eslint/checkstyle/gofmt/golint/rubocop/clang-format/hadolint），全部走 Docker 容器执行，由 `PIPELINE_*_CODE_STYLE` 开关控制。`stage_code_style` 总调度。
+每个语言一个 `style_check_<lang>`（phpcs+php-cs-fixer/ktlint/pylint+black+isort/eslint+prettier/checkstyle/gofmt+golangci-lint/rustfmt+clippy/rubocop/clang-format/hadolint/dotnet format），全部走 Docker 容器执行，由 `PIPELINE_*_CODE_STYLE` 开关控制。`stage_code_style` 总调度。
 
-### 2.9 lib/build.sh — 922 行（构建）
+### 2.9 lib/build.sh — 958 行（构建）
 
 | 函数 | 行号 | 功能 |
 |---|---|---|
 | `ensure_buildx_builder` | 11 | 用 `ENV_BUILDX_REMOTE_HOSTS` 创建 docker-container 驱动多节点 builder |
 | `ensure_buildx_builder_kubernetes` | 37 | 创建 kubernetes 驱动 builder |
 | `enable_buildx_mode` | 55 | 按 `ENV_BUILDX_MODE`（auto/kubernetes/remote）选 builder |
-| `generate_bake_file` | 90 | 生成 `docker-bake.hcl`（default + base 双 target） |
-| `build_image` | 195 | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略 |
-| `stage_build` | 370 | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
-| `build_<lang>` | 475+ | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建 |
-| `docker_login` | 741 | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
-| `generate_base_dockerfile` / `generate_lang_dockerfile` | 784/811 | 生成基础/语言 Dockerfile |
-| `detect_repo_language_and_build` | 836 | 用 Cloud Native Buildpacks（pack）构建 |
+| `generate_bake_file` | 95 | 生成 `docker-bake.hcl`（default + base 双 target；支持多架构 `ENV_BUILDX_PLATFORMS`、BuildKit 缓存 `ENV_BUILDX_CACHE`） |
+| `build_image` | 231 | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略 |
+| `stage_build` | 401 | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
+| `build_<lang>` | 496+ | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建（java/node 工具镜像可用 `ENV_BASE_BUILD_IMAGE` 覆盖） |
+| `docker_login` | 771 | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
+| `generate_base_dockerfile` / `generate_lang_dockerfile` | 815/842 | 生成基础/语言 Dockerfile |
+| `detect_repo_language_and_build` | 870 | 用 Cloud Native Buildpacks（pack）构建 |
 
 ### 2.10 lib/deployment.sh — 1020 行（部署）
 

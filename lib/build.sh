@@ -173,18 +173,49 @@ generate_bake_file() {
         RUN_SCRIPT_ARG = \"${ENV_RUN_SCRIPT_ARG}\""
 
 
+    ## 多架构构建平台（逗号分隔，默认 linux/amd64）
+    local platforms="${ENV_BUILDX_PLATFORMS:-linux/amd64}" platform_list="" p
+    for p in ${platforms//,/ }; do
+        platform_list+="\"${p}\", "
+    done
+    platform_list="${platform_list%, }"
+
+    ## BuildKit 构建缓存（bake cache-from/cache-to，仅 ENV_BUILDX_CACHE=true 时启用）
+    ## 优先级: ENV_BUILDX_CACHE_REF（registry ref）> GitHub Actions (type=gha) > 自动推导 registry 缓存 ref
+    local cache_block="" cache_from="" cache_to=""
+    if [[ "${ENV_BUILDX_CACHE:-false}" == true ]]; then
+        if [[ -n "${ENV_BUILDX_CACHE_REF:-}" ]]; then
+            cache_from="type=registry,ref=${ENV_BUILDX_CACHE_REF}"
+            cache_to="type=registry,ref=${ENV_BUILDX_CACHE_REF},mode=max"
+        elif [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+            cache_from="type=gha"
+            cache_to="type=gha,mode=max"
+        elif [[ -n "${ENV_DOCKER_REGISTRY:-}" ]]; then
+            local cache_ref="${ENV_DOCKER_REGISTRY%/}/cache/${G_REPO_NAME}:${G_REPO_BRANCH}"
+            cache_from="type=registry,ref=${cache_ref}"
+            cache_to="type=registry,ref=${cache_ref},mode=max"
+        else
+            _msg warn "ENV_BUILDX_CACHE=true but no ENV_BUILDX_CACHE_REF / ENV_DOCKER_REGISTRY / GitHub Actions, cache disabled"
+        fi
+        if [[ -n "${cache_from}" ]]; then
+            cache_block="    cache-from = [\"${cache_from}\"]
+    cache-to = [\"${cache_to}\"]
+"
+        fi
+    fi
+
     cat >"${bake_file}" <<EOF
 target "default" {
     context = "${G_REPO_DIR}"
     dockerfile = "Dockerfile"
-    platforms = ["linux/amd64"]
+    platforms = [${platform_list}]
     args = {
         IS_CHINA = "${IS_CHINA}"
         MIRROR = "${mirror}"
         BUILD_OUTPUT_DIR = "/build_output"${lang_args}${extra_args}
     }
     tags = ["${repo_tag}"]
-}
+${cache_block}}
 EOF
     if [ -n "${base_tag}" ]; then
         cat >>"${bake_file}" <<EOF
@@ -464,6 +495,8 @@ stage_build() {
 # Java Build
 build_java() {
     local jars_path="$G_REPO_DIR/build_output"
+    ## 统一构建镜像: ENV_BASE_BUILD_IMAGE 可覆盖默认 maven 工具镜像
+    local java_image="${ENV_BASE_BUILD_IMAGE:-maven:${ENV_MAVEN_VER:-3.8-jdk-8}}"
 
     if [[ -f "$G_REPO_DIR/build.gradle" ]]; then
         _msg task "Building with gradle"
@@ -481,12 +514,12 @@ build_java() {
             $G_DOCK volume create --name maven-repo
         fi
 
-        $G_RUN -u 0:0 -v maven-repo:/var/maven/.m2:rw maven:"${ENV_MAVEN_VER:-3.8-jdk-8}" bash -c "chown -R 1000:1000 /var/maven"
+        $G_RUN -u 0:0 -v maven-repo:/var/maven/.m2:rw "${java_image}" bash -c "chown -R 1000:1000 /var/maven"
         $G_RUN --user "$(id -u):$(id -g)" \
             -e MAVEN_CONFIG=/var/maven/.m2 \
             -v maven-repo:/var/maven/.m2:rw \
             -v "$G_REPO_DIR":/src:rw -w /src \
-            maven:"${ENV_MAVEN_VER:-3.8-jdk-8}" \
+            "${java_image}" \
             mvn -T 1C clean $maven_debug \
             --update-snapshots package \
             --define skipTests \
@@ -557,13 +590,13 @@ build_node() {
 
     # Custom build check
     if [ -f "$G_REPO_DIR/build.custom.sh" ]; then
-        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash build.custom.sh
+        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash build.custom.sh
         return
     fi
 
     # Install dependencies
     if ${yarn_install}; then
-        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash -c "yarn install" &&
+        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "yarn install" &&
             echo "$file_json_md5" >>"${me_log}"
     else
         _msg task "Skip yarn install..."
@@ -577,7 +610,7 @@ build_node() {
     *) build_opt=build ;;
     esac
 
-    $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-node:18-slim}" bash -c "yarn run ${build_opt}"
+    $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "yarn run ${build_opt}"
 
     [ -d "${G_REPO_DIR}"/build ] && rsync -a --delete "${G_REPO_DIR}"/build/ "${G_REPO_DIR}"/dist/
     _msg note "[build] yarn"
