@@ -20,5 +20,4 @@ tmp/
 .qoderignore
 .dockerignore
 .qoder/
-
 .cursorignore

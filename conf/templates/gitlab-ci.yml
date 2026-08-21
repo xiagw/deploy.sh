@@ -12,33 +12,40 @@ variables:
   ## gitlab checkout 时不清理以下文件
   GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e vendor/ -e yarn.lock -e composer.lock -e .dockerignore
 
+## CI/CD 流水线阶段：自上而下串行执行，前一阶段失败则后续阶段不执行
 stages:
-  - code_style      # 代码风格检查
-  - code_quality    # 代码质量检查
-  - test_unit       # 单元测试
-  - build           # 构建
-  - deploy          # 部署
-  - test_function   # 功能性测试
+  ## 代码风格检查：统一编码规范（eslint / phpcs / gofmt 等）
+  - lint
+  ## 代码质量扫描：静态分析与安全扫描（sonarqube / phpstan 等）
+  - scan
+  ## 单元测试：验证最小代码单元的正确性
+  - test
+  ## 构建打包：编译产物 / 构建镜像
+  - build
+  ## 部署发布：发布到对应环境（k8s namespace / 服务器 / 函数计算）
+  - deploy
+  ## 冒烟验收：部署完成后对目标环境做功能/冒烟测试
+  - smoke
 
 cache:
   # untracked: true
   key: "$CI_PROJECT_PATH_SLUG"
   paths:
     - vendor/
-    - composer.lock
     - node_modules/
+    - composer.lock
     - yarn.lock
 
-# code_style:
-#   stage: code_style
+# lint:
+#   stage: lint
 #   script:
 #     - bash $HOME/runner/deploy.sh --code-style
 #   only:
 #     - develop
 #     - dev
 
-# code_quality:
-#   stage: code_quality
+# scan:
+#   stage: scan
 #   script:
 #     - bash $HOME/runner/deploy.sh --code-quality
 #   only:
@@ -47,8 +54,8 @@ cache:
 #   when: manual
 #   allow_failure: true
 
-# test_unit:
-#   stage: test_unit
+# test:
+#   stage: test
 #   script:
 #     - bash $HOME/runner/deploy.sh --test-unit
 #   # when: manual
@@ -83,7 +90,6 @@ deploy:
   #     - target/
   #     - dist/
   script:
-    ## 全自动运行所有步骤
     - bash $HOME/runner/deploy.sh
     # - bash $HOME/runner/deploy.sh --deploy-rsync-ssh
     # - bash $HOME/runner/deploy.sh --deploy-rsync
@@ -91,21 +97,22 @@ deploy:
     # - bash $HOME/runner/deploy.sh --deploy-sftp
   environment:
     name: ENV-${CI_COMMIT_REF_NAME}
-  only:
-    - develop
-    - dev         ## 开发环境，等效于develop
-    - testing
-    - test        ## 测试环境，等效于testing
-    - sit         ## 测试环境，等效于testing
-    - release
-    - uat         ## 测试环境，等效于release
-    - main
-    - prod        ## 生产环境，等效于main
-    - master      ## 生产环境，等效于main
-  interruptible: true  ## 中断任务，当有新的提交时，自动取消当前正在运行的job
+  ## k8s namespace develops/testing/release/main
+  ## 每个项目只限定在以下固定分支自动发布 CI/CD
+  rules:
+    ## 研发分支 develop, 对应 k8s 的 namespace develop， （dev 为等效别名 alias,不对应 namespace)
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "dev"'
+    ## 测试分支 testing, 对应 k8s 的 namespace testing, (sit/test 均为等效别名 alias,不对应 namespace)
+    - if: '$CI_COMMIT_BRANCH == "testing" || $CI_COMMIT_BRANCH == "test" || $CI_COMMIT_BRANCH == "sit"'
+    ## 预发布分支 release, 对应 k8s 的 namespace release, (uat 均为等效别名 alias,不对应 namespace)
+    - if: '$CI_COMMIT_BRANCH == "release" || $CI_COMMIT_BRANCH == "uat"'
+    ## 特殊分支 发布到 阿里云 函数计算
+    - if: '$CI_COMMIT_BRANCH =~ /^func.*$/'
+    ## 生产分支 main, 对应 k8s 的 namespace main, (prod/master 均为等效别名 alias,不对应 namespace)
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "prod" || $CI_COMMIT_BRANCH == "master"'
 
-# test_function:
-#   stage: test_function
+# smoke:
+#   stage: smoke
 #   script:
 #     - bash $HOME/runner/deploy.sh --test-function
 #   when: manual

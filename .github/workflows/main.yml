@@ -20,10 +20,12 @@ jobs:
 
   GithubActionsStatus:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
 
       - name: Checkout the code
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
 
       - name: Build the Docker image
         run: |
