@@ -189,17 +189,16 @@ EOF
 
 ################################################################################
 # 函数: parse_command_args
-# 描述: 解析命令行参数，将用户请求的功能以函数名填入三个执行数组
+# 描述: 解析命令行参数并组装执行计划 RUN（位置即依赖顺序）
 # 参数: "$@" - 所有命令行参数
-# 返回: 无（填充 RUN_REPO/RUN_TASKS/RUN_STAGES/RUN_DEPLOY 及相关 arg_* 变量）
+# 返回: 无（填充 RUN/RUN_DEPLOY 及相关 arg_* 变量）
 # 全局变量:
-#   - RUN_REPO:   仓库准备函数名数组（循环点1: 必须在 config_deploy_vars 之前）
-#   - RUN_TASKS:  独立功能函数名数组（循环点2: 在 config_build_env 之后统一执行）
-#   - RUN_STAGES: 阶段函数名数组（循环点3: 阶段区）
+#   - RUN:       执行计划单数组，位置即依赖顺序（必备步骤 + 条件可选函数 + 阶段 + handle_notify）
 #   - RUN_DEPLOY: 部署方式 key 数组，供 stage_deploy 按优先级选型（非循环）
 #   - G_DEBUG_ON: 调试模式标志
 #   - arg_cron: 定时任务执行标志
-#   - arg_*: 各种命令行参数的值
+#   - arg_*: 各种命令行参数的值（布尔触发或参数）
+# 说明: 组装规则与依赖依据见函数尾部注释及 docs/execution-plan.md
 ################################################################################
 parse_command_args() {
     while [[ "$#" -gt 0 ]]; do
@@ -213,31 +212,19 @@ parse_command_args() {
         -L | --lang) _msg_lang_val="${2:?usage: zh or en}" && shift ;;
         # Repository operations
         -w | --workspace) arg_workspace="${2:?empty workspace dir}" && shift ;;
-        -g | --git-clone)
-            RUN_REPO+=(setup_git_repo)
-            arg_git_clone_url="${2:?empty git clone url}"
-            shift
-            ;;
-        -b | --git-branch)
-            RUN_REPO+=(setup_git_branch)
-            arg_git_clone_branch="${2:?empty git clone branch}"
-            shift
-            ;;
-        -s | --svn-checkout)
-            RUN_REPO+=(setup_svn_repo)
-            arg_svn_checkout_url="${2:?empty svn url}"
-            shift
-            ;;
+        -g | --git-clone) arg_git_clone_url="${2:?empty git clone url}" && shift ;;
+        -b | --git-branch) arg_git_clone_branch="${2:?empty git clone branch}" && shift ;;
+        -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build operations
-        -x | --build-base) RUN_TASKS+=(build_base_image_select) ;;
-        -B | --build) RUN_STAGES+=(stage_build) ;;
+        -x | --build-base) arg_build_base=true ;;
+        -B | --build) arg_build=true ;;
         --buildx-mode)
             arg_buildx_mode="${2:-auto}"
             export ENV_BUILDX_MODE="${arg_buildx_mode}"
             shift
             ;;
-        --gen-dockerfile) RUN_TASKS+=(generate_lang_dockerfile) ;;
-        --build-buildpacks) RUN_TASKS+=(detect_repo_language_and_build) ;;
+        --gen-dockerfile) arg_gen_dockerfile=true ;;
+        --build-buildpacks) arg_build_buildpacks=true ;;
         # Deployment
         -k | --deploy-k8s) RUN_DEPLOY+=(deploy_k8s) ;;
         -f | --deploy-functions) RUN_DEPLOY+=(deploy_aliyun_func) ;;
@@ -248,23 +235,21 @@ parse_command_args() {
         -F | --deploy-ftp) RUN_DEPLOY+=(deploy_ftp) ;;
         -S | --deploy-sftp) RUN_DEPLOY+=(deploy_sftp) ;;
         -c | --copy-image)
-            RUN_TASKS+=(copy_docker_image)
             arg_src="${2:?ERROR: example: nginx:stable-alpine}"
             arg_target="${3}"
             [ -z "$arg_src" ] || shift
             [ -z "$arg_target" ] || shift
             ;;
         # Testing and quality
-        -u | --test-unit) RUN_STAGES+=(stage_unit_test) ;;
-        -t | --test-function) RUN_STAGES+=(stage_functional_test) ;;
-        -C | --code-style) RUN_STAGES+=(stage_code_style) ;;
-        -Q | --code-quality) RUN_STAGES+=(stage_code_quality) ;;
-        -z | --security-zap) RUN_STAGES+=(stage_security_zap) ;;
-        -m | --security-vulmap) RUN_STAGES+=(stage_security_vulmap) ;;
+        -u | --test-unit) arg_test_unit=true ;;
+        -t | --test-function) arg_test_func=true ;;
+        -C | --code-style) arg_code_style=true ;;
+        -Q | --code-quality) arg_code_quality=true ;;
+        -z | --security-zap) arg_security_zap=true ;;
+        -m | --security-vulmap) arg_security_vulmap=true ;;
         # Kubernetes operations
-        -K | --create-k8s) RUN_TASKS+=(kube_setup_terraform) ;;
+        -K | --create-k8s) arg_create_k8s=true ;;
         -P | --kube-pvc)
-            RUN_TASKS+=(kube_create_pv_pvc)
             arg_sub_path="${2:? pvc name required}"
             if [[ "${3:-}" != -* && -n "${3:-}" ]]; then
                 arg_pvc_namespace="$3"
@@ -273,37 +258,151 @@ parse_command_args() {
             fi
             shift 2
             ;;
-        --create-storage-class) RUN_TASKS+=(kube_create_storage_class) ;;
+        --create-storage-class) arg_create_storage_class=true ;;
         # Miscellaneous
         -D | --disable-inject) arg_disable_inject=true ;;
-        -r | --renew-cert) RUN_TASKS+=(system_cert_renew) ;;
-        --clean-tags)
-            RUN_TASKS+=(clean_old_tags)
-            arg_clean_tags="${2:?ERROR: repository parameter is required}"
-            shift
-            ;;
+        -r | --renew-cert) arg_renew_cert=true ;;
+        --clean-tags) arg_clean_tags="${2:?ERROR: repository parameter is required}" && shift ;;
         *) _usage && exit 1 ;;
         esac
         shift
     done
 
-    ## 任一部署 flag 使 RUN_DEPLOY 非空时，把阶段 stage_deploy 加入 RUN_STAGES（仅一次，
-    ## 多个部署方式由 stage_deploy 内部按优先级取一）
+    ## ========================================================================
+    ## 组装执行计划: RUN 单数组，位置即依赖顺序（依赖依据见 docs/execution-plan.md）
+    ## 必备步骤无条件加入；可选函数按触发条件加入；requested 标记用户是否请求功能，
+    ## 组装结束仍为 false 时追加全部阶段（自动模式）。
+    ## Gitea Actions 的 setup_git_repo 属环境驱动，不计入 requested。
+    ## ========================================================================
+    RUN=()
+    local requested=false
+
+    ## 必备步骤
+    RUN+=(config_deploy_init)
+    RUN+=(system_check)
+
+    ## 真独立功能: 仅依赖 ENV_*/G_DATA，最早执行，避免被无关 setup 阻断
+    if [[ -n "${arg_clean_tags:-}" ]]; then
+        RUN+=(clean_old_tags)
+        requested=true
+    fi
+    if [[ "${arg_create_k8s:-false}" == true ]]; then
+        RUN+=(kube_setup_terraform)
+        requested=true
+    fi
+
+    ## 仓库准备: 必须早于 config_deploy_vars（后者读仓库分支，repo.sh:447）
+    if [[ -n "${arg_git_clone_url:-}" ]]; then
+        RUN+=(setup_git_repo)
+        requested=true
+    elif [[ "${GITEA_ACTIONS:-false}" == true ]]; then
+        RUN+=(setup_git_repo)
+    fi
+    if [[ -n "${arg_svn_checkout_url:-}" ]]; then
+        RUN+=(setup_svn_repo)
+        requested=true
+    fi
+    if [[ -n "${arg_git_clone_branch:-}" && -z "${arg_git_clone_url:-}" ]]; then
+        RUN+=(setup_git_branch)
+        requested=true
+    fi
+
+    RUN+=(config_deploy_vars)
+
+    ## 依赖 config_deploy_vars 的 G_REPO_* / G_IMAGE_*
+    if [[ "${arg_gen_dockerfile:-false}" == true ]]; then
+        RUN+=(generate_lang_dockerfile)
+        requested=true
+    fi
+    ## 须早于 repo_inject_file，避免注入内容被构建进镜像
+    if [[ "${arg_build_buildpacks:-false}" == true ]]; then
+        RUN+=(detect_repo_language_and_build)
+        requested=true
+    fi
+
+    RUN+=(find_project_config)
+    RUN+=(system_proxy)
+
+    ## 中国区 skopeo 拉取需 system_proxy 代理
+    if [[ -n "${arg_src:-}" ]]; then
+        RUN+=(copy_docker_image)
+        requested=true
+    fi
+
+    RUN+=(kube_config_init)
+
+    ## 依赖 kube_config_init 设置的 KUBECTL_OPT（kubernetes.sh:37-42）
+    if [[ "${arg_create_storage_class:-false}" == true ]]; then
+        RUN+=(kube_create_storage_class)
+        requested=true
+    fi
+    if [[ -n "${arg_sub_path:-}" ]]; then
+        RUN+=(kube_create_pv_pvc)
+        requested=true
+    fi
+
+    RUN+=(system_clean_disk)
+    RUN+=(system_install_tools)
+    RUN+=(config_deploy_setup)
+
+    ## 依赖 config_deploy_setup 可能创建的 $HOME/.acme.sh 链接（config.sh:254）
+    if [[ "${arg_renew_cert:-false}" == true ]]; then
+        RUN+=(system_cert_renew)
+        requested=true
+    fi
+
+    RUN+=(config_build_env)
+
+    ## 依赖 config_build_env 设置的 IS_CHINA（kubernetes.sh:398）
+    if [[ "${arg_build_base:-false}" == true ]]; then
+        RUN+=(build_base_image_select)
+        requested=true
+    fi
+
+    RUN+=(repo_inject_file)
+
+    ## 阶段（顺序即执行顺序）
+    if [[ "${arg_code_quality:-false}" == true ]]; then
+        RUN+=(stage_code_quality)
+        requested=true
+    fi
+    if [[ "${arg_code_style:-false}" == true ]]; then
+        RUN+=(stage_code_style)
+        requested=true
+    fi
+    if [[ "${arg_test_unit:-false}" == true ]]; then
+        RUN+=(stage_unit_test)
+        requested=true
+    fi
+    if [[ "${arg_build:-false}" == true ]]; then
+        RUN+=(stage_build)
+        requested=true
+    fi
+    ## 多个部署方式由 stage_deploy 内部按优先级取一
     if [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
-        RUN_STAGES+=(stage_deploy)
+        RUN+=(stage_deploy)
+        requested=true
+    fi
+    if [[ "${arg_test_func:-false}" == true ]]; then
+        RUN+=(stage_functional_test)
+        requested=true
+    fi
+    if [[ "${arg_security_zap:-false}" == true ]]; then
+        RUN+=(stage_security_zap)
+        requested=true
+    fi
+    if [[ "${arg_security_vulmap:-false}" == true ]]; then
+        RUN+=(stage_security_vulmap)
+        requested=true
     fi
 
-    ## 自动模式: 未请求任何功能时填充全部阶段
+    ## 自动模式: 未请求任何功能 → 追加全部阶段
     ## 独立功能不进自动模式，避免 -r/-K/--clean-tags 等单独执行时误跑完整流水线
-    if [[ ${#RUN_REPO[@]} -eq 0 && ${#RUN_TASKS[@]} -eq 0 && ${#RUN_STAGES[@]} -eq 0 ]]; then
-        RUN_STAGES=(stage_code_quality stage_code_style stage_unit_test stage_build stage_deploy stage_functional_test stage_security_zap stage_security_vulmap)
+    if ! $requested; then
+        RUN+=(stage_code_quality stage_code_style stage_unit_test stage_build stage_deploy stage_functional_test stage_security_zap stage_security_vulmap)
     fi
 
-    ## Gitea Actions: 仓库代码由 runner 注入，无论是否显式传参都要做仓库准备，
-    ## 故独立于自动模式之外无条件加入 RUN_REPO
-    if [[ "${GITEA_ACTIONS:-false}" == true ]]; then
-        RUN_REPO+=(setup_git_repo)
-    fi
+    RUN+=(handle_notify)
 }
 
 ################################################################################
@@ -428,15 +527,11 @@ main() {
     mkdir -p "$(dirname "$G_LOG")"
 
     ## ========================================================================
-    ## 执行数组初始化
-    ## 由 parse_command_args 按 CLI 请求填充函数名，main 在对应循环点执行数组值:
-    ##   RUN_REPO:   仓库准备函数，循环点1（config_deploy_vars 之前，因后者读仓库分支）
-    ##   RUN_TASKS:  独立功能函数，循环点2（config_build_env 之后，kube/cert 依赖已就绪）
-    ##   RUN_STAGES: 各个阶段函数，循环点3（阶段区）
-    ##   RUN_DEPLOY: 部署方式 key，供 stage_deploy 按优先级选型（非循环）
-    ## 三个执行数组全空时自动模式填充全部阶段，见 parse_command_args
+    ## 执行计划初始化
+    ## RUN:       由 parse_command_args 组装，位置即依赖顺序（docs/execution-plan.md）
+    ## RUN_DEPLOY: 部署方式 key，供 stage_deploy 按优先级选型（非循环）
     ## ========================================================================
-    declare -a RUN_REPO=() RUN_TASKS=() RUN_STAGES=() RUN_DEPLOY=()
+    declare -a RUN=() RUN_DEPLOY=()
 
     ## ========================================================================
     ## 命令行参数解析
@@ -474,115 +569,11 @@ main() {
     _msg anchor "$(_t '▸ 开始' '▸ BEGIN') ${G_NAME}"
 
     ## ========================================================================
-    ## 配置文件初始化 + 加载环境变量
-    ## 复制示例配置文件到 data 目录（如不存在）、添加二进制目录到 PATH、
-    ## source deploy.env 加载 ENV_* 变量，均在 config_deploy_init 内完成
+    ## 执行执行计划: RUN 单数组，位置即依赖顺序
+    ## 数组由 parse_command_args 组装（docs/execution-plan.md），包含必备步骤、
+    ## 条件可选函数、阶段与 handle_notify；此处只做顺序执行
     ## ========================================================================
-    config_deploy_init
-
-    ## ========================================================================
-    ## 系统环境检查
-    ## 检测操作系统版本、类型，安装必要的命令和软件
-    ## ========================================================================
-    system_check
-
-    ## ========================================================================
-    ## 独立功能: 仓库准备（RUN_REPO 循环点1）
-    ## 位置: 必须在 config_deploy_vars 之前——后者经 get_git_branch 读取仓库分支，
-    ##       setup_git_branch 切换的是 G_REPO_DIR（repo.sh:408）内的分支
-    ## ========================================================================
-    for fn in "${RUN_REPO[@]}"; do "$fn"; done
-
-    ## ========================================================================
-    ## 配置部署变量
-    ## 设置仓库信息、分支映射、命名空间、镜像标签等全局变量
-    ## ========================================================================
-    config_deploy_vars
-
-    ## ========================================================================
-    ## 查找项目专用配置文件
-    ## 仅使用项目专用配置，解决大量项目时的性能和维护问题:
-    ##   项目专用配置: data/conf/namespace/project-name.json
-    ## 优势: 避免单文件过大、减少版本冲突、更好的权限控制
-    ## 注意: 如果配置文件不存在，会自动从模板创建，不修改则执行自动部署，修改后执行定义部署
-    ## ========================================================================
-    find_project_config
-
-    ## ========================================================================
-    ## 中国地区特殊配置
-    ## 如果处于中国区环境，启用 deploy.env 中的代理设置
-    ## ========================================================================
-    system_proxy
-
-    ## ========================================================================
-    ## Kubernetes配置初始化
-    ## 初始化kubectl连接配置（KUBECTL_OPT/HELM_OPT）
-    ## 注意: kube_create_* 独立功能依赖此处设置的 KUBECTL_OPT，位置不可后移
-    ## ========================================================================
-    kube_config_init
-
-    ## ========================================================================
-    ## 磁盘空间清理
-    ## 如果磁盘空间不足，自动清理临时文件、旧镜像等
-    ## ========================================================================
-    system_clean_disk
-
-    ## ========================================================================
-    ## 系统工具安装
-    ## 根据项目需求安装所需的系统工具和依赖
-    ## ========================================================================
-    system_install_tools
-
-    ## ========================================================================
-    ## 部署环境配置
-    ## 设置SSH配置、acme.sh、AWS、Kubernetes、阿里云、python-gitlab、
-    ## Cloudflare、rsync等工具的配置文件
-    ## dry-run 由 config_deploy_setup 内部短路并提示，这里仅需一次调用
-    ## ========================================================================
-    config_deploy_setup
-
-    ## ========================================================================
-    ## 构建环境配置
-    ## 根据项目语言配置Docker/Podman构建参数（G_DOCK/G_RUN）
-    ## ========================================================================
-    config_build_env
-
-    ## ========================================================================
-    ## 独立功能（RUN_TASKS 循环点2）
-    ## 位置约束（按函数真实依赖）:
-    ##   - kube_create_*:      依赖 kube_config_init 设置的 KUBECTL_OPT
-    ##   - system_cert_renew:  依赖 config_deploy_setup 可能创建的 $HOME/.acme.sh 链接
-    ##   - build_base_image:   依赖 config_build_env 设置的 G_DOCK
-    ##   - 仍在 repo_inject_file 之前，保持 generate_lang_dockerfile / buildpacks 先于配置注入
-    ## ========================================================================
-    for fn in "${RUN_TASKS[@]}"; do "$fn"; done
-
-    ## ========================================================================
-    ## 配置文件注入
-    ## 预处理项目配置文件，根据环境注入或覆盖配置
-    ## 例如: 根据环境替换数据库连接字符串、API端点等
-    ## arg_disable_inject: 如果为true，则跳过文件注入
-    ## ========================================================================
-    repo_inject_file
-
-    ## ========================================================================
-    ## 任务执行阶段（RUN_STAGES 循环点3）
-    ##
-    ## 每个阶段函数自打印阶段横幅（_msg stage，序号自动递增）。
-    ## 执行顺序即 RUN_STAGES 数组顺序:
-    ##   1. 代码质量检查 (stage_code_quality, stage_code_style)
-    ##   2. 单元测试 (stage_unit_test)
-    ##   3. 构建 (stage_build)
-    ##   4. 部署 (stage_deploy)
-    ##   5. 功能测试 (stage_functional_test)
-    ##   6. 安全扫描 (stage_security_zap, stage_security_vulmap)
-    ## ========================================================================
-    for fn in "${RUN_STAGES[@]}"; do "$fn"; done
-
-    ## ========================================================================
-    ## 通知阶段: 发送部署结果通知（邮件、钉钉、企业微信、Slack等）
-    ## ========================================================================
-    handle_notify
+    for fn in "${RUN[@]}"; do "$fn"; done
 
     ## 记录脚本执行结束时间（耗时显示在行尾）
     _msg anchor "$(_t '✓ 完成' '✓ completed') ${G_NAME} · $(_t '全部任务完成' 'all tasks done') · $(_fmt_dur "$SECONDS")"

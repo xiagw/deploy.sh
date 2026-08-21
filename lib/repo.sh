@@ -315,7 +315,7 @@ detect_repo_language_docker() {
 # GITHUB_WORKSPACE=/home/ops/.cache/act/1298bce48350a805/hostexecutor
 # Git related functions
 setup_git_repo() {
-    ## RUN_REPO 成员（-g/--git-clone 或 GITEA_ACTIONS 触发，parse 加入数组）
+    ## RUN 单数组成员（-g/--git-clone 或 GITEA_ACTIONS 触发，parse 组装）
     ## 守卫: Gitea Actions 下无论是否传参都执行；-g 时 git_repo_url 由 parse 必填校验
     local is_gitea="${GITEA_ACTIONS:-false}" git_repo_url="${arg_git_clone_url:-}" git_repo_branch="${arg_git_clone_branch:-main}"
     $is_gitea || [ -n "$git_repo_url" ] || return 0
@@ -405,7 +405,7 @@ setup_git_repo() {
 # @param $1 branch name
 # @param $2 workspace dir
 setup_git_branch() {
-    ## RUN_REPO 成员（-b/--git-branch 触发，parse 加入数组）
+    ## RUN 单数组成员（-b/--git-branch 触发，parse 组装）
     ## 守卫: 仅 -w/-b（非克隆场景）时切换分支；-g 克隆时分支由 setup_git_repo 处理，此处跳过
     local git_repo_branch="${arg_git_clone_branch:-}" git_repo_dir="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
     [ -n "$git_repo_branch" ] && [ -z "${arg_git_clone_url:-}" ] || return 0
@@ -481,7 +481,7 @@ get_git_last_commit_message() {
 
 # SVN related functions
 setup_svn_repo() {
-    ## RUN_REPO 成员（-s/--svn-checkout 触发，parse 加入数组）
+    ## RUN 单数组成员（-s/--svn-checkout 触发，parse 组装）
     ## 守卫: svn_repo_url 由 parse 必填校验，此处防御
     local svn_repo_url="${arg_svn_checkout_url:-}"
     [ -n "$svn_repo_url" ] || return 0

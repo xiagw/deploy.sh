@@ -895,7 +895,7 @@ stage_deploy() {
 # @param $1 source_image Source image name (e.g., nginx:latest)
 # @param $2 target_registry Target registry (e.g., registry.example.com)
 copy_docker_image() {
-    ## RUN_TASKS 成员（-c/--copy-image 触发，parse 加入数组并必填校验 arg_src）
+    ## RUN 单数组成员（-c/--copy-image 触发，parse 组装并必填校验 arg_src）
     ## 守卫: 防御性校验 arg_src（parse 的 ${2:?} 已保证非空）
     [[ -n "${arg_src:-}" ]] || return 0
     local source_image="${arg_src}" target_registry image_name tag target base_name
@@ -979,7 +979,7 @@ copy_docker_image() {
 # Example usage / 使用示例:
 # clean_old_tags "registry.example.com/myapp"
 clean_old_tags() {
-    ## RUN_TASKS 成员（--clean-tags 触发，parse 加入数组并必填校验 arg_clean_tags）
+    ## RUN 单数组成员（--clean-tags 触发，parse 组装并必填校验 arg_clean_tags）
     ## 守卫: 防御性校验 arg_clean_tags（parse 的 ${2:?} 已保证非空）
     [[ -n "${arg_clean_tags:-}" ]] || return 0
     # Required parameter validation / 必需参数验证

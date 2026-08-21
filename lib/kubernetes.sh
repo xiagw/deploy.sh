@@ -153,7 +153,7 @@ EOF
 # Setup Kubernetes cluster using Terraform
 # This function is independent and non-blocking for the main process
 kube_setup_terraform() {
-  ## RUN_TASKS 成员（-K/--create-k8s 触发，parse 加入数组），无守卫直接执行
+  ## RUN 单数组成员（-K/--create-k8s 触发，parse 组装），无守卫直接执行
   local terraform_dir="${G_DATA}/terraform"
   [[ -d "$terraform_dir" ]] || exit 0
   if ${G_DRY_RUN:-false}; then
@@ -178,7 +178,7 @@ kube_setup_terraform() {
 # Create CNFS storage class and related resources
 # @param $1 namespace The namespace to create resources in
 kube_create_storage_class() {
-  ## RUN_TASKS 成员（--create-storage-class 触发，parse 加入数组），无守卫直接执行
+  ## RUN 单数组成员（--create-storage-class 触发，parse 组装），无守卫直接执行
   local cnfs_name="cnfs01"
   local sc_name="alicloud-cnfs-nas"
   local namespace="${G_NAMESPACE}"
@@ -233,7 +233,7 @@ EOF
 # @param $1 namespace The namespace to create resources in
 # @param $2 subpath The NAS subpath to use (optional)
 kube_create_pv_pvc() {
-  ## RUN_TASKS 成员（-P/--kube-pvc 触发，parse 加入数组并必填校验 arg_sub_path）
+  ## RUN 单数组成员（-P/--kube-pvc 触发，parse 组装并必填校验 arg_sub_path）
   ## 守卫: 依赖 kube_config_init 设置的 KUBECTL_OPT；防御性校验 arg_sub_path
   [[ -n "${arg_sub_path:-}" ]] || return 0
   local subpath="${arg_sub_path}" namespace="${arg_pvc_namespace:-${G_NAMESPACE:-default}}" pvc_name cnfs_name
@@ -436,7 +436,7 @@ EOF
 # Build selected base images
 # @param $@ Optional specific image tags to build
 build_base_image_select() {
-  ## RUN_TASKS 成员（-x/--build-base 触发，parse 加入数组），无守卫直接执行
+  ## RUN 单数组成员（-x/--build-base 触发，parse 组装），无守卫直接执行
   local all_tags=() tags=()
 
   dry_run_note "select base image tags"

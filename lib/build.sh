@@ -806,7 +806,7 @@ EOF
 
 # Language specific layers
 generate_lang_dockerfile() {
-    ## RUN_TASKS 成员（--gen-dockerfile 触发，parse 加入数组），无守卫直接执行
+    ## RUN 单数组成员（--gen-dockerfile 触发，parse 组装），无守卫直接执行
     local lang dockerfile
     lang="$(detect_repo_language | cut -d: -f1)"
     dockerfile="Dockerfile.${lang}"
@@ -834,7 +834,7 @@ EOF
 }
 
 detect_repo_language_and_build() {
-    ## RUN_TASKS 成员（--build-buildpacks 触发，parse 加入数组），无守卫直接执行
+    ## RUN 单数组成员（--build-buildpacks 触发，parse 组装），无守卫直接执行
     local target_dir="${G_REPO_DIR:-.}"
     local lang_type builder
 

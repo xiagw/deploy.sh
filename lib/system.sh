@@ -212,9 +212,9 @@ system_proxy() {
 # Internal function to renew SSL certificates
 # This function handles the actual certificate renewal process
 system_cert_renew() {
-    ## RUN_TASKS 成员（-r/--renew-cert 触发，parse 加入数组），无守卫直接执行
+    ## RUN 单数组成员（-r/--renew-cert 触发，parse 组装），无守卫直接执行
     # 读取 ${HOME}/.acme.sh/account.conf.*.dns_* 账号文件；由 config_deploy_setup 在
-    # G_DATA/.acme.sh 存在时链接 $HOME/.acme.sh，故 RUN_TASKS 循环点须在其之后
+    # G_DATA/.acme.sh 存在时链接 $HOME/.acme.sh，故 RUN 中须排在其之后
     if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
         exit 0
     fi
