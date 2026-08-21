@@ -468,7 +468,7 @@ cdn_pay() {
         echo -e "[$(date +'%F %T')] [DRY-RUN] 仅展示，未下单。确认无误后去掉 --dry-run 再执行。"
         return 0
     fi
-
+    ## 跑在 crontab 里，不能阻止自动化
     # if ! confirm_action "确认购买 CDN 资源包（1TB / 1 个月，约 ${package_unit_price} 元）？"; then
     #     return 1
     # fi
