@@ -114,16 +114,6 @@ dry_run_note() {
     _msg note "[dry-run] $*"
 }
 
-# dry-run 下仅打印命令预览并返回 0；否则执行命令并返回其退出码。
-# 参数: 命令及参数（不含管道/重定向，复杂命令请用 dry_run_note + if 结构）
-dry_run_or() {
-    if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] $*"
-        return 0
-    fi
-    "$@"
-}
-
 # Output language: zh|en. Priority: CLI --lang (_msg_lang_val) > ENV_LANG (deploy.env) > zh
 # _msg_lang_val 由 deploy.sh parse_command_args 直接赋值（模块加载晚于参数解析，勿在此初始化）
 _msg_lang() {

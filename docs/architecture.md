@@ -74,7 +74,7 @@ deploy.sh/
 
 - **日志/消息**：`_log`（级别+颜色+时间戳，写文件/终端）、`_msg`（统一消息分发，9 种类型）、`_t`/`_msg_lang`（中英 i18n）。
 - **时间工具**：`_fmt_dur`（秒→`0h01m05s`）、`_now_ms`（毫秒，三级回退：`EPOCHREALTIME`→`date +%s%3N`→`SECONDS*1000`）。
-- **dry-run**：`dry_run_note` / `dry_run_or`（`G_DRY_RUN` 环境下预览命令不执行）。
+- **dry-run**：`dry_run_note`（`G_DRY_RUN` 环境下预览命令不执行）。
 - **环境检查**：`_check_commands`、`_check_disk_space`、`_check_root`（+探测包管理器）、`_check_distribution`、`_check_cmd`、`_set_package_manager`、`_install_packages`、`_check_timezone`。
 - **交互/网络**：`_get_yes_no`、`_get_random_password`（5 级随机源降级）、`_get_current_ip`（macOS/OpenWrt/Linux 分支）。
 - **工具安装器**（幂等，已装跳过）：jmeter、wg、ossutil、aliyun cli、flarectl、kubectl、shellcheck、shfmt、helm、tencent cli、pipx、terraform、aws、python-gitlab、matrix-nio、docker、podman、k9s。统一套路：幂等跳过 → `_msg ok "Installing X..."` → 下载/安装 → `_msg ok "Showing version"`。
@@ -319,7 +319,7 @@ auto 优先级链：
 
 ### 4.7 dry-run 模式（`--dry`）
 
-- 所有下载/安装/执行类操作改为 `dry_run_note`/`dry_run_or`：打印 `⋯ [dry-run] 命令` 并返回 0，不执行。
+- 所有下载/安装/执行类操作改为 `dry_run_note`：打印 `⋯ [dry-run] 命令` 并返回 0，不执行。
 - `config_deploy_setup` 在 dry-run 下被跳过（不生成 SSH 密钥/符号链接）。
 - dry-run 不触发独立功能（renew/clean/copy）以外的系统变更。
 

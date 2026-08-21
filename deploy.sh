@@ -574,7 +574,7 @@ main() {
     for fn in "${RUN[@]}"; do "$fn"; done
 
     ## 记录脚本执行结束时间（耗时显示在行尾）
-    _msg anchor "$(_t '✓ 完成' '✓ completed') ${G_NAME} · $(_t '全部任务完成' 'all tasks done') · $(_fmt_dur "$SECONDS")"
+    _msg anchor "$(_t '✓ 完成' '✓ completed') ${G_NAME} · $(_fmt_dur "$SECONDS")"
 
     ## 返回部署结果状态码
     ## Exit codes:

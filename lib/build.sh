@@ -737,13 +737,14 @@ build_shell() {
 
 docker_login() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
-    local lock_login_registry="$G_DATA/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-aliyun}.lock"
+    local lock_login_registry="$G_DATA/cache/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-aliyun}.lock"
     local time_last
 
     if ${G_DRY_RUN:-false}; then
         dry_run_note "docker login ${ENV_DOCKER_REGISTRY%%/*} (${ENV_DOCKER_LOGIN_TYPE:-aliyun})"
         return 0
     fi
+    mkdir -p "${G_DATA}/cache"
 
     case "${ENV_DOCKER_LOGIN_TYPE:-aliyun}" in
     aws)
