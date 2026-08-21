@@ -171,7 +171,7 @@ EOF
 
 # Run PMD code analysis
 analysis_pmd() {
-    _msg task "Running PMD code analysis"
+    _msg task "Running PMD code analysis (java)"
     [[ "${PIPELINE_PMD:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_PMD=false)"
     if ! ${PIPELINE_PMD:-false}; then
         return 0
@@ -321,7 +321,7 @@ EOF
 
 # Run Spotbugs analysis for Java code
 analysis_spotbugs() {
-    _msg task "Running Spotbugs analysis"
+    _msg task "Running Spotbugs analysis (java)"
     [[ "${PIPELINE_SPOTBUGS:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SPOTBUGS=false)"
     if ! ${PIPELINE_SPOTBUGS:-false}; then
         return 0
@@ -380,7 +380,7 @@ EOF
 
 # Run Pylint analysis for Python code
 analysis_pylint() {
-    _msg task "Running Pylint analysis"
+    _msg task "Running Pylint analysis (python)"
     [[ "${PIPELINE_PYLINT:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_PYLINT=false)"
     if ! ${PIPELINE_PYLINT:-false}; then
         return 0
@@ -427,7 +427,7 @@ analysis_pylint() {
 
 # Run Checkstyle analysis for Java code
 analysis_checkstyle() {
-    _msg task "Running Checkstyle analysis"
+    _msg task "Running Checkstyle analysis (java)"
     [[ "${PIPELINE_CHECKSTYLE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CHECKSTYLE=false)"
     if ! ${PIPELINE_CHECKSTYLE:-false}; then
         return 0
