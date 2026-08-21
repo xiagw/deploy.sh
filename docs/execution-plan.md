@@ -28,7 +28,7 @@ v3 要点：
 
 ## 2. 必备步骤链（顺序固定）
 
-以下步骤无条件进入 RUN，且相对顺序不可打乱：
+以下步骤无条件进入 RUN，且相对顺序不可打乱（find_project_config 除外，见下）：
 
 ```
 config_deploy_init  →  G_DATA/G_ENV、source deploy.env 加载 ENV_*、扩展 PATH
@@ -37,6 +37,7 @@ config_deploy_vars  →  G_REPO_* / G_NAMESPACE / G_IMAGE_TAG / G_IMAGE_NAME
                         （读 G_REPO_DIR 的 git 分支与 commit）
 find_project_config →  G_CONF + PROJECT_BUILD_METHOD / PROJECT_DEPLOY_METHOD
                         （读 G_REPO_GROUP_PATH，生成/加载 data/conf/.../project.json）
+                        ※ 条件步骤: 仅当计划含 stage_build / stage_deploy（含自动模式）时进入
 system_proxy        →  按 ENV_HTTP_PROXY/ENV_SOCK_PROXY 设置代理环境变量（中国区）
 kube_config_init    →  KUBECTL_OPT / HELM_OPT（读 G_NAMESPACE，找 kubeconfig）
 system_clean_disk   →  磁盘空间不足时清理
@@ -50,7 +51,10 @@ repo_inject_file    →  注入 conf/root、生成 Dockerfile.base/Dockerfile �
 
 - `config_deploy_vars` 必须在仓库准备（setup_git_branch）之后：`get_git_branch` 优先读 CI 变量，
   本地场景回退到 `git rev-parse`（repo.sh:447），分支切换必须先于该读取。
-- `find_project_config` 必须在 `config_deploy_vars` 之后：读 `G_REPO_GROUP_PATH`。
+- `find_project_config`（若进入）必须在 `config_deploy_vars` 之后：读 `G_REPO_GROUP_PATH`。
+  仅在计划含 stage_build（读 PROJECT_BUILD_METHOD，build.sh:382）或 stage_deploy
+  （读 G_CONF hosts / PROJECT_DEPLOY_METHOD，deployment.sh:702/791）时进入；独立功能
+  （-x/--clean-tags/-r 等）与测试跳过，避免无关配置阻断或产生模板残留告警。
 - `kube_config_init` 必须在 `config_deploy_vars` 之后：读 `G_NAMESPACE`。
 - `config_build_env` 计算 `IS_CHINA`，此前必须保持 unset：
   `_install_packages → _set_mirror`（common.sh:962）读 `IS_CHINA` 决定是否改写 apt 源。
@@ -126,10 +130,12 @@ parse_command_args "$@"     # while 解析参数 → 设 arg_* 布尔/参数 + R
 
 ### 5.2 自动模式
 
-组装过程维护 `requested` 布尔：任何用户触发的可选/阶段条目加入时置 true。
-组装结束若 `requested` 仍为 false（如 `-w` 等修饰参数、或完全无参数），则追加全部 8 个阶段。
+组装开始时预计算 `auto_mode`：对全部 `arg_*` 触发条件与 `RUN_DEPLOY` 做一次判定，
+用户未请求任何功能（如仅 `-w` 等修饰参数、或完全无参数）时 `auto_mode=true`。
+组装结束若 `auto_mode` 为 true，追加全部 8 个阶段；`find_project_config` 的进入条件
+也依赖它（auto 模式含 stage_build/stage_deploy，需要项目配置）。
 
-- Gitea Actions 的 `setup_git_repo` 属环境驱动，**不计入** `requested`，避免抑制自动模式。
+- Gitea Actions 的 `setup_git_repo` 属环境驱动，**不计入**用户请求，不会抑制自动模式。
 - 独立功能（`-r`/`-K`/`--clean-tags` 等）单独执行时不触发自动模式。
 
 ### 5.3 main 流程
@@ -163,7 +169,7 @@ setup_git_branch              # arg_git_clone_branch 且无 arg_git_clone_url
 config_deploy_vars
 generate_lang_dockerfile      # arg_gen_dockerfile
 detect_repo_language_and_build# arg_build_buildpacks（须在 repo_inject_file 前）
-find_project_config
+find_project_config           # 条件: arg_build 或 RUN_DEPLOY 非空 或 auto_mode
 system_proxy
 copy_docker_image             # arg_src（中国区需代理）
 kube_config_init
@@ -187,7 +193,7 @@ stage_security_vulmap         # arg_security_vulmap
 handle_notify                 # 恒执行（末尾）
 ```
 
-自动模式（requested=false）时 `stage_code_quality .. stage_security_vulmap` 全部加入。
+自动模式（auto_mode=true）时 `stage_code_quality .. stage_security_vulmap` 全部加入。
 
 ---
 
@@ -203,3 +209,7 @@ handle_notify                 # 恒执行（末尾）
 5. **copy_docker_image 必须晚于 system_proxy**：中国区 skopeo 拉取需代理。
 6. **system_cert_renew 必须晚于 config_deploy_setup**：账号文件位于 `$HOME/.acme.sh`，
    config_deploy_setup 仅在 `G_DATA/.acme.sh` 存在时建链接（config.sh:254），软依赖。
+7. **find_project_config 为条件步骤**：仅计划含 stage_build / stage_deploy（含自动模式）时进入；
+   独立功能与测试跳过，避免无关配置阻断或产生模板残留告警。
+   `stage_build` 读 `PROJECT_BUILD_METHOD`（build.sh:382），`stage_deploy` 读
+   `G_CONF` hosts / `PROJECT_DEPLOY_METHOD`（deployment.sh:702/791），故这两条路径必须加载。

@@ -270,12 +270,24 @@ parse_command_args() {
 
     ## ========================================================================
     ## 组装执行计划: RUN 单数组，位置即依赖顺序（依赖依据见 docs/execution-plan.md）
-    ## 必备步骤无条件加入；可选函数按触发条件加入；requested 标记用户是否请求功能，
-    ## 组装结束仍为 false 时追加全部阶段（自动模式）。
-    ## Gitea Actions 的 setup_git_repo 属环境驱动，不计入 requested。
+    ## 必备步骤无条件加入；可选函数按触发条件加入。
+    ## auto_mode: 用户未请求任何功能（仅修饰参数如 -w/-d/-L）时为 true，追加全部阶段；
+    ##            Gitea 的 setup_git_repo 属环境驱动，不计入用户请求。
     ## ========================================================================
     RUN=()
-    local requested=false
+    local auto_mode=true
+    if [[ -n "${arg_git_clone_url:-}" || -n "${arg_svn_checkout_url:-}" || -n "${arg_git_clone_branch:-}" ]] ||
+        [[ -n "${arg_clean_tags:-}" || "${arg_create_k8s:-false}" == true ]] ||
+        [[ "${arg_gen_dockerfile:-false}" == true || "${arg_build_buildpacks:-false}" == true ]] ||
+        [[ -n "${arg_src:-}" ]] ||
+        [[ "${arg_create_storage_class:-false}" == true || -n "${arg_sub_path:-}" ]] ||
+        [[ "${arg_renew_cert:-false}" == true || "${arg_build_base:-false}" == true ]] ||
+        [[ "${arg_build:-false}" == true || "${arg_test_unit:-false}" == true || "${arg_test_func:-false}" == true ]] ||
+        [[ "${arg_code_style:-false}" == true || "${arg_code_quality:-false}" == true ]] ||
+        [[ "${arg_security_zap:-false}" == true || "${arg_security_vulmap:-false}" == true ]] ||
+        [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
+        auto_mode=false
+    fi
 
     ## 必备步骤
     RUN+=(config_deploy_init)
@@ -284,27 +296,22 @@ parse_command_args() {
     ## 真独立功能: 仅依赖 ENV_*/G_DATA，最早执行，避免被无关 setup 阻断
     if [[ -n "${arg_clean_tags:-}" ]]; then
         RUN+=(clean_old_tags)
-        requested=true
     fi
     if [[ "${arg_create_k8s:-false}" == true ]]; then
         RUN+=(kube_setup_terraform)
-        requested=true
     fi
 
     ## 仓库准备: 必须早于 config_deploy_vars（后者读仓库分支，repo.sh:447）
     if [[ -n "${arg_git_clone_url:-}" ]]; then
         RUN+=(setup_git_repo)
-        requested=true
     elif [[ "${GITEA_ACTIONS:-false}" == true ]]; then
         RUN+=(setup_git_repo)
     fi
     if [[ -n "${arg_svn_checkout_url:-}" ]]; then
         RUN+=(setup_svn_repo)
-        requested=true
     fi
     if [[ -n "${arg_git_clone_branch:-}" && -z "${arg_git_clone_url:-}" ]]; then
         RUN+=(setup_git_branch)
-        requested=true
     fi
 
     RUN+=(config_deploy_vars)
@@ -312,21 +319,24 @@ parse_command_args() {
     ## 依赖 config_deploy_vars 的 G_REPO_* / G_IMAGE_*
     if [[ "${arg_gen_dockerfile:-false}" == true ]]; then
         RUN+=(generate_lang_dockerfile)
-        requested=true
     fi
     ## 须早于 repo_inject_file，避免注入内容被构建进镜像
     if [[ "${arg_build_buildpacks:-false}" == true ]]; then
         RUN+=(detect_repo_language_and_build)
-        requested=true
     fi
 
-    RUN+=(find_project_config)
+    ## 项目专用配置: 仅当计划含 stage_build（读 PROJECT_BUILD_METHOD，build.sh:382）或
+    ## stage_deploy（读 G_CONF hosts / PROJECT_DEPLOY_METHOD，deployment.sh:702/791）时加载；
+    ## 独立功能（-x/--clean-tags/-r 等）与测试跳过，避免无关配置阻断或产生模板残留告警
+    if [[ "${arg_build:-false}" == true || ${#RUN_DEPLOY[@]} -gt 0 || "$auto_mode" == true ]]; then
+        RUN+=(find_project_config)
+    fi
+
     RUN+=(system_proxy)
 
     ## 中国区 skopeo 拉取需 system_proxy 代理
     if [[ -n "${arg_src:-}" ]]; then
         RUN+=(copy_docker_image)
-        requested=true
     fi
 
     RUN+=(kube_config_init)
@@ -334,11 +344,9 @@ parse_command_args() {
     ## 依赖 kube_config_init 设置的 KUBECTL_OPT（kubernetes.sh:37-42）
     if [[ "${arg_create_storage_class:-false}" == true ]]; then
         RUN+=(kube_create_storage_class)
-        requested=true
     fi
     if [[ -n "${arg_sub_path:-}" ]]; then
         RUN+=(kube_create_pv_pvc)
-        requested=true
     fi
 
     RUN+=(system_clean_disk)
@@ -348,7 +356,6 @@ parse_command_args() {
     ## 依赖 config_deploy_setup 可能创建的 $HOME/.acme.sh 链接（config.sh:254）
     if [[ "${arg_renew_cert:-false}" == true ]]; then
         RUN+=(system_cert_renew)
-        requested=true
     fi
 
     RUN+=(config_build_env)
@@ -356,7 +363,6 @@ parse_command_args() {
     ## 依赖 config_build_env 设置的 IS_CHINA（kubernetes.sh:398）
     if [[ "${arg_build_base:-false}" == true ]]; then
         RUN+=(build_base_image_select)
-        requested=true
     fi
 
     RUN+=(repo_inject_file)
@@ -364,41 +370,33 @@ parse_command_args() {
     ## 阶段（顺序即执行顺序）
     if [[ "${arg_code_quality:-false}" == true ]]; then
         RUN+=(stage_code_quality)
-        requested=true
     fi
     if [[ "${arg_code_style:-false}" == true ]]; then
         RUN+=(stage_code_style)
-        requested=true
     fi
     if [[ "${arg_test_unit:-false}" == true ]]; then
         RUN+=(stage_unit_test)
-        requested=true
     fi
     if [[ "${arg_build:-false}" == true ]]; then
         RUN+=(stage_build)
-        requested=true
     fi
     ## 多个部署方式由 stage_deploy 内部按优先级取一
     if [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
         RUN+=(stage_deploy)
-        requested=true
     fi
     if [[ "${arg_test_func:-false}" == true ]]; then
         RUN+=(stage_functional_test)
-        requested=true
     fi
     if [[ "${arg_security_zap:-false}" == true ]]; then
         RUN+=(stage_security_zap)
-        requested=true
     fi
     if [[ "${arg_security_vulmap:-false}" == true ]]; then
         RUN+=(stage_security_vulmap)
-        requested=true
     fi
 
     ## 自动模式: 未请求任何功能 → 追加全部阶段
     ## 独立功能不进自动模式，避免 -r/-K/--clean-tags 等单独执行时误跑完整流水线
-    if ! $requested; then
+    if $auto_mode; then
         RUN+=(stage_code_quality stage_code_style stage_unit_test stage_build stage_deploy stage_functional_test stage_security_zap stage_security_vulmap)
     fi
 
