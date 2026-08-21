@@ -459,17 +459,19 @@ cdn_pay() {
 
     # 执行购买操作
     log_result "${profile:-}" "${region:-}" "cdn" "pay" "当前剩余: ${remaining_amount:-0}TB，准备购买 $((package_size / package_unit_size))TB 资源包..."
+    ## 显示实际可购买量
     ## 特殊方式，修改为只买1TB时长1月的（1月的单价108¥，6-12月的单价126¥）
-    echo -e "[$(date +'%F %T')] 准备购买 1TB 资源包（1个月，单价 ${package_unit_price} 元）..."
+    local unit_price_1month=108
+    echo -e "[$(date +'%F %T')] 按当前余额最多可购买 $((package_size / package_unit_size))TB，本次购买 1TB 资源包（1个月，单价 ${unit_price_1month} 元）..."
 
     if [ "$dry_run" -eq 1 ]; then
         echo -e "[$(date +'%F %T')] [DRY-RUN] 仅展示，未下单。确认无误后去掉 --dry-run 再执行。"
         return 0
     fi
 
-    if ! confirm_action "确认购买 CDN 资源包（1TB / 1 个月，约 ${package_unit_price} 元）？"; then
-        return 1
-    fi
+    # if ! confirm_action "确认购买 CDN 资源包（1TB / 1 个月，约 ${package_unit_price} 元）？"; then
+    #     return 1
+    # fi
 
     echo "CDN 资源包购买："
 
