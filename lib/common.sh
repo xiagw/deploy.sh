@@ -115,7 +115,7 @@ dry_run_note() {
 }
 
 # Output language: zh|en. Priority: CLI --lang (_msg_lang_val) > ENV_LANG (deploy.env) > zh
-# _msg_lang_val 由 deploy.sh parse_command_args 直接赋值（模块加载晚于参数解析，勿在此初始化）
+# _msg_lang_val 由 deploy.sh parse_args 直接赋值（模块加载晚于参数解析，勿在此初始化）
 _msg_lang() {
     printf '%s' "${_msg_lang_val:-${ENV_LANG:-zh}}"
 }

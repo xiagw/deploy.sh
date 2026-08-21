@@ -64,9 +64,9 @@ deploy.sh/
 
 | 函数 | 行号 | 功能 |
 |---|---|---|
-| `config_deploy_vars` | 29 | 设定仓库信息、分支→命名空间映射、镜像标签等全局变量 |
-| `_usage` | 127 | 打印全部 CLI 参数帮助 |
-| `parse_command_args` | 212 | 解析参数，设置 `arg_flags`（关联数组）与 `deploy_method` |
+| `config_repo_vars` | 29 | 设定仓库信息、分支→命名空间映射、镜像标签等全局变量 |
+| `usage` | 127 | 打印全部 CLI 参数帮助 |
+| `parse_args` | 212 | 解析参数，设置 `arg_flags`（关联数组）与 `deploy_method` |
 | `config_build_env` | 329 | 选择 docker/podman，配置 `G_DOCK`/`G_RUN`/`G_PROGRESS` |
 | `main` | 377 | 主流程编排（见第 3 节） |
 
@@ -210,7 +210,7 @@ main "$@"
 ├─ unset G_* STAGE_* 等       # 清理上次状态
 ├─ 定义 G_NAME/G_PATH/G_LIB/G_DATA/G_ENV/G_LOG
 ├─ 初始化 arg_flags 关联数组（18 个开关全 0）
-├─ parse_command_args "$@"    # 解析参数 → arg_flags / deploy_method / arg_*
+├─ parse_args "$@"    # 解析参数 → arg_flags / deploy_method / arg_*
 ├─ source lib/*.sh（11 模块，固定顺序）   # common config system repo test analysis style build deployment kubernetes notify
 ├─ STAGE_START_MS=$(_now_ms)  # 阶段横幅累计耗时锚点（从脚本开始）
 ├─ _msg anchor BEGIN
@@ -219,7 +219,7 @@ main "$@"
 ├─ （build_base 独立功能 → build_base_image_select 后返回）
 ├─ system_check               # 系统检查（kube_pvc 时静默）
 ├─ setup_git_repo / setup_svn_repo / setup_git_branch  # 按参数克隆/检出/切分支
-├─ config_deploy_vars         # 设置 G_REPO_* / G_NAMESPACE / G_IMAGE_TAG 等（位置勿动）
+├─ config_repo_vars         # 设置 G_REPO_* / G_NAMESPACE / G_IMAGE_TAG 等（位置勿动）
 ├─ （gen_dockerfile / build_buildpacks 独立功能 → 返回）
 ├─ find_project_config        # 定位项目 JSON 配置 → G_CONF
 ├─ IS_CHINA && system_proxy on
@@ -239,7 +239,7 @@ main "$@"
 
 ### 3.2 两种模式与阶段调度
 
-- **auto（无参数）**：`parse_command_args` 检测到所有开关为 0 → 全部置 1。各阶段守卫条件恒真，全流程执行。`deploy_method` 保持空 → 走 `detect_deployment_method` 自动探测。
+- **auto（无参数）**：`parse_args` 检测到所有开关为 0 → 全部置 1。各阶段守卫条件恒真，全流程执行。`deploy_method` 保持空 → 走 `detect_deployment_method` 自动探测。
 - **spec（带参数）**：只跑被置 1 的开关对应阶段；`deploy_method` 由 deploy 参数显式指定（单一方法）。
 
 阶段总数 `STAGE_TOTAL` 已在精简中移除；阶段横幅序号由 `_msg stage` 自动递增（`▶ STAGE N`）。
@@ -258,7 +258,7 @@ main "$@"
 
 ### 3.3 分支→命名空间映射
 
-`config_deploy_vars` 中：`dev→develop`、`test/sit→testing`、`uat→release`、`prod/master→main`、其他→分支名本身。`G_NAMESPACE` 同时用于：镜像注入路径、helm namespace、rsync 目标目录前缀、通知分支禁用等。
+`config_repo_vars` 中：`dev→develop`、`test/sit→testing`、`uat→release`、`prod/master→main`、其他→分支名本身。`G_NAMESPACE` 同时用于：镜像注入路径、helm namespace、rsync 目标目录前缀、通知分支禁用等。
 
 ---
 
@@ -385,7 +385,7 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 这些注释是历史踩坑后的结论，改动前务必先读：
 
-1. **`deploy.sh:566`** config_deploy_vars 位置勿动——后续步骤依赖这些变量。
+1. **`deploy.sh:566`** config_repo_vars 位置勿动——后续步骤依赖这些变量。
 2. **`deploy.sh`** kube_config_init 须在一切 `KUBECTL_OPT`/`HELM_OPT` 用法（含 create_storage_class / kube_pvc / 部署阶段）之前。
 3. **`deploy.sh:591-593`** 只使用项目专用配置（`data/conf/<ns>/<project>.json`），替代单文件：避免单文件过大、减少版本冲突、更好权限控制。
 4. **`deploy.sh:95`** G_IMAGE_TAG 已简化为纯时间戳（旧格式注释保留）。

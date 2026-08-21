@@ -11,7 +11,7 @@
 ################################################################################
 
 ################################################################################
-# 函数: config_deploy_vars
+# 函数: config_repo_vars
 # 描述: 配置部署相关的全局变量，包括仓库信息、分支映射、命名空间等
 # 参数: 无
 # 返回: 无（设置全局变量）
@@ -26,7 +26,7 @@
 #   - G_NAMESPACE: Kubernetes命名空间（根据分支映射）
 #   - G_IMAGE_TAG: Docker镜像标签（时间戳格式）
 ################################################################################
-config_deploy_vars() {
+config_repo_vars() {
     ## 设置仓库目录路径
     ## 优先级: -w/--workspace (用户指定) > CI_PROJECT_DIR (GitLab CI) > PWD (当前工作目录)
     G_REPO_DIR="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
@@ -118,12 +118,12 @@ config_deploy_vars() {
 }
 
 ################################################################################
-# 函数: _usage
+# 函数: usage
 # 描述: 显示脚本使用帮助信息
 # 参数: 无
 # 返回: 无（输出到标准输出）
 ################################################################################
-_usage() {
+usage() {
     cat <<EOF
 Usage: $0 [parameters ...]
 
@@ -193,7 +193,7 @@ EOF
 }
 
 ################################################################################
-# 函数: parse_command_args
+# 函数: parse_args
 # 描述: 解析命令行参数并组装执行计划 RUN（位置即依赖顺序）
 # 参数: "$@" - 所有命令行参数
 # 返回: 无（填充 RUN/RUN_DEPLOY 及相关 arg_* 变量）
@@ -205,11 +205,11 @@ EOF
 #   - arg_*: 各种命令行参数的值（布尔触发或参数）
 # 说明: 组装规则与依赖依据见函数尾部注释及 docs/execution-plan.md
 ################################################################################
-parse_command_args() {
+parse_args() {
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
         # Basic options
-        -h | --help) _usage && exit 0 ;;
+        -h | --help) usage && exit 0 ;;
         -v | --version) echo "Version: 5.0.0" && exit 0 ;;
         -d | --debug) G_DEBUG_ON=true && set -x && echo "Debug mode enabled" ;;
         -l | --cron | --loop) arg_cron=true ;;
@@ -273,7 +273,7 @@ parse_command_args() {
         -D | --disable-inject) arg_disable_inject=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
         --clean-tags) arg_clean_tags="${2:?ERROR: repository parameter is required}" && shift ;;
-        *) _usage && exit 1 ;;
+        *) usage && exit 1 ;;
         esac
         shift
     done
@@ -313,7 +313,7 @@ parse_command_args() {
         RUN+=(kube_setup_terraform)
     fi
 
-    ## 仓库准备: 必须早于 config_deploy_vars（后者读仓库分支，repo.sh:447）
+    ## 仓库准备: 必须早于 config_repo_vars（后者读仓库分支，repo.sh:447）
     if [[ -n "${arg_git_clone_url:-}" ]]; then
         RUN+=(setup_git_repo)
     elif [[ "${GITEA_ACTIONS:-false}" == true ]]; then
@@ -326,9 +326,9 @@ parse_command_args() {
         RUN+=(setup_git_branch)
     fi
 
-    RUN+=(config_deploy_vars)
+    RUN+=(config_repo_vars)
 
-    ## 依赖 config_deploy_vars 的 G_REPO_* / G_IMAGE_*
+    ## 依赖 config_repo_vars 的 G_REPO_* / G_IMAGE_*
     if [[ "${arg_gen_dockerfile:-false}" == true ]]; then
         RUN+=(generate_lang_dockerfile)
     fi
@@ -556,7 +556,7 @@ main() {
 
     ## ========================================================================
     ## 执行计划初始化
-    ## RUN:       由 parse_command_args 组装，位置即依赖顺序（docs/execution-plan.md）
+    ## RUN:       由 parse_args 组装，位置即依赖顺序（docs/execution-plan.md）
     ## RUN_DEPLOY: 部署方式 key，供 stage_deploy 按优先级选型（非循环）
     ## ========================================================================
     declare -a RUN=() RUN_DEPLOY=()
@@ -564,7 +564,7 @@ main() {
     ## ========================================================================
     ## 命令行参数解析
     ## ========================================================================
-    parse_command_args "$@"
+    parse_args "$@"
 
     ## ========================================================================
     ## 加载功能模块
@@ -598,7 +598,7 @@ main() {
 
     ## ========================================================================
     ## 执行执行计划: RUN 单数组，位置即依赖顺序
-    ## 数组由 parse_command_args 组装（docs/execution-plan.md），包含必备步骤、
+    ## 数组由 parse_args 组装（docs/execution-plan.md），包含必备步骤、
     ## 条件可选函数、阶段与 handle_notify；此处只做顺序执行
     ## ========================================================================
     for fn in "${RUN[@]}"; do "$fn"; done

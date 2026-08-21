@@ -125,7 +125,7 @@ check_project_config_template() {
 # 说明:
 #   - 初始化环境变量配置文件（deploy.env）
 #   - 注意: 此函数在项目路径确定之前调用
-#   - 项目专用配置会在 config_deploy_vars 之后通过 find_project_config 查找并设置 G_CONF
+#   - 项目专用配置会在 config_repo_vars 之后通过 find_project_config 查找并设置 G_CONF
 ################################################################################
 config_deploy_init() {
     ## 初始化环境变量配置文件
