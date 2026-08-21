@@ -30,11 +30,10 @@ from traditional server deployments to modern container orchestration.
 # Features
 - **Code style**: phpcs, phpcbf, java code style, jslint, shfmt, hadolint...
 - **Code quality**: sonarqube scan, OWASP, ZAP, vulmap...
-- **Testing Suite**: Comprehensive testing support including unit tests, functional tests, and performance testing
+- **Testing Suite**: Unit tests, functional tests, and performance tests (project scripts + language test frameworks like phpunit / mvn test / pytest / go test, JMeter for `*.jmx` plans)
 - **Build**: npm build, composer install, maven build, gradle build, docker build, pip install ...
-- **Deploy method**: rsync+ssh, rsync, rsync + container image, rsync jar/war, ftp, sftp, kubectl, helm...
-- **Performance test**: stress test, jmeter, loadrunner
-- **Notifications**: Integrated alerts via WeChat Work, Telegram, Element(Matrix), DingTalk
+- **Deploy method**: rsync+ssh, rsync daemon, docker compose, ftp, sftp, kubectl/helm, Aliyun OSS, Aliyun Functions (FC)...
+- **Notifications**: Integrated alerts via WeChat Work (WeCom), Telegram, Element(Matrix), Email, Zoom, Feishu
 - **SSL/TLS**: Automated certificate management using [acme.sh](https://github.com/acmesh-official/acme.sh.git)
 - **Cloud Ready**: AWS, Aliyun, Tencent Cloud, Huawei Cloud...
 
@@ -177,7 +176,7 @@ CICD -- cert --> cert[Cert manage];
 CICD -- notify --> notify[Notify manage];
 CICD -- check --> rev[Code Check];
 CICD -- test --> test[Test Center];
-notify -- notify --> weixin/dingding/telegram/element;
+notify -- notify --> wecom/telegram/element/email/zoom/feishu;
 db1 -- sql --> flyway;
 cert -- shell --> acme[acme.sh];
 acme -- dns api --> dnsapi;

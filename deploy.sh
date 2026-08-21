@@ -163,6 +163,7 @@ Parameters:
     # Testing and quality
     -u, --test-unit              Run unit tests.
     -t, --test-function          Run functional tests.
+    -p, --test-performance       Run performance tests (JMeter *.jmx).
     -C, --code-style             Check code style.
     -Q, --code-quality           Check code quality.
     -z, --security-zap           Run ZAP security scan.
@@ -243,6 +244,7 @@ parse_command_args() {
         # Testing and quality
         -u | --test-unit) arg_test_unit=true ;;
         -t | --test-function) arg_test_func=true ;;
+        -p | --test-performance) arg_test_perf=true ;;
         -C | --code-style) arg_code_style=true ;;
         -Q | --code-quality) arg_code_quality=true ;;
         -z | --security-zap) arg_security_zap=true ;;
@@ -283,7 +285,7 @@ parse_command_args() {
         [[ "${arg_create_storage_class:-false}" == true || -n "${arg_sub_path:-}" ]] ||
         [[ "${arg_renew_cert:-false}" == true || "${arg_build_base:-false}" == true ]] ||
         [[ "${arg_build:-false}" == true || "${arg_test_unit:-false}" == true || "${arg_test_func:-false}" == true ]] ||
-        [[ "${arg_code_style:-false}" == true || "${arg_code_quality:-false}" == true ]] ||
+        [[ "${arg_test_perf:-false}" == true || "${arg_code_style:-false}" == true || "${arg_code_quality:-false}" == true ]] ||
         [[ "${arg_security_zap:-false}" == true || "${arg_security_vulmap:-false}" == true ]] ||
         [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
         auto_mode=false
@@ -387,6 +389,9 @@ parse_command_args() {
     if [[ "${arg_test_func:-false}" == true ]]; then
         RUN+=(stage_functional_test)
     fi
+    if [[ "${arg_test_perf:-false}" == true ]]; then
+        RUN+=(stage_performance_test)
+    fi
     if [[ "${arg_security_zap:-false}" == true ]]; then
         RUN+=(stage_security_zap)
     fi
@@ -397,7 +402,7 @@ parse_command_args() {
     ## 自动模式: 未请求任何功能 → 追加全部阶段
     ## 独立功能不进自动模式，避免 -r/-K/--clean-tags 等单独执行时误跑完整流水线
     if $auto_mode; then
-        RUN+=(stage_code_quality stage_code_style stage_unit_test stage_build stage_deploy stage_functional_test stage_security_zap stage_security_vulmap)
+        RUN+=(stage_code_quality stage_code_style stage_unit_test stage_build stage_deploy stage_functional_test stage_performance_test stage_security_zap stage_security_vulmap)
     fi
 
     RUN+=(handle_notify)
@@ -494,6 +499,7 @@ main() {
     ## IS_CHINA 需保留 unset: system_install_tools（_install_packages->_set_mirror os）
     ## 先于 config_build_env 运行，父环境残留 IS_CHINA 会在 ENV_IS_CHINA=false 时误配中国镜像。
     unset G_DEBUG_ON arg_cron arg_sub_path
+    unset arg_test_unit arg_test_func arg_test_perf
     unset IS_CHINA _msg_lang_val G_DRY_RUN G_DEPLOY_RESULT G_TEST_RESULT
 
     ## 如果 GitLab CI 环境启用了调试跟踪，则启用详细输出

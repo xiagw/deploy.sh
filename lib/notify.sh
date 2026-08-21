@@ -37,7 +37,7 @@ notify_element() {
 
 # Send notification via Email
 notify_email() {
-    local project_root="$1" server="$2" from="$3" to="$4" subject="$5" message="$6"
+    local project_root="$1" server="$2" from="$3" to="$4" subject="$5" message="$6" username="$7" password="$8"
 
     [ -z "$project_root" ] || [ -z "$server" ] || [ -z "$from" ] || [ -z "$to" ] && return 1
 
@@ -48,12 +48,10 @@ notify_email() {
     if [ ! -x "$send_email" ]; then
         return 1
     fi
-    "$send_email" \
-        -s "$server" \
-        -f "$from" \
-        -t "$to" \
-        -u "$subject" \
-        -m "$message"
+    local -a email_args=(-s "$server" -f "$from" -t "$to" -u "$subject" -m "$message")
+    [[ -n "$username" ]] && email_args+=(-xu "$username")
+    [[ -n "$password" ]] && email_args+=(-xp "$password")
+    "$send_email" "${email_args[@]}"
 }
 
 # Send notification to Zoom
@@ -142,7 +140,7 @@ Branche = ${G_REPO_BRANCH}"
         ;;
     email)
         echo "Sending Email notification..."
-        notify_email "${G_PATH:-}" "${ENV_EMAIL_SERVER}" "${ENV_EMAIL_FROM}" "${ENV_EMAIL_TO}" "${ENV_EMAIL_SUBJECT:-Deployment Notification}" "$message" || _msg warn "Email notification failed"
+        notify_email "${G_PATH:-}" "${ENV_EMAIL_SERVER}" "${ENV_EMAIL_FROM}" "${ENV_EMAIL_TO}" "${ENV_EMAIL_SUBJECT:-Deployment Notification}" "$message" "${ENV_EMAIL_USERNAME:-}" "${ENV_EMAIL_PASSWORD:-}" || _msg warn "Email notification failed"
         ;;
     zoom)
         echo "Sending Zoom notification..."
