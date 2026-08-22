@@ -39,7 +39,9 @@ shutdown_timeout = 0
 
     ACTUAL=$(grep -vE "^[[:space:]]*#|^[[:space:]]*$" "$CI_FILE" 2>/dev/null | xargs)
 
-    if ! printf '%s' "$ACTUAL" | grep -qE "$EXPECTED_RE"; then
+    if printf '%s' "$ACTUAL" | grep -qE "$EXPECTED_RE"; then
+      echo "✅ .gitlab-ci.yml 为标准模板，放行"
+    else
       echo "❌ .gitlab-ci.yml 非标准模板，放弃执行"
       exit 1
     fi
