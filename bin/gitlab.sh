@@ -556,7 +556,16 @@ install_gitlab_runner() {
         sudo systemctl stop gitlab-runner.service || true
         sudo pkill -f gitlab-runner || true
         _msg task "Installing gitlab-runner..."
-        curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | sudo bash
+        local runner_script
+        runner_script=$(mktemp)
+        curl -fsSL "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" -o "$runner_script"
+        if ! _check_downloaded_script "$runner_script"; then
+            _msg error "Failed to download or invalid gitlab-runner installer"
+            rm -f "$runner_script"
+            return 1
+        fi
+        sudo bash "$runner_script"
+        rm -f "$runner_script"
         sudo apt install -y gitlab-runner
         sudo systemctl stop gitlab-runner.service || true
         sudo install -d -m 0755 -o "$user" -g "$user" "$user_home/runner"

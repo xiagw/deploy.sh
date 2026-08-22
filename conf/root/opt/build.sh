@@ -532,7 +532,7 @@ _build_jdk_runtime() {
     # Clean up if yum is available
     if command -v yum; then
         yum clean all
-        rm -rf /var/lib/yum/yumdb /var/lib/yum/history /var/cache/yum || true
+        rm -rf /var/lib/yum/yumdb /var/lib/yum/history /var/cache/yum 2>/dev/null || true
     fi
 }
 
@@ -540,7 +540,7 @@ _build_jmeter() {
     apt-get update
     apt-get install -yqq --no-install-recommends curl ca-certificates vim iputils-ping unzip
     curl -fL "https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-$JMETER_VERSION.tgz" | tar -C /opt/ -xz
-    rm -rf /tmp/*
+    rm -rf /tmp/* 2>/dev/null || true
 }
 
 _build_python() {
@@ -717,7 +717,7 @@ _build_tomcat() {
     ln -sf /dev/stdout /opt/bitnami/tomcat/logs/localhost_access_log.txt
     # && useradd -m -s /bin/bash -u 1001 tomcat
     # && chown -R 1001 /opt/bitnami/tomcat
-    rm -rf /opt/bitnami/tomcat/webapps_default/*
+    rm -rf /opt/bitnami/tomcat/webapps_default/* 2>/dev/null || true
 }
 
 main() {
@@ -778,7 +778,7 @@ main() {
 
     ## clean
     if [ "$(id -u)" -eq 0 ]; then
-        rm -rf /tmp/* /opt/*.{cnf,xml,log}
+        rm -rf /tmp/* /opt/*.{cnf,xml,log} 2>/dev/null || true
     fi
 
     for script in /opt/*.sh; do

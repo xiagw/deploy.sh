@@ -76,38 +76,37 @@ system_clean_disk() {
 
     # Clean up Docker images
     if command -v docker >/dev/null 2>&1; then
-        echo "Cleaning up Docker resources..."
-        docker image prune -f
-        docker builder prune -f
+        _msg task "Cleaning up Docker resources..."
+        docker image prune -f >/dev/null
+        docker builder prune -f >/dev/null
         docker image ls --format '{{.Repository}}:{{.Tag}}' "${ENV_DOCKER_REGISTRY}" | grep -v '^$' | xargs docker rmi 2>/dev/null || true
         if $aggressive; then
-            docker system prune -af --volumes
+            docker system prune -af --volumes >/dev/null
         fi
     fi
 
     # Clean up temporary files
-    echo "Cleaning up temporary files..."
+    _msg task "Cleaning up temporary files..."
     ${use_sudo:-} find /tmp -type f -atime +10 -delete 2>/dev/null || true
     ${use_sudo:-} find /var/tmp -type f -atime +10 -delete 2>/dev/null || true
 
     # Clean up old log files
-    echo "Cleaning up old log files..."
+    _msg task "Cleaning up old log files..."
     ${use_sudo:-} find /var/log -type f -name "*.log" -mtime +30 -delete 2>/dev/null || true
 
     # Clean up old core dumps if aggressive
     if $aggressive; then
-        echo "Cleaning up old core dumps..."
+        _msg task "Cleaning up old core dumps..."
         ${use_sudo:-} find /var/crash -type f -delete 2>/dev/null || true
     fi
 
     # Final disk usage check
     disk_usage_after=$(df -P / | awk 'NR==2 {print int($5)}')
-    echo "Cleanup completed. Disk usage now: ${disk_usage_after}%"
 
     if ((disk_usage_after >= disk_usage)); then
-        _msg error "Warning: Cleanup did not free up space. Further investigation may be needed."
+        _msg error "Cleanup did not free up space. Disk usage now: ${disk_usage_after}%"
     else
-        _msg ok "Successfully freed up $((disk_usage - disk_usage_after))% of disk space."
+        _msg ok "Cleanup completed. Disk usage now: ${disk_usage_after}% (freed $((disk_usage - disk_usage_after))%)."
     fi
 }
 

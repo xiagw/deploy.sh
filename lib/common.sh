@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034,SC1090,SC1091
-# 需要兼容sh/bash/zsh，尽量少使用不兼容命令/数组/(subshell)等
+# 仅兼容 bash/zsh（使用 [[ ]]、(( ))、${var:0:N} 等 bash 专属语法），不兼容 POSIX sh
 
 # 定义日志级别常量
 LOG_LEVEL_ERROR=0
@@ -49,7 +49,7 @@ _log() {
         ;;
     esac
 
-    if [[ $CURRENT_LOG_LEVEL -ge $level ]]; then
+    if [[ ${CURRENT_LOG_LEVEL:-$LOG_LEVEL_INFO} -ge $level ]]; then
         if [[ $level -eq $LOG_LEVEL_FILE ]]; then
             # 输出到日志文件，不使用颜色
             echo "[${level_name}] $(date '+%Y-%m-%d %H:%M:%S') - $message" >>"${LOG_FILE:-/tmp/tmp.log}"
@@ -83,6 +83,13 @@ _check_disk_space() {
     _log $LOG_LEVEL_INFO "Sufficient disk space available. Required: ${required_space_gb}GB, Available: $((available_space / 1024 / 1024))GB"
 }
 
+# 校验下载的 shell 脚本：非空 + 首行 shebang + bash 语法可解析（防 200 错误页 / 截断 / 伪装内容）
+_check_downloaded_script() {
+    local file="$1"
+    [ -s "$file" ] || return 1
+    bash -n "$file" 2>/dev/null || return 1
+}
+
 # Convert seconds to H/M/S cumulative duration (e.g. 0h01m05s)
 _fmt_dur() {
     local s=$1
@@ -95,6 +102,7 @@ _now_ms() {
     if [[ -n "${EPOCHREALTIME:-}" ]]; then
         sec=${EPOCHREALTIME%.*}
         us=${EPOCHREALTIME#*.}
+        us=${us:-0}
         printf '%d' "$((10#$sec * 1000 + 10#$us / 1000))"
         return
     fi
@@ -114,24 +122,30 @@ dry_run_note() {
     _msg note "[dry-run] $*"
 }
 
-# Output language: zh|en. Priority: CLI --lang (_msg_lang_val) > ENV_LANG (deploy.env) > zh
-# _msg_lang_val 由 deploy.sh parse_args 直接赋值（模块加载晚于参数解析，勿在此初始化）
-_msg_lang() {
-    printf '%s' "${_msg_lang_val:-${ENV_LANG:-zh}}"
-}
-
-# 阶段横幅状态（common 模块私有；_stage_start_ms 由 deploy.sh 在脚本开始时初始化）
+# 阶段横幅状态（_stage_start_ms 由 deploy.sh 在脚本开始时初始化；_stage_num 为 common 模块私有）
 _stage_start_ms=0
 _stage_num=0
 
 # Inline bilingual structural strings: _t "中文" "English"
 # Only for framework sentences we own; technical content stays single-language.
+# Output language: zh|en. Priority: CLI --lang (_msg_lang_val) > ENV_LANG (deploy.env) > zh
+# _msg_lang_val 由 deploy.sh parse_args 直接赋值（模块加载晚于参数解析，勿在此初始化）
 _t() {
-    if [ "$(_msg_lang)" = zh ]; then
+    if [ "${_msg_lang_val:-${ENV_LANG:-zh}}" = zh ]; then
         printf '%s' "$1"
     else
         printf '%s' "$2"
     fi
+}
+
+# 计算字符串在终端中的显示宽度（CJK/emoji 等多字节字符按 2 列计），用于阶段横幅对齐补位
+_display_width() {
+    local s="$1" i bytes w=0
+    for ((i = 0; i < ${#s}; i++)); do
+        bytes=$(printf '%s' "${s:i:1}" | wc -c | tr -d '[:space:]')
+        w=$((w + (bytes > 1 ? 2 : 1)))
+    done
+    printf '%d' "$w"
 }
 
 _msg() {
@@ -156,7 +170,7 @@ _msg() {
         if [ "${silent_mode:-0}" -eq 0 ]; then
             printf '\033[0;36m%s\033[0m\n' "$rule"
             local left="▶ STAGE ${_stage_num} · ${msg:0:40}"
-            local pad=$((58 - ${#left}))
+            local pad=$((58 - $(_display_width "$left")))
             ((pad < 1)) && pad=1
             printf '\033[1;36m%s\033[0m\033[0;36m%*s\033[0m\n' "$left" "$pad" "$(_fmt_dur "$((cum_ms / 1000))")"
             printf '\033[0;36m%s\033[0m\n' "$rule"
@@ -205,7 +219,7 @@ _check_root() {
         unset use_sudo
         ;;
     *)
-        if sudo -l -U "$USER" &>/dev/null; then
+        if sudo -l &>/dev/null; then
             use_sudo=sudo
             echo "Not root but has sudo privileges."
         else
@@ -343,26 +357,56 @@ _check_timezone() {
 }
 
 _get_yes_no() {
+    local read_yes_no
     read -rp "${1:-Confirm the action?} [y/N] " -n 1 read_yes_no
     [[ ${read_yes_no,,} == y ]] && return 0 || return 1
 }
 
 _get_random_password() {
-    local cmd_hash bits=${1:-14}
-    cmd_hash=$(command -v md5sum || command -v sha256sum || command -v md5 2>/dev/null)
-    count=0
-    while [ -z "$password_rand" ] || [ "${#password_rand}" -lt "$bits" ]; do
-        ((++count))
-        case $count in
-        1) password_rand="$(LC_ALL=C strings /dev/urandom | LC_ALL=C tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
-        2) password_rand="$(LC_ALL=C head /dev/urandom | LC_ALL=C tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null)" ;;
-        3) password_rand="$(LC_ALL=C dd if=/dev/urandom bs=1 count=50 status=none 2>/dev/null | LC_ALL=C base64 | head -c"$bits" 2>/dev/null)" ;;
-        4) password_rand=$(openssl rand -base64 50 | LC_ALL=C tr -dc A-Za-z0-9 | head -c"$bits" 2>/dev/null) ;;
-        5) password_rand="$(echo "$RANDOM$(date)$RANDOM" | $cmd_hash | LC_ALL=C base64 | head -c"$bits" 2>/dev/null)" ;;
-        *) echo "${password_rand:?Failed-to-generate-password}" && return 1 ;;
+    # 去除易混淆字符（0/O/o、1/I/l）后的字符集
+    local chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+    local bits=${1:-14} password_rand="" raw gen
+    # 依次尝试各种随机源，直到有一个产出足够长度的密码
+    for gen in openssl dd head od; do
+        case $gen in
+        openssl)
+            command -v openssl >/dev/null 2>&1 || continue
+            raw=$(openssl rand -base64 128 2>/dev/null)
+            ;;
+        dd)
+            raw=$(LC_ALL=C dd if=/dev/urandom bs=1 count=128 2>/dev/null | LC_ALL=C base64)
+            ;;
+        head)
+            raw=$(LC_ALL=C head -c 128 /dev/urandom | LC_ALL=C base64)
+            ;;
+        od)
+            raw=$(LC_ALL=C od -An -N 128 -t x1 /dev/urandom)
+            ;;
         esac
+        [ -n "$raw" ] || continue
+        password_rand=$(printf '%s' "$raw" | LC_ALL=C tr -dc "$chars" | head -c "$bits")
+        [ "${#password_rand}" -ge "$bits" ] && break
     done
-    echo "$password_rand"
+
+    # 兜底：shell 内建 RANDOM + 时间戳摘要（几乎任何环境都可用）
+    if [ "${#password_rand}" -lt "$bits" ]; then
+        local cmd_hash seed="" i=0
+        cmd_hash=$(command -v sha256sum || command -v md5sum || command -v shasum || command -v md5)
+        if [ -n "$cmd_hash" ]; then
+            while [ "${#seed}" -lt 256 ] && [ "$i" -lt 8 ]; do
+                seed+="$RANDOM$(date +%s)$RANDOM"
+                i=$((i + 1))
+            done
+            password_rand=$(printf '%s' "$seed" | "$cmd_hash" | LC_ALL=C base64 | LC_ALL=C tr -dc "$chars" | head -c "$bits")
+        fi
+    fi
+
+    if [ "${#password_rand}" -ge "$bits" ]; then
+        printf '%s' "$password_rand"
+    else
+        echo "Failed to generate random password" >&2
+        return 1
+    fi
 }
 
 _get_current_ip() {
@@ -417,7 +461,7 @@ _install_jmeter() {
         export TZ=Asia/Shanghai
 
         # Set timezone
-        echo "tzdata tzdata/Areas select Asia" | ${use_sudo:-} debconf-set-selections
+        echo "tzdata tzdata/Areas select Asia" | ${use_sudo:-sudo} debconf-set-selections
         echo "tzdata tzdata/Zones/Asia select Shanghai" | $use_sudo debconf-set-selections
 
         # Update and install Java
@@ -428,7 +472,7 @@ _install_jmeter() {
     fi
 
     # Download and install JMeter
-    local url="https://dlcdn.apache.org/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
+    local url="https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${ver_jmeter}.zip"
     curl -sSL -o "$temp_file" "$url"
     $use_sudo unzip -q "$temp_file" -d /usr/local/
     $use_sudo ln -sf "/usr/local/apache-jmeter-${ver_jmeter}" /usr/local/jmeter
@@ -488,14 +532,25 @@ _install_wg() {
     if [ "$1" != "upgrade" ] && command -v wg >/dev/null; then
         return
     fi
+    if [ -z "${cmd_pkg_install:-}" ]; then
+        _msg error "_install_wg: cmd_pkg_install is not set. Run _check_root first."
+        return 1
+    fi
+    # 包名按官方文档 wireguard.com/install：
+    #   Ubuntu/Debian(apt) : `apt install wireguard`（meta 包：内核模块 + 工具）
+    #   CentOS/RHEL<9(elrepo): kmod-wireguard + wireguard-tools
+    #   Fedora/Arch/Alpine/brew 等 : 内核>=5.6 已内置 wireguard，仅 wireguard-tools（无 wireguard 包）
     case "${lsb_dist-}" in
     centos | alinux | openEuler)
-        ${cmd_pkg-} install -y epel-release elrepo-release
+        $cmd_pkg install -y epel-release elrepo-release
         $cmd_pkg install -y yum-plugin-elrepo
         $cmd_pkg install -y kmod-wireguard wireguard-tools
         ;;
+    debian | ubuntu)
+        $cmd_pkg_install wireguard
+        ;;
     *)
-        $cmd_pkg install -yqq wireguard wireguard-tools
+        $cmd_pkg_install wireguard-tools
         ;;
     esac
     $use_sudo modprobe wireguard
@@ -523,13 +578,24 @@ _install_ossutil() {
     os=${os/centos/linux}
     os=${os/macos/mac}
 
-    # 下载安装
+    # 下载安装到临时目录，避免污染当前目录
     local url_doc="https://help.aliyun.com/zh/oss/developer-reference/install-ossutil$ver"
-    local url_down
+    local url_down temp_dir bin_path
     url_down=$(curl -fsSL "$url_doc" | grep -oE 'href="[^\"]+"' | grep -o "https.*ossutil.*${os}-amd64\.zip")
-    curl -fLo ossu.zip "$url_down" && unzip -qq -o -j ossu.zip
+    temp_dir=$(mktemp -d)
+    if [ -z "$url_down" ] || ! (cd "$temp_dir" && curl -fLo ossu.zip "$url_down" && unzip -qq -o -j ossu.zip); then
+        _msg error "Failed to download/extract ossutil"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    bin_path=$(find "$temp_dir" -maxdepth 1 -type f -name 'ossutil*' -print -quit)
+    if [ -z "$bin_path" ]; then
+        _msg error "ossutil binary not found in archive"
+        rm -rf "$temp_dir"
+        return 1
+    fi
     _msg ok "Installing to $cmd"
-    $use_sudo install -m 0755 ossutil "$cmd"
+    $use_sudo install -m 0755 "$bin_path" "$cmd"
 
     # 创建版本软链接
     _msg ok "Creating symlink /usr/local/bin/oss${ver:-1} to $cmd"
@@ -542,7 +608,7 @@ _install_ossutil() {
     else
         $cmd --version
     fi
-    rm -f ossu.zip ossutil ossutil64 ossutilmac64
+    rm -rf "$temp_dir"
 }
 
 _install_aliyun_cli() {
@@ -558,12 +624,25 @@ _install_aliyun_cli() {
     _msg ok "Installing/Upgrading Alibaba Cloud CLI using official installer script"
 
     # Prefer official one-line installer (recommended by Alibaba Cloud)
-    if /bin/bash -c "$(curl -fsSL https://aliyuncli.alicdn.com/install.sh)"; then
-        _msg ok "Alibaba Cloud CLI installed/updated via official installer"
-        return 0
+    # 下载到临时目录并做内容校验（防 200 错误页 / 截断 / 伪装内容），再在临时目录内执行（官方脚本会 curl -O 污染当前目录）
+    local temp_dir temp_file
+    temp_dir=$(mktemp -d)
+    temp_file="$temp_dir/install.sh"
+    if curl -fsSL https://aliyuncli.alicdn.com/install.sh -o "$temp_file" 2>/dev/null; then
+        if _check_downloaded_script "$temp_file"; then
+            if (cd "$temp_dir" && bash install.sh); then
+                _msg ok "Alibaba Cloud CLI installed/updated via official installer"
+                rm -rf "$temp_dir"
+                return 0
+            fi
+            _msg warn "Official installer failed or is not usable; falling back to direct CDN download"
+        else
+            _msg warn "Official installer content invalid (empty or not a shell script); falling back to direct CDN download"
+        fi
     else
-        _msg warn "Official installer failed or is not usable; falling back to direct CDN download"
+        _msg warn "Official installer download failed; falling back to direct CDN download"
     fi
+    rm -rf "$temp_dir"
 
     # Fallback: construct CDN URL based on OS and ARCH
     local os=${lsb_dist/ubuntu/linux}
@@ -660,10 +739,10 @@ _install_flarectl() {
     local url="https://github.com/cloudflare/cloudflare-go/releases/download/${ver}/flarectl_${ver#v}_${os}_${arch}.tar.gz"
 
     if curl -fsSLo "$temp_file" "$url"; then
-        _msg ok "Extracting flarectl to /tmp"
-        tar -C /tmp -xzf "$temp_file" flarectl
+        _msg ok "Extracting flarectl"
+        tar -C "$(dirname "$temp_file")" -xzf "$temp_file" flarectl
         _msg ok "Installing to /usr/local/bin/flarectl"
-        sudo install -m 0755 /tmp/flarectl /usr/local/bin/flarectl
+        ${use_sudo:-sudo} install -m 0755 "$(dirname "$temp_file")/flarectl" /usr/local/bin/flarectl
         _msg ok "flarectl installed successfully"
         _msg ok "Showing version"
         flarectl -version
@@ -671,7 +750,7 @@ _install_flarectl() {
         _msg error "failed to download and install flarectl"
         return 1
     fi
-    rm -f "$temp_file" /tmp/flarectl
+    rm -f "$temp_file" "$(dirname "$temp_file")/flarectl"
 }
 
 _install_kubectl() {
@@ -683,21 +762,52 @@ _install_kubectl() {
         return 0
     fi
     _msg ok "Installing kubectl..."
-    local ver
+    local os arch
+    case "$OSTYPE" in
+    darwin*) os="darwin" ;;
+    linux*) os="linux" ;;
+    *) _msg error "Unsupported operating system: $OSTYPE" && return 1 ;;
+    esac
+    case "$(uname -m | tr '[:upper:]' '[:lower:]')" in
+    x86_64 | x64 | amd64) arch="amd64" ;;
+    aarch64 | arm64) arch="arm64" ;;
+    *) arch="amd64" ;;
+    esac
+    local ver cmd temp_dir
     ver=$(curl -sL https://dl.k8s.io/release/stable.txt)
-    local cmd=/usr/local/bin/kubectl
-    curl -fsSLO "https://dl.k8s.io/release/${ver}/bin/linux/amd64/kubectl" \
-        -fsSLO "https://dl.k8s.io/${ver}/bin/linux/amd64/kubectl.sha256"
-    if echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check; then
-        _msg ok "Installing to $cmd"
-        $use_sudo install -m 0755 kubectl "$cmd"
-        _msg ok "Showing version"
-        "$cmd" version --client
-        rm -f kubectl kubectl.sha256
+    cmd=/usr/local/bin/kubectl
+    temp_dir=$(mktemp -d)
+    curl -fsSL --retry 3 --retry-delay 2 -o "$temp_dir/kubectl" "https://dl.k8s.io/release/${ver}/bin/${os}/${arch}/kubectl" || {
+        _msg error "Failed to download kubectl"
+        rm -rf "$temp_dir"
+        return 1
+    }
+    curl -fsSL --retry 3 --retry-delay 2 -o "$temp_dir/kubectl.sha256" "https://dl.k8s.io/release/${ver}/bin/${os}/${arch}/kubectl.sha256"
+    local shasum_cmd shasum_flag=''
+    if command -v sha256sum >/dev/null 2>&1; then
+        shasum_cmd=sha256sum
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum_cmd=shasum
+        shasum_flag='-a 256'
     else
-        _msg error "failed to install kubectl"
+        _msg error "sha256sum/shasum not found"
+        rm -rf "$temp_dir"
         return 1
     fi
+    local expected actual
+    expected=$(tr -d '[:space:]' <"$temp_dir/kubectl.sha256")
+    actual=$($shasum_cmd ${shasum_flag:+"$shasum_flag"} "$temp_dir/kubectl" | awk '{print $1}')
+    if [ -n "$expected" ] && [ "$expected" = "$actual" ]; then
+        _msg ok "Installing to $cmd"
+        $use_sudo install -m 0755 "$temp_dir/kubectl" "$cmd"
+        _msg ok "Showing version"
+        "$cmd" version --client
+    else
+        _msg error "kubectl checksum mismatch"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    rm -rf "$temp_dir"
 }
 
 _install_shellcheck() {
@@ -823,6 +933,11 @@ _install_helm() {
     temp_file="$(mktemp)"
     local cmd=/usr/local/bin/helm
     curl -fsSLo "$temp_file" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+    if ! _check_downloaded_script "$temp_file"; then
+        _msg error "Failed to download or invalid helm install script"
+        rm -f "$temp_file"
+        return 1
+    fi
     export HELM_INSTALL_DIR=/usr/local/bin
     $use_sudo bash "$temp_file"
     rm -f "$temp_file"
@@ -873,6 +988,10 @@ _install_terraform() {
         return
     fi
     _msg ok "Installing terraform..."
+    if ! command -v apt-get >/dev/null; then
+        _msg error "_install_terraform: only Debian/Ubuntu (apt-get) is supported"
+        return 1
+    fi
     $use_sudo apt-get update -qq && $use_sudo apt-get install -yqq gnupg software-properties-common curl
     curl -fsSL --retry 3 --retry-delay 2 https://apt.releases.hashicorp.com/gpg |
         gpg --dearmor |
@@ -891,18 +1010,35 @@ _install_aws() {
     if [ "$1" != "upgrade" ] && command -v aws >/dev/null; then
         return
     fi
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install aws cli + eksctl"
+        return 0
+    fi
     _msg ok "Installing aws cli..."
-    local temp_file
-    temp_file=$(mktemp)
-    curl -fsSLo "$temp_file" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
-    unzip -qq "$temp_file" -d /tmp
-    $use_sudo /tmp/aws/install --bin-dir /usr/local/bin/ --install-dir /usr/local/ --update
-    rm -rf /tmp/aws "$temp_file"
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    case "$OSTYPE" in
+    darwin*)
+        curl -fsSLo "$temp_dir/AWSCLIV2.pkg" "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+        ${use_sudo:-sudo} installer -pkg "$temp_dir/AWSCLIV2.pkg" -target /
+        ;;
+    linux*)
+        curl -fsSLo "$temp_dir/aws.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+        unzip -qq "$temp_dir/aws.zip" -d "$temp_dir"
+        ${use_sudo:-sudo} "$temp_dir/aws/install" --bin-dir /usr/local/bin/ --install-dir /usr/local/ --update
+        ;;
+    *)
+        _msg error "Unsupported operating system: $OSTYPE"
+        rm -rf "$temp_dir"
+        return 1
+        ;;
+    esac
     ## install eksctl / 安装 eksctl
     local cmd=/usr/local/bin/eksctl
-    curl -fsSL --retry 3 --retry-delay 2 "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+    curl -fsSL --retry 3 --retry-delay 2 "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C "$temp_dir"
     _msg ok "Installing to $cmd"
-    $use_sudo install -m 0755 /tmp/eksctl "$cmd"
+    ${use_sudo:-sudo} install -m 0755 "$temp_dir/eksctl" "$cmd"
+    rm -rf "$temp_dir"
     _msg ok "Showing version"
     "$cmd" version
 }
@@ -958,6 +1094,11 @@ _install_docker() {
     local temp_file
     temp_file=$(mktemp)
     curl -fsSLo "$temp_file" https://get.docker.com
+    if ! _check_downloaded_script "$temp_file"; then
+        _msg error "Failed to download or invalid docker install script"
+        rm -f "$temp_file"
+        return 1
+    fi
     if "${IS_CHINA:-false}"; then
         $use_sudo bash "$temp_file" --mirror Aliyun
     else
@@ -986,10 +1127,15 @@ _install_podman() {
 
 _notify_wecom() {
     local wecom_key="$1"
-    local wecom_msg="$2"
+    local wecom_msg="${2:-wecom_msg undefined}"
     local wecom_api="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${wecom_key}"
+    local escaped
+    # 只转义双引号与真实换行；不转义反斜杠——否则外部调用方传字面 \n（原版靠 JSON 解析成换行）会被双重转义成字面文本
+    escaped=${wecom_msg//\"/\\\"}
+    escaped=${escaped//$'\n'/\\n}
+    local payload="{\"msgtype\": \"text\", \"text\": {\"content\": \"${escaped}\"}}"
     curl -fsSL -X POST -H 'Content-Type: application/json' \
-        -d '{"msgtype": "text", "text": {"content": "'"${wecom_msg:-wecom_msg undefined}"'"}}' "$wecom_api"
+        -d "$payload" "$wecom_api"
     echo
 }
 
@@ -1036,14 +1182,17 @@ _set_mirror() {
 get_oom_score() {
     ## Get top 15 processes by OOM score
     printf "%-8s %-19s %s\n" "OOMScore" "PID" "Command"
-    while read -r proc; do
-        printf "%2d      %5d       %s\n" \
-            "$(cat "$proc"/oom_score)" \
-            "$(basename "$proc")" \
-            "$(tr '\0' ' ' <"$proc"/cmdline | head -c 50)"
-    done < <(find /proc -maxdepth 1 -regex '/proc/[0-9]+' 2>/dev/null | sort -nr | head -n 15)
+    while read -r score pid cmd; do
+        printf "%2d      %5d       %s\n" "$score" "$pid" "$cmd"
+    done < <(
+        for proc in /proc/[0-9]*; do
+            [ -r "$proc/oom_score" ] || continue
+            score=$(cat "$proc/oom_score")
+            printf '%s %s %s\n' "$score" "${proc##*/}" "$(tr '\0' ' ' <"$proc"/cmdline | head -c 50)"
+        done | sort -k1,1nr | head -n 15
+    )
     echo
-    dmesg -T | grep -Ei 'error|crash|segmentation|fault|panic'
+    dmesg -T 2>/dev/null | grep -Ei 'error|crash|segmentation|fault|panic'
 }
 
 clean_snap() {
@@ -1117,7 +1266,7 @@ get_github_latest_download() {
     # 获取最新版本信息并处理可能的错误
     local release_info
     release_info=$(curl -sS -H "Accept: application/vnd.github.v3+json" "$api_url")
-    ret=$?
+    local ret=$?
     if [ $ret -ne 0 ] || [ -z "$release_info" ]; then
         _msg warn "Failed to fetch release info from GitHub API"
         echo "https://github.com/$repo/archive/refs/heads/master.tar.gz"
@@ -1178,10 +1327,36 @@ _install_acme_official() {
 
     _msg ok "Installing acme.sh..."
     if "${IS_CHINA:-false}"; then
-        git clone --depth 1 https://gitee.com/neilpang/acme.sh.git
-        cd acme.sh && ./acme.sh --install --accountemail deploy@deploy.sh
+        local temp_dir
+        temp_dir=$(mktemp -d)
+        if ! git clone --depth 1 https://gitee.com/neilpang/acme.sh.git "$temp_dir"; then
+            _msg error "Failed to clone acme.sh from gitee"
+            rm -rf "$temp_dir"
+            return 1
+        fi
+        cd "$temp_dir" || {
+            rm -rf "$temp_dir"
+            return 1
+        }
+        if ! ./acme.sh --install --accountemail deploy@deploy.sh; then
+            _msg error "acme.sh install failed"
+            cd - >/dev/null || true
+            rm -rf "$temp_dir"
+            return 1
+        fi
+        cd - >/dev/null || true
+        rm -rf "$temp_dir"
     else
-        curl https://get.acme.sh | bash -s email=deploy@deploy.sh
+        local acme_script
+        acme_script=$(mktemp)
+        curl -fsSL https://get.acme.sh -o "$acme_script"
+        if ! _check_downloaded_script "$acme_script"; then
+            _msg error "Failed to download or invalid acme.sh installer"
+            rm -f "$acme_script"
+            return 1
+        fi
+        bash "$acme_script" email=deploy@deploy.sh
+        rm -f "$acme_script"
     fi
     _msg ok "Showing version"
     "$cmd_acme" --version
@@ -1199,11 +1374,24 @@ _install_acme_github() {
     local download_url
     download_url=$(get_github_latest_download "acmesh-official/acme.sh" source_only=true)
 
-    curl -fsSL "$download_url" | tar xz -C "$temp_dir" --strip-components=1
-    cd "$temp_dir" || exit
-    ./acme.sh --install --accountemail deploy@deploy.sh
-
-    cd - || exit
+    if ! curl -fsSL "$download_url" | tar xz -C "$temp_dir" --strip-components=1; then
+        _msg error "Failed to download and extract acme.sh"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    if [ ! -x "$temp_dir/acme.sh" ]; then
+        _msg error "acme.sh script not found in release archive"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    cd "$temp_dir" || return 1
+    if ! ./acme.sh --install --accountemail deploy@deploy.sh; then
+        _msg error "acme.sh install failed"
+        cd - >/dev/null || return 1
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    cd - >/dev/null || return 1
     rm -rf "$temp_dir"
 
     # 显示版本
@@ -1343,7 +1531,11 @@ _compress_pdf_with_gs() {
         original_bytes=$(stat -f%z "$input_pdf" 2>/dev/null || stat -c%s "$input_pdf")
         compressed_bytes=$(stat -f%z "$output_pdf" 2>/dev/null || stat -c%s "$output_pdf")
         local compression_ratio
-        compression_ratio=$(awk "BEGIN {printf \"%.2f\", ($compressed_bytes/$original_bytes)*100}")
+        if [ "$original_bytes" -gt 0 ]; then
+            compression_ratio=$(awk "BEGIN {printf \"%.2f\", ($compressed_bytes/$original_bytes)*100}")
+        else
+            compression_ratio="0.00"
+        fi
 
         _msg ok "PDF compression completed:"
         echo "Time taken: $time_str"
