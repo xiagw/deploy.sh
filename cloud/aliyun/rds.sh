@@ -22,6 +22,11 @@ show_rds_help() {
     echo "  del-db <实例ID> <数据库名>              - 删除数据库"
     echo "  get-bak [<实例ID>] [format]          - 列出实例备份集"
     echo "  del-bak [<实例ID>] [<备份ID>]        - 删除备份集（可用 fzf 选择；自动备份保留期内不可删）"
+    echo "  get-ip [<实例ID>]                      - 列出实例 IP 白名单"
+    echo "  set-ip <实例ID> <IP列表> [组名]         - 设置实例 IP 白名单（覆盖模式）"
+    echo "  add-ip <实例ID> <IP列表>                - 追加 IP 到白名单"
+    echo "  del-ip <实例ID> <IP列表>                - 从白名单删除指定 IP"
+    echo "  clear-ip [<实例ID>] [组名]               - 清空实例 IP 白名单（保留 127.0.0.1），不指定组名则清空所有组"
     echo "  recovery-time [<实例ID>]                - 查询可恢复时间范围（需开启日志备份，显示本地时间）"
     echo "  restore-clone [实例ID] [备份ID|时间点] [新实例名] - 克隆实例恢复（Serverless）"
     echo "  restore-table <实例ID> <备份ID|时间点> <TableMeta> - 库表恢复到原实例（MySQL/PostgreSQL）"
@@ -43,6 +48,12 @@ show_rds_help() {
     echo "  $0 rds del-db rm-xxx mydb"
     echo "  $0 rds get-bak rm-xxx"
     echo "  $0 rds del-bak rm-xxx 902xxxx"
+    echo "  $0 rds get-ip rm-xxx"
+    echo "  $0 rds set-ip rm-xxx '192.168.1.1,10.0.0.0/8'"
+    echo "  $0 rds add-ip rm-xxx '58.213.75.137'"
+    echo "  $0 rds del-ip rm-xxx '58.213.75.137'"
+    echo "  $0 rds clear-ip rm-xxx"
+    echo "  $0 rds clear-ip rm-xxx default"
     echo "  $0 rds recovery-time rm-xxx"
     echo "  $0 rds restore-clone                    # 交互选择实例、备份、可省略新实例名"
     echo "  $0 rds restore-table rm-xxx 902xxxx '[{\"type\":\"db\",\"name\":\"mydb\",\"newname\":\"mydb_restored\"}]'"
@@ -68,6 +79,11 @@ handle_rds_commands() {
     del-db) rds_db_delete "$@" ;;
     get-bak | get-backup | backup-list) rds_backup_list "$@" ;;
     del-bak | del-backup) rds_backup_delete "$@" ;;
+    get-ip) rds_ip_get "$@" ;;
+    set-ip) rds_ip_set "$@" ;;
+    add-ip) rds_ip_add "$@" ;;
+    del-ip) rds_ip_del "$@" ;;
+    clear-ip) rds_ip_clear "$@" ;;
     recovery-time) rds_recovery_time "$@" ;;
     restore-clone) rds_restore_clone "$@" ;;
     restore-table) rds_restore_table "$@" ;;
@@ -1137,4 +1153,249 @@ rds_restore_table() {
         echo "$result" >&2
         return 1
     fi
+}
+
+# 列出 IP 白名单（DescribeDBInstanceIPArrayList）
+rds_ip_get() {
+    local instance_id
+    instance_id=$(_rds_resolve_instance_id "$1" "选择要查看白名单的 RDS 实例") || return 1
+
+    echo "获取实例 $instance_id 的 IP 白名单："
+
+    local result
+    result=$(call_aliyun_api rds describe-db-instance-ip-array-list --db-instance-id "$instance_id" --biz-region-id "$region")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：无法获取 IP 白名单信息。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    echo "白名单组名称      IP列表"
+    echo "----------------  ----------------------------------------"
+    echo "$result" | jq -r '.Items.DBInstanceIPArray[]? | select(. != null) | "\(.DBInstanceIPArrayName // "N/A")  \(.SecurityIPList // "N/A")"' |
+        awk 'BEGIN {FS="  "; OFS="  "}
+        {
+            printf "%-16s  %s\n", $1, $2
+        }'
+
+    log_result "${profile:-}" "$region" "rds" "get-ip" "$result"
+}
+
+# 设置 IP 白名单（覆盖模式）
+rds_ip_set() {
+    local instance_id=$1
+    local ips=$2
+    local ip_array_name=$3
+
+    if [ -z "$instance_id" ] || [ -z "$ips" ]; then
+        echo "使用 fzf 交互式模式设置 IP 白名单（覆盖模式）"
+
+        if [ -z "$instance_id" ]; then
+            instance_id=$(_rds_resolve_instance_id "" "选择 RDS 实例") || return 1
+        fi
+
+        local current_whitelist
+        current_whitelist=$(call_aliyun_api rds describe-db-instance-ip-array-list --db-instance-id "$instance_id" --biz-region-id "$region" 2>/dev/null)
+        local ret=$?
+        if [ $ret -eq 0 ] && [ -n "$current_whitelist" ]; then
+            echo "当前实例的 IP 白名单："
+            echo "$current_whitelist" | jq -r '.Items.DBInstanceIPArray[]? | select(. != null) | "\(.DBInstanceIPArrayName // "N/A")  \(.SecurityIPList // "N/A")"' |
+                awk 'BEGIN {FS="  "; OFS="  "}
+                {
+                    printf "%-16s  %s\n", $1, $2
+                }'
+            echo ""
+        fi
+
+        if [ -z "$ip_array_name" ] && [ $ret -eq 0 ] && [ -n "$current_whitelist" ]; then
+            local group_list
+            group_list=$(echo "$current_whitelist" | jq -r '.Items.DBInstanceIPArray[]? | select(. != null) | "\(.DBInstanceIPArrayName // "Default")\t\(.SecurityIPList // "N/A")"' 2>/dev/null)
+            if [ -n "$group_list" ]; then
+                local choice
+                if type select_with_fzf >/dev/null 2>&1; then
+                    choice=$(select_with_fzf "选择要设置的 IP 组" "$group_list")
+                else
+                    echo "可用 IP 组：" >&2
+                    echo "$group_list" | awk -F'\t' '{printf "%-20s  %s\n", $1, $2}' >&2
+                    read -r -p "输入组名（留空=默认组）: " choice
+                fi
+                ip_array_name=$(echo "$choice" | awk '{print $1}')
+            fi
+        fi
+
+        if [ -z "$ips" ]; then
+            read -r -p "请输入新的 IP 列表（多个 IP 用逗号分隔，覆盖该组白名单）: " ips
+            if [ -z "$ips" ]; then
+                echo "错误：IP 列表不能为空。" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    if [ -z "$instance_id" ] || [ -z "$ips" ]; then
+        echo "错误：实例 ID 和 IP 列表不能为空。" >&2
+        echo "用法：rds set-ip <实例ID> <IP列表> [组名]" >&2
+        return 1
+    fi
+
+    echo "正在设置实例 $instance_id 的 IP 白名单（覆盖模式）："
+    echo "IP列表: $ips"
+    if [ -n "$ip_array_name" ]; then
+        echo "IP白名单组: $ip_array_name"
+    fi
+
+    local api_args=(
+        --db-instance-id "$instance_id"
+        --security-ips "$ips"
+        --modify-mode "Cover"
+    )
+    if [ -n "$ip_array_name" ]; then
+        api_args+=(--db-instance-ip-array-name "$ip_array_name")
+    fi
+
+    local result
+    result=$(call_aliyun_api rds modify-security-ips --biz-region-id "$region" "${api_args[@]}")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：设置 IP 白名单失败。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    echo "IP 白名单设置成功。"
+    echo "$result" | jq '.'
+    log_result "${profile:-}" "$region" "rds" "set-ip" "$result"
+}
+
+# 追加 IP 到白名单
+rds_ip_add() {
+    local instance_id=$1
+    local ips=$2
+
+    instance_id=$(_rds_resolve_instance_id "$instance_id" "选择 RDS 实例") || return 1
+
+    if [ -z "$ips" ]; then
+        read -r -p "请输入要追加的 IP 列表（多个 IP 用逗号分隔）: " ips
+        if [ -z "$ips" ]; then
+            echo "错误：IP 列表不能为空。" >&2
+            return 1
+        fi
+    fi
+
+    echo "正在追加 IP 到实例 $instance_id 的白名单："
+    echo "IP列表: $ips"
+
+    local result
+    result=$(call_aliyun_api rds modify-security-ips \
+        --biz-region-id "$region" \
+        --db-instance-id "$instance_id" \
+        --security-ips "$ips" \
+        --modify-mode "Append")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：追加 IP 白名单失败。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    echo "IP 白名单追加成功。"
+    echo "$result" | jq '.'
+    log_result "${profile:-}" "$region" "rds" "add-ip" "$result"
+}
+
+# 从白名单删除指定 IP
+rds_ip_del() {
+    local instance_id=$1
+    local ips=$2
+
+    instance_id=$(_rds_resolve_instance_id "$instance_id" "选择 RDS 实例") || return 1
+
+    if [ -z "$ips" ]; then
+        read -r -p "请输入要删除的 IP 列表（多个 IP 用逗号分隔）: " ips
+        if [ -z "$ips" ]; then
+            echo "错误：IP 列表不能为空。" >&2
+            return 1
+        fi
+    fi
+
+    confirm_action "即将从实例 $instance_id 的白名单删除：$ips" || return 1
+
+    echo "正在从实例 $instance_id 的白名单删除：$ips"
+
+    local result
+    result=$(call_aliyun_api rds modify-security-ips \
+        --biz-region-id "$region" \
+        --db-instance-id "$instance_id" \
+        --security-ips "$ips" \
+        --modify-mode "Delete")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：删除 IP 白名单失败。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    echo "IP 白名单删除成功。"
+    echo "$result" | jq '.'
+    log_result "${profile:-}" "$region" "rds" "del-ip" "$result"
+}
+
+# 清空 IP 白名单
+rds_ip_clear() {
+    local instance_id
+    instance_id=$(_rds_resolve_instance_id "$1" "选择要清空白名单的 RDS 实例") || return 1
+    shift
+    local ip_array_name=$1
+
+    if [ -z "$ip_array_name" ]; then
+        local groups_json
+        groups_json=$(call_aliyun_api rds describe-db-instance-ip-array-list --db-instance-id "$instance_id" --biz-region-id "$region" 2>/dev/null)
+        local ret=$?
+        if [ $ret -eq 0 ] && [ -n "$groups_json" ]; then
+            local group_list
+            group_list=$(echo "$groups_json" | jq -r '.Items.DBInstanceIPArray[]? | select(. != null) | "\(.DBInstanceIPArrayName // "Default")\t\(.SecurityIPList // "N/A")"' 2>/dev/null)
+            if [ -n "$group_list" ]; then
+                group_list="ALL	清除所有组"$'\n'"$group_list"
+                local choice
+                if type select_with_fzf >/dev/null 2>&1; then
+                    choice=$(select_with_fzf "选择要清空的 IP 组" "$group_list")
+                else
+                    echo "可用 IP 组：" >&2
+                    echo "$group_list" | awk -F'\t' '{printf "%-20s  %s\n", $1, $2}' >&2
+                    read -r -p "输入组名（ALL=全部）: " choice
+                fi
+                if [ -z "$choice" ]; then
+                    echo "错误：未选择 IP 组。" >&2
+                    return 1
+                fi
+                ip_array_name=$(echo "$choice" | awk '{print $1}')
+                [ "$ip_array_name" = "ALL" ] && ip_array_name=""
+            fi
+        fi
+    fi
+
+    confirm_action "您即将清空实例 $instance_id 的 IP 白名单${ip_array_name:+（组：$ip_array_name）}${ip_array_name:-（所有组）}" || return 1
+
+    echo "正在清空实例 $instance_id 的 IP 白名单："
+
+    local api_args=(
+        --db-instance-id "$instance_id"
+        --security-ips "127.0.0.1"
+        --modify-mode "Cover"
+    )
+    [ -n "$ip_array_name" ] && api_args+=(--db-instance-ip-array-name "$ip_array_name")
+
+    local result
+    result=$(call_aliyun_api rds modify-security-ips --biz-region-id "$region" "${api_args[@]}")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：清空 IP 白名单失败。" >&2
+        echo "$result" >&2
+        return 1
+    fi
+
+    echo "IP 白名单已清空（保留 127.0.0.1 以维持基本访问）。"
+    echo "$result" | jq '.'
+    log_result "${profile:-}" "$region" "rds" "clear-ip" "$result"
 }

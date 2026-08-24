@@ -22,8 +22,9 @@ show_polardb_help() {
     echo "  del-db [<集群ID> <数据库名>]         - 删除数据库（参数可选，可用 fzf 选择）"
     echo "  get-ip <集群ID>                        - 列出集群IP白名单"
     echo "  set-ip <集群ID> <IP列表>               - 设置集群IP白名单（覆盖模式）"
-    echo "  ip-append <集群ID> <IP列表>            - 追加IP到白名单"
-    echo "  ip-clear <集群ID>                      - 清空集群IP白名单"
+    echo "  add-ip <集群ID> <IP列表>               - 追加IP到白名单"
+    echo "  del-ip <集群ID> <IP列表>               - 从白名单删除指定IP"
+    echo "  clear-ip <集群ID>                      - 清空集群IP白名单"
     echo "  get-bak [<集群ID>] [format]         - 列出备份集（默认最近30天）"
     echo "  del-bak [<集群ID>] [<备份ID>]       - 删除备份集（可用 fzf 选择）"
     echo
@@ -42,8 +43,9 @@ show_polardb_help() {
     echo "  $0 polardb del-db pc-xxxxxxxxxxxxx mydb"
     echo "  $0 polardb get-ip pc-xxxxxxxxxxxxx"
     echo "  $0 polardb set-ip pc-xxxxxxxxxxxxx '192.168.1.1,10.0.0.0/8'"
-    echo "  $0 polardb ip-append pc-xxxxxxxxxxxxx '192.168.2.1'"
-    echo "  $0 polardb ip-clear pc-xxxxxxxxxxxxx"
+    echo "  $0 polardb add-ip pc-xxxxxxxxxxxxx '192.168.2.1'"
+    echo "  $0 polardb del-ip pc-xxxxxxxxxxxxx '192.168.2.1'"
+    echo "  $0 polardb clear-ip pc-xxxxxxxxxxxxx"
     echo "  $0 polardb get-bak pc-xxxxxxxxxxxxx"
     echo "  $0 polardb del-bak pc-xxxxxxxxxxxxx cb-xxxx"
     echo ""
@@ -68,8 +70,9 @@ handle_polardb_commands() {
     del-db) polardb_db_delete "$@" ;;
     get-ip) polardb_ip_get "$@" ;;
     set-ip) polardb_ip_set "$@" ;;
-    ip-append) polardb_ip_append "$@" ;;
-    ip-clear) polardb_ip_clear "$@" ;;
+    add-ip) polardb_ip_append "$@" ;;
+    del-ip) polardb_ip_del "$@" ;;
+    clear-ip) polardb_ip_clear "$@" ;;
     get-bak | get-backup) polardb_backup_list "$@" ;;
     del-bak | del-backup) polardb_backup_delete "$@" ;;
     help) show_polardb_help ;;
@@ -782,7 +785,7 @@ polardb_ip_append() {
 
     if [ -z "$ips" ]; then
         echo "错误：集群ID和IP列表不能为空。" >&2
-        echo "用法：polardb ip-append <集群ID> <IP列表>" >&2
+        echo "用法：polardb add-ip <集群ID> <IP列表>" >&2
         return 1
     fi
 
@@ -806,7 +809,47 @@ polardb_ip_append() {
     echo "IP白名单追加成功。"
     echo "$result" | jq '.'
 
-    log_result "${profile:-}" "$region" "polardb" "ip-append" "$result"
+    log_result "${profile:-}" "$region" "polardb" "add-ip" "$result"
+}
+
+# 从白名单删除指定IP
+polardb_ip_del() {
+    local cluster_id ips=$2
+
+    local raw
+    raw=$(_polardb_resolve_cluster_id "$1" "选择 PolarDB 集群") || return 1
+    cluster_id=$(echo "$raw" | awk '{print $1}')
+
+    if [ -z "$ips" ]; then
+        read -r -p "请输入要删除的IP列表（多个IP用逗号分隔）: " ips
+        if [ -z "$ips" ]; then
+            echo "错误：IP列表不能为空。" >&2
+            return 1
+        fi
+    fi
+
+    confirm_action "即将从集群 $cluster_id 的白名单删除：$ips" || return 1
+
+    echo "正在从集群 $cluster_id 的白名单删除：$ips"
+    echo "IP列表: $ips"
+
+    local result
+    result=$(call_aliyun_api polardb modify-db-cluster-access-whitelist \
+        --biz-region-id "${region:-}" \
+        --db-cluster-id "$cluster_id" \
+        --security-ips "$ips" \
+        --modify-mode "Delete")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "错误：删除IP白名单失败。" >&2
+        echo "$result"
+        return 1
+    fi
+
+    echo "IP白名单删除成功。"
+    echo "$result" | jq '.'
+
+    log_result "${profile:-}" "$region" "polardb" "del-ip" "$result"
 }
 
 # 清空IP白名单
@@ -839,7 +882,7 @@ polardb_ip_clear() {
     echo "IP白名单已清空（保留127.0.0.1以维持基本访问）。"
     echo "$result" | jq '.'
 
-    log_result "${profile:-}" "$region" "polardb" "ip-clear" "$result"
+    log_result "${profile:-}" "$region" "polardb" "clear-ip" "$result"
 }
 
 # 交互式解析集群ID（fzf 选择，单个自动选中）
