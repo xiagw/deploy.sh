@@ -133,6 +133,11 @@ generate_bake_file() {
             local _node_num="${run_tag%%-*}"
             [[ -n "${_node_num}" && "${_node_num}" -lt 18 ]] 2>/dev/null && { build_tag="18-slim"; run_tag="18-slim"; }
         fi
+        ## 静态前端（vue-cli/vite/react-scripts/umi）：builder 用 node，final 用 nginx 承接静态产物
+        if [[ "${lang_type}" == node ]] && detect_node_framework_static; then
+            run_image="nginx"
+            run_tag="alpine"
+        fi
         lang_args+="
         BUILD_IMAGE = \"${build_image}\"
         BUILD_TAG = \"${build_tag}\"
@@ -149,10 +154,21 @@ generate_bake_file() {
 
         ;;
     node)
-        lang_args+="
+        if detect_node_framework_static; then
+            ## 静态前端: 注入构建脚本名（bake 传给 build.sh web <script>，由命名空间映射）
+            local web_build_script="build"
+            case "${G_NAMESPACE:-}" in
+            *uat* | *test*) web_build_script="build:stage" ;;
+            *master* | *main* | *prod*) web_build_script="build:prod" ;;
+            esac
+            lang_args+="
+        WEB_BUILD_SCRIPT = \"${web_build_script}\""
+        else
+            lang_args+="
         ONBUILD_CHOWN = \"1000:1000\"
         ONBUILD_COPY_SRC = \".\"
         ONBUILD_COPY_DEST = \"/app/\""
+        fi
         ;;
     esac
     ## README 文件中声明的额外安装需求(变量名转为全大写变量值为 true 小写)
@@ -585,7 +601,13 @@ build_node() {
 
     [ ! -d "${G_REPO_DIR}/node_modules" ] && yarn_install=true
 
-    _msg task "Running yarn install"
+    ## 包管理器: 静态前端按 lockfile 选 npm/yarn；后端沿用 yarn（现状不变）
+    local pkg_man="yarn"
+    if detect_node_framework_static && [[ -f "${G_REPO_DIR}/package-lock.json" ]]; then
+        pkg_man="npm"
+    fi
+
+    _msg task "Running ${pkg_man} install"
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
 
     # Custom build check
@@ -596,8 +618,13 @@ build_node() {
 
     # Install dependencies
     if ${yarn_install}; then
-        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "yarn install" &&
-            echo "$file_json_md5" >>"${me_log}"
+        if [[ "${pkg_man}" == npm ]]; then
+            $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "npm install" &&
+                echo "$file_json_md5" >>"${me_log}"
+        else
+            $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "yarn install" &&
+                echo "$file_json_md5" >>"${me_log}"
+        fi
     else
         _msg task "Skip yarn install..."
     fi
@@ -610,10 +637,19 @@ build_node() {
     *) build_opt=build ;;
     esac
 
-    $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "yarn run ${build_opt}"
+    ## 静态前端: 命名空间映射的脚本不存在时回退 build（vite/umi 等项目往往只有 build 脚本）
+    if detect_node_framework_static && ! jq -e --arg s "$build_opt" '.scripts | has($s)' "${G_REPO_DIR}/package.json" >/dev/null 2>&1; then
+        build_opt=build
+    fi
+
+    if [[ "${pkg_man}" == npm ]]; then
+        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "npm run ${build_opt}"
+    else
+        $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "yarn run ${build_opt}"
+    fi
 
     [ -d "${G_REPO_DIR}"/build ] && rsync -a --delete "${G_REPO_DIR}"/build/ "${G_REPO_DIR}"/dist/
-    _msg note "[build] yarn"
+    _msg note "[build] node (${pkg_man}, script=${build_opt})"
 }
 
 # Python Build

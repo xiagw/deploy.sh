@@ -66,22 +66,32 @@ repo_inject_file() {
     local _template="${G_PATH}/conf/Dockerfile.multi"
     case "$lang" in
     node)
-        ## node：
-        ## 先判断 package.json 文件是否变动，有则生成 dockerfile.base（生成 base image 提高效率）
-        ## 用 Dockerfile.single 作为 base image，再生成只含 FROM 的 Dockerfile
-        echo "Checking package.json hash..."
-        local hash_now hash_saved base_tag
-        hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
-        mkdir -p "${G_DATA}/cache"
-        hash_saved="$(cat "${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
-        if [[ "$hash_now" != "$hash_saved" ]]; then
-            _msg note "generate Dockerfile.base: ${_single} -> ${G_REPO_DIR}/Dockerfile.base"
-            cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
+        if detect_node_framework_static; then
+            ## 静态前端（vue-cli/vite/react-scripts/umi）：多阶段构建，nginx 承接静态产物
+            ## 生成 conf/Dockerfile.web + nginx-spa.conf，不生成 Dockerfile.base
+            local node_framework
+            node_framework="$(detect_node_framework)"
+            _msg note "node framework=${node_framework} (static frontend), inject multi-stage nginx Dockerfile"
+            cp -f "${G_PATH}/conf/Dockerfile.web" "${G_REPO_DIR}/Dockerfile"
+            cp -f "${G_PATH}/conf/nginx-spa.conf" "${G_REPO_DIR}/nginx-spa.conf"
         else
-            rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
+            ## 后端 node（SSR/纯后端，nodejs/next/nuxt）：
+            ## 先判断 package.json 文件是否变动，有则生成 dockerfile.base（生成 base image 提高效率）
+            ## 用 Dockerfile.single 作为 base image，再生成只含 FROM 的 Dockerfile
+            echo "Checking package.json hash..."
+            local hash_now hash_saved base_tag
+            hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
+            mkdir -p "${G_DATA}/cache"
+            hash_saved="$(cat "${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
+            if [[ "$hash_now" != "$hash_saved" ]]; then
+                _msg note "generate Dockerfile.base: ${_single} -> ${G_REPO_DIR}/Dockerfile.base"
+                cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
+            else
+                rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
+            fi
+            base_tag="${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
+            echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
         fi
-        base_tag="${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
-        echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
         ;;
     java | go | golang | php | nginx)
         [[ -f "${_template}" ]] && {
@@ -285,6 +295,35 @@ detect_repo_language() {
     ## 写入缓存（下次同 G_REPO_DIR 命中直接返回）
     G_REPO_LANG_CACHE="${lang_type}:${version}:${docker_flag}"
     G_REPO_LANG_CACHE_DIR="$G_REPO_DIR"
+}
+
+# Detect the frontend framework/build tool of a Node.js project
+# Reads dependencies+devDependencies keys from package.json
+# Returns: nuxt | next | vuecli | cra | umi | vite | nodejs
+detect_node_framework() {
+    local pkg="${G_REPO_DIR}/package.json"
+    [[ -f "${pkg}" ]] || { echo "nodejs"; return 0; }
+    local out
+    out="$(jq -r '
+        (.dependencies // {}) + (.devDependencies // {}) |
+        if has("nuxt") then "nuxt"
+        elif has("next") then "next"
+        elif has("@vue/cli-service") then "vuecli"
+        elif has("react-scripts") then "cra"
+        elif has("umi") or ([keys[] | startswith("@umijs/")] | any) then "umi"
+        elif has("vite") then "vite"
+        else "nodejs" end
+    ' "${pkg}" 2>/dev/null)"
+    echo "${out:-nodejs}"
+}
+
+# true when framework produces pure static assets served by nginx
+# (vuecli/vite/cra/umi), false for SSR/backend (nodejs/next/nuxt)
+detect_node_framework_static() {
+    case "$(detect_node_framework)" in
+    vuecli | cra | umi | vite) return 0 ;;
+    *) return 1 ;;
+    esac
 }
 
 # Detect repository languages using Docker and GitHub Linguist

@@ -6,6 +6,7 @@
 #
 # 用法（由 Dockerfile 通过 mount 传入 /src，或从 BUILD_URL 拉取）：
 #   bash build.sh              # 自动检测环境
+#   bash build.sh web build    # 静态前端：install + 构建，产物到 /build_output/usr/share/nginx/html
 #   bash build.sh geo           # Nginx：仅安装 GeoIP 相关（builder 阶段）
 #   bash build.sh runtime       # Nginx：仅运行时依赖
 #   bash build.sh swoole        # PHP：拷贝已编译的 swoole 扩展
@@ -378,6 +379,53 @@ _build_node() {
     fi
 }
 
+_build_web() {
+    echo "Building node web frontend..."
+    local web_script="${1:-build}"
+    local pkg_man="npm" npm_mirror="${npm_mirror:-}" web_out
+    cd /src || return 1
+
+    [ -f package-lock.json ] && pkg_man="npm"
+    [ -f yarn.lock ] && pkg_man="yarn"
+    [ -f pnpm-lock.yaml ] && pkg_man="pnpm"
+
+    if [ -n "$npm_mirror" ]; then
+        npm config set registry "$npm_mirror"
+        yarn config set registry "$npm_mirror" || true
+    fi
+
+    case "$pkg_man" in
+    yarn)
+        yarn install
+        yarn run "$web_script"
+        ;;
+    pnpm)
+        command -v pnpm >/dev/null 2>&1 || npm install -g pnpm
+        pnpm install
+        pnpm run "$web_script"
+        ;;
+    *)
+        npm install
+        npm run "$web_script"
+        ;;
+    esac
+
+    ## 产物统一输出到 nginx 静态根目录（按框架常见目录兜底）
+    web_out="${BUILD_OUTPUT_DIR:-/build_output}/usr/share/nginx/html"
+    mkdir -p "$web_out"
+    if [ -d dist ]; then
+        cp -a dist/. "$web_out"/
+    elif [ -d build ]; then
+        cp -a build/. "$web_out"/
+    elif [ -d .next ]; then
+        cp -a .next/. "$web_out"/
+    elif [ -d .nuxt ]; then
+        cp -a .nuxt/. "$web_out"/
+    else
+        echo "Warning: no static output dir found (dist/build/.next/.nuxt)" >&2
+    fi
+}
+
 _build_maven() {
     # Set up Maven options with standard parameters
     mvn_opts="mvn -T 1C --batch-mode --update-snapshots -DskipTests -Dmaven.compile.fork=true clean package"
@@ -738,6 +786,10 @@ main() {
     _set_mirror
 
     case "$1" in
+    web)
+        _build_web "$2"
+        return
+        ;;
     swoole)
         _build_php swoole
         return
