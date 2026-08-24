@@ -7,7 +7,7 @@ shutdown_timeout = 0
   session_timeout = 1800
 
 [[runners]]
-  name = "gitlabrunner"
+  name = "gitlab_runner"
   url = "https://git.example.com/"
   token = "xxxxxxxxxxxxxx"
   id = 2
@@ -18,7 +18,11 @@ shutdown_timeout = 0
   executor = "shell"
 
   ## 白名单守卫：pre_build_script 在 script 之前运行，工作目录是已 checkout 的项目。
-  ## 规则：项目自己的 .gitlab-ci.yml 必须是标准模板格式（gitlab-ci.yml 注释 #5-8）：
+  ## 规则一：CI_CONFIG_PATH 必须指向标准模板，允许以下形式，其它一律拒绝执行：
+  ##   - .gitlab-ci.yml                            （默认，本仓库根）
+  ##   - templates/gitlab-ci*.yml@root/pms:main    （项目引用格式 file@project:ref）
+  ##   - ${CI_SERVER_URL}/root/pms/-/raw/main/templates/gitlab-ci*.yml（URL 方式，可追加 @root/pms:main）
+  ## 规则二：仅当走本地 .gitlab-ci.yml 时，其内容必须是标准模板格式（gitlab-ci.yml 注释 #5-8）：
   ##     include:
   ##       - project: 'root/pms'
   ##         ref: main
@@ -27,24 +31,37 @@ shutdown_timeout = 0
   ##     include: - project: root/pms ref: main file: templates/gitlab-ci*.yml
   ##   gitlab-ci 文件名可带任意后缀（如 gitlab-ci-2.yml），其它任何内容一律拒绝执行。
   pre_build_script = """
-    CI_FILE=".gitlab-ci.yml"
+    CI_CONFIG="${CI_CONFIG_PATH:-.gitlab-ci.yml}"
 
-    # 0. CI 配置必须走默认的 .gitlab-ci.yml，防止 ci_config_path 指向其它文件/URL/仓库绕过白名单
-    if [[ "${CI_CONFIG_PATH:-.gitlab-ci.yml}" != ".gitlab-ci.yml" ]]; then
-      echo "❌ 使用了非默认 CI 配置路径: ${CI_CONFIG_PATH}，放弃执行"
-      exit 1
-    fi
-
-    EXPECTED_RE='^include: - project: root/pms ref: main file: templates/gitlab-ci[A-Za-z0-9._-]*\\.yml$'
-
-    ACTUAL=$(grep -vE "^[[:space:]]*#|^[[:space:]]*$" "$CI_FILE" 2>/dev/null | xargs)
-
-    if printf '%s' "$ACTUAL" | grep -qE "$EXPECTED_RE"; then
-      echo "✅ .gitlab-ci.yml 为标准模板，放行"
-    else
-      echo "❌ .gitlab-ci.yml 非标准模板，放弃执行"
-      exit 1
-    fi
+    # 0. CI_CONFIG_PATH 必须是标准模板的合法来源，防止 ci_config_path 指向其它文件/URL/仓库绕过白名单
+    #    注意：校验失败才 exit 1 终止；放行分支不能 exit，否则会终止真正的构建。
+    case "$CI_CONFIG" in
+      .gitlab-ci.yml)
+        if [[ -f "$CI_CONFIG" ]]; then
+          EXPECTED_RE='^include: - project: root/pms ref: main file: templates/gitlab-ci[A-Za-z0-9._-]*\\.yml$'
+          ACTUAL=$(grep -vE "^[[:space:]]*#|^[[:space:]]*$" "$CI_CONFIG" | xargs)
+          if printf '%s' "$ACTUAL" | grep -qE "$EXPECTED_RE"; then
+            echo "✅ .gitlab-ci.yml 为标准模板，放行"
+          else
+            echo "❌ .gitlab-ci.yml 非标准模板，禁止"
+            exit 1
+          fi
+        else
+          echo "❌ 未找到 ${CI_CONFIG}，禁止"
+          exit 1
+        fi
+        ;;
+      templates/gitlab-ci*.yml@root/pms:main | \
+      "${CI_SERVER_URL%/}"/root/pms/-/raw/main/templates/gitlab-ci*.yml | \
+      "${CI_SERVER_URL%/}"/root/pms/-/raw/main/templates/gitlab-ci*.yml@root/pms:main | \
+      https://gitee.com/xiagw/deploy.sh/raw/main/conf/templates/gitlab-ci.yml)
+        echo "✅ CI 配置指向标准模板，放行"
+        ;;
+      *)
+        echo "❌ 非白名单 CI 配置路径: ${CI_CONFIG}，禁止"
+        exit 1
+        ;;
+    esac
   """
 
   [runners.custom_build_dir]
