@@ -244,11 +244,23 @@ EOF
     fi
 }
 
+# 自动生成两段式时的说明（每个项目/分支首次构建输出一次，marker 记录）
+node_base_explain() {
+    local marker="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base.explained"
+    if ! ${G_DRY_RUN:-false} && [[ -f "${marker}" ]]; then
+        return 0
+    fi
+    ${G_DRY_RUN:-false} || touch "${marker}"
+    _msg note "[node] 两段式构建（加速设计）：base 镜像先按 package.json 安装依赖，运行时镜像直接 FROM base"
+    _msg note "      依赖只安装一次；package.json 变动才重建 base，未变动直接复用已有（构建更快）"
+    _msg note "      base tag: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
+}
+
 build_image() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
     local lang="${1:-}"
     local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror ret debug_flag
-    local custom_build_ret
+    local custom_build_ret build_base dep_hash node_base_record node_base_custom
 
     ## Ensure buildx builder is available
     enable_buildx_mode
@@ -272,14 +284,39 @@ build_image() {
     buildx_push_option="--push"
 
     ## 如果存在 Dockerfile.base，则生成 base 镜像的 tag
+    ## base 是否重建以 package.json 依赖指纹为准（仅后端 node）：依赖未变且 registry 已有该 base 时直接复用，
+    ## 不再依赖 Dockerfile.base 文件是否存在（研发提交该文件也不会导致每次重建 base）
     dockerfile_base_path="${G_REPO_DIR}/Dockerfile.base"
     dockerfile_path="${G_REPO_DIR}/Dockerfile"
     if [[ -f "${dockerfile_base_path}" ]]; then
         base_image_tag="${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
-        if ${G_DRY_RUN:-false}; then
-            dry_run_note "write 'FROM ${base_image_tag}' to ${dockerfile_path#"${G_REPO_DIR}"/} (base image)"
-        else
-            echo "FROM ${base_image_tag}" >"${dockerfile_path}"
+        build_base=true
+        if [[ "${lang%%:*}" == node ]] && ! detect_node_framework_static; then
+            if node_base_is_custom; then
+                ## 研发自提交 Dockerfile/Dockerfile.base：按其方式走，始终构建 base、不覆写其 Dockerfile
+                ## （提醒已在 repo_inject_file 输出）
+                node_base_custom=true
+            else
+                ## 自动生成的两段式：按 package.json 指纹决定是否重建 base
+                dep_hash="$(node_dep_hash)"
+                node_base_record="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base.md5"
+                node_base_explain
+                node_lockfile_warn
+                if [[ "$(cat "${node_base_record}" 2>/dev/null || echo 0)" == "${dep_hash}" ]]; then
+                    if ${G_DRY_RUN:-false} || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
+                        build_base=false
+                        _msg note "[node] package.json 未变，Dockerfile 直接复用基础镜像（本轮构建较快）"
+                    fi
+                fi
+            fi
+        fi
+        ## 自动生成时确保主 Dockerfile = FROM base；研发自提交的不动
+        if [[ "${node_base_custom:-false}" != true ]]; then
+            if ${G_DRY_RUN:-false}; then
+                ${build_base} && dry_run_note "write 'FROM ${base_image_tag}' to ${dockerfile_path#"${G_REPO_DIR}"/} (base image)"
+            else
+                echo "FROM ${base_image_tag}" >"${dockerfile_path}"
+            fi
         fi
     fi
 
@@ -291,7 +328,11 @@ build_image() {
     else
         bake_file_path="${G_REPO_DIR}/docker-bake.hcl"
     fi
-    generate_bake_file "${lang}" "${bake_file_path}" "${target_image_tag}" "${base_image_tag:-}"
+    local bake_base_tag=""
+    if ${build_base:-false}; then
+        bake_base_tag="${base_image_tag}"
+    fi
+    generate_bake_file "${lang}" "${bake_file_path}" "${target_image_tag}" "${bake_base_tag}"
 
     ## 自动生成 .dockerignore（仅在项目不存在时创建，避免覆盖用户自定义规则）
     ## 减少远程 buildx 构建时通过 SSH 传输的上下文体积
@@ -333,7 +374,7 @@ DOCKERIGNORE
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] skip docker buildx bake, showing build plan only"
         if $G_DOCK buildx version >/dev/null 2>&1; then
-            if [[ -f "${dockerfile_base_path}" ]]; then
+            if [[ -f "${dockerfile_base_path}" ]] && ${build_base:-false}; then
                 dry_run_note "$G_DOCK buildx bake ${G_BUILDER:-} --file ${bake_file_path} ${buildx_push_option} ${G_PROGRESS} base"
                 $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" --progress=quiet base --print
             fi
@@ -346,26 +387,36 @@ DOCKERIGNORE
         rm -f "${bake_file_path}"
         return 0
     fi
-    ## 如果存在 Dockerfile.base，则先构建 base 镜像
+    ## 存在 Dockerfile.base 且依赖指纹变化（或 registry 无该 base）时才构建 base
     if [[ -f "${dockerfile_base_path}" ]]; then
-        _msg note "Found ${dockerfile_base_path}, building base image:"
-        _msg note "  ${base_image_tag}"
-        local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build-${G_REPO_BRANCH}.log"
-        _msg note "log file: $base_build_log"
-        mkdir -p "$(dirname "$base_build_log")"
+        if ${build_base:-false}; then
+            if [[ "${node_base_custom:-false}" == true ]]; then
+                _msg note "[node] 按你的 Dockerfile.base/Dockerfile 构建基础镜像和运行时镜像"
+            else
+                _msg note "[node] package.json 有改动，重建基础镜像 Dockerfile.base（本轮构建较慢）"
+            fi
+            local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build-${G_REPO_BRANCH}.log"
+            _msg note "log file: $base_build_log"
+            mkdir -p "$(dirname "$base_build_log")"
 
-        set +e +o pipefail
-        $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} base 2>&1 | tee "$base_build_log" >/dev/null
-        ret="${PIPESTATUS[0]}"
-        set -eo pipefail
+            set +e +o pipefail
+            $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} base 2>&1 | tee "$base_build_log" >/dev/null
+            ret="${PIPESTATUS[0]}"
+            set -eo pipefail
 
-        if [ "$ret" -ne 0 ]; then
-            echo "============================================================"
-            _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
-            echo "============================================================"
-            tail -100 "$base_build_log"
-            _msg error "Full build log: $base_build_log"
-            return 1
+            if [ "$ret" -ne 0 ]; then
+                echo "============================================================"
+                _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
+                echo "============================================================"
+                tail -100 "$base_build_log"
+                _msg error "Full build log: $base_build_log"
+                return 1
+            fi
+            ## 构建成功：记录依赖指纹，依赖未变时下次直接复用
+            if [[ "${lang%%:*}" == node ]] && [[ -n "${dep_hash:-}" ]]; then
+                mkdir -p "$(dirname "${node_base_record}")"
+                echo "${dep_hash}" >"${node_base_record}"
+            fi
         fi
     fi
 

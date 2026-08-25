@@ -60,6 +60,11 @@ repo_inject_file() {
     ## 不存在 dockerfile， 按照lang不同分开处理
     if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
         _msg note "Found existing Dockerfile, skipping injection."
+        ## 研发自提交 Dockerfile（git 跟踪中）：按其方式构建，提醒自行负责分层/镜像加速
+        if [[ "$lang" == node ]] && ! detect_node_framework_static && node_base_is_custom; then
+            _msg warn "[warn] 仓库自带 Dockerfile/Dockerfile.base，按你的方式构建，不注入本程序的自动两段式加速模板"
+            _msg warn "      请自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
+        fi
         return 0
     fi
     local _single="${G_PATH}/conf/Dockerfile.single"
@@ -76,20 +81,11 @@ repo_inject_file() {
             cp -f "${G_PATH}/conf/nginx-spa.conf" "${G_REPO_DIR}/nginx-spa.conf"
         else
             ## 后端 node（SSR/纯后端，nodejs/next/nuxt）：
-            ## 先判断 package.json 文件是否变动，有则生成 dockerfile.base（生成 base image 提高效率）
-            ## 用 Dockerfile.single 作为 base image，再生成只含 FROM 的 Dockerfile
-            echo "Checking package.json hash..."
-            local hash_now hash_saved base_tag
-            hash_now="$(md5sum "${G_REPO_DIR}/package.json" | cut -d' ' -f1)"
-            mkdir -p "${G_DATA}/cache"
-            hash_saved="$(cat "${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-md5" 2>/dev/null || echo 0)"
-            if [[ "$hash_now" != "$hash_saved" ]]; then
-                _msg note "generate Dockerfile.base: ${_single} -> ${G_REPO_DIR}/Dockerfile.base"
-                cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
-            else
-                rm -rf "${G_REPO_DIR}/root" "${G_REPO_DIR}/Dockerfile.base"
-            fi
+            ## 主 Dockerfile = FROM base；base 是否重建由 build_image 按依赖指纹决定，
+            ## 不再依赖 Dockerfile.base 是否存在（研发提交该文件也不会导致每次重建 base）
+            local base_tag
             base_tag="${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
+            [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] || cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
             echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
         fi
         ;;
@@ -324,6 +320,35 @@ detect_node_framework_static() {
     vuecli | cra | umi | vite) return 0 ;;
     *) return 1 ;;
     esac
+}
+
+# 后端 node 依赖指纹：以 package.json 为准（依赖声明变化即重建 base）
+node_dep_hash() {
+    md5sum "${G_REPO_DIR}/package.json" 2>/dev/null | cut -d' ' -f1
+}
+
+# 检查 lockfile 与 package.json 是否同步；不同步时仅告警（决策仍以 package.json 为准）
+node_lockfile_warn() {
+    local pkg="${G_REPO_DIR}/package.json" lock="${G_REPO_DIR}/package-lock.json"
+    [[ -f "${pkg}" ]] || return 0
+    [[ -f "${lock}" ]] || return 0
+    ## yarn.lock / pnpm-lock.yaml 为文本格式，无法可靠比对，跳过
+    if ! jq -e '.packages[""] // empty' "${lock}" >/dev/null 2>&1; then
+        return 0
+    fi
+    local pkg_keys lock_keys
+    pkg_keys="$(jq -r '(.dependencies // {}) + (.devDependencies // {}) | keys[]' "${pkg}" | LC_ALL=C sort -u)"
+    lock_keys="$(jq -r '.packages[""] | (.dependencies // {}) + (.devDependencies // {}) | keys[]' "${lock}" | LC_ALL=C sort -u)"
+    [[ "${pkg_keys}" == "${lock_keys}" ]] || \
+        _msg warn "[node] package-lock.json 与 package.json 依赖不一致，建议重新生成 lockfile"
+}
+
+# 仓库中的 Dockerfile/Dockerfile.base 是否为研发提交（git 跟踪中）
+# 自动注入的产物不跟踪，返回 1；非 git 仓库视为自动注入，返回 1
+node_base_is_custom() {
+    git -C "${G_REPO_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+    git -C "${G_REPO_DIR}" ls-files --error-unmatch Dockerfile >/dev/null 2>&1 ||
+        git -C "${G_REPO_DIR}" ls-files --error-unmatch Dockerfile.base >/dev/null 2>&1
 }
 
 # Detect repository languages using Docker and GitHub Linguist
