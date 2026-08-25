@@ -36,7 +36,6 @@ ME_ENV="$ME_DATA/conf/${ME_NAME}.env"
 
 # 跨函数共享的运行态（由 prepare_workspace 填充）
 gitlab_profile=''
-cmd_gitlab=''
 GITLAB_URL=''
 GITLAB_TOKEN=''
 
@@ -197,14 +196,14 @@ prepare_workspace() {
         _msg note "未指定 profile，使用 env 默认配置"
     fi
 
-    # 从 env 文件读取 profile 的 URL/Token，并导出给 gitlab CLI（优先级高于配置文件）
+    # 从 env 文件读取 profile 的 URL/Token，并导出给 glab CLI（优先级高于配置文件）
     . "$ME_ENV" "$gitlab_profile"
     [[ -z "$GITLAB_URL" ]] && die "Cannot read url from env"
     [[ -z "$GITLAB_TOKEN" ]] && die "Cannot read private_token from env"
 
     export GITLAB_URL
-    export GITLAB_PRIVATE_TOKEN="$GITLAB_TOKEN"
-    cmd_gitlab="gitlab -o json"
+    export GITLAB_TOKEN
+    setup_glab_env
 }
 
 # ---- 交互式选择 ----
@@ -220,7 +219,7 @@ select_profile() {
 
 select_action() {
     local actions=(
-        "user add      Create a new user/Add user to groups"
+        "user add      Create a new user"
         "user get      List all users"
         "user set      Update user password"
         "user block    Block a user"
@@ -240,19 +239,9 @@ format_table() {
     local header="$1"
     local jq_filter="$2"
     shift 2
-    $cmd_gitlab "$@" | jq -r "$jq_filter" |
+    glab_api "$@" | jq -r "$jq_filter" |
         (echo -e "$header" && cat) |
         column -t -s $'\t'
-}
-
-gitlab_http_request() {
-    local method=$1 endpoint=$2
-    [ -z "$GITLAB_TOKEN" ] && {
-        _msg error "GITLAB_TOKEN is not set"
-        return 1
-    }
-    local curl_args=(curl -fsSL --request "$method" --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}")
-    "${curl_args[@]}" --url "${GITLAB_URL%/}/api/v4${endpoint}"
 }
 
 require_username() {
@@ -264,11 +253,43 @@ require_username() {
     printf '%s' "$user"
 }
 
+# ---- glab helpers ----
+GLAB_HOST=''
+
+setup_glab_env() {
+    local host="${GITLAB_URL#https://}"
+    host="${host#http://}"
+    host="${host%/}"
+    GLAB_HOST="$host"
+    export GL_HOST="$host"
+    export GITLAB_HOST="$host"
+}
+
+glab_api() {
+    glab api --hostname "$GLAB_HOST" "$@"
+}
+
+# Fetch all pages from a paginated GitLab API endpoint, merge into single JSON array
+glab_api_get_all() {
+    local endpoint="$1"
+    local page=1 all='[]' sep count response
+    while true; do
+        [[ "$endpoint" == *'?'* ]] && sep='&' || sep='?'
+        response=$(glab_api "${endpoint}${sep}page=${page}&per_page=100") || return 1
+        count=$(echo "$response" | jq 'if type == "array" then length else 0 end')
+        [[ "$count" -eq 0 ]] && break
+        all=$(printf '%s\n%s' "$all" "$response" | jq -s '.[0] + .[1]')
+        [[ "$count" -lt 100 ]] && break
+        page=$((page + 1))
+    done
+    echo "$all"
+}
+
 # ---- user 子命令 ----
 format_user_list() {
     format_table "ID\tUsername\tName\tEmail\tState" \
         '.[] | select(.state=="active") | [.id, .username, .name, .email, .state] | @tsv' \
-        user list
+        "users?per_page=100"
 }
 
 user_add_account() {
@@ -286,17 +307,18 @@ add_account() {
     [ -z "$user" ] && return 1
     password_rand=$(_get_random_password 2>/dev/null)
     _msg task "Check if user exists"
-    if $cmd_gitlab user list --username "$user" | jq -e '.[0].name'; then
+    if glab_api "users?username=$user" | jq -e '.[0].name' >/dev/null 2>&1; then
         _msg warn "User [$user] already exists, skip create"
         return 0
     fi
     _msg task "Create user"
-    $cmd_gitlab user create --name "$user" \
-        --username "$user" \
-        --password "${password_rand}" \
-        --email "${user}@${email_domain}" \
-        --skip-confirmation 1 \
-        --can-create-group 0
+    glab_api --method POST "users" \
+        --raw-field "name=$user" \
+        --raw-field "username=$user" \
+        --raw-field "password=${password_rand}" \
+        --raw-field "email=${user}@${email_domain}" \
+        --raw-field "skip_confirmation=true" \
+        --raw-field "can_create_group=false"
 
     send_msg="${GITLAB_URL}
 username=$user
@@ -308,14 +330,16 @@ password=$password_rand"
 add_account_to_groups() {
     local user="$1" user_id level pms_id
     _msg task "Add user [$user] to groups..."
-    user_id=$($cmd_gitlab user list --username "$user" | jq -r '.[].id')
+    user_id=$(glab_api "users?username=$user" | jq -r '.[].id')
 
     # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
     # 默认自动加入 pms 组，级别为 Developer，（因为需要读取CI/CD公共配置模版）
-    pms_id=$($cmd_gitlab group list --skip-groups 2 --top-level-only 1 |
+    pms_id=$(glab_api "groups?top_level_only=true&skip_groups=2&per_page=100" |
         jq -r '.[] | select(.name=="pms") | .id')
     if [ -n "$pms_id" ]; then
-        $cmd_gitlab group-member create --access-level 30 --group-id "$pms_id" --user-id "$user_id"
+        glab_api --method POST "groups/${pms_id}/members" \
+            --raw-field "access_level=30" \
+            --raw-field "user_id=${user_id}"
         _msg task "Added user [$user] to group [pms]"
     fi
 
@@ -323,10 +347,12 @@ add_account_to_groups() {
     if [ -t 1 ]; then
         while IFS=$'\t' read -r group_id group_name; do
             level=40
-            $cmd_gitlab group-member create --access-level "$level" --group-id "$group_id" --user-id "$user_id"
+            glab_api --method POST "groups/${group_id}/members" \
+                --raw-field "access_level=${level}" \
+                --raw-field "user_id=${user_id}"
             _msg task "Added user [$user] to group [$group_name]"
         done < <(
-            $cmd_gitlab group list --skip-groups 2 --top-level-only 1 |
+            glab_api "groups?top_level_only=true&skip_groups=2&per_page=100" |
                 jq -r '.[] | select(.name!="pms") | "\(.id)\t\(.name)"' |
                 fzf --multi --prompt="Select groups (TAB to multi-select, ENTER to confirm): " --header="ID\tName" --height=60%
         )
@@ -345,7 +371,7 @@ user_set_password() {
 update_account_password() {
     local user="$1" password_rand="$2"
     local user_id email username name user_json send_msg
-    user_json=$($cmd_gitlab user list --username "$user")
+    user_json=$(glab_api "users?username=$user")
     user_id=$(echo "$user_json" | jq -r '.[0].id // empty')
     email=$(echo "$user_json" | jq -r '.[0].email // empty')
     username=$(echo "$user_json" | jq -r '.[0].username // empty')
@@ -356,12 +382,12 @@ update_account_password() {
         return 1
     }
 
-    $cmd_gitlab user update --id "${user_id}" \
-        --email "${email}" \
-        --username "${username}" \
-        --name "${name}" \
-        --password "${password_rand}" \
-        --skip-reconfirmation 1
+    glab_api --method PUT "users/${user_id}" \
+        --raw-field "email=${email}" \
+        --raw-field "username=${username}" \
+        --raw-field "name=${name}" \
+        --raw-field "password=${password_rand}" \
+        --raw-field "skip_reconfirmation=true"
 
     send_msg="${GITLAB_URL}
 username=$user
@@ -385,8 +411,8 @@ user_add_group() {
 
 block_account() {
     local user="$1" user_id
-    user_id=$($cmd_gitlab user list --username "$user" | jq -r '.[].id')
-    $cmd_gitlab user block --id "${user_id}"
+    user_id=$(glab_api "users?username=$user" | jq -r '.[].id')
+    glab_api --method POST "users/${user_id}/block"
     _msg log "$ME_LOG" "Blocked user: $user"
 }
 
@@ -397,7 +423,7 @@ user_project_member() {
 }
 
 add_user_to_project() {
-    local user="$1" project_ref project_id access_level
+    local user="$1" project_ref project_id access_level encoded_path
 
     read -rp "[?] Project path (e.g. group/project): " project_ref || true
     [[ -z "$project_ref" ]] && {
@@ -405,7 +431,8 @@ add_user_to_project() {
         return 1
     }
 
-    project_id=$($cmd_gitlab project get --id "$project_ref" | jq -r '.id // empty')
+    encoded_path=$(echo "$project_ref" | jq -Rr '@uri')
+    project_id=$(glab_api "projects/${encoded_path}" | jq -r '.id // empty')
     [[ -z "$project_id" ]] && {
         _msg error "Project not found: $project_ref"
         return 1
@@ -424,17 +451,16 @@ add_user_to_project() {
 
     _get_yes_no "[+] Add [$user] as level [$access_level] to project [$project_ref]?" || return 1
 
-    $cmd_gitlab project-member create \
-        --project-id "$project_id" \
-        --access-level "$access_level" \
-        --username "$user"
+    glab_api --method POST "projects/${project_id}/members" \
+        --raw-field "access_level=${access_level}" \
+        --raw-field "username=${user}"
 }
 
 # ---- project 子命令 ----
 format_project_list() {
     format_table "ID\tProject\tDescription\tURL\tVisibility" \
         '.[] | [.id, .path_with_namespace, .description // "-", .web_url, .visibility] | @tsv' \
-        project list --no-get-all
+        "projects?per_page=100"
 }
 
 check_large_repos() {
@@ -447,10 +473,10 @@ check_large_repos() {
 
     _msg task "Check repositories larger than ${size_threshold}MB (profile: ${gitlab_profile:-default}):" | tee -a "$ME_LOG"
 
-    # Get all project IDs directly with jq and process through stdin
+    # Get all project IDs with pagination
     while read -r id; do
-        # Get project statistics using curl
-        response=$(curl -sL --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$GITLAB_URL/api/v4/projects/${id}?statistics=true")
+        # Get project statistics using glab api
+        response=$(glab_api "projects/${id}?statistics=true")
         repo_size=$(echo "$response" | jq -r '.statistics.repository_size // 0')
         storage_size=$(echo "$response" | jq -r '.statistics.storage_size // 0')
         path=$(echo "$response" | jq -r '.path_with_namespace')
@@ -462,7 +488,7 @@ check_large_repos() {
 
         # Convert to MB only for display
         echo "repository_size: $((repo_size / 1024 / 1024))MB, storage_size: $((storage_size / 1024 / 1024))MB, ${id} ${GITLAB_URL}/${path}" | tee -a "$ME_LOG"
-    done < <($cmd_gitlab project list --get-all | jq -r '.[].id')
+    done < <(glab_api_get_all "projects" | jq -r '.[].id')
 
     _msg task "Results saved to $ME_LOG"
 }
@@ -475,10 +501,10 @@ delete_project_path() {
     [[ -z "$path" ]] && die "Project path required"
     # 获取 GitLab 项目 ID
     encoded_path=$(echo "$path" | jq -Rr '@uri')
-    id=$(gitlab_http_request "GET" "/projects/${encoded_path}" | jq -r '.id // empty')
+    id=$(glab_api "projects/${encoded_path}" | jq -r '.id // empty')
     [[ -z "$id" ]] && die "Project not found: $path"
 
-    $cmd_gitlab project delete --id "$id"
+    glab_api --method DELETE "projects/${id}"
 }
 
 # Clean GitLab pipelines, keep the newest N pipelines per project
@@ -492,7 +518,7 @@ cleanup_pipelines() {
     if [[ ! -s "$project_list" || "$(find "$project_list" -mtime +7 -print)" ]]; then
         _msg log "$ME_LOG" "获取 GitLab 所有项目 ID 列表"
         tmp_list="${project_list}.tmp"
-        $cmd_gitlab project list --get-all | jq -r '.[].id' | sort -n >"$tmp_list"
+        glab_api_get_all "projects" | jq -r '.[].id' | sort -n >"$tmp_list"
         if [[ -s "$tmp_list" ]]; then
             mv "$tmp_list" "$project_list"
         else
@@ -516,7 +542,7 @@ cleanup_pipelines() {
     fi
 
     while read -r pid; do
-        if ! ids=$($cmd_gitlab project-pipeline list --project-id "${pid}" --get-all | jq -r '.[].id' | sort -n); then
+        if ! ids=$(glab_api_get_all "projects/${pid}/pipelines" | jq -r '.[].id' | sort -n); then
             _msg warn "获取 project $pid 的 pipeline 列表失败，跳过"
             sleep "$keep"
             continue
@@ -525,8 +551,10 @@ cleanup_pipelines() {
         del_count=$(printf '%s\n' "$ids" | sed '/^$/d' | wc -l | tr -d ' ')
         del_count=$((del_count - keep))
         if [[ $del_count -gt 0 ]]; then
-            printf '%s\n' "$ids" | sed -n "1,${del_count}p" |
-                xargs -r -P10 -I% $cmd_gitlab project-pipeline delete --project-id "${pid}" --id %
+            printf '%s\n' "$ids" | sed -n "1,${del_count}p" | while read -r pipeline_id; do
+                glab_api --method DELETE "projects/${pid}/pipelines/${pipeline_id}" &
+            done
+            wait
         fi
         sleep "$keep"
     done <"$work_list"
@@ -638,14 +666,14 @@ EOF
     # Create projects if needed
 
     if _get_yes_no "[+] Create project [pms]?"; then
-        gitlab project create --name "pms"
+        glab_api --method POST "projects" --raw-field "name=pms"
         git clone "git@${url_git#*//}:root/pms.git"
         mkdir -p pms/templates
         cp "$(dirname "$ME_PATH")/conf/templates/gitlab-ci.yml" pms/templates
         (cd pms && git add . && git commit -m 'add templates file' && git push origin main)
     fi
     if _get_yes_no "[+] Create project [devops]?"; then
-        gitlab project create --name "devops"
+        glab_api --method POST "projects" --raw-field "name=devops"
     fi
 }
 
