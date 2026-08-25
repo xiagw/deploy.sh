@@ -592,8 +592,12 @@ _build_jmeter() {
 }
 
 _build_python() {
-    echo TODO...
-    return
+    echo "Building Python environment..."
+    if [ -f /src/requirements.txt ]; then
+        pip install -r /src/requirements.txt
+    else
+        echo "Warning: /src/requirements.txt not found, skip pip install" >&2
+    fi
 }
 
 _build_mysql() {

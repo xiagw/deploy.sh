@@ -61,7 +61,7 @@ repo_inject_file() {
     if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
         _msg note "Found existing Dockerfile, skipping injection."
         ## 研发自提交 Dockerfile（git 跟踪中）：按其方式构建，提醒自行负责分层/镜像加速
-        if [[ "$lang" == node ]] && ! detect_node_framework_static && node_base_is_custom; then
+        if lang_uses_deps_base "$lang" && ! detect_node_framework_static && repo_base_is_custom; then
             _msg warn "[warn] 仓库自带 Dockerfile/Dockerfile.base，按你的方式构建，不注入本程序的自动两段式加速模板"
             _msg warn "      请自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
         fi
@@ -69,6 +69,9 @@ repo_inject_file() {
     fi
     local _single="${G_PATH}/conf/Dockerfile.single"
     local _template="${G_PATH}/conf/Dockerfile.multi"
+    ## 依赖 base 两段式：主 Dockerfile = FROM base；base 是否重建由 build_image 按依赖指纹决定
+    local base_tag
+    base_tag="${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
     case "$lang" in
     node)
         if detect_node_framework_static; then
@@ -81,15 +84,22 @@ repo_inject_file() {
             cp -f "${G_PATH}/conf/nginx-spa.conf" "${G_REPO_DIR}/nginx-spa.conf"
         else
             ## 后端 node（SSR/纯后端，nodejs/next/nuxt）：
-            ## 主 Dockerfile = FROM base；base 是否重建由 build_image 按依赖指纹决定，
-            ## 不再依赖 Dockerfile.base 是否存在（研发提交该文件也不会导致每次重建 base）
-            local base_tag
-            base_tag="${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
             [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] || cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
             echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
         fi
         ;;
-    java | go | golang | php | nginx)
+    php)
+        [[ -f "${_template}" ]] && {
+            _msg note "generate Dockerfile: ${_template} -> ${G_REPO_DIR}/Dockerfile"
+            cp -f "${_template}" "${G_REPO_DIR}/Dockerfile"
+        }
+        ;;
+    python)
+        ## 运行时依赖 base（同 node 后端）：requirements.txt 安装依赖到 base，业务镜像 FROM base
+        [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] || cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
+        echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
+        ;;
+    java | go | golang | nginx)
         [[ -f "${_template}" ]] && {
             _msg note "generate Dockerfile: ${_template} -> ${G_REPO_DIR}/Dockerfile"
             cp -f "${_template}" "${G_REPO_DIR}/Dockerfile"
@@ -322,12 +332,32 @@ detect_node_framework_static() {
     esac
 }
 
-# 后端 node 依赖指纹：以 package.json 为准（依赖声明变化即重建 base）
-node_dep_hash() {
-    md5sum "${G_REPO_DIR}/package.json" 2>/dev/null | cut -d' ' -f1
+# 运行时依赖语言（node 后端/python）是否走"依赖 base"两段式模式
+lang_uses_deps_base() {
+    case "${1:-}" in
+    node | python) return 0 ;;
+    *) return 1 ;;
+    esac
 }
 
-# 检查 lockfile 与 package.json 是否同步；不同步时仅告警（决策仍以 package.json 为准）
+# 依赖声明 manifest 路径（用 JSON/声明文件，不用 lockfile）
+lang_dep_manifest() {
+    case "${1:-}" in
+    node)   echo "${G_REPO_DIR}/package.json" ;;
+    php)    echo "${G_REPO_DIR}/composer.json" ;;
+    python) if [[ -f "${G_REPO_DIR}/requirements.txt" ]]; then echo "${G_REPO_DIR}/requirements.txt"; else echo "${G_REPO_DIR}/Pipfile"; fi ;;
+    *)      echo "" ;;
+    esac
+}
+
+# 依赖指纹：以声明 manifest 为准（声明变化即重建 base）
+lang_dep_hash() {
+    local m
+    m="$(lang_dep_manifest "${1:-}")"
+    [[ -n "${m}" && -f "${m}" ]] && md5sum "${m}" 2>/dev/null | cut -d' ' -f1
+}
+
+# 检查 lockfile 与声明 manifest 是否同步；不同步时仅告警（决策仍以声明文件为准）
 node_lockfile_warn() {
     local pkg="${G_REPO_DIR}/package.json" lock="${G_REPO_DIR}/package-lock.json"
     [[ -f "${pkg}" ]] || return 0
@@ -345,7 +375,7 @@ node_lockfile_warn() {
 
 # 仓库中的 Dockerfile/Dockerfile.base 是否为研发提交（git 跟踪中）
 # 自动注入的产物不跟踪，返回 1；非 git 仓库视为自动注入，返回 1
-node_base_is_custom() {
+repo_base_is_custom() {
     git -C "${G_REPO_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
     git -C "${G_REPO_DIR}" ls-files --error-unmatch Dockerfile >/dev/null 2>&1 ||
         git -C "${G_REPO_DIR}" ls-files --error-unmatch Dockerfile.base >/dev/null 2>&1

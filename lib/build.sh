@@ -170,6 +170,13 @@ generate_bake_file() {
         ONBUILD_COPY_DEST = \"/app/\""
         fi
         ;;
+    python)
+        ## 运行时依赖 base（同 node 后端）：业务镜像 ONBUILD 把源码 COPY 到 /app/
+        lang_args+="
+        ONBUILD_CHOWN = \"1000:1000\"
+        ONBUILD_COPY_SRC = \".\"
+        ONBUILD_COPY_DEST = \"/app/\""
+        ;;
     esac
     ## README 文件中声明的额外安装需求(变量名转为全大写变量值为 true 小写)
     local f
@@ -245,14 +252,18 @@ EOF
 }
 
 # 自动生成两段式时的说明（每个项目/分支首次构建输出一次，marker 记录）
-node_base_explain() {
+base_explain() {
+    local lang="${1:-}" manifest_name
+    manifest_name="$(lang_dep_manifest "${lang}")"
+    manifest_name="${manifest_name##*/}"
+    [[ -n "${manifest_name}" ]] || return 0
     local marker="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base.explained"
     if ! ${G_DRY_RUN:-false} && [[ -f "${marker}" ]]; then
         return 0
     fi
     ${G_DRY_RUN:-false} || touch "${marker}"
-    _msg note "[node] 两段式构建（加速设计）：base 镜像先按 package.json 安装依赖，运行时镜像直接 FROM base"
-    _msg note "      依赖只安装一次；package.json 变动才重建 base，未变动直接复用已有（构建更快）"
+    _msg note "[${lang}] 两段式构建（加速设计）：base 镜像先按 ${manifest_name} 安装依赖，运行时镜像直接 FROM base"
+    _msg note "      依赖只安装一次；${manifest_name} 变动才重建 base，未变动直接复用已有（构建更快）"
     _msg note "      base tag: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
 }
 
@@ -260,7 +271,7 @@ build_image() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
     local lang="${1:-}"
     local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror ret debug_flag
-    local custom_build_ret build_base dep_hash node_base_record node_base_custom
+    local custom_build_ret build_base dep_hash node_base_record deps_base_custom
 
     ## Ensure buildx builder is available
     enable_buildx_mode
@@ -284,34 +295,39 @@ build_image() {
     buildx_push_option="--push"
 
     ## 如果存在 Dockerfile.base，则生成 base 镜像的 tag
-    ## base 是否重建以 package.json 依赖指纹为准（仅后端 node）：依赖未变且 registry 已有该 base 时直接复用，
-    ## 不再依赖 Dockerfile.base 文件是否存在（研发提交该文件也不会导致每次重建 base）
+    ## base 是否重建以依赖声明文件（package.json/requirements.txt）指纹为准（node 后端/python）：
+    ## 依赖未变且 registry 已有该 base 时直接复用，不再依赖 Dockerfile.base 文件是否存在
     dockerfile_base_path="${G_REPO_DIR}/Dockerfile.base"
     dockerfile_path="${G_REPO_DIR}/Dockerfile"
     if [[ -f "${dockerfile_base_path}" ]]; then
         base_image_tag="${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
         build_base=true
-        if [[ "${lang%%:*}" == node ]] && ! detect_node_framework_static; then
-            if node_base_is_custom; then
+        local lang_type="${lang%%:*}"
+        local manifest_name="" node_static=false
+        [[ "${lang_type}" == node ]] && detect_node_framework_static && node_static=true
+        if lang_uses_deps_base "${lang_type}" && [[ "${node_static}" != true ]]; then
+            if repo_base_is_custom; then
                 ## 研发自提交 Dockerfile/Dockerfile.base：按其方式走，始终构建 base、不覆写其 Dockerfile
                 ## （提醒已在 repo_inject_file 输出）
-                node_base_custom=true
+                deps_base_custom=true
             else
-                ## 自动生成的两段式：按 package.json 指纹决定是否重建 base
-                dep_hash="$(node_dep_hash)"
+                ## 自动生成的两段式：按依赖声明文件指纹决定是否重建 base
+                dep_hash="$(lang_dep_hash "${lang_type}")"
                 node_base_record="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base.md5"
-                node_base_explain
-                node_lockfile_warn
+                manifest_name="$(lang_dep_manifest "${lang_type}")"
+                manifest_name="${manifest_name##*/}"
+                base_explain "${lang_type}"
+                [[ "${lang_type}" == node ]] && node_lockfile_warn
                 if [[ "$(cat "${node_base_record}" 2>/dev/null || echo 0)" == "${dep_hash}" ]]; then
                     if ${G_DRY_RUN:-false} || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
                         build_base=false
-                        _msg note "[node] package.json 未变，Dockerfile 直接复用基础镜像（本轮构建较快）"
+                        _msg note "[${lang_type}] ${manifest_name} 未变，Dockerfile 直接复用基础镜像（本轮构建较快）"
                     fi
                 fi
             fi
         fi
         ## 自动生成时确保主 Dockerfile = FROM base；研发自提交的不动
-        if [[ "${node_base_custom:-false}" != true ]]; then
+        if [[ "${deps_base_custom:-false}" != true ]]; then
             if ${G_DRY_RUN:-false}; then
                 ${build_base} && dry_run_note "write 'FROM ${base_image_tag}' to ${dockerfile_path#"${G_REPO_DIR}"/} (base image)"
             else
@@ -390,10 +406,10 @@ DOCKERIGNORE
     ## 存在 Dockerfile.base 且依赖指纹变化（或 registry 无该 base）时才构建 base
     if [[ -f "${dockerfile_base_path}" ]]; then
         if ${build_base:-false}; then
-            if [[ "${node_base_custom:-false}" == true ]]; then
-                _msg note "[node] 按你的 Dockerfile.base/Dockerfile 构建基础镜像和运行时镜像"
+            if [[ "${deps_base_custom:-false}" == true ]]; then
+                _msg note "[${lang_type}] 按你的 Dockerfile.base/Dockerfile 构建基础镜像和运行时镜像"
             else
-                _msg note "[node] package.json 有改动，重建基础镜像 Dockerfile.base（本轮构建较慢）"
+                _msg note "[${lang_type}] ${manifest_name} 有改动，重建基础镜像 Dockerfile.base（本轮构建较慢）"
             fi
             local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build-${G_REPO_BRANCH}.log"
             _msg note "log file: $base_build_log"
@@ -413,7 +429,7 @@ DOCKERIGNORE
                 return 1
             fi
             ## 构建成功：记录依赖指纹，依赖未变时下次直接复用
-            if [[ "${lang%%:*}" == node ]] && [[ -n "${dep_hash:-}" ]]; then
+            if [[ -n "${dep_hash:-}" ]]; then
                 mkdir -p "$(dirname "${node_base_record}")"
                 echo "${dep_hash}" >"${node_base_record}"
             fi

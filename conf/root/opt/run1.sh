@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 #=====================================================
-# run1.sh：按环境自动启动 Java（JAR）/ PHP（PHP-FPM + Nginx）/ Node（npm run start）
+# run1.sh：按环境自动启动 Java（JAR）/ PHP（PHP-FPM + Nginx）/ Node（npm run start）/ Python（start.sh/manage.py/app.py/main.py）
 # 支持 jvm.options、JAVA_OPTS、多 JAR、多配置文件。由 run0.sh 调用。
 # 示例：在容器内可 touch /opt/.nohup 使用 nohup 启动；或 touch /opt/.debug 进入调试（tail -f 日志）
 #=====================================================
@@ -307,6 +307,40 @@ start_node() {
     G_PIDS+=("$!")
 }
 
+# 函数：启动Python应用
+# 入口探测顺序：start.sh > manage.py(Django) > app.py > main.py；都不匹配时提示用 APP_CMD 指定
+start_python() {
+    cd "/app" || return
+    local py_cmd="python"
+    command -v python3 >/dev/null 2>&1 && py_cmd="python3"
+
+    if [ -f "start.sh" ]; then
+        log "找到 start.sh，正在执行..."
+        bash start.sh &
+        G_PIDS+=("$!")
+        return
+    fi
+    if [ -f "manage.py" ]; then
+        log "检测到 Django (manage.py)，启动开发服务器..."
+        $py_cmd manage.py runserver 0.0.0.0:"${APP_PORT:-8000}" &
+        G_PIDS+=("$!")
+        return
+    fi
+    if [ -f "app.py" ]; then
+        log "正在启动Python应用 (app.py)..."
+        $py_cmd app.py &
+        G_PIDS+=("$!")
+        return
+    fi
+    if [ -f "main.py" ]; then
+        log "正在启动Python应用 (main.py)..."
+        $py_cmd main.py &
+        G_PIDS+=("$!")
+        return
+    fi
+    log "未找到 Python 应用入口（start.sh/manage.py/app.py/main.py），请通过 APP_CMD 指定启动命令"
+}
+
 # 函数：设置jemalloc
 set_jemalloc() {
     case "$PHP_VERSION" in
@@ -421,6 +455,9 @@ main() {
     command -v npm >/dev/null 2>&1 && start_node "$@"
     command -v php >/dev/null 2>&1 && start_php "$@"
     command -v java >/dev/null 2>&1 && start_java "$@"
+    if command -v python >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1; then
+        start_python "$@"
+    fi
 
     # 启动自动更新
     while true; do
