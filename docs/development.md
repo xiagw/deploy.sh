@@ -50,6 +50,8 @@
 
 1. 阅读相关 `lib/*.sh` 模块与 `conf/` 模板，理解现有模式。
 2. 按命名规范新增/修改函数，遵循加载顺序。
+   - 主脚本各子函数的**上下依赖/调用顺序**见 [architecture.md §3（主流程 main）](./architecture.md)。
+   - `config_repo_vars` / `kube_config_init` / `config_build_env` 等位置勿动——后序步骤依赖其设置的变量。
 3. 跑 `bash -n` 与 `shellcheck -S warning`。
 4. 用 `deploy.sh --dry`（dry-run）验证流程编排与生成的 `docker-bake.hcl` / 注入文件。
 5. 提交（bot 身份 + emoji 规范）。
