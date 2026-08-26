@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="deploy.sh — 开源 CI/CD 部署系统文档站：功能介绍、使用手册、开发指南、流水线看板">
+<title>deploy.sh · 文档</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f81f7'/%3E%3Ctext x='16' y='22' font-size='17' font-family='sans-serif' font-weight='800' text-anchor='middle' fill='%23fff'%3ED%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d;
+  --text:#e6edf3; --text-dim:#8b949e; --text-mute:#6e7681;
+  --accent:#2f81f7; --accent2:#a371f7;
+  --ok:#3fb950; --fail:#f85149; --warn:#d29922;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+
+/* sidebar */
+.side{background:var(--bg2);border-right:1px solid var(--border);padding:20px 14px;position:sticky;top:0;height:100vh;overflow-y:auto}
+.side .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px;padding:4px 8px}
+.side .brand .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:17px;flex:none}
+.side .brand b{font-size:17px}
+.side .brand small{display:block;color:var(--text-mute);font-family:var(--mono);font-size:11px;font-weight:400}
+.side .nav{display:flex;flex-direction:column;gap:2px;margin-top:10px}
+.side .grp{color:var(--text-mute);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:12px 10px 4px}
+.nlink{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;color:var(--text-dim);font-size:14px;cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:var(--sans)}
+.nlink:hover{background:var(--bg3);color:var(--text)}
+.nlink.active{background:var(--bg3);color:var(--text)}
+.nlink .ic{width:18px;text-align:center;flex:none;font-size:14px}
+.nlink.ext{margin-top:4px}
+
+/* main */
+.main{padding:28px 40px 80px;min-width:0}
+.main .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:26px;flex-wrap:wrap}
+.main .topbar .crumbs{color:var(--text-mute);font-size:13px}
+.main .topbar .links{display:flex;gap:10px}
+.top-repo{border:1px solid var(--border);background:var(--bg2);color:var(--text-dim);border-radius:8px;padding:5px 12px;font-size:13px}
+.top-repo:hover{color:var(--text);border-color:var(--accent)}
+.side-toggle{display:none;border:1px solid var(--border);background:var(--bg2);color:var(--text);border-radius:8px;padding:5px 12px;cursor:pointer}
+
+/* content (rendered markdown) */
+.content{max-width:860px}
+.md{font-size:15.5px;line-height:1.85}
+.md h1{font-size:30px;margin:0 0 20px;padding-bottom:10px;border-bottom:1px solid var(--border);line-height:1.3}
+.md h2{font-size:22px;margin:46px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.md h3{font-size:18px;margin:34px 0 12px}
+.md h4{font-size:15px;margin:24px 0 8px}
+.md p{margin:0 0 18px;color:var(--text)}
+.md ul,.md ol{margin:0 0 20px;padding-left:32px}
+.md li{margin:8px 0}
+.md li>ul,.md li>ol{margin:6px 0 4px;padding-left:24px}
+.md li li{font-size:15px}
+.md code{font-family:var(--mono);font-size:13px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:#ff8c8c}
+.md pre{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 20px;overflow-x:auto;margin:0 0 22px}
+.md pre code{background:none;border:none;padding:0;color:var(--text);font-size:13.5px;line-height:1.7;display:block}
+.md blockquote{border-left:3px solid var(--accent);background:var(--bg2);padding:14px 20px;border-radius:0 8px 8px 0;margin:0 0 22px;color:var(--text-dim);line-height:1.8}
+.md table{border-collapse:collapse;width:100%;margin:0 0 20px;font-size:14px}
+.md th,.md td{border:1px solid var(--border);padding:12px 16px;text-align:left}
+.md th{background:var(--bg2);color:var(--text-dim);font-weight:600}
+.md tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.md td:first-child{white-space:nowrap}
+.md img{max-width:100%;border-radius:8px}
+.md .mermaid{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin:0 0 20px;display:flex;justify-content:center}
+.md .mermaid svg{max-width:100%;height:auto}
+/* mermaid.run 会把 SVG 直接放进 <pre>（无 .mermaid 包装） */
+.md pre:has(> svg){display:flex;justify-content:center}
+.md pre:has(> svg) svg{max-width:100%;height:auto}
+.md hr{border:none;border-top:1px solid var(--border);margin:32px 0}
+.md :not(pre)>code{color:#ff9e9e}
+
+/* feature cards（intro.md 内嵌 HTML） */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin:24px 0 30px}
+.feat-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 18px 16px;transition:.15s}
+.feat-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.feat-card .feat-ic{width:40px;height:40px;border-radius:10px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px}
+.feat-card b{display:block;font-size:15.5px;margin-bottom:6px}
+.feat-card span{color:var(--text-dim);font-size:13.5px;line-height:1.55;display:block}
+
+.no-render{padding:40px;text-align:center;color:var(--text-dim)}
+.no-render a{color:var(--accent)}
+.offline-note{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;color:var(--warn);font-size:14px;margin-bottom:18px;display:none}
+
+/* hero (home) */
+.hero{padding:44px 0 6px}
+.hero .logo{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+.hero .logo img{width:100%;height:100%;object-fit:contain}
+.hero h1{font-size:36px;letter-spacing:-.5px;margin-bottom:8px}
+.hero p{color:var(--text-dim);max-width:600px;font-size:16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:26px 0}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;cursor:pointer;transition:.15s;display:block;color:var(--text)}
+.card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.card .ic{font-size:24px;margin-bottom:10px}
+.card b{font-size:16px;display:block;margin-bottom:6px}
+.card span{color:var(--text-dim);font-size:13.5px}
+footer{color:var(--text-mute);font-size:13px;padding:30px 0 10px;text-align:center}
+footer .mono{font-family:var(--mono)}
+
+@media(max-width:860px){
+  .wrap{grid-template-columns:1fr}
+  .side{display:none;position:fixed;z-index:50;width:280px;height:100vh;box-shadow:0 0 40px rgba(0,0,0,.6)}
+  .side.open{display:block}
+  .side-toggle{display:inline-block}
+  .main{padding:20px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside class="side" id="side">
+    <div class="brand">
+      <div class="logo">D</div>
+      <div><b>deploy.sh</b><small>CI/CD SYSTEM</small></div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <span class="side-toggle" id="toggle">☰</span>
+      <span class="crumbs" id="crumbs"></span>
+      <div class="links">
+        <a class="top-repo" href="https://github.com/xiagw/deploy.sh" target="_blank" rel="noopener">GitHub</a>
+        <a class="top-repo" href="https://gitee.com/xiagw/deploy.sh" target="_blank" rel="noopener">Gitee</a>
+      </div>
+    </div>
+    <div class="offline-note" id="offline"></div>
+    <div class="content" id="content"></div>
+    <footer>deploy.sh · <span class="mono">docs/dashboard.html</span> 状态看板 &nbsp;·&nbsp; MIT License</footer>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<script>
+/* 文档站点：内容源为 repo 内的 .md 文件（单一来源），客户端用 marked 渲染。
+   本地预览： cd docs && python3 -m http.server 8000  →  http://localhost:8000/
+   线上：GitHub Pages 直出（docs/.nojekyll 已禁用 Jekyll）。 */
+const DOCS = [
+  {grp:"开始使用"},
+  {id:"home", ic:"🏠", label:"总览", file:"intro.md"},
+  {id:"features", ic:"✨", label:"功能特色", file:"intro.md", anchor:"#功能介绍"},
+  {id:"quickstart", ic:"🚀", label:"快速开始", file:"intro.md", anchor:"#快速开始"},
+  {grp:"文档手册"},
+  {id:"architecture", ic:"🧱", label:"架构说明", file:"architecture.md"},
+  {id:"testing", ic:"🧪", label:"测试模块", file:"testing.md"},
+  {grp:"开发"},
+  {id:"development", ic:"🧩", label:"开发指南", file:"development.md"},
+  {id:"dashboard", ic:"📊", label:"流水线看板", href:"dashboard.html", ext:true}
+];
+
+const CONTENT = document.getElementById("content");
+const NAV = document.getElementById("nav");
+let currentId = "home";
+
+function buildNav(){
+  NAV.innerHTML = DOCS.map(d=>{
+    if(d.grp) return `<div class="grp">${d.grp}</div>`;
+    const cls = d.id===currentId ? "nlink active" : "nlink";
+    if(d.href) return `<a class="${cls} ext" href="${d.href}"><span class="ic">${d.ic}</span>${d.label}<span style="margin-left:auto;font-size:11px;color:var(--text-mute)">↗</span></a>`;
+    return `<button class="${cls}" data-id="${d.id}"><span class="ic">${d.ic}</span>${d.label}</button>`;
+  }).join("");
+}
+function setActive(id){
+  currentId=id;
+  NAV.querySelectorAll(".nlink").forEach(n=>n.classList.toggle("active", n.dataset.id===id));
+}
+function setCrumbs(label){ document.getElementById("crumbs").textContent="deploy.sh / "+(label||""); }
+
+function fallback(url){
+  CONTENT.innerHTML = `<div class="no-render">当前缩略渲染依赖 marked（CDN）。请联网刷新，或查看原始文件：<a href="${url}" target="_blank">${url}</a></div>`;
+}
+
+async function loadDoc(id){
+  const doc = DOCS.find(d=>d.id===id) || DOCS[0];
+  setActive(id); setCrumbs(doc.label);
+  if(doc.href){ location.href=doc.href; return; }
+  const file = doc.file;
+  const rawUrl = "https://raw.githubusercontent.com/xiagw/deploy.sh/main/docs/" + file;
+  let text;
+  try{
+    const res = await fetch(file + "?t=" + Date.now());
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    text = await res.text();
+  }catch(e){
+    fallback(rawUrl);
+    return;
+  }
+  if(typeof marked==="undefined"){ document.getElementById("offline").style.display="block"; fallback(rawUrl); return; }
+  marked.setOptions({gfm:true, breaks:false});
+  const html = DOMPurify ? DOMPurify.sanitize(marked.parse(text)) : marked.parse(text);
+  if(doc.anchor){
+    // 首页去 hero，跳到锚点（按标题文本匹配，不依赖 marked 生成的 id）
+    CONTENT.innerHTML = renderHero() + html;
+    setTimeout(()=>{
+      const want = doc.anchor.slice(1).replace(/\s+/g,"");
+      const heads = CONTENT.querySelectorAll("h1,h2,h3,h4");
+      for(const h of heads){ if(h.textContent.replace(/\s+/g,"").includes(want)){ h.scrollIntoView({behavior:"smooth"}); break; } }
+    }, 60);
+  } else {
+    CONTENT.innerHTML = (id==="home" ? renderHero() : "") + html;
+  }
+  renderMermaid();
+}
+
+/* mermaid 流程图渲染（mermaid v10 的 render 是异步的，用 run() 自动渲染 DOM 内 mermaid 块） */
+async function renderMermaid(){
+  if(typeof mermaid==="undefined") return;
+  try{
+    mermaid.initialize({
+      startOnLoad:false, theme:"dark", securityLevel:"loose",
+      flowchart:{htmlLabels:true, curve:"basis", nodeSpacing:36, rankSpacing:44}
+    });
+    await mermaid.run({querySelector:"code.language-mermaid"});
+  }catch(e){ /* 跳过无法渲染的图 */ }
+}
+function renderHero(){
+  return `<div class="hero">
+    <div class="logo"><img src="img/logo.png" alt="deploy.sh logo"></div>
+    <h1>deploy.sh</h1>
+    <p>开源 CI/CD 部署系统：构建、测试、分析、部署一体化，支持 GitLab / GitHub Actions / Jenkins / crontab / Screen &amp; tmux 等多种运行方式。</p>
+    <div class="cards">
+      <a class="card" data-jump="features"><div class="ic">✨</div><b>功能介绍</b><span>支持的代码规范、安全扫描、测试、构建与发布方式一览</span></a>
+      <a class="card" data-jump="quickstart"><div class="ic">🚀</div><b>使用手册</b><span>安装、语言探测、快速手动/自动运行、GitLab-Runner / Jenkins 接入</span></a>
+      <a class="card" data-jump="development"><div class="ic">🧩</div><b>开发指南</b><span>核心结构、命名规范、shell 硬性要求与提交规范，如何补充功能</span></a>
+      <a class="card" href="dashboard.html"><div class="ic">📊</div><b>流水线看板</b><span>各项目构建/部署状态一览（GitHub Actions 风格）</span></a>
+    </div>
+  </div>`;
+}
+
+NAV.addEventListener("click",e=>{ const b=e.target.closest("[data-id]"); if(b) loadDoc(b.dataset.id); });
+CONTENT.addEventListener("click",e=>{ const c=e.target.closest("[data-jump]"); if(c) loadDoc(c.dataset.jump); });
+
+document.getElementById("toggle").addEventListener("click",()=>document.getElementById("side").classList.toggle("open"));
+document.addEventListener("click",e=>{
+  const side=document.getElementById("side");
+  if(side.classList.contains("open") && !e.target.closest("#side") && !e.target.closest("#toggle")) side.classList.remove("open");
+});
+
+buildNav();
+const init = (location.hash.match(/doc=([\w-]+)/)||[])[1] || "home";
+loadDoc(init);
+</script>
+</body>
+</html>

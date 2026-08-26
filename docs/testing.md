@@ -18,6 +18,21 @@
 **触发规则（三者一致）**：CLI 标志或 CI 环境变量任一触发即运行；
 **auto 模式（无参数运行 deploy.sh）默认全部跳过**，需显式触发，避免自动化流水线被测试意外中断。
 
+```mermaid
+flowchart TD
+  A([测试中心]) --> U["单元测试<br/>stage_unit_test · -u"]
+  A --> F["功能测试<br/>stage_functional_test · -t"]
+  A --> P["性能测试<br/>stage_performance_test · -p"]
+
+  U --> U1["仓库 tests/unit_test.sh<br/>按语言自动调框架(phpunit/mvn/npm/pytest/go…)"]
+  U1 --> U2["覆盖率统计"]
+  F --> F1["仓库 tests/func_test.sh<br/>部署后冒烟 / 验收"]
+  P --> P1["JMeter *.jmx"]
+  P --> P2["k6 · tests/perf/*.js<br/>p95 基线回归对比"]
+
+  U & F & P -.-> ENV["触发: CLI 标志 或 CI 环境变量<br/>(auto 模式默认全跳过)"]
+```
+
 ---
 
 ## 2. 单元测试（test_unit）

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="deploy.sh — 开源 CI/CD 部署系统流水线状态看板">
+<title>deploy.sh · Pipeline Dashboard</title>
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d;
+  --text:#e6edf3; --text-dim:#8b949e; --text-mute:#6e7681;
+  --accent:#2f81f7; --accent2:#a371f7;
+  --ok:#3fb950; --fail:#f85149; --run:#d29922; --cancel:#8b949e;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.5}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.container{max-width:1080px;margin:0 auto;padding:0 20px 60px}
+
+/* hero / landing */
+.hero{padding:56px 0 20px;text-align:center}
+.hero .logo{width:88px;height:88px;border-radius:22px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:34px;color:#fff;box-shadow:0 8px 24px rgba(47,129,247,.35)}
+.hero h1{font-size:38px;margin:18px 0 8px;letter-spacing:-.5px}
+.hero p{color:var(--text-dim);font-size:16px;max-width:560px;margin:0 auto 14px}
+.hero .badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.badge{border:1px solid var(--border);border-radius:999px;padding:5px 14px;font-size:13px;color:var(--text-dim);background:var(--bg2)}
+.badge b{color:var(--text);font-family:var(--mono);font-weight:600}
+
+/* summary strip */
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:26px 0 10px}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.stat .num{font-size:30px;font-weight:700;font-family:var(--mono)}
+.stat .lbl{color:var(--text-dim);font-size:13px;margin-top:2px}
+.stat .num.ok{color:var(--ok)} .stat .num.fail{color:var(--fail)} .stat .num.run{color:var(--run)}
+
+/* toolbar */
+.toolbar{display:flex;align-items:center;gap:12px;justify-content:space-between;margin:18px 0 14px;flex-wrap:wrap}
+.toolbar h2{font-size:18px;font-weight:600}
+.toolbar .count{color:var(--text-mute);font-size:13px;margin-left:6px}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--border);background:var(--bg2);color:var(--text-dim);border-radius:999px;padding:6px 14px;font-size:13px;cursor:pointer;transition:.15s}
+.chip:hover{border-color:var(--accent);color:var(--text)}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* run list — GitHub Actions 风格 */
+.runs{display:flex;flex-direction:column;gap:10px}
+.run{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start;transition:.15s}
+.run:hover{border-color:var(--accent);transform:translateY(-1px)}
+.run .icon{font-size:22px;width:26px;text-align:center;flex:none;margin-top:2px}
+.run .icon.ok{color:var(--ok)} .run .icon.fail{color:var(--fail)} .run .icon.run{color:var(--run)} .run .icon.cancel{color:var(--cancel)}
+.run .body{flex:1;min-width:0}
+.run .title{font-weight:600;font-size:15px;word-break:break-word}
+.run .meta{color:var(--text-mute);font-family:var(--mono);font-size:12.5px;margin-top:4px;display:flex;flex-wrap:wrap;gap:12px}
+.run .meta span b{color:var(--text-dim);font-weight:500}
+.run .stages{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.tag{font-size:11.5px;padding:3px 9px;border-radius:6px;border:1px solid var(--border);color:var(--text-dim)}
+.tag.ok{color:var(--ok);border-color:rgba(63,185,80,.35)}
+.tag.fail{color:var(--fail);border-color:rgba(248,81,73,.35)}
+.tag.run{color:var(--run);border-color:rgba(210,153,34,.35)}
+.tag.skipped{color:var(--text-mute)}
+.run .pill{flex:none;font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid var(--border);border-radius:6px;padding:3px 8px;align-self:center}
+.pill.prod{color:var(--accent2);border-color:rgba(163,113,247,.4)}
+footer{margin-top:40px;text-align:center;color:var(--text-mute);font-size:13px}
+footer .mono{font-family:var(--mono)}
+.empty{color:var(--text-mute);text-align:center;padding:40px 0}
+@media(max-width:640px){.summary{grid-template-columns:repeat(2,1fr)}.hero h1{font-size:30px}}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header class="hero">
+    <div class="logo">D</div>
+    <h1>deploy.sh</h1>
+    <p>An open source CI/CD deployment system. 集成 GitLab / GitHub Actions 的全自动构建、测试、分析与部署流水线。</p>
+    <div class="badges">
+      <span class="badge">语言 <b>Shell</b></span>
+      <span class="badge">流水线 <b id="b-runs">0</b></span>
+      <span class="badge">成功率 <b id="b-rate">–</b></span>
+      <span class="badge">分支 <b>dev2 · main</b></span>
+    </div>
+  </header>
+
+  <section class="summary">
+    <div class="stat"><div class="num" id="s-total">–</div><div class="lbl">总运行</div></div>
+    <div class="stat"><div class="num ok" id="s-ok">–</div><div class="lbl">成功</div></div>
+    <div class="stat"><div class="num fail" id="s-fail">–</div><div class="lbl">失败</div></div>
+    <div class="stat"><div class="num run" id="s-run">–</div><div class="lbl">进行中</div></div>
+  </section>
+
+  <div class="toolbar">
+    <h2>All workflows<span class="count" id="shown-count"></span></h2>
+    <div class="filters" id="filters">
+      <button class="chip active" data-f="all">全部</button>
+      <button class="chip" data-f="success">成功</button>
+      <button class="chip" data-f="failure">失败</button>
+      <button class="chip" data-f="running">进行中</button>
+    </div>
+  </div>
+
+  <section class="runs" id="runs"></section>
+  <footer>
+    <p><span class="mono">deploy.sh</span> · 数据源：<span class="mono">data/</span>（当前为演示数据，接入真实流水线输出后自动刷新）</p>
+  </footer>
+</div>
+
+<script>
+/* =========================================================================
+   演示数据 —— 接入真实 deploy.sh 状态时，用 deploy.sh 输出替换此数组即可。
+   字段：project/branch/lang 标识流水线; status ∈ success|failure|running|cancel;
+   commit 提交信息; trigger 触发方式; duration 秒; startedAt ISO 时间;
+   log 日志相对路径; stages[] 各阶段（build/test/deploy/...）。
+   ========================================================================= */
+const DEMO = [
+  {id:"916", project:"dynamic-template", branch:"dev2", lang:"node", status:"running", title:"feat: bake 注入 BASE_IMAGE，支持研发提交两段式 Dockerfile", trigger:"workflow_dispatch", duration:null, startedAt:"2026-08-26T09:28:07+08:00", log:"dynamic-template-build-dev2.log", stages:["checkout","build-base","build","test"]},
+  {id:"909", project:"buddysales-platform", branch:"dev2", lang:"node", status:"failure", title:"fix: use_sudo 去掉 sudo 兜底，修复容器 root 安装 aws 报错", trigger:"push", duration:312, startedAt:"2026-08-26T08:41:00+08:00", log:"buddysales-build-dev2.log", stages:["checkout","build"], failStage:1},
+  {id:"812", project:"mysql-ops", branch:"main", lang:"shell", status:"success", title:"feat: ack 新增节点池操作，rds/polardb 补充 IP 白名单", trigger:"push", duration:98, startedAt:"2026-08-25T22:30:11+08:00", log:"mysql-ops-build-main.log", stages:["checkout","test","build","deploy"]},
+  {id:"791", project:"openwrt-firmware", branch:"dev", lang:"shell", status:"success", title:"fix: pxe 引导修复 dhcp 超时重试", trigger:"push", duration:176, startedAt:"2026-08-25T19:12:40+08:00", log:"openwrt-build-dev.log", stages:["checkout","build","deploy"]},
+  {id:"788", project:"pve-cluster", branch:"main", lang:"shell", status:"cancel", title:"docs: 更新 PVE 集群运维手册", trigger:"workflow_dispatch", duration:45, startedAt:"2026-08-25T15:02:09+08:00", log:"pve-build-main.log", stages:["checkout","build"]},
+  {id:"731", project:"dynamic-template", branch:"dev2", lang:"node", status:"success", title:"refactor: gitlab.sh 从 gitlab CLI 迁移到 glab api 封装", trigger:"push", duration:241, startedAt:"2026-08-24T18:20:55+08:00", log:"dynamic-template-build-dev2.log", stages:["checkout","build-base","build","deploy"]}
+];
+
+/* ---------- helpers ---------- */
+const STATUS = {
+  success:{cls:"ok",icon:"✓",label:"成功"},
+  failure:{cls:"fail",icon:"✗",label:"失败"},
+  running:{cls:"run",icon:"◐",label:"进行中"},
+  cancel:{cls:"cancel",icon:"⊘",label:"已取消"}
+};
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function fmtDur(sec){
+  if(sec==null) return "进行中";
+  if(sec<60) return sec+"s";
+  const m=Math.floor(sec/60), s=sec%60;
+  return m+"m "+String(s).padStart(2,"0")+"s";
+}
+function fmtTime(iso){
+  const d=new Date(iso); if(isNaN(d)) return iso;
+  const p=n=>String(n).padStart(2,"0");
+  return p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+}
+
+/* ---------- render ---------- */
+function render(list){
+  const runsEl=document.getElementById("runs");
+  document.getElementById("shown-count").textContent="· "+list.length+" runs";
+  runsEl.innerHTML = list.length ? list.map(r=>{
+    const st=STATUS[r.status]||STATUS.cancel;
+    const stages=(r.stages||[]).map((s,i)=>`<span class="tag ${i===r.failStage?"fail":"ok"}">${esc(s)}</span>`).join("");
+    return `<div class="run">
+      <div class="icon ${st.cls}">${st.icon}</div>
+      <div class="body">
+        <div class="title">${esc(r.title)}</div>
+        <div class="meta">
+          <span><b>${esc(r.project)}</b> #${esc(r.id||"")}</span>
+          <span>${esc(r.trigger)}</span>
+          <span><b>${fmtTime(r.startedAt)}</b></span>
+          <span>${fmtDur(r.duration)}</span>
+          <span><a href="#log/${esc(r.log)}">日志</a></span>
+        </div>
+        <div class="stages">${stages}</div>
+      </div>
+      <span class="pill ${r.branch==="main"||r.branch==="prod"?"prod":""}">${esc(r.branch)}</span>
+    </div>`;
+  }).join("") : `<div class="empty">暂无匹配的运行记录</div>`;
+}
+
+function refresh(){
+  const json=localStorage.getItem("deploy_dash_data");
+  const data = json ? JSON.parse(json) : DEMO;
+  const f=document.querySelector(".chip.active").dataset.f;
+  const list = f==="all" ? data : data.filter(r=>{
+    if(f==="success") return r.status==="success";
+    if(f==="failure") return r.status==="failure"||r.status==="cancel";
+    if(f==="running") return r.status==="running";
+    return true;
+  });
+  // summary 基于全量
+  const ok=data.filter(r=>r.status==="success").length;
+  const fail=data.filter(r=>r.status==="failure"||r.status==="cancel").length;
+  const run=data.filter(r=>r.status==="running").length;
+  const total=data.length;
+  document.getElementById("s-total").textContent=total;
+  document.getElementById("s-ok").textContent=ok;
+  document.getElementById("s-fail").textContent=fail;
+  document.getElementById("s-run").textContent=run;
+  document.getElementById("b-runs").textContent=total;
+  document.getElementById("b-rate").textContent= total? Math.round(ok/total*100)+"%" : "–";
+  render(list);
+}
+
+document.getElementById("filters").addEventListener("click",e=>{
+  const chip=e.target.closest(".chip"); if(!chip) return;
+  document.querySelectorAll(".chip").forEach(c=>c.classList.remove("active"));
+  chip.classList.add("active"); refresh();
+});
+
+/* 若 deploy.sh 往 localStorage 写入真实数据（key=deploy_dash_data）优先使用 */
+window.addEventListener("storage",refresh);
+refresh();
+</script>
+</body>
+</html>

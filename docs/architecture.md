@@ -35,8 +35,7 @@ deploy.sh/
 │   ├── kubernetes.sh    # K8s：kubeconfig、helm chart、PV/PVC、基础镜像构建
 │   ├── notify.sh        # 通知：企业微信/Telegram/Element/Email/Zoom/飞书
 │   ├── element.py       # Element 消息发送脚本
-│   └── test.sh          # （与根目录 lib/test.sh 同名，属测试辅助）
-├── conf/                # 模板与静态配置
+│   └── test.sh          # （与根目录 lib/test.sh 同名，属测试辅助）├── conf/                # 模板与静态配置
 │   ├── templates/       # deploy.env / project-config.json / aliyun.functions.json 等模板
 │   ├── Dockerfile.single# 单阶段运行时型 Dockerfile（python/mysql/redis）
 │   ├── Dockerfile.multi # 多阶段编译型 Dockerfile（java/go/php/nginx）
@@ -54,6 +53,26 @@ deploy.sh/
 ├── bin/                 # 运维辅助脚本（backup/gitlab/gitea/mysql/openwrt 等）
 ├── docs/                # 设计文档（见文末）
 ├── ansible/ cloud/      # 集群/云编排资源
+```
+
+### 模块加载顺序与依赖
+
+主脚本启动时按序 `source lib/*.sh`（deploy.sh 内 for 循环），**顺序即依赖先后**——前面的模块先定义函数，供后面的模块调用；`notify` 最后加载，故各阶段可统一收尾通知。
+
+```mermaid
+flowchart TD
+  MAIN["deploy.sh 主脚本<br/>初始化 · 参数解析 · 阶段调度"] --> LOAD["source lib/*.sh · 按序加载"]
+  LOAD --> c1["common.sh · 基础设施<br/>日志 / i18n / dry-run / 工具"]
+  c1 --> c2["config.sh · 配置<br/>deploy.env · 项目 JSON"]
+  c2 --> c3["system.sh · 系统<br/>磁盘 / 证书 / GeoIP"]
+  c3 --> c4["repo.sh · 仓库<br/>语言探测 · 文件注入 · git"]
+  c4 --> c5["test.sh · 测试<br/>单元 / 功能 / 性能"]
+  c5 --> c6["analysis.sh · 分析<br/>SonarQube / 安全扫描"]
+  c6 --> c7["style.sh · 风格<br/>各语言 linter"]
+  c7 --> c8["build.sh · 构建<br/>buildx / bake / 系统构建"]
+  c8 --> c9["deployment.sh · 部署<br/>k8s / rsync / 云"]
+  c9 --> c10["kubernetes.sh · K8s<br/>kubeconfig / helm / PV"]
+  c10 --> c11["notify.sh · 通知<br/>企微 / 飞书 / 邮件"]
 ```
 
 ---
