@@ -92,9 +92,10 @@ enable_buildx_mode() {
 
 # 根据 lang（固定三段式 lang:ver:docker_flag，字段可为空）生成 docker-bake.hcl
 # $1 lang, $2 bake 文件路径, $3 应用镜像 tag, $4 可选 base 镜像 tag（存在 Dockerfile.base 时）
+# $5 是否生成 base target（复用时仅注入 BASE_IMAGE 参数，不生成 base target）
 generate_bake_file() {
     local lang="${1:?lang required}" bake_file="${2:?bake file required}"
-    local repo_tag="${3:?repo tag required}" base_tag="${4:-}"
+    local repo_tag="${3:?repo tag required}" base_tag="${4:-}" build_base_target="${5:-false}"
     local lang_type ver docker_flag lang_args="" extra_args="" mirror="${ENV_DOCKER_MIRROR:+${ENV_DOCKER_MIRROR%/}/}"
     IFS=: read -r lang_type ver docker_flag <<<"${lang}"
     lang_type="${lang_type:-unknown}"
@@ -194,6 +195,9 @@ generate_bake_file() {
         BUILD_SCRIPT_ARG = \"${ENV_BUILD_SCRIPT_ARG}\""
     [[ -n "${ENV_RUN_SCRIPT_ARG:-}" ]] && extra_args+="
         RUN_SCRIPT_ARG = \"${ENV_RUN_SCRIPT_ARG}\""
+    ## BASE_IMAGE：研发自提交两段式 Dockerfile（FROM ${BASE_IMAGE}）用，注入 base tag
+    [[ -n "${base_tag}" ]] && extra_args+="
+        BASE_IMAGE = \"${base_tag}\""
 
 
     ## 多架构构建平台（逗号分隔，默认 linux/amd64）
@@ -240,7 +244,7 @@ target "default" {
     tags = ["${repo_tag}"]
 ${cache_block}}
 EOF
-    if [ -n "${base_tag}" ]; then
+    if [[ -n "${base_tag}" && "${build_base_target}" == true ]]; then
         cat >>"${bake_file}" <<EOF
 target "base" {
     inherits = ["default"]
@@ -344,11 +348,7 @@ build_image() {
     else
         bake_file_path="${G_REPO_DIR}/docker-bake.hcl"
     fi
-    local bake_base_tag=""
-    if ${build_base:-false}; then
-        bake_base_tag="${base_image_tag}"
-    fi
-    generate_bake_file "${lang}" "${bake_file_path}" "${target_image_tag}" "${bake_base_tag}"
+    generate_bake_file "${lang}" "${bake_file_path}" "${target_image_tag}" "${base_image_tag:-}" "${build_base:-false}"
 
     ## 自动生成 .dockerignore（仅在项目不存在时创建，避免覆盖用户自定义规则）
     ## 减少远程 buildx 构建时通过 SSH 传输的上下文体积
@@ -407,7 +407,7 @@ DOCKERIGNORE
     if [[ -f "${dockerfile_base_path}" ]]; then
         if ${build_base:-false}; then
             if [[ "${deps_base_custom:-false}" == true ]]; then
-                _msg note "[${lang_type}] 按你的 Dockerfile.base/Dockerfile 构建基础镜像和运行时镜像"
+                _msg note "[${lang_type}] 按仓库自带的 Dockerfile.base/Dockerfile 构建基础镜像和运行时镜像"
             else
                 _msg note "[${lang_type}] ${manifest_name} 有改动，重建基础镜像 Dockerfile.base（本轮构建较慢）"
             fi

@@ -62,7 +62,7 @@ repo_inject_file() {
         _msg note "Found existing Dockerfile, skipping injection."
         ## 研发自提交 Dockerfile（git 跟踪中）：按其方式构建，提醒自行负责分层/镜像加速
         if lang_uses_deps_base "$lang" && ! detect_node_framework_static && repo_base_is_custom; then
-            _msg warn "[warn] 仓库自带 Dockerfile/Dockerfile.base，按仓库自带方式构建，不注入CI/CD程序的自动两段式加速模板"
+            _msg warn "[warn] 仓库自带 Dockerfile.base/Dockerfile，按仓库自带方式构建，不注入CI/CD程序的自动两段式加速模板"
             _msg warn "      请自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
         fi
         return 0
