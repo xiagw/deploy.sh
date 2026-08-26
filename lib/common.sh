@@ -212,11 +212,15 @@ _msg() {
     fi
 }
 
+# use_sudo 语义（勿改勿加兜底）：root → 空串（直接执行）；非 root 有 sudo 权限 → sudo
+# 警告：调用点一律用 $use_sudo，禁止写成 ${use_sudo:-sudo} —— CI/容器以 root 运行且无 sudo，
+#       sudo 兜底必炸（曾因 _install_aws 用 ${use_sudo:-sudo} 导致 "sudo: command not found"）。
+#       同理 root 分支不可 unset use_sudo（unset 与空串都会被 :- 兜底误判）
 _check_root() {
     ${already_check_root:-false} && return 0
     case "$(id -u)" in
     0)
-        unset use_sudo
+        use_sudo=""
         ;;
     *)
         if sudo -l &>/dev/null; then
@@ -461,7 +465,7 @@ _install_jmeter() {
         export TZ=Asia/Shanghai
 
         # Set timezone
-        echo "tzdata tzdata/Areas select Asia" | ${use_sudo:-sudo} debconf-set-selections
+        echo "tzdata tzdata/Areas select Asia" | $use_sudo debconf-set-selections
         echo "tzdata tzdata/Zones/Asia select Shanghai" | $use_sudo debconf-set-selections
 
         # Update and install Java
@@ -518,7 +522,7 @@ _install_k6() {
     if curl -fsSLo "$temp_file" "$url"; then
         _msg ok "Extracting k6"
         tar -C "$(dirname "$temp_file")" -xzf "$temp_file" k6
-        ${use_sudo:-sudo} install -m 0755 "$(dirname "$temp_file")/k6" /usr/local/bin/k6
+        $use_sudo install -m 0755 "$(dirname "$temp_file")/k6" /usr/local/bin/k6
         _msg ok "k6 installed successfully"
     else
         _msg error "failed to download and install k6"
@@ -742,7 +746,7 @@ _install_flarectl() {
         _msg ok "Extracting flarectl"
         tar -C "$(dirname "$temp_file")" -xzf "$temp_file" flarectl
         _msg ok "Installing to /usr/local/bin/flarectl"
-        ${use_sudo:-sudo} install -m 0755 "$(dirname "$temp_file")/flarectl" /usr/local/bin/flarectl
+        $use_sudo install -m 0755 "$(dirname "$temp_file")/flarectl" /usr/local/bin/flarectl
         _msg ok "flarectl installed successfully"
         _msg ok "Showing version"
         flarectl -version
@@ -1020,12 +1024,12 @@ _install_aws() {
     case "$OSTYPE" in
     darwin*)
         curl -fsSLo "$temp_dir/AWSCLIV2.pkg" "https://awscli.amazonaws.com/AWSCLIV2.pkg"
-        ${use_sudo:-sudo} installer -pkg "$temp_dir/AWSCLIV2.pkg" -target /
+        $use_sudo installer -pkg "$temp_dir/AWSCLIV2.pkg" -target /
         ;;
     linux*)
         curl -fsSLo "$temp_dir/aws.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
         unzip -qq "$temp_dir/aws.zip" -d "$temp_dir"
-        ${use_sudo:-sudo} "$temp_dir/aws/install" --bin-dir /usr/local/bin/ --install-dir /usr/local/ --update
+        $use_sudo "$temp_dir/aws/install" --bin-dir /usr/local/bin/ --install-dir /usr/local/ --update
         ;;
     *)
         _msg error "Unsupported operating system: $OSTYPE"
@@ -1037,7 +1041,7 @@ _install_aws() {
     local cmd=/usr/local/bin/eksctl
     curl -fsSL --retry 3 --retry-delay 2 "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C "$temp_dir"
     _msg ok "Installing to $cmd"
-    ${use_sudo:-sudo} install -m 0755 "$temp_dir/eksctl" "$cmd"
+    $use_sudo install -m 0755 "$temp_dir/eksctl" "$cmd"
     rm -rf "$temp_dir"
     _msg ok "Showing version"
     "$cmd" version
