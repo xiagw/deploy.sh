@@ -7,20 +7,31 @@
 # shellcheck source=/dev/null
 [ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
-# 生成 RAM 登录用随机密码（含大小写+数字，末尾加 @@ 满足策略）
+# 生成 RAM 登录用随机密码：随机串 + 补齐缺失的字符类 + 末尾 @@（满足大小写、数字、特殊字符策略）
 # 优先使用 common.sh 的 _get_random_password，否则用 openssl 等本地生成
 _ram_random_password() {
-    local p
+    # 易错字符排除（0/O/o、1/I/l），与 lib/common.sh 的 _get_random_password 保持一致
+    local p extra="" chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
     if declare -f _get_random_password >/dev/null 2>&1; then
         p=$(_get_random_password 14 2>/dev/null)
     fi
-    if [ -z "$p" ] || [ "${#p}" -lt 8 ]; then
-        p=$(openssl rand -base64 16 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c 14)
+    if [ -z "$p" ]; then
+        p=$(openssl rand -base64 16 2>/dev/null | LC_ALL=C tr -dc "$chars" | head -c 14)
     fi
-    if [ -z "$p" ] || [ "${#p}" -lt 8 ]; then
-        p=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 14)
+    if [ -z "$p" ]; then
+        p=$(LC_ALL=C tr -dc "$chars" </dev/urandom 2>/dev/null | head -c 14)
     fi
-    [ -n "$p" ] && echo "${p}@@" || echo ""
+    if [ -z "$p" ]; then
+        echo "无法生成随机密码" >&2
+        return 1
+    fi
+
+    # 补齐缺失的字符类，保证同时包含大写、小写、数字（补的数字用 2，避开易混淆的 0/O、1/I/l）
+    [[ "$p" =~ [A-Z] ]] || extra+="A"
+    [[ "$p" =~ [a-z] ]] || extra+="a"
+    [[ "$p" =~ [0-9] ]] || extra+="2"
+
+    echo "${p}${extra}@@"
 }
 
 show_ram_help() {

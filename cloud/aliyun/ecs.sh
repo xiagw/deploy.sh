@@ -19,7 +19,7 @@ show_ecs_help() {
     echo "  del-key [<密钥对名称>]                   - 删除 SSH 密钥对（密钥对名称可选，可使用fzf选择）"
     echo "  start [<实例ID>]                         - 启动 ECS 实例（实例ID可选，可使用fzf选择）"
     echo "  stop [<实例ID>]                          - 停止 ECS 实例（实例ID可选，可使用fzf选择）"
-    echo "  reinstall [<实例ID>] [<镜像ID>]          - 更换操作系统（重装系统盘，实例需已停止，数据盘保留）"
+    echo "  reinstall [<实例ID>] [<镜像ID>]          - 更换操作系统（运行中自动停止，更换后自动重启，数据盘保留）"
     echo "  key-attach [<实例ID>] [<密钥对名称>]     - 绑定 SSH 密钥对到实例（参数可选，可使用fzf选择）"
     echo "  key-detach [<实例ID>] [<密钥对名称>]     - 解绑实例的 SSH 密钥对（参数可选，可使用fzf选择）"
     echo "  快照："
@@ -586,14 +586,41 @@ ecs_reinstall() {
     local instance_id=$1
     local image_id=$2
 
-    local raw status
+    local raw
     raw=$(_ecs_resolve_instance_id "$instance_id" "选择要更换操作系统的 ECS 实例") || return 1
     instance_id=$(echo "$raw" | awk '{print $1}')
-    status=$(echo "$raw" | sed -n 's/.*\[\(.*\)\].*/\1/p')
 
+    # 更换系统盘要求实例已停止；运行中实例自动停止，更换成功后自动重启
+    local status
+    status=$(call_aliyun_api ecs describe-instance-attribute --instance-id "$instance_id" --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null | jq -r '.Status // ""')
     if [ -n "$status" ] && [ "$status" != "Stopped" ]; then
-        echo "错误：实例 $instance_id 当前状态为 $status，请先使用 stop 停止实例后再更换操作系统。" >&2
-        return 1
+        if [ "$status" != "Running" ] && [ "$status" != "Stopping" ]; then
+            echo "错误：实例 $instance_id 当前状态为 $status，无法自动停止更换。" >&2
+            return 1
+        fi
+        echo "实例 $instance_id 当前状态为 $status ，将自动停止后更换，完成后自动重启。"
+        if ! confirm_action "自动停止实例 $instance_id 以更换操作系统？"; then
+            return 1
+        fi
+        local stop_result stop_ret
+        stop_result=$(call_aliyun_api ecs stop-instance --instance-id "$instance_id" --biz-region-id "${region:-cn-hangzhou}" 2>&1)
+        stop_ret=$?
+        if [ $stop_ret -ne 0 ]; then
+            echo "错误：停止实例失败。" >&2
+            echo "$stop_result" >&2
+            return 1
+        fi
+        echo "等待实例停止..."
+        local i
+        for i in {1..60}; do
+            sleep 5
+            status=$(call_aliyun_api ecs describe-instance-attribute --instance-id "$instance_id" --biz-region-id "${region:-cn-hangzhou}" 2>/dev/null | jq -r '.Status // ""')
+            [ "$status" = "Stopped" ] && break
+        done
+        if [ "$status" != "Stopped" ]; then
+            echo "错误：等待实例停止超时（5 分钟），请稍后手动重试。" >&2
+            return 1
+        fi
     fi
 
     # 未提供镜像时，从阿里云公共镜像簇选择（取该族系最新可用镜像）
@@ -626,7 +653,7 @@ acs:centos_7_9_x64 (CentOS 7.9 x64)"
         echo "镜像簇 $family -> 最新镜像 $image_id"
     fi
 
-    if ! confirm_action "更换实例 $instance_id 的系统盘为镜像 $image_id？（系统盘数据将丢失，数据盘保留）"; then
+    if ! confirm_action "更换实例 $instance_id 的系统盘为镜像 $image_id ？（系统盘数据将丢失，数据盘保留）"; then
         return 1
     fi
 
@@ -634,7 +661,19 @@ acs:centos_7_9_x64 (CentOS 7.9 x64)"
     call_api_logged "ecs" "reinstall" "错误：更换操作系统失败。" \
         -- ecs replace-system-disk \
         --instance-id "$instance_id" \
-        --image-id "$image_id"
+        --image-id "$image_id" || return 1
+
+    echo "更换成功，等待新系统盘就绪后启动实例 $instance_id ..."
+    sleep 10
+    local start_result start_ret
+    start_result=$(call_aliyun_api ecs start-instance --instance-id "$instance_id" --biz-region-id "${region:-cn-hangzhou}" 2>&1)
+    start_ret=$?
+    if [ $start_ret -eq 0 ]; then
+        echo "实例 $instance_id 已重新启动。"
+    else
+        echo "警告：更换成功，但自动启动失败，请手动执行 start。" >&2
+        echo "$start_result" >&2
+    fi
 }
 
 # SSH 密钥对列表（使用框架函数）
