@@ -29,8 +29,6 @@ flowchart TD
   F --> F1["仓库 tests/func_test.sh<br/>部署后冒烟 / 验收"]
   P --> P1["JMeter *.jmx"]
   P --> P2["k6 · tests/perf/*.js<br/>p95 基线回归对比"]
-
-  U & F & P -.-> ENV["触发: CLI 标志 或 CI 环境变量<br/>(auto 模式默认全跳过)"]
 ```
 
 ---
