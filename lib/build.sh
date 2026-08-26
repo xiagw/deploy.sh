@@ -901,7 +901,7 @@ build_shell() {
 docker_login() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
     local lock_login_registry="$G_DATA/cache/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-aliyun}.lock"
-    local time_last
+    local time_last stat_cmd date_cmd
 
     if ${G_DRY_RUN:-false}; then
         dry_run_note "docker login ${ENV_DOCKER_REGISTRY%%/*} (${ENV_DOCKER_LOGIN_TYPE:-aliyun})"
@@ -911,9 +911,11 @@ docker_login() {
 
     case "${ENV_DOCKER_LOGIN_TYPE:-aliyun}" in
     aws)
-        time_last="$(stat -t -c %Y "$lock_login_registry" 2>/dev/null || echo 0)"
-        ## Compare the last login time, login again after 12 hours / 比较上一次登陆时间，超过12小时则再次登录
-        if [[ "$(date +%s -d '12 hours ago')" -lt "${time_last:-0}" ]]; then
+        ## ECR 令牌 12h 过期：按锁 mtime 判断是否重登
+        stat_cmd="$(command -v gstat || command -v stat)"
+        date_cmd="$(command -v gdate || command -v date)"
+        time_last="$("${stat_cmd}" -t -c %Y "$lock_login_registry" 2>/dev/null || echo 0)"
+        if [[ "$("${date_cmd}" +%s -d '12 hours ago')" -lt "${time_last:-0}" ]]; then
             return 0
         fi
         _msg task "AWS ECR login [${ENV_DOCKER_LOGIN_TYPE:-aliyun}]..."
@@ -926,13 +928,17 @@ docker_login() {
         fi
         ;;
     *)
-
-        if [[ -f "$lock_login_registry" ]]; then
+        ## 无 docker 凭据时假定外部已登录（docker context 已认证），跳过登录
+        [[ -n "${ENV_DOCKER_USERNAME:-}" && -n "${ENV_DOCKER_PASSWORD:-}" ]] || return 0
+        ## 凭据指纹：user:pass 未变且已成功登录过则跳过（通用 registry 凭据长期有效，唯一变数是改密码）
+        local cred_fp
+        cred_fp="$(printf '%s:%s' "${ENV_DOCKER_USERNAME}" "${ENV_DOCKER_PASSWORD}" | md5sum | cut -d' ' -f1)"
+        if [[ -f "$lock_login_registry" && "$(cat "$lock_login_registry" 2>/dev/null)" == "${cred_fp}" ]]; then
             return 0
         fi
         if printf '%s\n' "${ENV_DOCKER_PASSWORD}" |
             $G_DOCK login --username="${ENV_DOCKER_USERNAME}" --password-stdin "${ENV_DOCKER_REGISTRY%%/*}"; then
-            touch "$lock_login_registry"
+            echo "${cred_fp}" >"$lock_login_registry"
         else
             _msg error "Docker login failed"
             return 1
