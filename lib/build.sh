@@ -271,6 +271,25 @@ base_explain() {
     _msg note "      base tag: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
 }
 
+# 研发自提交 base 指纹：Dockerfile.base（环境定义）+ 全部 workspace package.json + lockfile
+# monorepo 依赖散落在 apps/*/packages/* 的 package.json，逐一纳入；lockfile 有则一并计算（frozen 权威）
+# 兼容不提交 lockfile 的仓库：package.json 即依赖声明唯一来源，纳入后依赖变化必然触发重建
+custom_base_hash() {
+    local base_file="${1:-}" lang="${2:-}"
+    [[ -f "${base_file}" ]] || { echo ""; return 0; }
+    local files=("${base_file}") m f pkg_json
+    m="$(lang_dep_manifest "${lang}")"
+    [[ -f "${m}" ]] && files+=("${m}")
+    while IFS= read -r pkg_json; do
+        files+=("${pkg_json}")
+    done < <(find "${G_REPO_DIR}" -name package.json \
+        -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null)
+    for f in pnpm-lock.yaml package-lock.json yarn.lock composer.lock; do
+        [[ -f "${G_REPO_DIR}/${f}" ]] && files+=("${G_REPO_DIR}/${f}")
+    done
+    md5sum "${files[@]}" 2>/dev/null | md5sum | cut -d' ' -f1
+}
+
 build_image() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
     local lang="${1:-}"
@@ -311,9 +330,17 @@ build_image() {
         [[ "${lang_type}" == node ]] && detect_node_framework_static && node_static=true
         if lang_uses_deps_base "${lang_type}" && [[ "${node_static}" != true ]]; then
             if repo_base_is_custom; then
-                ## 研发自提交 Dockerfile/Dockerfile.base：按其方式走，始终构建 base、不覆写其 Dockerfile
-                ## （提醒已在 repo_inject_file 输出）
+                ## 研发自提交 Dockerfile.base/Dockerfile：按其方式走、不覆写其 Dockerfile
+                ## base 是否重建以 Dockerfile.base + 全部 package.json + lockfile 内容指纹为准
                 deps_base_custom=true
+                dep_hash="$(custom_base_hash "${dockerfile_base_path}" "${lang_type}")"
+                node_base_record="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base-custom.md5"
+                if [[ -n "${dep_hash}" && "$(cat "${node_base_record}" 2>/dev/null || echo 0)" == "${dep_hash}" ]]; then
+                    if ${G_DRY_RUN:-false} || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
+                        build_base=false
+                        _msg note "[${lang_type}] 仓库自带 Dockerfile.base 未变，复用基础镜像（本轮构建较快）"
+                    fi
+                fi
             else
                 ## 自动生成的两段式：按依赖声明文件指纹决定是否重建 base
                 dep_hash="$(lang_dep_hash "${lang_type}")"
@@ -411,7 +438,7 @@ DOCKERIGNORE
             else
                 _msg note "[${lang_type}] ${manifest_name} 有改动，重建基础镜像 Dockerfile.base（本轮构建较慢）"
             fi
-            local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-base-build-${G_REPO_BRANCH}.log"
+            local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-${G_REPO_BRANCH}-base-build.log"
             _msg note "log file: $base_build_log"
             mkdir -p "$(dirname "$base_build_log")"
 

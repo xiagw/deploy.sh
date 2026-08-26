@@ -63,7 +63,7 @@ repo_inject_file() {
         ## 研发自提交 Dockerfile（git 跟踪中）：按其方式构建，提醒自行负责分层/镜像加速
         if lang_uses_deps_base "$lang" && ! detect_node_framework_static && repo_base_is_custom; then
             _msg warn "[warn] 仓库自带 Dockerfile.base/Dockerfile，按仓库自带方式构建，不注入CI/CD程序的自动两段式加速模板"
-            _msg warn "      请自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
+            _msg warn "  请研发人员自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
         fi
         return 0
     fi
@@ -373,7 +373,7 @@ node_lockfile_warn() {
         _msg warn "[node] package-lock.json 与 package.json 依赖不一致，建议重新生成 lockfile"
 }
 
-# 仓库中的 Dockerfile/Dockerfile.base 是否为研发提交（git 跟踪中）
+# 仓库中的 Dockerfile.base/Dockerfile 是否为研发提交（git 跟踪中）
 # 自动注入的产物不跟踪，返回 1；非 git 仓库视为自动注入，返回 1
 repo_base_is_custom() {
     git -C "${G_REPO_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
