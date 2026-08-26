@@ -30,6 +30,8 @@ config_repo_vars() {
     ## 设置仓库目录路径
     ## 优先级: -w/--workspace (用户指定) > CI_PROJECT_DIR (GitLab CI) > PWD (当前工作目录)
     G_REPO_DIR="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
+    ## 去掉尾部斜杠，否则 ${G_REPO_DIR##*/} 取到空仓库名
+    G_REPO_DIR="${G_REPO_DIR%/}"
 
     ## 切换到仓库目录，确保后续 git 命令在正确目录执行
     [[ -d "$G_REPO_DIR" ]] || {
