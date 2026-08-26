@@ -19,6 +19,7 @@ show_ecs_help() {
     echo "  del-key [<密钥对名称>]                   - 删除 SSH 密钥对（密钥对名称可选，可使用fzf选择）"
     echo "  start [<实例ID>]                         - 启动 ECS 实例（实例ID可选，可使用fzf选择）"
     echo "  stop [<实例ID>]                          - 停止 ECS 实例（实例ID可选，可使用fzf选择）"
+    echo "  reinstall [<实例ID>] [<镜像ID>]          - 更换操作系统（重装系统盘，实例需已停止，数据盘保留）"
     echo "  key-attach [<实例ID>] [<密钥对名称>]     - 绑定 SSH 密钥对到实例（参数可选，可使用fzf选择）"
     echo "  key-detach [<实例ID>] [<密钥对名称>]     - 解绑实例的 SSH 密钥对（参数可选，可使用fzf选择）"
     echo "  快照："
@@ -37,6 +38,7 @@ show_ecs_help() {
     echo "  $0 ecs del i-bp67acfmxazb4ph****"
     echo "  $0 ecs start i-bp67acfmxazb4ph****"
     echo "  $0 ecs stop i-bp67acfmxazb4ph****"
+    echo "  $0 ecs reinstall i-bp67acfmxazb4ph**** m-bp1xxx          # 更换操作系统"
     echo "  $0 ecs get-key"
     echo "  $0 ecs add-key my-key"
     echo "  $0 ecs add-key                           # 交互选择创建或从 GitHub/本地导入"
@@ -70,6 +72,7 @@ handle_ecs_commands() {
     del-key) ecs_key_delete "$@" ;;
     start) ecs_start "$@" ;;
     stop) ecs_stop "$@" ;;
+    reinstall) ecs_reinstall "$@" ;;
     key-attach) ecs_key_attach "$@" ;;
     key-detach) ecs_key_detach "$@" ;;
     get-snap) ecs_snapshot_list "$@" ;;
@@ -576,6 +579,62 @@ ecs_delete() {
         -- ecs delete-instance \
         --instance-id "$instance_id" \
         --biz-force true
+}
+
+# 更换操作系统（重装系统盘，保留数据盘；实例需处于已停止状态）
+ecs_reinstall() {
+    local instance_id=$1
+    local image_id=$2
+
+    local raw status
+    raw=$(_ecs_resolve_instance_id "$instance_id" "选择要更换操作系统的 ECS 实例") || return 1
+    instance_id=$(echo "$raw" | awk '{print $1}')
+    status=$(echo "$raw" | sed -n 's/.*\[\(.*\)\].*/\1/p')
+
+    if [ -n "$status" ] && [ "$status" != "Stopped" ]; then
+        echo "错误：实例 $instance_id 当前状态为 $status，请先使用 stop 停止实例后再更换操作系统。" >&2
+        return 1
+    fi
+
+    # 未提供镜像时，从阿里云公共镜像簇选择（取该族系最新可用镜像）
+    if [ -z "$image_id" ]; then
+        local family_list family selected
+        family_list="acs:ubuntu_24_04_x64 (Ubuntu 24.04 x64)
+acs:ubuntu_22_04_x64 (Ubuntu 22.04 x64)
+acs:ubuntu_26_04_x64 (Ubuntu 26.04 x64)
+acs:ubuntu_24_04_arm64 (Ubuntu 24.04 ARM64)
+acs:alibaba_cloud_linux_3_2104_lts_x64 (Alibaba Cloud Linux 3 x64)
+acs:alibaba_cloud_linux_3_2104_lts_arm64 (Alibaba Cloud Linux 3 ARM64)
+acs:centos_7_9_x64 (CentOS 7.9 x64)"
+        if type select_with_fzf >/dev/null 2>&1; then
+            selected=$(select_with_fzf "选择要更换到的公共镜像簇" "$family_list")
+        else
+            read -r -p "请输入公共镜像簇（如 acs:ubuntu_24_04_x64）: " selected
+        fi
+        [ -z "$selected" ] && echo "错误：未选择镜像簇。" >&2 && return 1
+        family=$(echo "$selected" | awk '{print $1}')
+
+        local result ret
+        result=$(call_aliyun_api ecs describe-image-from-family --biz-region-id "${region:-cn-hangzhou}" --image-family "$family" 2>/dev/null)
+        ret=$?
+        if [ $ret -ne 0 ] || ! echo "$result" | jq -e . >/dev/null 2>&1; then
+            echo "错误：无法从镜像簇 $family 解析镜像。" >&2
+            return 1
+        fi
+        image_id=$(echo "$result" | jq -r '.Image.ImageId // ""')
+        [ -z "$image_id" ] && echo "错误：镜像簇 $family 没有可用的镜像。" >&2 && return 1
+        echo "镜像簇 $family -> 最新镜像 $image_id"
+    fi
+
+    if ! confirm_action "更换实例 $instance_id 的系统盘为镜像 $image_id？（系统盘数据将丢失，数据盘保留）"; then
+        return 1
+    fi
+
+    echo "更换操作系统：实例=$instance_id 镜像=$image_id"
+    call_api_logged "ecs" "reinstall" "错误：更换操作系统失败。" \
+        -- ecs replace-system-disk \
+        --instance-id "$instance_id" \
+        --image-id "$image_id"
 }
 
 # SSH 密钥对列表（使用框架函数）
