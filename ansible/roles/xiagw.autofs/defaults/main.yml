@@ -1,2 +1,5 @@
 ---
 # defaults file for roles/xiagw.autofs
+autofs_nis_domain: smartind.cn
+autofs_nis_server: git.smartind.cn
+autofs_nfs_server: 192.168.199.11

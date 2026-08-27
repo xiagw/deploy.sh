@@ -1,72 +1,69 @@
 ---
 # tasks file for roles/xiagw.autofs
-- name: Install autofs nfs-common (Debian)
-  ansible.builtin.apt:
-    update_cache: true
-    # state: latest
-    pkg:
-      - autofs
-      - nfs-common
-      - nis
-      - nscd
+- name: Configure autofs nis nfs client
   when: ansible_os_family == "Debian"
+  block:
+    - name: Install autofs nfs-common (Debian)
+      ansible.builtin.apt:
+        update_cache: true
+        pkg:
+          - autofs
+          - nfs-common
+          - nis
+          - nscd
 
-- name: Copy auto.data using inline content
-  ansible.builtin.copy:
-    content: '/data    -fstype=nfs,rw,nosuid,soft,sync     192.168.199.190:/data'
-    dest: /etc/auto.data
-    mode: '0644'
-    owner: root
-    group: root
+    - name: Copy auto.data
+      ansible.builtin.template:
+        src: templates/auto.data.j2
+        dest: /etc/auto.data
+        mode: '0644'
+        owner: root
+        group: root
 
-- name: Copy auto.home using inline content
-  ansible.builtin.copy:
-    content: '*      -fstype=nfs,rw,nosuid,soft,sync      192.168.199.190:/home2/&'
-    dest: /etc/auto.home
-    mode: '0644'
-    owner: root
-    group: root
+    - name: Copy auto.home
+      ansible.builtin.template:
+        src: templates/auto.home.j2
+        dest: /etc/auto.home
+        mode: '0644'
+        owner: root
+        group: root
 
-- name: Remove domain in /etc/yp.conf
-  lineinfile: >
-    dest=/etc/yp.conf
-    regexp='domain  smartind.cn  server git.smartind.cn'
-    state=absent
+    - name: Remove stale NIS line in /etc/yp.conf
+      ansible.builtin.lineinfile:
+        dest: /etc/yp.conf
+        regexp: '^domain\s+.*\s+server\s+'
+        state: absent
 
-- name: Copy /etc/yp.conf using inline content
-  lineinfile: >
-    dest=/etc/yp.conf
-    line='domain  smartind.cn  server git.smartind.cn'
+    - name: Set NIS domain in /etc/yp.conf
+      ansible.builtin.lineinfile:
+        dest: /etc/yp.conf
+        line: 'domain  {{ autofs_nis_domain }}  server {{ autofs_nis_server }}'
+      notify: Systemctl restart nis
 
-- name: Remove content /etc/pam.d/common-session
-  lineinfile: >
-    dest=/etc/yp.conf
-    regexp='session optional        pam_mkhomedir.so skel=/etc/skel umask=077'
-    state=absent
-  notify: Systemctl restart nis
+    - name: Add pam_mkhomedir to common-session
+      ansible.builtin.lineinfile:
+        dest: /etc/pam.d/common-session
+        regexp: '^session\s+optional\s+pam_mkhomedir.so'
+        line: 'session	optional			pam_mkhomedir.so skel=/etc/skel umask=077'
+        insertafter: '^session\s+(required|optional)\s+pam_unix.so'
 
-- name: Copy /etc/pam.d/common-session using inline content
-  lineinfile: >
-    dest=/etc/pam.d/common-session
-    line='session optional        pam_mkhomedir.so skel=/etc/skel umask=077'
+    - name: Add nis to nsswitch.conf
+      ansible.builtin.lineinfile:
+        dest: /etc/nsswitch.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^passwd:\s+', line: 'passwd:         compat systemd nis' }
+        - { regexp: '^group:\s+', line: 'group:          compat systemd nis' }
+        - { regexp: '^shadow:\s+', line: 'shadow:         compat nis' }
+        - { regexp: '^hosts:\s+', line: 'hosts:          files nis mdns4_minimal [NOTFOUND=return] dns myhostname' }
+      notify: Systemctl restart nis
 
-- name: Copy /etc/nsswitch.conf using inline content
-  lineinfile: >
-    dest=/etc/nsswitch.conf
-    regexp="{{ item.regexp }}"
-    line="{{ item.line }}"
-  with_items:
-    - { regexp: "^passwd:         compat systemd", line: 'passwd:         compat systemd nis' }
-    - { regexp: "^group:          compat systemd", line: "group:          compat systemd nis" }
-    - { regexp: "^shadow:         compat", line: "shadow:         compat nis" }
-    - { regexp: "^hosts:          files mdns4_minimal.*", line: "hosts:          files nis mdns4_minimal [NOTFOUND=return] dns myhostname" }
-  notify: Systemctl restart nis
-
-- name: Copy auto.master
-  ansible.builtin.copy:
-    src: "files/auto.master"
-    dest: "/etc/auto.master"
-    mode: '0644'
-    owner: root
-    group: root
-  notify: Systemctl restart autofs
+    - name: Copy auto.master
+      ansible.builtin.copy:
+        src: files/auto.master
+        dest: /etc/auto.master
+        mode: '0644'
+        owner: root
+        group: root
+      notify: Systemctl restart autofs

@@ -1,38 +1,65 @@
-Role Name
-=========
+xiagw.autofs
+============
 
-A brief description of the role goes here.
+Configure an autofs + NIS + NFS client on Debian/Ubuntu hosts. It installs the
+needed packages, programs the automounter maps, registers the NIS domain against
+a ypserver, adds NIS to NSS, and enables `pam_mkhomedir` so a user's home under
+`/home2` is created on first login.
+
+Role is **Debian-only** and is fully guarded, so it is a no-op on other OS
+families (e.g. `RedHat`, `Darwin`).
 
 Requirements
 ------------
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+- Target host runs Debian or Ubuntu.
+- A reachable NIS server (`ypserver`) and NFS server exporting `/data` and
+  `/home2`.
 
 Role Variables
 --------------
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+All variables live in `defaults/main.yml` and can be overridden by inventory or
+playbook vars:
+
+| Variable               | Default                | Description                                   |
+|------------------------|------------------------|-----------------------------------------------|
+| `autofs_nis_domain`    | `smartind.cn`          | NIS domain name registered in `yp.conf`       |
+| `autofs_nis_server`    | `git.smartind.cn`      | NIS `ypserver` host (resolvable via `/etc/hosts`) |
+| `autofs_nfs_server`    | `192.168.199.190`      | NFS server exporting `/data` and `/home2`     |
+
+Generated files (based on the variables above):
+
+- `/etc/auto.data` → mounts `{{ autofs_nfs_server }}:/data` at `/data`
+- `/etc/auto.home` → mounts `{{ autofs_nfs_server }}:/home2/<user>` at `/home2/<user>`
+- `/etc/yp.conf` → `domain {{ autofs_nis_domain }} server {{ autofs_nis_server }}`
+- `/etc/nsswitch.conf` → `passwd`/`group`/`shadow`/`hosts` gain `nis`
+- `/etc/pam.d/common-session` → adds `pam_mkhomedir.so`
+- `/etc/auto.master` → static file from `files/auto.master`
 
 Dependencies
 ------------
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+None.
 
 Example Playbook
 ----------------
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
-
-    - hosts: servers
+    - hosts: clients
+      become: true
       roles:
-         - { role: username.rolename, x: 42 }
+        - role: xiagw.autofs
+          vars:
+            autofs_nis_domain: example.lan
+            autofs_nis_server: ypserver.example.lan
+            autofs_nfs_server: 192.168.199.190
 
 License
 -------
 
-BSD
+BSD-3-Clause
 
 Author Information
 ------------------
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+xiagw / smartind
