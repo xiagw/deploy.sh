@@ -512,10 +512,7 @@ stage_security_semgrep() {
         return 0
     fi
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run semgrep: docker ... semgrep/semgrep scan --config=auto --json"
-        return 0
-    fi
+    dry_run_skip "run semgrep: docker ... semgrep/semgrep scan --config=auto --json" && return 0
 
     local out="$G_DATA/reports/security" ret=0
     mkdir -p "$out"
@@ -541,10 +538,7 @@ stage_security_sca() {
         return 0
     fi
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run trivy fs: docker ... aquasec/trivy fs --scanners vuln --exit-code 1"
-        return 0
-    fi
+    dry_run_skip "run trivy fs: docker ... aquasec/trivy fs --scanners vuln --exit-code 1" && return 0
 
     local out="$G_DATA/reports/security" ret=0
     mkdir -p "$out"
@@ -572,10 +566,7 @@ stage_security_image() {
     fi
 
     local image_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run trivy image $image_tag"
-        return 0
-    fi
+    dry_run_skip "run trivy image $image_tag" && return 0
 
     local out="$G_DATA/reports/security" ret=0
     mkdir -p "$out"
@@ -606,10 +597,7 @@ stage_security_gitleaks() {
         return 0
     fi
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run gitleaks: docker ... gitleaks --path=$G_REPO_DIR --config=conf/templates/config.toml"
-        return 0
-    fi
+    dry_run_skip "run gitleaks: docker ... gitleaks --path=$G_REPO_DIR --config=conf/templates/config.toml" && return 0
 
     local config_file="$G_PATH/conf/templates/config.toml"
     if analysis_gitleaks "$G_REPO_DIR" "$config_file"; then

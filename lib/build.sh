@@ -57,10 +57,7 @@ enable_buildx_mode() {
     mode="${mode,,}"
 
     ## dry-run: 只提示会选择哪种 builder，不真正 create/bootstrap
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "enable buildx builder (mode=${mode})"
-        return 0
-    fi
+    dry_run_skip "enable buildx builder (mode=${mode})" && return 0
 
     case "${mode}" in
     auto)
@@ -292,6 +289,7 @@ custom_base_hash() {
 
 build_image() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
+    local dry="${G_DRY_RUN:-false}"
     local lang="${1:-}"
     local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror ret debug_flag
     local custom_build_ret build_base dep_hash node_base_record deps_base_custom
@@ -302,7 +300,7 @@ build_image() {
     ## If build.base.sh exists, run it and preserve its exit status
     custom_build_script="${G_REPO_DIR}/build.base.sh"
     if [[ -f "${custom_build_script}" ]]; then
-        if ${G_DRY_RUN:-false}; then
+        if $dry; then
             dry_run_note "run custom build script: bash ${custom_build_script#"${G_REPO_DIR}"/}"
         else
             _msg note "Found ${custom_build_script}, running it..."
@@ -336,7 +334,7 @@ build_image() {
                 dep_hash="$(custom_base_hash "${dockerfile_base_path}" "${lang_type}")"
                 node_base_record="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base-custom.md5"
                 if [[ -n "${dep_hash}" && "$(cat "${node_base_record}" 2>/dev/null || echo 0)" == "${dep_hash}" ]]; then
-                    if ${G_DRY_RUN:-false} || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
+                    if $dry || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
                         build_base=false
                         _msg note "[${lang_type}] 仓库自带 Dockerfile.base 未变，复用基础镜像（本轮构建较快）"
                     fi
@@ -350,7 +348,7 @@ build_image() {
                 base_explain "${lang_type}"
                 [[ "${lang_type}" == node ]] && node_lockfile_warn
                 if [[ "$(cat "${node_base_record}" 2>/dev/null || echo 0)" == "${dep_hash}" ]]; then
-                    if ${G_DRY_RUN:-false} || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
+                    if $dry || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
                         build_base=false
                         _msg note "[${lang_type}] ${manifest_name} 未变，Dockerfile 直接复用基础镜像（本轮构建较快）"
                     fi
@@ -359,7 +357,7 @@ build_image() {
         fi
         ## 自动生成时确保主 Dockerfile = FROM base；研发自提交的不动
         if [[ "${deps_base_custom:-false}" != true ]]; then
-            if ${G_DRY_RUN:-false}; then
+            if $dry; then
                 ${build_base} && dry_run_note "write 'FROM ${base_image_tag}' to ${dockerfile_path#"${G_REPO_DIR}"/} (base image)"
             else
                 echo "FROM ${base_image_tag}" >"${dockerfile_path}"
@@ -369,7 +367,7 @@ build_image() {
 
     ## 生成 docker-bake.hcl 文件
     target_image_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
-    if ${G_DRY_RUN:-false}; then
+    if $dry; then
         ## dry-run: hcl 写临时文件，不污染仓库
         bake_file_path="$(mktemp)"
     else
@@ -382,7 +380,7 @@ build_image() {
     local dockerignore_path="${G_REPO_DIR}/.dockerignore"
     if [[ -f "${dockerignore_path}" ]]; then
         : ## 已存在则不动
-    elif ${G_DRY_RUN:-false}; then
+    elif $dry; then
         dry_run_note "generate ${dockerignore_path#"${G_REPO_DIR}"/} (auto .dockerignore)"
     else
         cat >"${dockerignore_path}" <<'DOCKERIGNORE'
@@ -414,7 +412,7 @@ DOCKERIGNORE
         _msg note "Auto-generated .dockerignore to reduce build context"
     fi
     ## dry-run: 仅显示构建计划，不实际执行构建
-    if ${G_DRY_RUN:-false}; then
+    if $dry; then
         _msg note "[dry-run] skip docker buildx bake, showing build plan only"
         if $G_DOCK buildx version >/dev/null 2>&1; then
             if [[ -f "${dockerfile_base_path}" ]] && ${build_base:-false}; then
@@ -488,7 +486,7 @@ DOCKERIGNORE
     if [[ "${PIPELINE_TTL_SH:-false}" == "true" || "${ENV_IMAGE_TTL:-false}" == "true" ]]; then
         image_uuid="ttl.sh/$(uuidgen):1h"
         echo "Temporary image tag: $image_uuid"
-        if ${G_DRY_RUN:-false}; then
+        if $dry; then
             dry_run_note "$G_DOCK tag ${target_image_tag} ${image_uuid} && $G_DOCK push ${image_uuid}"
         else
             $G_DOCK tag ${target_image_tag} ${image_uuid}
@@ -578,10 +576,7 @@ stage_build() {
     # or prefer_docker=false (skip Docker), use system command build
     if [[ "${PROJECT_PREFER_DOCKER:-true}" != true ]] || [[ "$docker_build_failed" == true ]] || [[ "$has_dockerfile" != true ]] || ! check_docker_available; then
         _msg note "Using system command build for ${lang_type}"
-        if ${G_DRY_RUN:-false}; then
-            dry_run_note "run ${lang_type} system build (build_${lang_type})"
-            return 0
-        fi
+        dry_run_skip "run ${lang_type} system build (build_${lang_type})" && return 0
         case "$lang_type" in
         java) build_java ;;
         node) build_node ;;
@@ -847,10 +842,7 @@ build_php() {
 # shc 产物是 glibc/arch 绑定的 native 二进制，跨机器分发受限，但满足部署场景防护。
 build_shell() {
     _msg task "Running shell build with shc"
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run shc on shell scripts under ${G_REPO_DIR}"
-        return 0
-    fi
+    dry_run_skip "run shc on shell scripts under ${G_REPO_DIR}" && return 0
 
     command -v shc >/dev/null || {
         _msg warn "shc not installed, installing..."
@@ -903,10 +895,7 @@ docker_login() {
     local lock_login_registry="$G_DATA/cache/.docker.login.${ENV_DOCKER_LOGIN_TYPE:-aliyun}.lock"
     local time_last stat_cmd date_cmd
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "docker login ${ENV_DOCKER_REGISTRY%%/*} (${ENV_DOCKER_LOGIN_TYPE:-aliyun})"
-        return 0
-    fi
+    dry_run_skip "docker login ${ENV_DOCKER_REGISTRY%%/*} (${ENV_DOCKER_LOGIN_TYPE:-aliyun})" && return 0
     mkdir -p "${G_DATA}/cache"
 
     case "${ENV_DOCKER_LOGIN_TYPE:-aliyun}" in

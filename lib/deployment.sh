@@ -518,10 +518,7 @@ deploy_aliyun_oss() {
     local source_path="${1:?'source_path parameter is required'}"
     local oss_dest="${2:?'oss_dest parameter is required (format: oss://bucket-name/path)'}"
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "ossutil cp ${source_path%/}/ ${oss_dest} --recursive --force"
-        return 0
-    fi
+    dry_run_skip "ossutil cp ${source_path%/}/ ${oss_dest} --recursive --force" && return 0
     _msg task "Deploy files to Aliyun OSS"
     _oss_upload "${source_path}" "${oss_dest}"
     _msg task "Aliyun OSS deployment completed"
@@ -568,10 +565,7 @@ deploy_via_rsync() {
     fi
 
     local rsync_options="rsync -avz --exclude-from=${exclude_file}"
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "${rsync_options} ${source_dir}/ ${rsync_user}@${rsync_host}::${target_dir}"
-        return 0
-    fi
+    dry_run_skip "${rsync_options} ${source_dir}/ ${rsync_user}@${rsync_host}::${target_dir}" && return 0
     if ! $rsync_options "${source_dir}/" "${rsync_user}@${rsync_host}::${target_dir}"; then
         G_DEPLOY_RESULT=1
         _msg error "rsync daemon deployment failed"
@@ -591,10 +585,7 @@ deploy_via_ftp() {
 
     local upload_file="${G_REPO_DIR}/ftp.tgz" upload_name
     upload_name="$(basename "$upload_file")"
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "tar czf ${upload_file} -C ${G_REPO_DIR} . && ftp -inv ${ftp_host} (user/pass, cd ${ftp_directory:-/}, put ${upload_name})"
-        return 0
-    fi
+    dry_run_skip "tar czf ${upload_file} -C ${G_REPO_DIR} . && ftp -inv ${ftp_host} (user/pass, cd ${ftp_directory:-/}, put ${upload_name})" && return 0
     command -v ftp >/dev/null || { _msg error "ftp command not found"; return 1; }
     if ! tar czf "$upload_file" -C "$G_REPO_DIR" .; then
         G_DEPLOY_RESULT=1
@@ -632,10 +623,7 @@ deploy_via_sftp() {
     local has_host=false
     local ssh_user ssh_host_ip ssh_port remote_dir
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "tar czf ${upload_file} -C ${G_REPO_DIR} . && sftp -b <batch> <user@host> (mkdir/put ${upload_name})"
-        return 0
-    fi
+    dry_run_skip "tar czf ${upload_file} -C ${G_REPO_DIR} . && sftp -b <batch> <user@host> (mkdir/put ${upload_name})" && return 0
     command -v sftp >/dev/null || { _msg error "sftp command not found"; return 1; }
     if ! tar czf "$upload_file" -C "$G_REPO_DIR" .; then
         G_DEPLOY_RESULT=1

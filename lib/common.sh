@@ -122,6 +122,15 @@ dry_run_note() {
     _msg note "[dry-run] $*"
 }
 
+# dry-run 守卫：dry-run 下打印将要执行的整段说明并返回 0（跳过真实执行），
+# 非 dry-run 下返回 1（继续执行）。用于收掉 "if G_DRY_RUN; then <note>; return 0; fi" 的块。
+# 用法: dry_run_skip "跳过原因/描述" && return 0
+dry_run_skip() {
+    ${G_DRY_RUN:-false} || return 1
+    _msg note "[dry-run] $*"
+    return 0
+}
+
 # 阶段横幅状态（_stage_start_ms 由 deploy.sh 在脚本开始时初始化；_stage_num 为 common 模块私有）
 _stage_start_ms=0
 _stage_num=0

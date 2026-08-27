@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+# shellcheck disable=SC2034
 # bats 测试共享 helper: 只 stub 环境/工具依赖的辅助函数，令 deploy.sh 纯逻辑可离确定测试
 # 不 source 任何 lib 模块 —— deploy.sh 的 main() 才做模块加载，此处刻意避开，保证测试幂等。
 

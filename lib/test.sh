@@ -137,10 +137,7 @@ test_unit() {
     if [[ -n "$cov_cmd" ]]; then
         cov_log="$G_DATA/reports/coverage/${G_REPO_NAME}-${lang}.txt"
         mkdir -p "$(dirname "$cov_log")"
-        if ${G_DRY_RUN:-false}; then
-            dry_run_note "run: (cd $G_REPO_DIR && bash -lc \"$cov_cmd\" | tee $cov_log)"
-            return 0
-        fi
+        dry_run_skip "run: (cd $G_REPO_DIR && bash -lc \"$cov_cmd\" | tee $cov_log)" && return 0
         _msg task "Running framework unit tests with coverage: $cov_cmd"
         if (cd "$G_REPO_DIR" && bash -lc "$cov_cmd" 2>&1 | tee "$cov_log"); then
             _msg ok "Coverage report: $cov_log"
@@ -159,10 +156,7 @@ test_unit() {
         return 0
     fi
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run: (cd $G_REPO_DIR && bash -lc \"$framework_cmd\")"
-        return 0
-    fi
+    dry_run_skip "run: (cd $G_REPO_DIR && bash -lc \"$framework_cmd\")" && return 0
     _msg task "Running framework unit tests: $framework_cmd"
     if (cd "$G_REPO_DIR" && bash -lc "$framework_cmd"); then
         _msg ok "Framework unit tests passed"
@@ -178,10 +172,7 @@ test_function() {
     local test_scripts=("$G_REPO_DIR/tests/func_test.sh" "$G_DATA/tests/func_test.sh")
     local script found=false
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run functional tests: bash ${test_scripts[0]}"
-        return 0
-    fi
+    dry_run_skip "run functional tests: bash ${test_scripts[0]}" && return 0
 
     for script in "${test_scripts[@]}"; do
         [[ -f "$script" ]] || continue
@@ -272,10 +263,7 @@ test_performance() {
         return 0
     fi
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run performance tests: ${plan_list[*]}"
-        return 0
-    fi
+    dry_run_skip "run performance tests: ${plan_list[*]}" && return 0
 
     local plan name ret=0
     for plan in "${plan_list[@]}"; do

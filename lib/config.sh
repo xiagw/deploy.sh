@@ -211,10 +211,7 @@ _load_project_build_deploy_config() {
 ################################################################################
 config_deploy_setup() {
     ## dry-run: 不生成SSH密钥、不创建符号链接（仅本地环境配置，预览无意义）
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "config_deploy_setup (ssh keys, $HOME symlinks) — skipped in preview"
-        return 0
-    fi
+    dry_run_skip "config_deploy_setup (ssh keys, $HOME symlinks) — skipped in preview" && return 0
 
     ## 需要创建符号链接的配置目录列表
     local conf_dirs=(".ssh" ".acme.sh" ".aws" ".kube" ".aliyun")

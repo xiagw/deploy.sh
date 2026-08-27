@@ -89,10 +89,7 @@ handle_notify() {
     # If notification type is not set, return early
     [ -z "$type" ] && return 0
 
-    if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] handle_notify: would send '${type}' notification"
-        return 0
-    fi
+    dry_run_skip "handle_notify: would send '${type}' notification" && return 0
 
     # Disable notifications for specific branches (pipe-separated list, e.g. develop|testing)
     local disable_branch disable_list="${ENV_DISABLE_NOTIFY_BRANCH:-develop|testing}"

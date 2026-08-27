@@ -208,10 +208,7 @@ stage_code_style() {
         return 0
     fi
 
-    if ${G_DRY_RUN:-false}; then
-        dry_run_note "run code style check for ${lang} (style_check_${lang})"
-        return 0
-    fi
+    dry_run_skip "run code style check for ${lang} (style_check_${lang})" && return 0
 
     case "$lang" in
     php) style_check_php ;;
