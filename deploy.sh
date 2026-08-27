@@ -563,7 +563,10 @@ main() {
     return "${G_DEPLOY_RESULT:-0}"
 }
 
-main "$@"
+## 仅当直接执行时运行 main；被 bats/其它脚本 source 时不触发，便于对纯逻辑函数做单元测试
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
 
 ## Configure external service dependencies:
 ## - Authentication: .ssh/config
