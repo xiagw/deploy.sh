@@ -27,8 +27,7 @@
 #   - G_IMAGE_TAG: Docker镜像标签（时间戳格式）
 ################################################################################
 config_repo_vars() {
-    ## 设置仓库目录路径
-    ## 优先级: -w/--workspace (用户指定) > CI_PROJECT_DIR (GitLab CI) > PWD (当前工作目录)
+    ## 仓库目录优先级: -w/--workspace > CI_PROJECT_DIR (GitLab CI) > PWD
     G_REPO_DIR="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
     ## 去掉尾部斜杠，否则 ${G_REPO_DIR##*/} 取到空仓库名
     G_REPO_DIR="${G_REPO_DIR%/}"
@@ -40,8 +39,7 @@ config_repo_vars() {
     }
     cd "$G_REPO_DIR" || return 1
 
-    ## 提取仓库名称
-    ## 优先级: GITHUB_REPOSITORY (GitHub/Gitea Actions) > CI_PROJECT_NAME (GitLab CI) > 当前目录名
+    ## 仓库名优先级: GITHUB_REPOSITORY (GitHub/Gitea) > CI_PROJECT_NAME (GitLab CI) > 当前目录名
     ## GITHUB_REPOSITORY 格式: owner/repo，取最后一部分作为仓库名
     if [[ -n "${GITHUB_REPOSITORY}" ]]; then
         G_REPO_NAME=${GITHUB_REPOSITORY##*/}
@@ -68,7 +66,7 @@ config_repo_vars() {
     ## 获取当前Git分支名称
     G_REPO_BRANCH=$(get_git_branch)
 
-    ## 获取Git提交哈希的简短版本（通常7个字符）
+    ## 获取Git提交哈希的简短版本（8个字符）
     G_REPO_SHORT_SHA=$(get_git_commit_sha)
 
     ## 根据Git分支映射到Kubernetes命名空间
@@ -86,14 +84,10 @@ config_repo_vars() {
     *) G_NAMESPACE="${G_REPO_BRANCH}" ;;
     esac
 
-    ## 设置Docker构建的进度显示模式
-    ## 构建输出统一写入日志文件，始终使用 --progress=plain 保证日志完整性
+    ## 构建输出统一写入日志文件，固定 --progress=plain 保证日志完整
     export G_PROGRESS='--progress=plain'
 
-    ## 生成Docker镜像标签
-    ## 格式: Unix时间戳（毫秒级）
-    ## 注意: 之前支持包含Git提交哈希的格式，现已简化为仅时间戳
-    # G_IMAGE_TAG="${G_REPO_SHORT_SHA}-$(date +%s%3N)"  # 旧格式（已注释）
+    ## 生成Docker镜像标签（Unix时间戳毫秒级）
     G_IMAGE_TAG="t$(date +%s%3N)"
 
     ## Docker镜像仓库路径配置
@@ -104,8 +98,7 @@ config_repo_vars() {
     ENV_DOCKER_REGISTRY="${ENV_DOCKER_REGISTRY:-example.com/myrepo}"
     if [[ "${ENV_DOCKER_IMAGE_RANDOM:-${ENV_DOCKER_RANDOM:-false}}" = true ]]; then
         local chars
-        chars=({a..o}) # 字符集: a到o（共15个字符）
-        ## 随机选取两个字符组合（可组合总数: 15*15=225个）
+        chars=({a..o})  # 字符集 a-o（15个），随机取两字符组合
         G_IMAGE_NAME="${chars[$((RANDOM % ${#chars[@]}))]}${chars[$((RANDOM % ${#chars[@]}))]}"
     else
         G_IMAGE_NAME="${G_REPO_NAME//-/}"
@@ -311,7 +304,7 @@ parse_args() {
     [[ -n "${arg_clean_tags:-}" ]] && RUN+=(clean_old_tags)
     [[ "${arg_create_k8s:-false}" == true ]] && RUN+=(kube_setup_terraform)
 
-    ## 仓库准备: 必须早于 config_repo_vars（后者读仓库分支，repo.sh:447）
+    ## 仓库准备: 必须早于 config_repo_vars（后者读仓库分支，见 get_git_branch）
     [[ -n "${arg_git_clone_url:-}" || "${GITEA_ACTIONS:-false}" == true ]] && RUN+=(setup_git_repo)
     [[ -n "${arg_svn_checkout_url:-}" ]] && RUN+=(setup_svn_repo)
     [[ -n "${arg_git_clone_branch:-}" && -z "${arg_git_clone_url:-}" ]] && RUN+=(setup_git_branch)
@@ -323,8 +316,8 @@ parse_args() {
     ## 须早于 repo_inject_file，避免注入内容被构建进镜像
     [[ "${arg_build_buildpacks:-false}" == true ]] && RUN+=(detect_repo_language_and_build)
 
-    ## 项目专用配置: 仅当计划含 stage_build（读 PROJECT_BUILD_METHOD，build.sh:382）或
-    ## stage_deploy（读 G_CONF hosts / PROJECT_DEPLOY_METHOD，deployment.sh:702/791）时加载；
+    ## 项目专用配置: 仅当计划含 stage_build（读 PROJECT_BUILD_METHOD）或
+    ## stage_deploy（读 G_CONF hosts / PROJECT_DEPLOY_METHOD）时加载；
     ## 独立功能（-x/--clean-tags/-r 等）与测试跳过，避免无关配置阻断或产生模板残留告警
     [[ "${arg_build:-false}" == true || ${#RUN_DEPLOY[@]} -gt 0 || "$auto_mode" == true ]] && RUN+=(find_project_config)
 
@@ -335,7 +328,7 @@ parse_args() {
 
     RUN+=(kube_config_init)
 
-    ## 依赖 kube_config_init 设置的 KUBECTL_OPT（kubernetes.sh:37-42）
+    ## 依赖 kube_config_init 设置的 KUBECTL_OPT
     [[ "${arg_create_storage_class:-false}" == true ]] && RUN+=(kube_create_storage_class)
     [[ -n "${arg_sub_path:-}" ]] && RUN+=(kube_create_pv_pvc)
 
@@ -343,12 +336,12 @@ parse_args() {
     RUN+=(system_install_tools)
     RUN+=(config_deploy_setup)
 
-    ## 依赖 config_deploy_setup 可能创建的 $HOME/.acme.sh 链接（config.sh:254）
+    ## 依赖 config_deploy_setup 可能创建的 $HOME/.acme.sh 链接
     [[ "${arg_renew_cert:-false}" == true ]] && RUN+=(system_cert_renew)
 
     RUN+=(config_build_env)
 
-    ## 依赖 config_build_env 设置的 IS_CHINA（kubernetes.sh:398）
+    ## 依赖 config_build_env 设置的 IS_CHINA
     [[ "${arg_build_base:-false}" == true ]] && RUN+=(build_base_image_select)
 
     RUN+=(repo_inject_file)
@@ -408,13 +401,10 @@ config_build_env() {
         G_DOCK=$(command -v docker || echo docker)
     fi
 
-    ## 设置Docker/Podman运行命令的基础参数
-    ## --interactive: 保持标准输入打开
-    ## --rm: 容器退出后自动删除
+    ## Docker/Podman 通用运行基底: 交互模式 + 容器退出自动清理
     G_RUN="${G_DOCK} run --interactive --rm"
 
-    ## 添加主机映射参数（用于容器内访问外部服务）
-    ## ENV_ADD_HOST 数组中的每个条目都会添加到 G_RUN 中
+    ## 追加容器内访问外部服务的主机映射 --add-host
     if [ -n "${ENV_ADD_HOST[*]:-}" ]; then
         for host in "${ENV_ADD_HOST[@]}"; do
             G_RUN+=" --add-host=${host}"
