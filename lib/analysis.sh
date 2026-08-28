@@ -45,8 +45,6 @@ stage_security_zap() {
 
     local target_url="${ENV_TARGET_URL}"
     local zap_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
-    local zap_report_file
-    zap_report_file="zap_report_$(date +%Y%m%d_%H%M%S).html"
 
     _msg task "Running ZAP security scan"
 
@@ -57,7 +55,7 @@ stage_security_zap() {
     fi
 
     if $G_RUN -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh "${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"; then
-        mv "$zap_report_file" "zap_report_latest.html"
+        mv "report.html" "zap_report_latest.html" || _msg warn "ZAP report not found: report.html"
         _msg ok "ZAP scan completed. Report saved to zap_report_latest.html"
     else
         _msg error "ZAP scan failed."

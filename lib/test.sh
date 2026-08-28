@@ -307,7 +307,6 @@ test_performance() {
 }
 
 stage_unit_test() {
-    G_TEST_RESULT=0
     _msg stage "$(_t '单元测试' 'unit test')"
     _msg task "Running unit tests"
     if ${arg_test_unit:-false} || [[ "${PIPELINE_UNIT_TEST:-false}" == true ]]; then
@@ -321,12 +320,12 @@ stage_unit_test() {
         _msg note "$(_t '跳过' 'skipped') (use --test-unit or set PIPELINE_UNIT_TEST=true)"
     fi
     ## 测试结果写入 G_TEST_RESULT 供通知使用；main 是裸调用，
-    ## 固定返回 0 避免 set -e 中断流水线导致 handle_notify 被跳过
+    ## 固定返回 0 避免 set -e 中断流水线导致 handle_notify 被跳过。
+    ## 入口不清零: 多个测试阶段叠加置位，任一阶段失败则最终 G_TEST_RESULT=1（main 启动时已 unset）
     return 0
 }
 
 stage_functional_test() {
-    G_TEST_RESULT=0
     _msg stage "$(_t '功能测试' 'functional test')"
     _msg task "Running functional tests"
     if ${arg_test_func:-false} || [[ "${PIPELINE_FUNCTION_TEST:-false}" == true ]]; then
@@ -345,7 +344,6 @@ stage_functional_test() {
 }
 
 stage_performance_test() {
-    G_TEST_RESULT=0
     _msg stage "$(_t '性能测试' 'performance test')"
     _msg task "Running performance tests"
     if ${arg_test_perf:-false} || [[ "${PIPELINE_PERF_TEST:-false}" == true ]]; then
@@ -359,6 +357,7 @@ stage_performance_test() {
         _msg note "$(_t '跳过' 'skipped') (use --test-performance or set PIPELINE_PERF_TEST=true)"
     fi
     ## 测试结果写入 G_TEST_RESULT 供通知使用；main 是裸调用，
-    ## 固定返回 0 避免 set -e 中断流水线导致 handle_notify 被跳过
+    ## 固定返回 0 避免 set -e 中断流水线导致 handle_notify 被跳过。
+    ## 入口不清零: 与其它测试阶段叠加置位，保持前面阶段的失败结果
     return 0
 }

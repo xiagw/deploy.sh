@@ -73,10 +73,12 @@ _project_rsync_src() {
 
 # 返回当前命名空间的 OSS 目标地址（oss:// 开头）: 项目配置优先，其次 ENV_OSS_DEST
 _project_oss_dest() {
-    local dest
-    dest=$(jq -r --arg branch "${G_NAMESPACE:-}" \
-        '.branches[] | select(.branch == $branch) | .hosts[]? | select((.rsync_dest // "") | startswith("oss://")) | .rsync_dest' \
-        "${G_CONF:-}" 2>/dev/null | head -n 1)
+    local dest=""
+    if [[ -n "${G_CONF:-}" && -f "${G_CONF}" ]]; then
+        dest=$(jq -r --arg branch "${G_NAMESPACE:-}" \
+            '.branches[] | select(.branch == $branch) | .hosts[]? | select((.rsync_dest // "") | startswith("oss://")) | .rsync_dest' \
+            "${G_CONF}" 2>/dev/null | head -n 1 || true)
+    fi
     [[ -n "$dest" ]] || dest="${ENV_OSS_DEST:-}"
     printf '%s' "$dest"
 }
@@ -295,7 +297,7 @@ deploy_to_kubernetes() {
     fi
     ## 显示可复用命令
     echo "helm upgrade/install command (reusable):"
-    echo "${helm_args[@]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
+    echo "  ${helm_args[*]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
 
     ## helm 部署
     "${helm_args[@]}" >/dev/null || return 1

@@ -452,7 +452,7 @@ check_k8s_available() {
     fi
     # 检查 helm 是否可用（可选，但推荐）
     if ! command -v helm &>/dev/null; then
-        _msg warn "Helm is not installed, but kubectl is available"
+        _msg warn "Helm is not installed, but kubectl is available" >&2
         return 0 # kubectl 可用即可
     fi
     return 0

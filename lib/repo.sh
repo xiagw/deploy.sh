@@ -184,29 +184,29 @@ detect_repo_language() {
             # 尝试提取 Java 版本
             # 1. 首先检查是否存在任何 README 文件(兼容旧规范)
             if [ -z "$version" ]; then
-                version=$(find "${G_REPO_DIR}" -maxdepth 1 -type f -iname "readme*" -exec awk -F= 'BEGIN{IGNORECASE=1} /^jdk_version/ {print tolower($2)}' {} + | tr -d ' ' | tail -n 1)
+                version=$(find "${G_REPO_DIR}" -maxdepth 1 -type f -iname "readme*" -exec awk -F= 'BEGIN{IGNORECASE=1} /^jdk_version/ {print tolower($2)}' {} + | tr -d ' ' | tail -n 1 || true)
             fi
 
             # 2. 尝试使用 xmllint（如果可用）
             if [ -z "$version" ] && command -v xmllint >/dev/null 2>&1; then
-                version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null)
+                version=$(xmllint --xpath "string(//*[local-name()='java.version' or local-name()='maven.compiler.source'])" "${G_REPO_DIR}/${file}" 2>/dev/null || true)
             fi
 
             # 3. 尝试获取 java.version
-            [ -z "$version" ] && version=$(grep -E "<java.version>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<java.version>([^<]+)<.*/\1/')
+            [ -z "$version" ] && version=$(grep -E "<java.version>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<java.version>([^<]+)<.*/\1/' || true)
 
             # 4. 尝试获取 maven.compiler.source
-            [ -z "$version" ] && version=$(grep -E "<maven.compiler.source>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.source>([^<]+)<.*/\1/')
+            [ -z "$version" ] && version=$(grep -E "<maven.compiler.source>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.source>([^<]+)<.*/\1/' || true)
 
             # 5. 尝试获取 maven.compiler.target
-            [ -z "$version" ] && version=$(grep -E "<maven.compiler.target>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.target>([^<]+)<.*/\1/')
+            [ -z "$version" ] && version=$(grep -E "<maven.compiler.target>[^<]+" "${G_REPO_DIR}/${file}" 2>/dev/null | sed -E 's/.*<maven.compiler.target>([^<]+)<.*/\1/' || true)
             ## defautl to 8
             # version="${version:-8}"
             ;;
         build.gradle | gradle.build)
             lang_type="java"
             # 从 build.gradle 提取 Java 版本，支持多种格式
-            version=$(grep -E "sourceCompatibility.*=.*|targetCompatibility.*=.*|JavaVersion\.(VERSION_)?[0-9]+.*" "${G_REPO_DIR}/${file}" 2>/dev/null | head -n1)
+            version=$(grep -E "sourceCompatibility.*=.*|targetCompatibility.*=.*|JavaVersion\.(VERSION_)?[0-9]+.*" "${G_REPO_DIR}/${file}" 2>/dev/null | head -n1 || true)
             if [ -n "$version" ]; then
                 # 处理不同的版本格式
                 if [[ $version =~ JavaVersion\.(VERSION_)?([0-9]+) ]]; then
@@ -214,7 +214,7 @@ detect_repo_language() {
                     version="${BASH_REMATCH[2]}"
                 else
                     # 处理 sourceCompatibility = '1.8' 或 targetCompatibility = 11 格式
-                    version=$(echo "$version" | grep -oE "[0-9]+(\.[0-9]+)?")
+                    version=$(echo "$version" | grep -oE "[0-9]+(\.[0-9]+)?" || true)
                 fi
                 # 统一版本格式，如果是 1.8 这样的格式，转换为 8
                 if [[ $version =~ ^1\.([0-9]+)$ ]]; then
@@ -229,31 +229,31 @@ detect_repo_language() {
         package.json)
             lang_type="node"
             local _node_ver
-            _node_ver=$(jq -r '.engines.node // empty' "${G_REPO_DIR}/${file}" 2>/dev/null)
+            _node_ver=$(jq -r '.engines.node // empty' "${G_REPO_DIR}/${file}" 2>/dev/null || true)
             ## engines.node 通常是约束表达式（>=8.9），提取第一个纯数字主版本
-            version=$(echo "${_node_ver}" | grep -oE '[0-9]+' | head -1)
+            version=$(echo "${_node_ver}" | grep -oE '[0-9]+' | head -1 || true)
             ;;
         requirements.txt | setup.py | Pipfile)
             lang_type="python"
             if [[ ${file} == "setup.py" ]]; then
-                version=$(grep -E "python_requires.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+                version=$(grep -E "python_requires.*=.*" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+" || true)
             fi
             ;;
         go.mod)
             lang_type="golang"
-            version=$(grep -E "^go [0-9]+\.[0-9]+$" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+")
+            version=$(grep -E "^go [0-9]+\.[0-9]+$" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+" || true)
             ;;
         Cargo.toml)
             lang_type="rust"
             ;;
         *.csproj)
             lang_type="dotnet"
-            version=$(grep -oE 'TargetFramework>net[^<]+' "${G_REPO_DIR}/${file}" 2>/dev/null | sed 's/.*>net//' | head -n 1)
+            version=$(grep -oE 'TargetFramework>net[^<]+' "${G_REPO_DIR}/${file}" 2>/dev/null | sed 's/.*>net//' | head -n 1 || true)
             ;;
         Gemfile | *.gemspec)
             lang_type="ruby"
             if [[ ${file} == "Gemfile" ]]; then
-                version=$(grep -E "^ruby ['\"].*['\"]" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+                version=$(grep -E "^ruby ['\"].*['\"]" "${G_REPO_DIR}/${file}" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" || true)
             fi
             ;;
         mix.exs)
@@ -272,7 +272,7 @@ detect_repo_language() {
     if [[ -z $lang_type || $lang_type == "unknown" ]]; then
         # 获取仓库中最常见的源代码文件类型
         local most_common_ext
-        most_common_ext=$(find "${G_REPO_DIR}" -type f -name "*.*" | grep -v "/\." | grep -oE "\.[^./]+$" | sort | uniq -c | sort -nr | head -n1 | awk '{print $2}')
+        most_common_ext=$(find "${G_REPO_DIR}" -type f -name "*.*" | grep -v "/\." | grep -oE "\.[^./]+$" | sort | uniq -c | sort -nr | head -n1 | awk '{print $2}' || true)
         case ${most_common_ext} in
         .java) lang_type="java" ;;
         .py) lang_type="python" ;;

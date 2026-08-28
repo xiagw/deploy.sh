@@ -21,3 +21,5 @@ tmp/
 .dockerignore
 .qoder/
 .cursorignore
+
+.serena/

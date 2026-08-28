@@ -1278,16 +1278,15 @@ get_github_latest_download() {
 
     # 获取最新版本信息并处理可能的错误
     local release_info
-    release_info=$(curl -sS -H "Accept: application/vnd.github.v3+json" "$api_url")
-    local ret=$?
-    if [ $ret -ne 0 ] || [ -z "$release_info" ]; then
+    release_info=$(curl -sS -H "Accept: application/vnd.github.v3+json" "$api_url") || true
+    if [ -z "$release_info" ]; then
         _msg warn "Failed to fetch release info from GitHub API"
         echo "https://github.com/$repo/archive/refs/heads/master.tar.gz"
         return
     fi
 
     # 使用 grep 和 sed 来提取版本号，避免 JSON 解析问题
-    latest_ver=$(echo "$release_info" | grep -o '"tag_name": *"[^"]*"' | sed 's/.*": *"//;s/"//')
+    latest_ver=$(echo "$release_info" | grep -o '"tag_name": *"[^"]*"' | sed 's/.*": *"//;s/"//') || true
     if [ -z "$latest_ver" ]; then
         _msg warn "Failed to parse release version"
         echo "https://github.com/$repo/archive/refs/heads/master.tar.gz"
@@ -1310,7 +1309,7 @@ get_github_latest_download() {
         # 使用不区分大小写的匹配和扩展的操作系统名称模式
         pattern="\"browser_download_url\": *\"[^\"]*\(${os_pattern}\)[^\"]*${arch}[^\"]*\""
         download_url=$(echo "$release_info" | grep -io "$pattern" |
-            sed 's/.*": *"//;s/"//' | head -n 1)
+            sed 's/.*": *"//;s/"//' | head -n 1) || true
         if [ -n "$download_url" ]; then
             echo "$download_url"
             return
@@ -1319,7 +1318,7 @@ get_github_latest_download() {
         # 如果没找到，尝试反向顺序（架构在前，系统在后）的匹配
         pattern="\"browser_download_url\": *\"[^\"]*${arch}[^\"]*\(${os_pattern}\)[^\"]*\""
         download_url=$(echo "$release_info" | grep -io "$pattern" |
-            sed 's/.*": *"//;s/"//' | head -n 1)
+            sed 's/.*": *"//;s/"//' | head -n 1) || true
         if [ -n "$download_url" ]; then
             echo "$download_url"
             return
