@@ -121,7 +121,7 @@ restart" | awk '{print $1}')
     del-pool) ack_pool_delete "$@" ;;
     set-node)
         # set-node <restart|cordon> [参数]
-        local node_action=${2:-} node_param=${3:-}
+        local node_action=${1:-} node_param=${2:-}
         if [ -z "$node_action" ]; then
             node_action=$(select_with_fzf "选择节点操作" "restart
 cordon" | awk '{print $1}')
