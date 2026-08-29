@@ -10,27 +10,29 @@
 
 show_ack_help() {
     echo "ACK (容器服务 Kubernetes 版) 操作："
+    echo "  集群："
     echo "  get                                     - 列出所有集群"
     echo "  add <名称> [参数...]                   - 创建新集群"
     echo "  del [<集群ID>]                          - 删除集群（集群ID可选，可使用fzf选择）"
     echo "  set [<集群ID>] [<新名称>]               - 更新集群（集群ID和新名称都是可选的，可使用fzf选择）"
     echo "  detail [<集群ID>]                       - 获取集群详情（集群ID可选，可使用fzf选择）"
+    echo "  config [<集群ID>]                       - 获取集群的 kubeconfig（集群ID可选，可使用fzf选择）"
+    echo "  节点："
     echo "  get-node [<集群ID>] [format]           - 列出集群节点（集群ID可选，可使用fzf选择）"
     echo "  add-node [<集群ID>] [<节点池>] [数量]   - 添加集群节点（集群ID和节点池可选，可使用fzf选择）"
     echo "  del-node [<集群ID>] [<节点名>]          - 移除集群节点（集群ID和节点名可选，可使用fzf选择）"
-    echo "  config [<集群ID>]                       - 获取集群的 kubeconfig（集群ID可选，可使用fzf选择）"
-    echo "  auto-scale <deployment> [namespace]     - 自定义 PHP 部署自动扩缩容（应对突发流量，用户级 systemd timer 每15秒触发，勿删）"
-    echo "  auto-node [<集群ID>] [内存阈值]          - 所有节点（除virtual）内存都超阈值时自动扩容 +1（优先默认池，无则选名称含 dynamic 的池；适合 crontab，默认阈值 95）"
-    echo "  rebalance [内存阈值]                     - 根据节点内存使用率自动 cordon/uncordon（默认阈值 95）"
+    echo "  set-node restart [<节点名>]             - 重启单个节点上的所有 deployment（节点名可选，可使用fzf选择）"
+    echo "  set-node cordon [内存阈值]               - 根据节点内存使用率自动 cordon/uncordon（默认阈值 94）"
+    echo "  节点池："
+    echo "  add-pool [<集群ID>] [<名称>]             - 新建节点池并加入集群（名称缺省自动生成 pool-时间戳）"
     echo "  get-pool [<集群ID>]                     - 列出集群节点池"
-    echo "  scale-pool [<集群ID>] [<节点池>] [目标数] - 调整节点池节点数（可扩/缩容；未给目标数则交互输入，留空扩容到集群上限，ACK 限制最多10节点）"
-    echo "  add-pool <集群ID> <名称>                - 新建节点池并加入集群"
-    echo "  cordon-pool [<集群ID>] [<节点池>]       - 禁止调度到指定节点池的所有节点"
-    echo "  uncordon-pool [<集群ID>] [<节点池>]     - 解除指定节点池所有节点的调度限制"
-    echo "  restart-node [<节点名>]                 - 重启单个节点上的所有 deployment"
-    echo "  restart-pool [<集群ID>] [<节点池>]      - 重启节点池内所有节点上的 deployment"
+    echo "  set-pool [<集群ID>] <操作> [<节点池>] [参数] - 节点池操作：scale [<节点池>] [目标总数]（如 scale 4 指节点总数=4）/ scale mem [内存阈值] / cordon / uncordon / restart"
+    echo "  del-pool [<集群ID>] [<节点池>]          - 删除节点池（池内有节点时提示）"
+    echo "  自动扩缩容："
+    echo "  scale-php <deployment> [namespace]       - 自定义 PHP 部署自动扩缩容（应对突发流量，用户级 systemd timer 每15秒触发，勿删）"
     echo
     echo "示例："
+    echo "  集群："
     echo "  $0 ack get"
     echo "  $0 ack get json"
     echo "  $0 ack add my-cluster"
@@ -38,25 +40,28 @@ show_ack_help() {
     echo "  $0 ack del c-xxx"
     echo "  $0 ack set c-xxx new-name"
     echo "  $0 ack detail c-xxx"
+    echo "  $0 ack config c-xxx"
+    echo "  节点："
     echo "  $0 ack get-node c-xxx"
     echo "  $0 ack add-node c-xxx 2"
     echo "  $0 ack add-node c-xxx <节点池ID> 2"
     echo "  $0 ack del-node c-xxx i-xxx"
-    echo "  $0 ack config c-xxx"
-    echo "  $0 ack auto-scale my-deployment default"
-    echo "  $0 ack auto-node c-xxx"
-    echo "  $0 ack auto-node c-xxx 95"
-    echo "  $0 ack rebalance"
-    echo "  $0 ack rebalance 95"
-    echo "  $0 ack get-pool c-xxx"
-    echo "  $0 ack scale-pool c-xxx"
-    echo "  $0 ack scale-pool c-xxx <节点池ID> 4"
-    echo "  $0 ack scale-pool c-xxx <节点池ID> 1"
+    echo "  $0 ack set-node restart <节点名>"
+    echo "  节点池："
     echo "  $0 ack add-pool c-xxx new-pool"
-    echo "  $0 ack cordon-pool c-xxx <节点池ID>"
-    echo "  $0 ack uncordon-pool c-xxx <节点池ID>"
-    echo "  $0 ack restart-node <节点名>"
-    echo "  $0 ack restart-pool c-xxx <节点池ID>"
+    echo "  $0 ack get-pool c-xxx"
+    echo "  $0 ack set-pool c-xxx scale 4"
+    echo "  $0 ack set-pool c-xxx scale mem 94"
+    echo "  $0 ack set-pool c-xxx scale <节点池ID> 1"
+    echo "  $0 ack set-pool c-xxx cordon"
+    echo "  $0 ack set-pool c-xxx uncordon"
+    echo "  $0 ack set-pool c-xxx restart"
+    echo "  $0 ack del-pool c-xxx <节点池ID>"
+    echo "  节点："
+    echo "  $0 ack set-node restart <节点名>"
+    echo "  $0 ack set-node cordon 94"
+    echo "  自动扩缩容："
+    echo "  $0 ack scale-php my-deployment default"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -75,16 +80,65 @@ handle_ack_commands() {
     add-node) ack_node_add "$@" ;;
     del-node) ack_node_remove "$@" ;;
     config) ack_get_kubeconfig "$@" ;;
-    auto-scale) ack_auto_scale "$@" >>"${SCRIPT_LOG:-/tmp/ack_auto_scale.log}" ;;
-    auto-node) ack_auto_node "$@" >>"${SCRIPT_LOG:-/tmp/ack_auto_node.log}" ;;
-    rebalance) ack_rebalance "$@" ;;
+    scale-php) ack_scale_php "$@" >>"${SCRIPT_LOG:-/tmp/ack_scale_php.log}" ;;
     get-pool) ack_pool_list "$@" ;;
-    scale-pool) ack_pool_scale "$@" ;;
+    set-pool)
+        # set-pool [<集群ID>] <scale|cordon|uncordon|restart> [<节点池>] [参数]；scale 支持 mem 子模式（内存紧张 +1）
+        local pool_action=${2:-} pool_id=${3:-} pool_param=${4:-}
+        if [ -z "$pool_action" ]; then
+            pool_action=$(select_with_fzf "选择节点池操作" "scale
+cordon
+uncordon
+restart" | awk '{print $1}')
+        fi
+        [ -z "$pool_action" ] && echo "错误：未选择节点池操作。" >&2 && return 1
+        case "$pool_action" in
+        scale)
+            if [ "$pool_id" = "mem" ]; then
+                # 内存子模式：所有节点内存超阈值则 +1（阈值在参数位，默认 94，crontab 场景）
+                ack_pool_scale_mem "$1" "${pool_param:-94}" >>"${SCRIPT_LOG:-/tmp/ack_pool_scale_mem.log}"
+            elif [ -z "$pool_param" ] && [[ "$pool_id" =~ ^[0-9]+$ ]]; then
+                # 省略节点池直接给目标数：set-pool c-xxx scale 4
+                ack_pool_scale "$1" "" "$pool_id"
+            else
+                ack_pool_scale "$1" "$pool_id" "$pool_param"
+            fi
+            ;;
+        cordon | uncordon)
+            _ack_pool_schedule_set "$1" "$pool_id" "$pool_action"
+            ;;
+        restart)
+            ack_restart_pool "$1" "$pool_id"
+            ;;
+        *)
+            echo "错误：未知的节点池操作：$pool_action" >&2
+            return 1
+            ;;
+        esac
+        ;;
     add-pool) ack_pool_create "$@" ;;
-    cordon-pool) ack_pool_cordon "$@" ;;
-    uncordon-pool) ack_pool_uncordon "$@" ;;
-    restart-node) ack_restart_node "$@" ;;
-    restart-pool) ack_restart_pool "$@" ;;
+    del-pool) ack_pool_delete "$@" ;;
+    set-node)
+        # set-node <restart|cordon> [参数]
+        local node_action=${2:-} node_param=${3:-}
+        if [ -z "$node_action" ]; then
+            node_action=$(select_with_fzf "选择节点操作" "restart
+cordon" | awk '{print $1}')
+        fi
+        [ -z "$node_action" ] && echo "错误：未选择节点操作。" >&2 && return 1
+        case "$node_action" in
+        restart)
+            ack_restart_node "$node_param"
+            ;;
+        cordon)
+            ack_node_cordon "$node_param"
+            ;;
+        *)
+            echo "错误：未知的节点操作：$node_action" >&2
+            return 1
+            ;;
+        esac
+        ;;
     help) show_ack_help ;;
     *)
         echo "错误：未知的 ACK 操作：$operation" >&2
@@ -288,7 +342,7 @@ ack_create() {
                 ;;
             *)
                 # failed/inactive/unavailable/updating/deleting/delete_failed 等终态
-                echo "错误：集群进入终态 $status，创建失败。请在控制台检查集群状态。"
+                echo "错误：集群进入终态 $status ，创建失败。请在控制台检查集群状态。"
                 break
                 ;;
             esac
@@ -558,11 +612,18 @@ ack_node_remove() {
         return 1
     fi
 
-    if ! confirm_action "从集群中移除节点：$node_name"; then
+    # 安全删除：先 cordon 停新调度 -> 滚动重启全部 deployment（迁移业务）-> 再删（drain 只处理残余）
+    if ! confirm_action "从集群中移除节点：$node_name（将依次执行 cordon -> 重启全部 deployment -> 删除）"; then
         return 1
     fi
 
-    echo "移除集群节点："
+    echo "1) 标记节点不可调度（cordon）..."
+    kubectl cordon "$node_name"
+
+    echo "2) 滚动重启节点上的 deployment（业务迁移到其他节点）..."
+    _ack_restart_node_deployments "$node_name"
+
+    echo "3) 删除节点（drain 残余 Pod）..."
     local result
     result=$(call_aliyun_api cs DELETE "/clusters/$cluster_id/nodes" \
         --region "$region" \
@@ -666,7 +727,7 @@ scale_deployment() {
 
     # 记录操作日志
     msg_body="${msg_body}，结果: ${result}"
-    log_result "${profile:-}" "$region" "ack" "auto-scale" "$msg_body"
+    log_result "${profile:-}" "$region" "ack" "scale-php" "$msg_body"
 
     # 如果存在通知函数，则调用
     if type _notify_wecom >/dev/null 2>&1; then
@@ -678,18 +739,18 @@ scale_deployment() {
 # ============================================================
 # 自动扩缩容：自定义 PHP 部署专用（不用 K8s HPA），应对突发流量。
 #   K8s HPA 不够灵敏/快速，故自研，由用户级 systemd timer 每 15 秒触发一次：
-#     ~/.config/systemd/user/ack-auto-scale.service：
+#     ~/.config/systemd/user/ack-scale-php.service：
 #       [Service]
 #       Type=oneshot
-#       ExecStart=/bin/bash <repo>/cloud/aliyun/main.sh -p <profile> -r cn-hangzhou ack auto-scale <deployment> [namespace]
-#     ~/.config/systemd/user/ack-auto-scale.timer：
+#       ExecStart=/bin/bash <repo>/cloud/aliyun/main.sh -p <profile> -r cn-hangzhou ack scale-php <deployment> [namespace]
+#     ~/.config/systemd/user/ack-scale-php.timer：
 #       [Timer]
 #       OnBootSec=30s
 #       OnUnitActiveSec=15s
 #       AccuracySec=1s
 #       [Install]
 #       WantedBy=timers.target
-#   启用：systemctl --user enable --now ack-auto-scale.timer；输出由 handle_ack_commands 重定向到 /tmp/ack_auto_scale.log。
+#   启用：systemctl --user enable --now ack-scale-php.timer；输出由 handle_ack_commands 重定向到 /tmp/ack_scale_php.log。
 #
 # 触发逻辑（双因子 OR/AND 滞回）：
 #   扩容 = CPU求和 > warn 阈值  OR  内存求和 > warn 阈值      （任一资源过载即扩，保应用）
@@ -705,7 +766,7 @@ scale_deployment() {
 #
 # 注意：本功能必须保留，勿删（依赖：check_cooldown / scale_deployment）。
 # ============================================================
-ack_auto_scale() {
+ack_scale_php() {
     local deployment=$1
     local namespace=${2:-main}
     local lock_file_all="/tmp/lock.scale.all"
@@ -815,7 +876,7 @@ ack_auto_scale() {
     fi
 }
 
-## 手动节点维护锁：cordon-pool 持有、uncordon-pool 释放；rebalance 检测到则跳过，避免互斥冲突
+## 手动节点维护锁：set-pool cordon 持有、set-pool uncordon 释放；set-node cordon 检测到则跳过，避免互斥冲突
 _ack_cordon_locked() {
     local ACK_CORDON_LOCK_FILE=/tmp/ack.cordon.maintenance
     [[ -f $ACK_CORDON_LOCK_FILE ]] || return 1
@@ -826,13 +887,13 @@ _ack_cordon_locked() {
 }
 
 ## 根据node内存使用率，禁止调度到内存使用率最高的节点上
-# 参数：$1 - 内存使用率阈值（默认 95），达到或超过该值的节点将被 cordon
-ack_rebalance() {
-    local value_threshold=${1:-95}
+# 参数：$1 - 内存使用率阈值（默认 94），达到或超过该值的节点将被 cordon
+ack_node_cordon() {
+    local value_threshold=${1:-94}
     local node mem_usage
 
     if _ack_cordon_locked; then
-        echo "检测到手动节点维护（cordon-pool 进行中），本次跳过自动 rebalance。"
+        echo "检测到手动节点维护（set-pool cordon 进行中），本次跳过自动 cordon。"
         return 0
     fi
 
@@ -897,7 +958,7 @@ ack_pool_scale() {
     max_allowed=$((ack_node_limit - virtual_node_count - others_total))
 
     if [ -z "$target" ]; then
-        read -r -p "目标节点数（留空则扩容到上限 $max_allowed）: " target
+        read -r -p "目标节点数（留空则扩容到上限 $max_allowed ）: " target
         target=${target:-$max_allowed}
     fi
 
@@ -906,7 +967,7 @@ ack_pool_scale() {
         return 1
     fi
     if [ "$target" -gt "$max_allowed" ]; then
-        echo "错误：目标节点数 $target 超过集群上限可容纳数 ${max_allowed}（上限 ${ack_node_limit}，扣除 $virtual_node_count 个 virtual 节点）。" >&2
+        echo "错误：目标节点数 $target 超过集群上限可容纳数 ${max_allowed} （上限 ${ack_node_limit} ，扣除 $virtual_node_count 个 virtual 节点）。" >&2
         return 1
     fi
 
@@ -921,7 +982,7 @@ ack_pool_scale() {
         confirm_action "即将对节点池 $nodepool_id 缩容：从 $current 个节点缩到 $target 个" || return 1
     fi
 
-    echo "${action}节点池 ${nodepool_id}：从 $current 个节点到 $target 个（集群上限 ${ack_node_limit}，扣除 $virtual_node_count 个 virtual 节点）"
+    echo "${action}节点池 ${nodepool_id} ：从 $current 个节点到 $target 个"
     local result
     result=$(call_aliyun_api cs PUT "/clusters/$cluster_id/nodepools/$nodepool_id" \
         --region "${region:-}" \
@@ -938,7 +999,33 @@ ack_pool_scale() {
     fi
 }
 
-# 新建节点池并加入集群
+# 删除节点池（节点池内有节点时提示，可先 set-pool scale 0 清空）
+ack_pool_delete() {
+    local cluster_id=$1 nodepool_id=$2
+
+    local raw
+    raw=$(_ack_resolve_cluster_id "$cluster_id" "选择要删除节点池的 ACK 集群") || return 1
+    cluster_id=$(echo "$raw" | awk '{print $1}')
+
+    nodepool_id=$(_ack_select_nodepool "$nodepool_id" "选择要删除的节点池" "$cluster_id") || return 1
+
+    # 显示池内当前节点数，提醒清空
+    local current
+    current=$(_ack_nodepool_list "$cluster_id" | awk -F'\t' -v id="$nodepool_id" '$2 == id {print $3; exit}')
+    current=${current:-0}
+    if [ "$current" -gt 0 ]; then
+        echo "警告：节点池 $nodepool_id 当前有 $current 个节点，建议先 set-pool $cluster_id scale 0 清空再删除。" >&2
+        confirm_action "节点池 $nodepool_id 仍有 $current 个节点（可能被释放/删除），确认继续删除？" || return 1
+    else
+        confirm_action "删除节点池 $nodepool_id" || return 1
+    fi
+
+    echo "删除节点池："
+    call_api_del_logged "ack" "$nodepool_id" "节点池" "错误：节点池删除失败。" \
+        -- cs DELETE "/clusters/$cluster_id/nodepools/$nodepool_id" --region "$region"
+}
+
+# 新建节点池并加入集群（名称缺省时自动生成 pool-时间戳，复用既有 fzf 选择 vSwitch 流程）
 ack_pool_create() {
     local cluster_id=$1
     local name=$2
@@ -948,15 +1035,12 @@ ack_pool_create() {
     cluster_id=$(echo "$raw" | awk '{print $1}')
 
     if [ -z "$name" ]; then
-        read -r -p "请输入节点池名称: " name
-        if [ -z "$name" ]; then
-            echo "错误：节点池名称不能为空。" >&2
-            return 1
-        fi
+        name="pool-$(date +%Y%m%d-%H%M%S)"
+        echo "未提供节点池名称，自动生成: $name"
     fi
 
-    # 选择 vSwitch（优先从 vpc 模块列出现有交换机供 fzf 选择）
-    local vswitch_id=""
+    # 选择 vSwitch（多选多个可用区的交换机，符合官方跨可用区高可用规范）
+    local vswitch_ids=""
     if type get_vpc_id >/dev/null 2>&1; then
         local vpc_id vswitches
         vpc_id=$(get_vpc_id)
@@ -964,21 +1048,88 @@ ack_pool_create() {
             vswitches=$(call_aliyun_api vpc describe-vswitches --vpc-id "$vpc_id" --biz-region-id "$region" --region "$region" 2>/dev/null |
                 jq -r '.VSwitches.VSwitch[]? | "\(.VSwitchId)  \(.VSwitchName // "-") [\(.ZoneId)]"')
             if [ -n "$vswitches" ]; then
-                vswitch_id=$(select_with_fzf "选择 vSwitch" "$vswitches" | awk '{print $1}') || vswitch_id=""
+                vswitch_ids=$(select_with_fzf "选择 vSwitch（Tab 多选多个可用区）" "$vswitches" -m 2>/dev/null | awk '{print $1}' | paste -sd "," -) || vswitch_ids=""
             fi
         fi
     fi
-    if [ -z "$vswitch_id" ]; then
-        read -r -p "请输入 vSwitch ID: " vswitch_id
-        if [ -z "$vswitch_id" ]; then
+    if [ -z "$vswitch_ids" ]; then
+        read -r -p "请输入 vSwitch ID（多个用逗号分隔）: " vswitch_ids
+        if [ -z "$vswitch_ids" ]; then
             echo "错误：vSwitch ID 不能为空。" >&2
             return 1
         fi
     fi
+    # 转成 JSON 数组，供 --argjson vswitch_ids 使用
+    local vswitch_ids_json
+    vswitch_ids_json=$(echo "$vswitch_ids" | tr ',' '\n' | jq -R -s 'split("\n") | map(select(length > 0))')
 
-    local instance_type=""
-    read -r -p "请输入实例类型 (默认 ecs.g6.large): " instance_type
-    instance_type=${instance_type:-ecs.g6.large}
+    # 操作系统镜像（默认与集群现有池一致：阿里云 Linux 4 容器优化版）
+    local image_type="AliyunLinux4ContainerOptimized"
+    read -r -p "请输入操作系统镜像 (默认 AliyunLinux4ContainerOptimized): " image_type
+    image_type=${image_type:-AliyunLinux4ContainerOptimized}
+
+    # 实例规格方式：按实例属性匹配（instance_patterns，默认，对齐现有池）或固定实例规格（instance_types）
+    local compute_mode input
+    read -r -p "实例规格方式，按实例属性=1 固定规格=2 [1]: " input
+    compute_mode=${input:-1}
+
+    local instance_patterns_json="[]"
+    local instance_type_json="[]"
+    if [ "$compute_mode" = "2" ]; then
+        local instance_type=""
+        read -r -p "请输入实例规格 (如 ecs.g6.large): " instance_type
+        if [ -z "$instance_type" ]; then
+            echo "错误：实例规格不能为空。" >&2
+            return 1
+        fi
+        instance_type_json=$(printf '[%s]' "$(jq -nc --arg t "$instance_type" '$t')")
+    else
+        # 默认与集群现有池 nodepool-fixed 对齐：X86、g6/c6/r6/g7/c7/r7/g8i/c8i/r8i/u1、4~8 核、32~64GiB
+        local cpu_arch="X86"
+        local families="ecs.g6,ecs.c6,ecs.r6,ecs.g7,ecs.c7,ecs.r7,ecs.g8i,ecs.c8i,ecs.r8i,ecs.u1"
+        local min_cpu=4 max_cpu=8 min_mem=32 max_mem=64 input_v
+        [ -z "$cpu_arch" ] || :
+        read -r -p "CPU 架构 (X86/Arm64, 默认 $cpu_arch): " input_v
+        cpu_arch=${input_v:-$cpu_arch}
+        read -r -p "实例族，逗号分隔 (默认 $families): " input_v
+        families=${input_v:-$families}
+        read -r -p "最小核数 (默认 $min_cpu): " input_v
+        min_cpu=${input_v:-$min_cpu}
+        read -r -p "最大核数 (默认 $max_cpu): " input_v
+        max_cpu=${input_v:-$max_cpu}
+        read -r -p "最小内存 GiB (默认 $min_mem): " input_v
+        min_mem=${input_v:-$min_mem}
+        read -r -p "最大内存 GiB (默认 $max_mem): " input_v
+        max_mem=${input_v:-$max_mem}
+        instance_patterns_json=$(jq -nc \
+            --arg arch "$cpu_arch" \
+            --arg families "$families" \
+            --argjson min_cpu "$min_cpu" \
+            --argjson max_cpu "$max_cpu" \
+            --argjson min_mem "$min_mem" \
+            --argjson max_mem "$max_mem" \
+            '[{instance_type_families: ($families | split(",")), cpu_architectures: [$arch], min_cpu_cores: $min_cpu, max_cpu_cores: $max_cpu, min_memory_size: $min_mem, max_memory_size: $max_mem, burst_performance_option: "Exclude", maximum_gpu_amount: 0}]')
+    fi
+
+    local system_disk_category="cloud_essd"
+    read -r -p "请输入系统盘类型 (默认 cloud_essd): " system_disk_category
+    system_disk_category=${system_disk_category:-cloud_essd}
+
+    local system_disk_size=120
+    read -r -p "请输入系统盘大小 GiB (默认 120): " system_disk_size
+    system_disk_size=${system_disk_size:-120}
+
+    local runtime="containerd"
+    local runtime_version="2.1.8"
+    read -r -p "请输入容器运行时 (默认 containerd): " runtime
+    runtime=${runtime:-containerd}
+    read -r -p "请输入运行时版本 (默认 2.1.8): " runtime_version
+    runtime_version=${runtime_version:-2.1.8}
+
+    # 节点池托管（对应控制台"自定义托管"）：默认开启自动修复/自动升级
+    local managed=1
+    read -r -p "是否启用节点池托管 (自定义托管，1=是 0=否 [1]): " managed
+    managed=${managed:-1}
 
     local count=2 count_input
     read -r -p "请输入节点数 (默认 2): " count_input
@@ -987,8 +1138,17 @@ ack_pool_create() {
     fi
 
     echo "创建节点池：$name"
-    echo "vSwitch: $vswitch_id"
-    echo "实例类型: $instance_type"
+    echo "vSwitch: $vswitch_ids"
+    echo "操作系统镜像: $image_type"
+    if [ -n "$instance_patterns_json" ] && [ "$instance_patterns_json" != "[]" ]; then
+        echo "实例规格: 按实例属性匹配 $(echo "$instance_patterns_json" | jq -c '.[0] | {"架构": .cpu_architectures, "族": .instance_type_families, "核": "\(.min_cpu_cores)-\(.max_cpu_cores)", "内存GiB": "\(.min_memory_size)-\(.max_memory_size)"}')"
+    else
+        echo "实例规格: 固定 $(echo "$instance_type_json" | jq -c '.')"
+    fi
+    echo "系统盘类型: $system_disk_category"
+    echo "系统盘大小: ${system_disk_size}GiB"
+    echo "容器运行时: $runtime $runtime_version"
+    echo "节点池托管: $([ "$managed" = 1 ] && echo 是 || echo 否)"
     echo "节点数: $count"
 
     local result
@@ -996,10 +1156,17 @@ ack_pool_create() {
         --region "${region:-}" \
         --body "$(jq -nc \
             --arg name "$name" \
-            --arg vswitch "$vswitch_id" \
-            --arg instance_type "$instance_type" \
+            --argjson vswitch_ids "$vswitch_ids_json" \
+            --argjson instance_patterns "$instance_patterns_json" \
+            --argjson instance_types "$instance_type_json" \
+            --arg image_type "$image_type" \
+            --arg system_disk_category "$system_disk_category" \
+            --argjson system_disk_size "$system_disk_size" \
+            --arg runtime "$runtime" \
+            --arg runtime_version "$runtime_version" \
+            --argjson managed "$managed" \
             --argjson count "$count" \
-            '{nodepool_info: {name: $name}, scaling_group: {vswitch_ids: [$vswitch], instance_types: [$instance_type], instance_charge_type: "PostPaid"}, desired_size: $count}')")
+            '{nodepool_info: {name: $name}, scaling_group: {vswitch_ids: $vswitch_ids, instance_patterns: $instance_patterns, instance_types: $instance_types, image_type: $image_type, instance_charge_type: "PostPaid", system_disk_category: $system_disk_category, system_disk_size: $system_disk_size}, kubernetes_config: {runtime: $runtime, runtime_version: $runtime_version}, management: {enable: ($managed == 1), auto_repair: ($managed == 1), auto_upgrade: ($managed == 1)}, desired_size: $count}')")
     local ret=$?
     if [ $ret -eq 0 ]; then
         echo "节点池创建请求已提交："
@@ -1012,50 +1179,38 @@ ack_pool_create() {
     fi
 }
 
-# 禁止调度到指定节点池的所有节点（持有维护锁，rebalance 期间跳过）
-ack_pool_cordon() {
-    local cluster_id=$1
-    local nodepool_id=$2
+# 禁止/解除调度到指定节点池的所有节点（action: cordon 持有维护锁，uncordon 释放；两者互斥锁使 set-node cordon 期间跳过）
+_ack_pool_schedule_set() {
+    local cluster_id=$1 nodepool_id=$2 action=$3
 
     local raw
     raw=$(_ack_resolve_cluster_id "$cluster_id" "选择 ACK 集群") || return 1
     cluster_id=$(echo "$raw" | awk '{print $1}')
 
-    nodepool_id=$(_ack_select_nodepool "$nodepool_id" "选择要禁止调度的节点池" "$cluster_id") || return 1
+    nodepool_id=$(_ack_select_nodepool "$nodepool_id" "选择节点池" "$cluster_id") || return 1
 
     local ACK_CORDON_LOCK_FILE=/tmp/ack.cordon.maintenance
-    date +%s > "$ACK_CORDON_LOCK_FILE"
-    echo "禁止调度到节点池 $nodepool_id 的节点："
-    kubectl cordon -l "node.alibabacloud.com/nodepool-id=$nodepool_id"
+    if [ "$action" = "cordon" ]; then
+        date +%s > "$ACK_CORDON_LOCK_FILE"
+        echo "禁止调度到节点池 $nodepool_id 的节点："
+        kubectl cordon -l "node.alibabacloud.com/nodepool-id=$nodepool_id"
+    else
+        rm -f "$ACK_CORDON_LOCK_FILE"
+        echo "解除节点池 $nodepool_id 节点的调度限制："
+        kubectl uncordon -l "node.alibabacloud.com/nodepool-id=$nodepool_id"
+    fi
 }
 
-# 解除指定节点池所有节点的调度限制（释放维护锁）
-ack_pool_uncordon() {
-    local cluster_id=$1
-    local nodepool_id=$2
-
-    local raw
-    raw=$(_ack_resolve_cluster_id "$cluster_id" "选择 ACK 集群") || return 1
-    cluster_id=$(echo "$raw" | awk '{print $1}')
-
-    nodepool_id=$(_ack_select_nodepool "$nodepool_id" "选择要解除调度限制的节点池" "$cluster_id") || return 1
-
-    local ACK_CORDON_LOCK_FILE=/tmp/ack.cordon.maintenance
-    rm -f "$ACK_CORDON_LOCK_FILE"
-    echo "解除节点池 $nodepool_id 节点的调度限制："
-    kubectl uncordon -l "node.alibabacloud.com/nodepool-id=$nodepool_id"
-}
-
-# 重启指定节点上的所有 deployment（跳过 kube-system/kruise-system 与 fly-nginx/fly-php/node-* 前缀，逐个重启间隔 30s）
+# 重启节点上所有 deployment（跳过 kube-system/kruise-system 与 fly-nginx/fly-php 前缀，逐个重启间隔 30s）
 _ack_restart_node_deployments() {
     local node_name=$1
-    local ns rs dep
+    local ns rs dep count=0
     while IFS=$'\t' read -r ns rs; do
         [ -z "$rs" ] && continue
         dep="${rs%-*}"
         [[ $dep =~ fly-nginx ]] && continue
         [[ $dep =~ fly-php ]] && continue
-        [[ $dep =~ node- ]] && continue
+        count=$((count + 1))
         echo "重启 \"$ns/$dep\""
         kubectl rollout restart deployment "$dep" -n "$ns" || echo "警告：$ns/$dep 重启失败" >&2
         sleep 30
@@ -1064,9 +1219,10 @@ _ack_restart_node_deployments() {
             --field-selector="spec.nodeName=${node_name},status.phase=Running,metadata.namespace!=kube-system,metadata.namespace!=kruise-system" \
             -o jsonpath="{range .items[*]}{.metadata.namespace}{'\t'}{.metadata.ownerReferences[?(@.kind=='ReplicaSet')].name}{'\n'}{end}"
     )
+    [ "$count" -eq 0 ] && echo "节点 $node_name 上没有匹配的 deployment，无需重启。"
 }
 
-# 重启单个节点上的所有 deployment
+# 重启单个节点上的所有 deployment（先 cordon 停新调度，重启后节点保持不可调度）
 ack_restart_node() {
     local node_name=$1
 
@@ -1076,6 +1232,9 @@ ack_restart_node() {
             tr ' ' '\n' | grep -v virtual | grep -v '^$')
         node_name=$(resolve_from_candidates "" "选择要重启部署的节点" "错误：没有可用的非虚拟节点。" "$candidates") || return 1
     fi
+
+    echo "标记节点不可调度（cordon）..."
+    kubectl cordon "$node_name"
 
     echo "重启节点 $node_name 上的 deployment："
     _ack_restart_node_deployments "$node_name"
@@ -1109,10 +1268,10 @@ ack_restart_pool() {
     done <<< "$nodes"
 }
 
-# 自动扩容：监控所有节点（除 virtual）内存，任一超过阈值则默认节点池扩容一个节点（适合 crontab）
-ack_auto_node() {
+# 自动扩容：监控所有节点（除 virtual）内存，所有节点内存都超过阈值则默认节点池扩容一个节点（适合 crontab）
+ack_pool_scale_mem() {
     local cluster_id=$1
-    local threshold=${2:-95}
+    local threshold=${2:-94}
     local lock_file="/tmp/lock.auto.node"
     local cooldown_seconds=300
 
@@ -1145,28 +1304,25 @@ ack_auto_node() {
     hot_count=$(echo "$node_stats" | awk -v t="$threshold" 'int($5) >= t {c++} END {print c+0}')
 
     if [ "$hot_count" -lt "$total_count" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 节点内存超阈值(${threshold}%) ${hot_count}/${total_count}，未全部超过，不扩容。"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 节点内存超阈值(${threshold}%) ${hot_count}/${total_count} ，未全部超过，不扩容。"
         return 0
     fi
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 所有节点（${total_count} 个）内存均超过阈值 ${threshold}%："
     echo "$node_stats" | awk -v t="$threshold" '{printf "%s  %s\n", $1, $5}'
 
-    # 选择要扩容的节点池：优先默认节点池（is_default），无则退回名称含 dynamic 的池
+    # 选择要扩容的节点池：自动选当前节点数为 0 的空池（扩容 +1 激活；无可扩容的空池则报错）
     local pools nodepool_id nodepool_name
     pools=$(_ack_nodepool_list "$cluster_id")
-    nodepool_id=$(echo "$pools" | awk -F'\t' '$4 == "true" {print $2; exit}')
+    nodepool_id=$(echo "$pools" | awk -F'\t' '$3 == "0" {print $2; exit}')
+    nodepool_name=$(echo "$pools" | awk -F'\t' '$3 == "0" {print $1; exit}')
     if [ -z "$nodepool_id" ]; then
-        nodepool_name=$(echo "$pools" | awk -F'\t' '$1 ~ /dynamic/ {print $1; exit}')
-        nodepool_id=$(echo "$pools" | awk -F'\t' '$1 ~ /dynamic/ {print $2; exit}')
-        if [ -z "$nodepool_id" ]; then
-            echo "错误：集群 $cluster_id 没有默认节点池，也没有名称含 dynamic 的节点池，无法自动扩容。" >&2
-            return 1
-        fi
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 无默认节点池，选择名称含 dynamic 的节点池：$nodepool_name"
+        echo "错误：集群 $cluster_id 没有节点数为 0 的空节点池，无法自动扩容。" >&2
+        return 1
     fi
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 选择空节点池（0 节点）：$nodepool_name"
 
-    echo "自动扩容节点池 ${nodepool_id}：增加 1 个节点"
+    echo "自动扩容节点池 ${nodepool_id} ：增加 1 个节点"
     local result
     result=$(call_aliyun_api cs POST "/clusters/$cluster_id/nodepools/$nodepool_id" \
         --region "${region:-}" \
@@ -1176,7 +1332,7 @@ ack_auto_node() {
         echo "自动扩容请求已提交："
         echo "$result" | jq '.'
         date +%s > "$lock_file"
-        log_result "${profile:-}" "$region" "ack" "auto-node" "$result"
+        log_result "${profile:-}" "$region" "ack" "scale-pool-mem" "$result"
     else
         echo "错误：自动扩容失败。"
         echo "$result"
