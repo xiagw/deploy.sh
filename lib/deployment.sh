@@ -301,7 +301,10 @@ deploy_to_kubernetes() {
 
     ## 自动扩缩容互斥锁：helm 发布期间创建 per-user 锁（含 PID/时间/发布对象），
     ## ack scale-php/scale-pod 检测到则跳过扩缩容（mtime 5 分钟内生效）
-    local scale_all_lock="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/lock.scale.all"
+    ## 运行时目录去尾斜杠：macOS $TMPDIR 带 / 会拼出 //，与 ack.sh run_once 同口径
+    local runtime_dir="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+    runtime_dir="${runtime_dir%/}"
+    local scale_all_lock="${runtime_dir}/lock.scale.all"
     printf '%s\n' "$$ $(date '+%F %T') helm deploy ${release_name}/${G_NAMESPACE}" > "$scale_all_lock"
     trap 'rm -f "$scale_all_lock"' RETURN
 

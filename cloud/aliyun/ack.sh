@@ -32,8 +32,7 @@ show_ack_help() {
     echo "  set-pool [<集群ID>] restart [<节点池>]              - 重启节点池内所有节点上的 deployment"
     echo "  del-pool [<集群ID>] [<节点池>]          - 删除节点池（池内有节点时提示）"
     echo "  自动扩缩容："
-    echo "  scale-pod <deployment>[/namespace] [--watch] - 通用 Deployment 自动扩缩容（namespace 默认 main；可用 dep/ns 复合指定；求和判断；--watch 常驻监控，默认单次执行）"
-    echo "  scale-php <deployment>[/namespace]        - PHP 部署自动扩缩容（scale-pod 特例：扩容+2、下限 2 副本、PHP 生产阈值；支持 dep/ns 复合写法）"
+    echo "  scale-pod <deployment>[/namespace] [--watch] [--max N] - 通用 Deployment 自动扩缩容（namespace 默认 main；求和判断；--watch 常驻监控；--max 副本上限 缺省=真实节点数，0=不限；默认单次执行）"
     echo
     echo "示例："
     echo "  集群："
@@ -64,7 +63,6 @@ show_ack_help() {
     echo "  $0 ack del-pool c-xxx <节点池ID>"
     echo "  自动扩缩容："
     echo "  $0 ack scale-pod fly-php71/main --watch"
-    echo "  $0 ack scale-php fly-php71/main"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -83,7 +81,6 @@ handle_ack_commands() {
     add-node) ack_node_add "$@" ;;
     del-node) ack_node_remove "$@" ;;
     config) ack_get_kubeconfig "$@" ;;
-    scale-php) ack_scale_php "$@" >>"${SCRIPT_LOG:-/tmp/ack_scale_php.log}" ;;
     scale-pod) ack_scale_pod "$@" >>"${SCRIPT_LOG:-/tmp/ack_scale_pod.log}" ;;
     get-pool) ack_pool_list "$@" ;;
     set-pool)
@@ -671,12 +668,15 @@ ack_get_kubeconfig() {
     fi
 }
 
-# 检查锁文件和冷却时间（保持原有逻辑）
+# 检查锁文件和冷却时间（保持原有逻辑；GNU stat/date 探测，兼容 macOS gstat/gdate）
 check_cooldown() {
     local action=$1
     local lock_file=$2
     local cooldown_minutes=$3
     local action_name
+    local gstat_cmd gdate_cmd
+    gstat_cmd=$(command -v gstat || echo stat)
+    gdate_cmd=$(command -v gdate || echo date)
 
     if [[ "$action" == "up" ]]; then
         action_name="扩容"
@@ -685,7 +685,7 @@ check_cooldown() {
     fi
 
     if [[ -f $lock_file ]]; then
-        if [[ $(stat -c %Y "$lock_file") -lt $(date -d "$cooldown_minutes minutes ago" +%s) ]]; then
+        if [[ $("$gstat_cmd" -c %Y "$lock_file") -lt $("$gdate_cmd" -d "$cooldown_minutes minutes ago" +%s) ]]; then
             rm -f "$lock_file"
             return 1
         else
@@ -697,41 +697,37 @@ check_cooldown() {
 }
 
 # ============================================================
-# 自定义 PHP 部署自动扩缩容（应对突发流量，由 systemd timer / 手动触发单次执行）。
-# 与通用 ack_scale_pod 共用同一套监控逻辑，仅保留 PHP 特例参数：
-#   - 每次扩容 +2（突发流量响应更激进）
-#   - 自动缩容下限 2 副本
-#   - 阈值因子走旧环境变量名（ACK_CPU_WARN_FACTOR 等，默认生产值）
-# 调用方式: ack scale-php <deployment> [namespace]，内部委托 ack_scale_pod。
-# ============================================================
-ack_scale_php() {
-    local deployment=$1
-    if [ -z "$deployment" ]; then
-        echo "错误：部署名称不能为空。" >&2
-        return 1
-    fi
-
-    # PHP 特例参数委托给通用监控：step=2、min=2；阈值因子映射旧环境变量名
-    # namespace 仅在有第二参数时透传；dep/ns 复合写法由 ack_scale_pod 拆解，防止默认 main 覆盖复合 ns
-    ACK_POD_CPU_WARN_FACTOR=${ACK_CPU_WARN_FACTOR:-1500} \
-    ACK_POD_CPU_NORMAL_FACTOR=${ACK_CPU_NORMAL_FACTOR:-500} \
-    ACK_POD_MEM_WARN_FACTOR=${ACK_MEM_WARN_FACTOR:-1200} \
-    ACK_POD_MEM_NORMAL_FACTOR=${ACK_MEM_NORMAL_FACTOR:-500} \
-        ack_scale_pod "$deployment" ${2:+"$2"} --step 2 --min 2
-}
-
-# ============================================================
-# 通用 Deployment 自动扩缩容（scale-php 为其 PHP 特例封装：+2 / min=2 / PHP 阈值因子）。
-# 适用: java / node 等非 PHP 应用，多为单副本；沿用"pod 资源求和"判断。
+# 通用 Deployment 自动扩缩容。
+# 适用: java / node 等应用（无 WorkloadSpread 绑定），多为单副本；沿用"pod 资源求和"判断。
+# 自动识别 PHP 特例（部署名含 php，如 fly-php71）: 自动应用 PHP 参数
+#   step=2 / min=2 / max=0 + PHP 生产阈值因子，无需单独命令（原 scale-php 已并入）。
+#   PHP 关联 OpenKruise WorkloadSpread 双 subset，详见"闲时回收"分支注释。
 #
 # 用法:
 #   ack scale-pod <deployment>[/namespace] [namespace] [选项]   （dep/ns 复合可省参数；namespace 默认 main）
 #   选项:
 #     --watch             死循环常驻监控（配合 systemd service 使用；默认单次执行后退出，供 cron/timer）
 #     --interval 秒       相邻检查间隔，默认 15（配合 --watch）
-#     --step N            每次扩容的副本增量，默认 1
-#     --min N             自动缩容下限，默认 1
+#     --step N            每次扩容的副本增量，默认 1（PHP 特例默认 2）
+#     --min N             自动缩容下限（基线），默认 1（PHP 特例默认 2）
+#     --max N             副本上限：缺省 = 真实节点数（每节点 1 副本朴素预期）；
+#                         --max 0 = 不限制（PHP 特例默认，kruise 管理上限）；>0 = 显式上限
 #     --once              显式单次执行（默认行为，与 --watch 互斥冗余）
+#
+# 节点数口径（重要）:
+#   真实节点数 = kubectl get nodes 排除 virtual-kubelet 节点后计数（无 -1 歧义）。
+#   包含 cordon/不可调度节点 —— 理由是 cordon 随时可解除，按节点总数给足扩容余量；
+#   且这是朴素预期（每节点 1 副本），实际分布由 k8s 调度决定，非准确保证。
+#   PHP 的固定池上限（kruise chart 静态 4）与这里动态节点数口径不同，各自适用场景不同，勿混用。
+#
+# 隐形条件（设计约束，勿随意改动）:
+#   1) 缩容终点 = 基线 min_replicas（扩容前的副本数，通常=1 单pod 运行、特殊=2）；
+#      峰值扩、低谷缩回基线，不被节点数拦截。
+#   2) 扩容上限 = --max（缺省=真实节点数，每节点 1 副本的朴素预期）；
+#      资源有限时节点打满再加 pod 无意义，故顶到节点数为止。
+#      注: 节点数口径含 cordon 节点（随时可解除，按总数给足余量）。
+#   3) PHP 特例: 部署名含 php 自动套特例参数（step=2/min=2/max=0/PHP 阈值）；
+#      WorkloadSpread 管理 virtual 扩容（max=0 → 脚本不限制）
 #
 # 运行方式（三选一，互不冲突可叠加）:
 #   a) crontab 定时单次检查（最简单，无 --watch；每次独立进程，天然自愈，推荐日常兜底）:
@@ -759,7 +755,7 @@ ack_scale_php() {
 #      ... ack scale-pod <deployment>[/namespace]
 #   死循环意外退出兜底: b 由 Restart=always 自动拉起；a/c 每次都是新进程，崩溃只影响本轮，下次到点照跑。
 #
-# 触发逻辑（与 scale-php 一致的双因子 OR/AND 滞回）:
+# 触发逻辑（双因子 OR/AND 滞回）:
 #   扩容 = CPU求和 > warn 阈值  OR  内存求和 > warn 阈值      （任一资源过载即扩）
 #   缩容 = CPU求和 < normal 阈值 AND  内存求和 < normal 阈值   （两资源都回落才缩，避免抖动）
 #   阈值 = 因子 × 当前副本数；因子单位: CPU 毫核/副本、内存 MiB/副本。
@@ -767,10 +763,10 @@ ack_scale_php() {
 #     ACK_POD_CPU_WARN_FACTOR=2000 / ACK_POD_CPU_NORMAL_FACTOR=800
 #     ACK_POD_MEM_WARN_FACTOR=2500 / ACK_POD_MEM_NORMAL_FACTOR=1000
 #
-# 互斥/冷却（与 scale-php 共享）:
-#   锁路径 ${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/lock.scale.all   helm 发布互斥（deploy.sh 部署时创建），5 分钟内跳过
+# 互斥/冷却:
+#   锁路径 ${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}（去尾斜杠）/lock.scale.all   helm 发布互斥（deploy.sh 部署时创建），5 分钟内跳过
 #   /tmp/lock.scale.up|down.$deployment  冷却锁（扩容 1 分钟 / 缩容 5 分钟）
-# 闲时回收: 资源回落后若 pod 仍跑在 virtual 节点，rollout restart 迁回真实节点。
+# 闲时回收: 资源回落后若 pod 仍跑在 virtual 节点，rollout restart 迁回真实节点（机制详见该分支注释）。
 # ============================================================
 ack_scale_pod() {
     local deployment=$1
@@ -789,14 +785,15 @@ ack_scale_pod() {
     fi
     [ -z "$namespace" ] && namespace=main
 
-    # 选项解析
-    local watch_mode=false interval=15 step=1 min_replicas=1
+    # 选项解析（step/min/max 用 -1 表示"未显式指定"，解析后按是否 PHP 特例套默认）
+    local watch_mode=false interval=15 step=-1 min_replicas=-1 max_replicas=-1
     while [[ $# -gt 0 ]]; do
         case "$1" in
         --watch) watch_mode=true && shift ;;
         --interval) interval="${2:?--interval 需要数字}" && shift 2 ;;
         --step) step="${2:?--step 需要数字}" && shift 2 ;;
         --min) min_replicas="${2:?--min 需要数字}" && shift 2 ;;
+        --max) max_replicas="${2:?--max 需要数字}" && shift 2 ;;
         --once) watch_mode=false && shift ;;
         *)
             echo "错误：未知参数：$1" >&2
@@ -807,31 +804,60 @@ ack_scale_pod() {
 
     if [ -z "$deployment" ]; then
         echo "错误：部署名称不能为空。" >&2
-        echo "用法：ack scale-pod <deployment> [namespace] [--watch] [--interval 15] [--step 1] [--min 1]" >&2
+        echo "用法：ack scale-pod <deployment> [namespace] [--watch] [--interval 15] [--step 1] [--min 1] [--max N]" >&2
         return 1
+    fi
+
+    # PHP 特例自动识别（命名约定：deployment 名含 php 视为 PHP 部署）：
+    #   step=2 / min=2 / max=0（kruise 管理工作负载的 virtual 扩容上限）
+    #   阈值因子在 run_once 内按 is_php 取不同默认；显式 --step/--min/--max 优先
+    local is_php=false
+    [[ "$deployment" == *php* ]] && is_php=true
+    if $is_php; then
+        [ "$step" -eq -1 ] && step=2
+        [ "$min_replicas" -eq -1 ] && min_replicas=2
+        [ "$max_replicas" -eq -1 ] && max_replicas=0
+    else
+        [ "$step" -eq -1 ] && step=1
+        [ "$min_replicas" -eq -1 ] && min_replicas=1
+        # max 保持 -1：非 PHP 缺省 = 真实节点数（eff_max，见 run_once）
     fi
 
     # 单次检查：求和判断 + 扩缩容 + virtual 闲时回收
     local run_once ret
     run_once() {
-        local lock_file_all="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/lock.scale.all"
+        # 运行时目录（${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}，去尾斜杠：macOS $TMPDIR 带 / 会拼出 //）
+        local runtime_dir="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+        runtime_dir="${runtime_dir%/}"
+        local lock_file_all="${runtime_dir}/lock.scale.all"
         local lock_file_up="/tmp/lock.scale.up.$deployment"
         local lock_file_down="/tmp/lock.scale.down.$deployment"
 
-        ## helm 发布互斥：deploy.sh 部署期间跳过扩缩容（锁存在 5 分钟内静默跳过）
+        ## helm 发布互斥：deploy.sh 部署期间跳过扩缩容（锁存在 5 分钟内静默跳过；GNU stat/date 探测兼容 macOS）
         if [[ -f "${lock_file_all}" ]]; then
-            if [[ $(stat -c %Y "$lock_file_all") -lt $(date -d "5 minutes ago" +%s) ]]; then
+            local gstat_cmd gdate_cmd
+            gstat_cmd=$(command -v gstat || echo stat)
+            gdate_cmd=$(command -v gdate || echo date)
+            if [[ $("$gstat_cmd" -c %Y "$lock_file_all") -lt $("$gdate_cmd" -d "5 minutes ago" +%s) ]]; then
                 rm -f "${lock_file_all}"
             else
+                $watch_mode && touch "${runtime_dir}/ack-scale-pod.heartbeat.$deployment"
                 return 0
             fi
         fi
 
-        # 阈值因子（环境变量可覆盖）
-        local CPU_WARN_FACTOR=${ACK_POD_CPU_WARN_FACTOR:-2000}
-        local CPU_NORMAL_FACTOR=${ACK_POD_CPU_NORMAL_FACTOR:-800}
-        local MEM_WARN_FACTOR=${ACK_POD_MEM_WARN_FACTOR:-2500}
-        local MEM_NORMAL_FACTOR=${ACK_POD_MEM_NORMAL_FACTOR:-1000}
+        # 阈值因子（环境变量可覆盖；PHP 特例走旧变量名 + 生产默认，非 PHP 走 ACK_POD_* + 适中默认）
+        if $is_php; then
+            local CPU_WARN_FACTOR=${ACK_CPU_WARN_FACTOR:-1500}
+            local CPU_NORMAL_FACTOR=${ACK_CPU_NORMAL_FACTOR:-500}
+            local MEM_WARN_FACTOR=${ACK_MEM_WARN_FACTOR:-1200}
+            local MEM_NORMAL_FACTOR=${ACK_MEM_NORMAL_FACTOR:-500}
+        else
+            local CPU_WARN_FACTOR=${ACK_POD_CPU_WARN_FACTOR:-2000}
+            local CPU_NORMAL_FACTOR=${ACK_POD_CPU_NORMAL_FACTOR:-800}
+            local MEM_WARN_FACTOR=${ACK_POD_MEM_WARN_FACTOR:-2500}
+            local MEM_NORMAL_FACTOR=${ACK_POD_MEM_NORMAL_FACTOR:-1000}
+        fi
         local COOLDOWN_MINUTES_SCALE_UP=1
         local COOLDOWN_MINUTES_SCALE_DOWN=5
 
@@ -840,10 +866,14 @@ ack_scale_pod() {
             return 0
         fi
 
-        # 节点数（扣 1 个 virtual 节点）
-        local node_total node_fixed
-        node_total=$(kubectl get nodes -o name --no-headers | grep -c "^")
-        node_fixed=$((node_total - 1))
+        # 节点数（真实节点 = 排除 virtual，直接计数，无 -1 歧义）
+        local node_fixed
+        node_fixed=$(kubectl get nodes -o name --no-headers 2>/dev/null | grep -v virtual-kubelet | grep -c '^')
+
+        # 副本上限：缺省 = 真实节点数（每节点 1 副本的朴素预期），每次检查重新计算跟随节点增减；
+        # --max 0 = 不限制（PHP 特例，kruise 管理上限）；>0 = 显式上限
+        local eff_max=$max_replicas
+        [ "$eff_max" -eq -1 ] && eff_max=$node_fixed
 
         # pod 数
         local pod_total
@@ -874,14 +904,23 @@ ack_scale_pod() {
 
         # 扩容：任一资源过 warn 阈值
         if ((cpu > pod_cpu_warn)) || ((mem > pod_mem_warn)); then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment CPU求和 ${cpu}（阈值 ${pod_cpu_warn} 毫核）, 内存求和 ${mem}MiB（阈值 ${pod_mem_warn}MiB），扩容 +$step"
-            if ! kubectl -n "$namespace" scale --replicas=$((pod_total + step)) deployment "$deployment"; then
+            ## 副本上限：eff_max=0 表示不限制；达到上限则跳过扩容（默认不扩到 virtual，virtual 由 kruise/人工管理）
+            local target_replicas=$((pod_total + step))
+            if [ "$eff_max" -gt 0 ] && [ "$target_replicas" -gt "$eff_max" ]; then
+                target_replicas=$eff_max
+            fi
+            if [ "$target_replicas" -le "$pod_total" ]; then
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 已达副本上限 ${eff_max}，跳过扩容（CPU 求和 ${cpu} / 内存求和 ${mem}MiB）"
+                return 0
+            fi
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment CPU求和 ${cpu}（阈值 ${pod_cpu_warn} 毫核）, 内存求和 ${mem}MiB（阈值 ${pod_mem_warn}MiB），扩容到 $target_replicas"
+            if ! kubectl -n "$namespace" scale --replicas="$target_replicas" deployment "$deployment"; then
                 echo "扩容失败" >&2
                 return 1
             fi
             touch "$lock_file_up" "$lock_file_down"
             local up_msg
-            up_msg="[$(date '+%Y-%m-%d %H:%M:%S')] 应用 ${deployment} 过载, 扩容到 $((pod_total + step)) 个副本"
+            up_msg="[$(date '+%Y-%m-%d %H:%M:%S')] 应用 ${deployment} 过载, 扩容到 ${target_replicas} 个副本"
             log_result "${profile:-}" "$region" "ack" "scale-pod" "$up_msg"
             type _notify_wecom >/dev/null 2>&1 && _notify_wecom "${WECOM_KEY:-}" "$up_msg"
             return 0
@@ -892,9 +931,10 @@ ack_scale_pod() {
             return 0
         fi
 
-        # 缩容：两资源都低于 normal 阈值
+        # 缩容：两资源都低于 normal 阈值；缩到基线(min_replicas，扩容前副本数)为止，
+        # 不被节点数拦截 —— 资源有限场景基线通常=1（单pod），特殊=2；峰值扩、低谷缩回基线
         if ((cpu < pod_cpu_normal)) && ((mem < pod_mem_normal)); then
-            if ((pod_total > node_fixed)); then
+            if ((pod_total > min_replicas)); then
                 local new_replicas=$((pod_total - 1))
                 ((new_replicas < min_replicas)) && new_replicas=$min_replicas
                 if ((new_replicas < pod_total)); then
@@ -908,16 +948,49 @@ ack_scale_pod() {
                 fi
                 return 0
             fi
-            ## 闲时回收：virtual 节点上的 pod 迁回真实节点
+            ## 闲时回收：已到基线仍有 virtual pod（残留/异常态兜底）
+            ## ==========================================================
+            ## 背景（仅 PHP 生效，非 PHP 不会命中）:
+            ##   仅 PHP deployment 绑定了 OpenKruise WorkloadSpread 双 subset：
+            ##     subset fixed-resource-pool（真实节点）→ subset elastic-resource-pool（virtual）
+            ##   fixed pool 的 maxReplicas 是 helm chart 静态写死（当前=4），与节点数无关；
+            ##   分配不感知节点 cordon/可用性 —— 固定扩到 4 台后多出的 pod 注入 elastic（virtual）
+            ##   缩容顺序: WorkloadSpread 用 deletion-cost(-100) 保证 elastic subset 的 pod 优先删除，
+            ##   因此主缩容（回到基线 min_replicas）过程中超出 fixed 容量的 elastic pod 已被顺带清空；
+            ##   正常情况下回到基线后不应再有 virtual pod。
+            ## 本分支只处理"基线仍有 virtual"的残留/异常态:
+            ##   1) fixed 有空位（missingReplicas>0 或 -1）→ rollout restart：
+            ##      重建时 webhook 按 missingReplicas 顺序注入 fixed subset，旧 elastic pod 被替换
+            ##      -> virtual 消失
+            ##   2) fixed 已满（missingReplicas=0）且已到基线 → 配置矛盾
+            ##      （min_replicas > fixed maxReplicas），无法回收，提示人工排查
+            ##   判断依据: WorkloadSpread status.missingReplicas
+            ## 非 PHP (java/node) 无 WorkloadSpread，普通 pod 不会调度到 virtual 节点，此分支不命中
+            ## ==========================================================
             local pod_on_virtual_node
             pod_on_virtual_node=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" -o json 2>/dev/null |
                 jq -r '.items[]? | select((.spec.nodeName // "") | contains("virtual-kubelet")) | .metadata.name')
             if [ -n "$pod_on_virtual_node" ]; then
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 闲时 pod 在 virtual 节点：$pod_on_virtual_node ，重启迁回真实节点"
-                kubectl -n "$namespace" patch deployment "$deployment" -p '{"spec":{"strategy":{"rollingUpdate":{"maxUnavailable":"25%"}}}}'
-                kubectl -n "$namespace" rollout restart deployment "$deployment"
+                ## 读 WorkloadSpread：fixed 池（首个 subset）是否还有空位
+                local ws_fixed_name ws_fixed_missing
+                ws_fixed_name=$(kubectl -n "$namespace" get workloadspread "$deployment" -o json 2>/dev/null |
+                    jq -r '.spec.subsets[0].name // ""')
+                ws_fixed_missing=$(kubectl -n "$namespace" get workloadspread "$deployment" -o json 2>/dev/null |
+                    jq -r --arg n "$ws_fixed_name" '.status.subsetStatuses[]? | select(.name == $n) | .missingReplicas')
+                if [ -n "$ws_fixed_missing" ] && [ "$ws_fixed_missing" -ne 0 ]; then
+                    ## fixed 有空位：滚动重启，新 pod 按序注入 fixed，替换 elastic 残留
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 基线 ${min_replicas} 仍有 virtual pod：$pod_on_virtual_node ，滚动重启迁回真实节点（fixed 池空位 missingReplicas=$ws_fixed_missing）"
+                    kubectl -n "$namespace" rollout restart deployment "$deployment"
+                elif [ -n "$ws_fixed_missing" ] && [ "$ws_fixed_missing" -eq 0 ]; then
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 基线 ${min_replicas} 已到但 fixed 池满（missingReplicas=0）仍有 virtual pod，疑似 min 配置 > fixed maxReplicas，请人工排查"
+                else
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 无法读取 WorkloadSpread 状态（missingReplicas=${ws_fixed_missing:-空}），跳过回收"
+                fi
             fi
         fi
+        ## 心跳（仅 --watch 常驻）：touch 心跳文件（mtime=最近检查时间），供外部验证监控存活；
+        ## 单次模式每次都是新进程、靠 cron/timer 调度天然自愈，无需探针，不写文件
+        $watch_mode && touch "${runtime_dir}/ack-scale-pod.heartbeat.$deployment"
         return 0
     }
 
