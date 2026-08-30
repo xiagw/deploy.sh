@@ -32,7 +32,8 @@ show_ack_help() {
     echo "  set-pool [<集群ID>] restart [<节点池>]              - 重启节点池内所有节点上的 deployment"
     echo "  del-pool [<集群ID>] [<节点池>]          - 删除节点池（池内有节点时提示）"
     echo "  自动扩缩容："
-    echo "  scale-php <deployment> [namespace]       - 自定义 PHP 部署自动扩缩容（应对突发流量，用户级 systemd timer 每15秒触发，勿删）"
+    echo "  scale-pod <deployment>[/namespace] [--watch] - 通用 Deployment 自动扩缩容（namespace 默认 main；可用 dep/ns 复合指定；求和判断；--watch 常驻监控，默认单次执行）"
+    echo "  scale-php <deployment>[/namespace]        - PHP 部署自动扩缩容（scale-pod 特例：扩容+2、下限 2 副本、PHP 生产阈值；支持 dep/ns 复合写法）"
     echo
     echo "示例："
     echo "  集群："
@@ -62,7 +63,8 @@ show_ack_help() {
     echo "  $0 ack set-pool c-xxx restart"
     echo "  $0 ack del-pool c-xxx <节点池ID>"
     echo "  自动扩缩容："
-    echo "  $0 ack scale-php my-deployment default"
+    echo "  $0 ack scale-pod fly-php71/main --watch"
+    echo "  $0 ack scale-php fly-php71/main"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
 }
@@ -82,6 +84,7 @@ handle_ack_commands() {
     del-node) ack_node_remove "$@" ;;
     config) ack_get_kubeconfig "$@" ;;
     scale-php) ack_scale_php "$@" >>"${SCRIPT_LOG:-/tmp/ack_scale_php.log}" ;;
+    scale-pod) ack_scale_pod "$@" >>"${SCRIPT_LOG:-/tmp/ack_scale_pod.log}" ;;
     get-pool) ack_pool_list "$@" ;;
     set-pool)
         # set-pool [<集群ID>] <scale|cordon|uncordon|restart> [<节点池>] [参数]；scale 支持 mem 子模式（内存紧张 +1）
@@ -693,187 +696,241 @@ check_cooldown() {
     fi
 }
 
-# 扩缩容函数（保持原有逻辑）
-scale_deployment() {
-    local action=$1
-    local new_total=$2
-    local lock_file_up=$3
-    local lock_file_down=$4
-    local action_name load_status
-
-    if [[ "$action" == "up" ]]; then
-        action_name="扩容"
-        load_status="过载"
-        touch "$lock_file_up" "$lock_file_down"
-    else
-        action_name="缩容"
-        load_status="空闲"
-        touch "$lock_file_down"
-    fi
-
-    if ! kubectl -n "$namespace" scale --replicas="$new_total" deployment "$deployment"; then
-        echo "扩缩容操作失败" >&2
-        return 1
-    fi
-
-    local msg_body
-    msg_body="[$(date '+%Y-%m-%d %H:%M:%S')], 应用 ${deployment} ${load_status}, ${action_name} 到 ${new_total} 个副本"
-    echo "$msg_body"
-
-    if kubectl -n "$namespace" rollout status deployment "$deployment" --timeout 60s; then
-        local result="成功"
-    else
-        local result="失败"
-    fi
-
-    # 记录操作日志
-    msg_body="${msg_body}，结果: ${result}"
-    log_result "${profile:-}" "$region" "ack" "scale-php" "$msg_body"
-
-    # 如果存在通知函数，则调用
-    if type _notify_wecom >/dev/null 2>&1; then
-        _notify_wecom "${WECOM_KEY:-}" "$msg_body"
-    fi
-    echo ""
-}
-
 # ============================================================
-# 自动扩缩容：自定义 PHP 部署专用（不用 K8s HPA），应对突发流量。
-#   K8s HPA 不够灵敏/快速，故自研，由用户级 systemd timer 每 15 秒触发一次：
-#     ~/.config/systemd/user/ack-scale-php.service：
-#       [Service]
-#       Type=oneshot
-#       ExecStart=/bin/bash <repo>/cloud/aliyun/main.sh -p <profile> -r cn-hangzhou ack scale-php <deployment> [namespace]
-#     ~/.config/systemd/user/ack-scale-php.timer：
-#       [Timer]
-#       OnBootSec=30s
-#       OnUnitActiveSec=15s
-#       AccuracySec=1s
-#       [Install]
-#       WantedBy=timers.target
-#   启用：systemctl --user enable --now ack-scale-php.timer；输出由 handle_ack_commands 重定向到 /tmp/ack_scale_php.log。
-#
-# 触发逻辑（双因子 OR/AND 滞回）：
-#   扩容 = CPU求和 > warn 阈值  OR  内存求和 > warn 阈值      （任一资源过载即扩，保应用）
-#   缩容 = CPU求和 < normal 阈值 AND  内存求和 < normal 阈值   （两资源都回落后才缩，避免抖动）
-#   阈值 = 因子 × 当前副本数；warn/normal 构成滞回带，配合冷却锁防止频繁扩缩。
-#   因子单位：CPU 毫核/副本、内存 MiB/副本，可用环境变量覆盖（默认值为实际生产值）：
-#     ACK_CPU_WARN_FACTOR / ACK_CPU_NORMAL_FACTOR / ACK_MEM_WARN_FACTOR / ACK_MEM_NORMAL_FACTOR
-#   数据源：kubectl top pod，mem 会把 Ki/Mi/Gi/裸字节统一归一化为 MiB（注意 top 输出如 1.5Gi 不能直接 int()）。
-#
-# 互斥机制：
-#   /tmp/lock.scale.all：helm 发布或人工运维时由外部 touch 创建，检测到后 5 分钟内静默跳过，避免与 15 秒轮询冲突。
-#   /tmp/lock.scale.up|down.$deployment：冷却锁（扩容 1 分钟 / 缩容 5 分钟）。
-#
-# 注意：本功能必须保留，勿删（依赖：check_cooldown / scale_deployment）。
+# 自定义 PHP 部署自动扩缩容（应对突发流量，由 systemd timer / 手动触发单次执行）。
+# 与通用 ack_scale_pod 共用同一套监控逻辑，仅保留 PHP 特例参数：
+#   - 每次扩容 +2（突发流量响应更激进）
+#   - 自动缩容下限 2 副本
+#   - 阈值因子走旧环境变量名（ACK_CPU_WARN_FACTOR 等，默认生产值）
+# 调用方式: ack scale-php <deployment> [namespace]，内部委托 ack_scale_pod。
 # ============================================================
 ack_scale_php() {
     local deployment=$1
-    local namespace=${2:-main}
-    local lock_file_all="/tmp/lock.scale.all"
-    local lock_file_up="/tmp/lock.scale.up.$deployment"
-    local lock_file_down="/tmp/lock.scale.down.$deployment"
-
-    ## 发布/人工运维互斥：外部创建 lock.scale.all 后 5 分钟内跳过（helm install/upgrade 时禁用 auto-scale）
-    if [[ -f "${lock_file_all}" ]]; then
-        if [[ $(stat -c %Y "$lock_file_all") -lt $(date -d "5 minutes ago" +%s) ]]; then
-            rm "${lock_file_all}"
-        fi
-        return 0
-    fi
-
     if [ -z "$deployment" ]; then
         echo "错误：部署名称不能为空。" >&2
         return 1
     fi
 
-    # 定义常量（四因子可用环境变量覆盖，默认值为实际生产值；单位：CPU 毫核/副本、内存 MiB/副本）
-    local CPU_WARN_FACTOR=${ACK_CPU_WARN_FACTOR:-1500}    # CPU 警告阈值因子（毫核/副本）
-    local CPU_NORMAL_FACTOR=${ACK_CPU_NORMAL_FACTOR:-500}  # CPU 正常阈值因子（毫核/副本）
-    local MEM_WARN_FACTOR=${ACK_MEM_WARN_FACTOR:-1200}     # 内存警告阈值因子（MiB/副本）
-    local MEM_NORMAL_FACTOR=${ACK_MEM_NORMAL_FACTOR:-500}  # 内存正常阈值因子（MiB/副本）
-    local SCALE_CHANGE=2                # 每次扩缩容的节点数量
-    local MIN_REPLICAS=2                # 自动缩容下限，不低于此副本数
-    local COOLDOWN_MINUTES_SCALE_UP=1   # 扩容冷却时间（分钟）
-    local COOLDOWN_MINUTES_SCALE_DOWN=5 # 缩容冷却时间（分钟）
+    # PHP 特例参数委托给通用监控：step=2、min=2；阈值因子映射旧环境变量名
+    # namespace 仅在有第二参数时透传；dep/ns 复合写法由 ack_scale_pod 拆解，防止默认 main 覆盖复合 ns
+    ACK_POD_CPU_WARN_FACTOR=${ACK_CPU_WARN_FACTOR:-1500} \
+    ACK_POD_CPU_NORMAL_FACTOR=${ACK_CPU_NORMAL_FACTOR:-500} \
+    ACK_POD_MEM_WARN_FACTOR=${ACK_MEM_WARN_FACTOR:-1200} \
+    ACK_POD_MEM_NORMAL_FACTOR=${ACK_MEM_NORMAL_FACTOR:-500} \
+        ack_scale_pod "$deployment" ${2:+"$2"} --step 2 --min 2
+}
 
-    # 检查扩容冷却期
-    if check_cooldown "up" "$lock_file_up" $COOLDOWN_MINUTES_SCALE_UP; then
-        return
+# ============================================================
+# 通用 Deployment 自动扩缩容（scale-php 为其 PHP 特例封装：+2 / min=2 / PHP 阈值因子）。
+# 适用: java / node 等非 PHP 应用，多为单副本；沿用"pod 资源求和"判断。
+#
+# 用法:
+#   ack scale-pod <deployment>[/namespace] [namespace] [选项]   （dep/ns 复合可省参数；namespace 默认 main）
+#   选项:
+#     --watch             死循环常驻监控（配合 systemd service 使用；默认单次执行后退出，供 cron/timer）
+#     --interval 秒       相邻检查间隔，默认 15（配合 --watch）
+#     --step N            每次扩容的副本增量，默认 1
+#     --min N             自动缩容下限，默认 1
+#     --once              显式单次执行（默认行为，与 --watch 互斥冗余）
+#
+# 运行方式（三选一，互不冲突可叠加）:
+#   a) crontab 定时单次检查（最简单，无 --watch；每次独立进程，天然自愈，推荐日常兜底）:
+#      0 3 * * * bash <repo>/cloud/aliyun/main.sh -p <profile> -r cn-hangzhou ack scale-pod <deployment>[/namespace]
+#      注意：不要在 crontab 里每分钟触发 --watch（会堆叠多个死循环进程）；crontab 只配单次模式。
+#   b) systemd template unit 常驻（推荐多部署场景；%i 即 deployment，namespace 默认 main；
+#      崩溃自动拉起 Restart=always；注意单元名不可含 /，需显式 ns 时用 \x2f 转义）:
+#      ~/.config/systemd/user/ack-scale-pod@.service:
+#        [Unit]
+#        Description=ACK scale-pod (%i) auto-scaling monitor
+#        [Service]
+#        Type=simple
+#        Restart=always
+#        RestartSec=5
+#        ExecStart=/bin/bash <repo>/cloud/aliyun/main.sh -p <profile> -r cn-hangzhou ack scale-pod %i --watch
+#        [Install]
+#        WantedBy=timers.target
+#      启用（单元名实例段不能含 /；namespace 默认 main 可直接用 deployment 名）:
+#        systemctl --user enable --now ack-scale-pod@fly-php71.service
+#        systemctl --user enable --now ack-scale-pod@order-java.service
+#      非 main 命名空间需转义 / 为 \x2f（%i 展开时自动解码回 fly-php71/main）:
+#        systemctl --user enable --now 'ack-scale-pod@fly-php71\x2fdev.service'
+#      日志: 由 handle_ack_commands 重定向到 /tmp/ack_scale_pod.log
+#   c) systemd timer 定时触发（不带 --watch，单次检查）:
+#      ... ack scale-pod <deployment>[/namespace]
+#   死循环意外退出兜底: b 由 Restart=always 自动拉起；a/c 每次都是新进程，崩溃只影响本轮，下次到点照跑。
+#
+# 触发逻辑（与 scale-php 一致的双因子 OR/AND 滞回）:
+#   扩容 = CPU求和 > warn 阈值  OR  内存求和 > warn 阈值      （任一资源过载即扩）
+#   缩容 = CPU求和 < normal 阈值 AND  内存求和 < normal 阈值   （两资源都回落才缩，避免抖动）
+#   阈值 = 因子 × 当前副本数；因子单位: CPU 毫核/副本、内存 MiB/副本。
+#   默认值（适中，可用环境变量覆盖）:
+#     ACK_POD_CPU_WARN_FACTOR=2000 / ACK_POD_CPU_NORMAL_FACTOR=800
+#     ACK_POD_MEM_WARN_FACTOR=2500 / ACK_POD_MEM_NORMAL_FACTOR=1000
+#
+# 互斥/冷却（与 scale-php 共享）:
+#   锁路径 ${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/lock.scale.all   helm 发布互斥（deploy.sh 部署时创建），5 分钟内跳过
+#   /tmp/lock.scale.up|down.$deployment  冷却锁（扩容 1 分钟 / 缩容 5 分钟）
+# 闲时回收: 资源回落后若 pod 仍跑在 virtual 节点，rollout restart 迁回真实节点。
+# ============================================================
+ack_scale_pod() {
+    local deployment=$1
+    local namespace=""
+    # 支持 dep/ns 复合写法（只传一个参数）：deployment 含 / 时按 deployment/namespace 拆解
+    if [[ "$deployment" == */* ]]; then
+        namespace="${deployment##*/}"
+        deployment="${deployment%/*}"
+    fi
+    # $2 是选项（以 - 开头）时只消费 $1；否则消费 $1+$2（namespace）
+    if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+        namespace="$2"
+        shift 2
+    else
+        shift 1
+    fi
+    [ -z "$namespace" ] && namespace=main
+
+    # 选项解析
+    local watch_mode=false interval=15 step=1 min_replicas=1
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        --watch) watch_mode=true && shift ;;
+        --interval) interval="${2:?--interval 需要数字}" && shift 2 ;;
+        --step) step="${2:?--step 需要数字}" && shift 2 ;;
+        --min) min_replicas="${2:?--min 需要数字}" && shift 2 ;;
+        --once) watch_mode=false && shift ;;
+        *)
+            echo "错误：未知参数：$1" >&2
+            return 1
+            ;;
+        esac
+    done
+
+    if [ -z "$deployment" ]; then
+        echo "错误：部署名称不能为空。" >&2
+        echo "用法：ack scale-pod <deployment> [namespace] [--watch] [--interval 15] [--step 1] [--min 1]" >&2
+        return 1
     fi
 
-    # 获取节点和 Pod 信息
-    local node_total
-    node_total=$(kubectl get nodes -o name --no-headers | grep -c "^")
-    local node_fixed=$((node_total - 1)) # 实际节点数 = 所有节点数 - 1 个虚拟节点
+    # 单次检查：求和判断 + 扩缩容 + virtual 闲时回收
+    local run_once ret
+    run_once() {
+        local lock_file_all="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/lock.scale.all"
+        local lock_file_up="/tmp/lock.scale.up.$deployment"
+        local lock_file_down="/tmp/lock.scale.down.$deployment"
 
-    local pod_total
-    pod_total=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" --no-headers | grep -c "$deployment")
-
-    # 计算阈值
-    local pod_cpu_warn=$((pod_total * CPU_WARN_FACTOR))
-    local pod_mem_warn=$((pod_total * MEM_WARN_FACTOR))
-    local pod_cpu_normal=$((pod_total * CPU_NORMAL_FACTOR))
-    local pod_mem_normal=$((pod_total * MEM_NORMAL_FACTOR))
-
-    # 获取当前 CPU 和内存使用情况。
-    # CPU：top 输出为毫核（如 2000m），int() 取整即毫核，直接求和。
-    # 内存：top 输出带单位（如 1245Mi / 1.5Gi / 512Ki / 裸字节），不能直接 int()（1.5Gi 会截成 1），
-    #      统一归一化为 MiB：Ki÷1024、Mi×1、Gi×1024、裸字节÷1048576。
-    # 注意：--no-headers 已无表头，不能用 NR>1（会跳过第一行数据，单 pod 时求和恒为 0）；
-    #       改为按"$2 是否数字开头"识别表头行再跳过。
-    local cpu mem
-    read -r cpu mem < <(kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment" --no-headers |
-        awk '
-        $2 ~ /^[0-9]/ {
-            c += int($2)
-            v = $3
-            unit = v; gsub(/[0-9.]/, "", unit)
-            gsub(/[^0-9.]/, "", v)
-            if (unit ~ /^[Gg]/) m += v * 1024
-            else if (unit ~ /^[Mm]/) m += v
-            else if (unit ~ /^[Kk]/) m += v / 1024
-            else m += v / 1048576
-        }
-        END {printf "%d %d", c, m}')
-
-    # 检查是否需要扩容（CPU 或 内存 任一超过警告阈值即扩，避免任一资源过载拖垮应用）
-    if ((cpu > pod_cpu_warn)) || ((mem > pod_mem_warn)); then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')], 当前CPU求和: ${cpu}（警告阈值 ${pod_cpu_warn} 毫核）, 内存求和: ${mem}MiB（警告阈值 ${pod_mem_warn}MiB）"
-        kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-        ## 扩容数量每次增加2，应对突发流量
-        scale_deployment "up" $((pod_total + SCALE_CHANGE)) "$lock_file_up" "$lock_file_down"
-        return
-    fi
-
-    # 检查缩容冷却期
-    if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
-        return
-    fi
-
-    # 检查是否需要缩容（CPU 和 内存 都低于正常阈值才缩，避免缩下去又弹回来）
-    if ((cpu < pod_cpu_normal)) && ((mem < pod_mem_normal)); then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')], 当前CPU求和: ${cpu}（正常阈值 ${pod_cpu_normal} 毫核）, 内存求和: ${mem}MiB（正常阈值 ${pod_mem_normal}MiB）"
-        ## 缩容门槛：副本数须大于可用节点数才缩，避免缩到节点装不下（隐含"每节点至少能放 1 副本"的假设）
-        if ((pod_total > node_fixed)); then
-            local new_replicas=$((pod_total - SCALE_CHANGE))
-            ((new_replicas < MIN_REPLICAS)) && new_replicas=$MIN_REPLICAS
-            if ((new_replicas < pod_total)); then
-                kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment"
-                scale_deployment "down" "$new_replicas" "$lock_file_up" "$lock_file_down"
+        ## helm 发布互斥：deploy.sh 部署期间跳过扩缩容（锁存在 5 分钟内静默跳过）
+        if [[ -f "${lock_file_all}" ]]; then
+            if [[ $(stat -c %Y "$lock_file_all") -lt $(date -d "5 minutes ago" +%s) ]]; then
+                rm -f "${lock_file_all}"
+            else
+                return 0
             fi
-            return
         fi
-        ## 资源已回落后，若仍有 pod 跑在虚拟节点上，强制 rollout restart 把 pod 迁回真实节点
-        ## （虚拟节点 ECI 计费贵，资源空闲时不该继续占着；nodeName 含 virtual-kubelet 即视为虚拟节点，不限地域）
-        local pod_on_virtual_node
-        pod_on_virtual_node=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" -o json 2>/dev/null |
-            jq -r '.items[]? | select((.spec.nodeName // "") | contains("virtual-kubelet")) | .metadata.name')
-        if [ -n "$pod_on_virtual_node" ]; then
-            echo "警告：以下pod运行在虚拟节点上：$pod_on_virtual_node ，即将重启"
-            kubectl -n "$namespace" patch deployment "$deployment" -p '{"spec":{"strategy":{"rollingUpdate":{"maxUnavailable":"25%"}}}}'
-            kubectl -n "$namespace" rollout restart deployment "$deployment"
+
+        # 阈值因子（环境变量可覆盖）
+        local CPU_WARN_FACTOR=${ACK_POD_CPU_WARN_FACTOR:-2000}
+        local CPU_NORMAL_FACTOR=${ACK_POD_CPU_NORMAL_FACTOR:-800}
+        local MEM_WARN_FACTOR=${ACK_POD_MEM_WARN_FACTOR:-2500}
+        local MEM_NORMAL_FACTOR=${ACK_POD_MEM_NORMAL_FACTOR:-1000}
+        local COOLDOWN_MINUTES_SCALE_UP=1
+        local COOLDOWN_MINUTES_SCALE_DOWN=5
+
+        # 扩容冷却
+        if check_cooldown "up" "$lock_file_up" $COOLDOWN_MINUTES_SCALE_UP; then
+            return 0
         fi
+
+        # 节点数（扣 1 个 virtual 节点）
+        local node_total node_fixed
+        node_total=$(kubectl get nodes -o name --no-headers | grep -c "^")
+        node_fixed=$((node_total - 1))
+
+        # pod 数
+        local pod_total
+        pod_total=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" --no-headers | grep -c "$deployment")
+
+        # 阈值 = 因子 × 副本数
+        local pod_cpu_warn pod_mem_warn pod_cpu_normal pod_mem_normal
+        pod_cpu_warn=$((pod_total * CPU_WARN_FACTOR))
+        pod_mem_warn=$((pod_total * MEM_WARN_FACTOR))
+        pod_cpu_normal=$((pod_total * CPU_NORMAL_FACTOR))
+        pod_mem_normal=$((pod_total * MEM_NORMAL_FACTOR))
+
+        # 求和（CPU 毫核 / 内存归一 MiB）
+        local cpu mem
+        read -r cpu mem < <(kubectl -n "$namespace" top pod -l "app.kubernetes.io/name=$deployment" --no-headers |
+            awk '
+            $2 ~ /^[0-9]/ {
+                c += int($2)
+                v = $3
+                unit = v; gsub(/[0-9.]/, "", unit)
+                gsub(/[^0-9.]/, "", v)
+                if (unit ~ /^[Gg]/) m += v * 1024
+                else if (unit ~ /^[Mm]/) m += v
+                else if (unit ~ /^[Kk]/) m += v / 1024
+                else m += v / 1048576
+            }
+            END {printf "%d %d", c, m}')
+
+        # 扩容：任一资源过 warn 阈值
+        if ((cpu > pod_cpu_warn)) || ((mem > pod_mem_warn)); then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment CPU求和 ${cpu}（阈值 ${pod_cpu_warn} 毫核）, 内存求和 ${mem}MiB（阈值 ${pod_mem_warn}MiB），扩容 +$step"
+            if ! kubectl -n "$namespace" scale --replicas=$((pod_total + step)) deployment "$deployment"; then
+                echo "扩容失败" >&2
+                return 1
+            fi
+            touch "$lock_file_up" "$lock_file_down"
+            local up_msg
+            up_msg="[$(date '+%Y-%m-%d %H:%M:%S')] 应用 ${deployment} 过载, 扩容到 $((pod_total + step)) 个副本"
+            log_result "${profile:-}" "$region" "ack" "scale-pod" "$up_msg"
+            type _notify_wecom >/dev/null 2>&1 && _notify_wecom "${WECOM_KEY:-}" "$up_msg"
+            return 0
+        fi
+
+        # 缩容冷却
+        if check_cooldown "down" "$lock_file_down" $COOLDOWN_MINUTES_SCALE_DOWN; then
+            return 0
+        fi
+
+        # 缩容：两资源都低于 normal 阈值
+        if ((cpu < pod_cpu_normal)) && ((mem < pod_mem_normal)); then
+            if ((pod_total > node_fixed)); then
+                local new_replicas=$((pod_total - 1))
+                ((new_replicas < min_replicas)) && new_replicas=$min_replicas
+                if ((new_replicas < pod_total)); then
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment CPU求和 ${cpu}（正常阈值 ${pod_cpu_normal}）, 内存求和 ${mem}MiB（正常阈值 ${pod_mem_normal}），缩容到 $new_replicas"
+                    kubectl -n "$namespace" scale --replicas="$new_replicas" deployment "$deployment"
+                    touch "$lock_file_down"
+                    local down_msg
+                    down_msg="[$(date '+%Y-%m-%d %H:%M:%S')] 应用 ${deployment} 空闲, 缩容到 ${new_replicas} 个副本"
+                    log_result "${profile:-}" "$region" "ack" "scale-pod" "$down_msg"
+                    type _notify_wecom >/dev/null 2>&1 && _notify_wecom "${WECOM_KEY:-}" "$down_msg"
+                fi
+                return 0
+            fi
+            ## 闲时回收：virtual 节点上的 pod 迁回真实节点
+            local pod_on_virtual_node
+            pod_on_virtual_node=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" -o json 2>/dev/null |
+                jq -r '.items[]? | select((.spec.nodeName // "") | contains("virtual-kubelet")) | .metadata.name')
+            if [ -n "$pod_on_virtual_node" ]; then
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 闲时 pod 在 virtual 节点：$pod_on_virtual_node ，重启迁回真实节点"
+                kubectl -n "$namespace" patch deployment "$deployment" -p '{"spec":{"strategy":{"rollingUpdate":{"maxUnavailable":"25%"}}}}'
+                kubectl -n "$namespace" rollout restart deployment "$deployment"
+            fi
+        fi
+        return 0
+    }
+
+    if $watch_mode; then
+        ## 死循环常驻：不退出；每 interval 秒检查一次；Ctrl+C 或 systemd stop 退出
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ack scale-pod 常驻监控开始：$deployment/$namespace ，间隔 ${interval}s（--watch）"
+        while true; do
+            run_once
+            sleep "$interval"
+        done
+    else
+        run_once
+        return $?
     fi
 }
 

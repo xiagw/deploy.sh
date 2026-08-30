@@ -299,6 +299,12 @@ deploy_to_kubernetes() {
     echo "helm upgrade/install command (reusable):"
     echo "  ${helm_args[*]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
 
+    ## 自动扩缩容互斥锁：helm 发布期间创建 per-user 锁（含 PID/时间/发布对象），
+    ## ack scale-php/scale-pod 检测到则跳过扩缩容（mtime 5 分钟内生效）
+    local scale_all_lock="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/lock.scale.all"
+    printf '%s\n' "$$ $(date '+%F %T') helm deploy ${release_name}/${G_NAMESPACE}" > "$scale_all_lock"
+    trap 'rm -f "$scale_all_lock"' RETURN
+
     ## helm 部署
     "${helm_args[@]}" >/dev/null || return 1
 
