@@ -84,8 +84,12 @@ repo_inject_file() {
             cp -f "${G_PATH}/conf/nginx-spa.conf" "${G_REPO_DIR}/nginx-spa.conf"
         else
             ## 后端 node（SSR/纯后端，nodejs/next/nuxt）：
-            [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] || cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
+            if [[ ! -f "${G_REPO_DIR}/Dockerfile.base" ]]; then
+                cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
+                _msg note "generate Dockerfile.base: ${_single} -> ${G_REPO_DIR}/Dockerfile.base"
+            fi
             echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
+            _msg note "generate Dockerfile: FROM ${base_tag} (base 两段式) -> ${G_REPO_DIR}/Dockerfile"
         fi
         ;;
     php)
@@ -96,8 +100,12 @@ repo_inject_file() {
         ;;
     python)
         ## 运行时依赖 base（同 node 后端）：requirements.txt 安装依赖到 base，业务镜像 FROM base
-        [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] || cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
+        if [[ ! -f "${G_REPO_DIR}/Dockerfile.base" ]]; then
+            cp -f "${_single}" "${G_REPO_DIR}/Dockerfile.base"
+            _msg note "generate Dockerfile.base: ${_single} -> ${G_REPO_DIR}/Dockerfile.base"
+        fi
         echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
+        _msg note "generate Dockerfile: FROM ${base_tag} (base 两段式) -> ${G_REPO_DIR}/Dockerfile"
         ;;
     java | go | golang | nginx)
         [[ -f "${_template}" ]] && {
