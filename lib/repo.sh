@@ -141,10 +141,10 @@ repo_overlay_files() {
         _msg note "overlay root/: ${conf_root} -> ${repo_root}"
         ${rsync_opts} "${conf_root}/" "${repo_root}/"
     fi
-    ## 优先级2：从 data/dockerfile/root/ 覆盖自定义目录结构
-    if [[ -d "${G_DATA}/dockerfile/root" ]]; then
-        _msg note "overlay root/: ${G_DATA}/dockerfile/root -> ${repo_root}"
-        ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
+    ## 优先级2：从 data/overlay/root/ 覆盖自定义目录结构
+    if [[ -d "${G_DATA}/overlay/root" ]]; then
+        _msg note "overlay root/: ${G_DATA}/overlay/root -> ${repo_root}"
+        ${rsync_opts} "${G_DATA}/overlay/root/" "${repo_root}/"
     fi
 }
 
