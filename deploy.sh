@@ -174,7 +174,7 @@ Parameters:
     --create-storage-class       Create CNFS NAS storage class resources (needs ENV_NAS_URL).
 
     # Miscellaneous
-    -D, --disable-inject         Disable file injection.
+    -D, --disable-overlay        Disable file overlay.
     -r, --renew-cert             Renew all the certs.
     --clean-tags REPO            Clean old tags from Docker registry.
                                REPO: Repository to clean (e.g., registry.example.com/myapp)
@@ -265,7 +265,7 @@ parse_args() {
             ;;
         --create-storage-class) arg_create_storage_class=true ;;
         # Miscellaneous
-        -D | --disable-inject) arg_disable_inject=true ;;
+        -D | --disable-overlay) arg_disable_overlay=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
         --clean-tags) arg_clean_tags="${2:?ERROR: repository parameter is required}" && shift ;;
         *) usage && exit 1 ;;
@@ -313,7 +313,7 @@ parse_args() {
 
     ## 依赖 config_repo_vars 的 G_REPO_* / G_IMAGE_*
     [[ "${arg_gen_dockerfile:-false}" == true ]] && RUN+=(generate_lang_dockerfile)
-    ## 须早于 repo_inject_file，避免注入内容被构建进镜像
+    ## 须早于 repo_overlay_files，避免覆盖内容被构建进镜像
     [[ "${arg_build_buildpacks:-false}" == true ]] && RUN+=(detect_repo_language_and_build)
 
     ## 项目专用配置: 仅当计划含 stage_build（读 PROJECT_BUILD_METHOD）或
@@ -344,7 +344,7 @@ parse_args() {
     ## 依赖 config_build_env 设置的 IS_CHINA
     [[ "${arg_build_base:-false}" == true ]] && RUN+=(build_base_image_select)
 
-    RUN+=(repo_inject_file)
+    RUN+=(repo_overlay_files)
 
     ## 阶段（顺序即执行顺序）
     [[ "${arg_code_quality:-false}" == true ]] && RUN+=(stage_code_quality)

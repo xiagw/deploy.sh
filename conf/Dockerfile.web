@@ -4,7 +4,7 @@
 #          产物输出到 /build_output/usr/share/nginx/html
 # final:   官方 nginx:alpine，继承其 ENTRYPOINT/CMD（/docker-entrypoint.sh 前台启动），
 #          SPA 路由 fallback 见 nginx-spa.conf
-# 由 repo_inject_file 在 detect_node_framework 命中静态框架时注入为 Dockerfile
+# 由 repo_overlay_files 在 detect_node_framework 命中静态框架时覆盖为 Dockerfile
 # =============================================================================
 ARG MIRROR=
 ARG BUILD_IMAGE=node

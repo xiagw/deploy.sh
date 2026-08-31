@@ -14,7 +14,7 @@ setup_deploy() {
     unset arg_build arg_build_base arg_gen_dockerfile arg_build_buildpacks
     unset arg_code_style arg_code_quality arg_security_zap arg_security_vulmap
     unset arg_create_k8s arg_create_storage_class arg_renew_cert arg_clean_tags
-    unset arg_src arg_target arg_pvc_namespace arg_disable_inject arg_buildx_mode
+    unset arg_src arg_target arg_pvc_namespace arg_disable_overlay arg_buildx_mode
     unset GITEA_ACTIONS GITHUB_REPOSITORY GITHUB_REPOSITORY_OWNER
     unset CI_PROJECT_PATH CI_PROJECT_PATH_SLUG CI_PROJECT_NAMESPACE CI_PROJECT_NAME
     unset CI_PROJECT_DIR CI_COMMIT_REF_NAME CI_COMMIT_SHORT_SHA GITHUB_REF_NAME GITHUB_SHA

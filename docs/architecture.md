@@ -26,7 +26,7 @@ deploy.sh/
 │   ├── common.sh        # 基础设施：日志/消息/i18n/时间/dry-run/环境检查/工具安装
 │   ├── config.sh        # 配置管理：项目配置、deploy.env、dotfile 链接
 │   ├── system.sh        # 系统维护：磁盘清理、GeoIP、证书续签、工具安装、环境探测
-│   ├── repo.sh          # 仓库操作：文件注入、语言探测、git/svn
+│   ├── repo.sh          # 仓库操作：文件覆盖、语言探测、git/svn
 │   ├── test.sh          # 测试：单元/功能测试脚本执行
 │   ├── analysis.sh      # 代码分析：SonarQube、PMD、ZAP、Gitleaks、Checkstyle 等
 │   ├── style.sh         # 代码风格：各语言 linter
@@ -39,12 +39,12 @@ deploy.sh/
 │   ├── templates/       # deploy.env / project-config.json / aliyun.functions.json 等模板
 │   ├── Dockerfile.single# 单阶段运行时型 Dockerfile（python/mysql/redis）
 │   ├── Dockerfile.multi # 多阶段编译型 Dockerfile（java/go/php/nginx）
-│   ├── root/            # 注入用的 root 目录结构
+│   ├── root/            # 覆盖用的 root 目录结构
 │   └── rsync.exclude    # 默认 rsync 排除规则
 ├── data/                # 运行时数据（git 忽略？）
 │   ├── deploy.env       # 环境变量配置（由 conf/templates/deploy.env 复制而来）
 │   ├── conf/            # 项目专用配置 data/conf/<ns>/<project>.json
-│   ├── inject/          # 注入仓库的文件（按 仓库名/命名空间 分层）
+│   ├── overlay/          # 覆盖仓库的文件（按 仓库名/命名空间 分层）
 │   ├── helm/            # 各项目生成的 helm charts
 │   ├── bin/             # 下载的可执行文件（sendEmail 等）
 │   ├── logs/            # 日志 deploy.sh.log、各项目构建日志
@@ -65,7 +65,7 @@ flowchart TD
   LOAD --> c1["common.sh · 基础设施<br/>日志 / i18n / dry-run / 工具"]
   c1 --> c2["config.sh · 配置<br/>deploy.env · 项目 JSON"]
   c2 --> c3["system.sh · 系统<br/>磁盘 / 证书 / GeoIP"]
-  c3 --> c4["repo.sh · 仓库<br/>语言探测 · 文件注入 · git"]
+  c3 --> c4["repo.sh · 仓库<br/>语言探测 · 文件覆盖 · git"]
   c4 --> c5["test.sh · 测试<br/>单元 / 功能 / 性能"]
   c5 --> c6["analysis.sh · 分析<br/>SonarQube / 安全扫描"]
   c6 --> c7["style.sh · 风格<br/>各语言 linter"]
@@ -129,7 +129,7 @@ flowchart TD
 
 ### 2.5 lib/repo.sh — 500 行（仓库操作）
 
-- `repo_inject_file`（8）：把 `data/inject/<仓库名>/[<命名空间>/]` 下的文件 rsync 进仓库；缺失时注入 Dockerfile/.dockerignore/root/ 结构。
+- `repo_overlay_files`（8）：把 `data/overlay/<仓库名>/[<命名空间>/]` 下的文件 rsync 进仓库；缺失时覆盖 Dockerfile/.dockerignore/root/ 结构。
 - `detect_repo_language`（131）：按文件表探测语言/版本/Docker 标志，输出 `lang:ver:docker`；兜底扩展名统计；可走 Docker Linguist。
 - `setup_git_repo`（321） / `setup_svn_repo`（480）：clone/checkout 或更新已有仓库。
 - `get_git_branch`（440） / `get_git_commit_sha`（455） / `get_git_last_commit_message`（470）：从 CI 环境变量或 git 命令取信息，带多级回退。
@@ -272,7 +272,7 @@ main "$@"
 ├─ config_deploy_setup        # dotfile/SSH 密钥
 ├─ （renew_cert / clean_tags 独立功能 → 返回）
 ├─ config_build_env           # 选 docker/podman → G_DOCK/G_RUN
-├─ repo_inject_file           # 文件注入
+├─ repo_overlay_files           # 文件覆盖
 ├─ detect_repo_language       # 重新探测语言
 └─ 任务执行阶段（阶段 1-6）→ 通知 → END
 ```
@@ -293,7 +293,7 @@ system_clean_disk   →  磁盘空间不足时清理
 system_install_tools→  按项目安装所需工具
 config_deploy_setup →  SSH 密钥、$HOME 符号链接（.ssh/.acme.sh/.aws/.kube/.aliyun）、python-gitlab
 config_build_env    →  G_DOCK / G_RUN / IS_CHINA（安装 docker/podman）
-repo_inject_file    →  注入 conf/root、生成 Dockerfile.base/Dockerfile 到 G_REPO_DIR
+repo_overlay_files    →  覆盖 conf/root、生成 Dockerfile.base/Dockerfile 到 G_REPO_DIR
 ```
 
 链内强顺序约束（依据）：
@@ -334,14 +334,14 @@ repo_inject_file    →  注入 conf/root、生成 Dockerfile.base/Dockerfile �
 | `copy_docker_image` | `-c` | ENV_DOCKER_MIRROR + skopeo + system_proxy（中国区代理） | system_proxy 后 |
 | `system_cert_renew` | `-r` | `$HOME/.acme.sh` 账号文件 + config_deploy_setup（软依赖，仅当 G_DATA/.acme.sh 存在才建链接，config.sh:254） | config_deploy_setup 后 |
 | `generate_lang_dockerfile` | `--gen-dockerfile` | G_REPO_DIR + detect_repo_language | config_repo_vars 后 |
-| `detect_repo_language_and_build` | `--build-buildpacks` | G_REPO_DIR + G_IMAGE_NAME/TAG + pack | config_repo_vars 后；须在 repo_inject_file 前（构建语义） |
+| `detect_repo_language_and_build` | `--build-buildpacks` | G_REPO_DIR + G_IMAGE_NAME/TAG + pack | config_repo_vars 后；须在 repo_overlay_files 前（构建语义） |
 | `kube_create_storage_class` | `--create-storage-class` | KUBECTL_OPT（kube_config_init）+ G_NAMESPACE + ENV_NAS_URL | kube_config_init 后 |
 | `kube_create_pv_pvc` | `-P` | KUBECTL_OPT + G_NAMESPACE | kube_config_init 后 |
 | `build_base_image_select` | `-x` | ENV_DOCKER_* + G_PATH/conf + **IS_CHINA**（kubernetes.sh:398 读 `IS_CHINA:-true`） | config_build_env 后 |
 
 > 注：`build_base_image_select` 不依赖 `find_project_config`，但依赖 `config_build_env` 设置的
 > `IS_CHINA`（提前会令 `${IS_CHINA:-true}` 默认命中中国镜像源），故只能放到 config_build_env 之后，无法更早。
-> `detect_repo_language_and_build`（buildpacks）须在 `repo_inject_file` 前：先按源码生成镜像，再注入环境配置，避免注入内容被构建进镜像。
+> `detect_repo_language_and_build`（buildpacks）须在 `repo_overlay_files` 前：先按源码生成镜像，再覆盖环境配置，避免覆盖内容被构建进镜像。
 > `copy_docker_image` 须在 `system_proxy` 后：中国区 skopeo 拉取需代理。
 
 ### 3.6 RUN 数组顺序总表（代码即文档）
@@ -356,7 +356,7 @@ setup_svn_repo                # arg_svn_checkout_url
 setup_git_branch              # arg_git_clone_branch 且无 arg_git_clone_url
 config_repo_vars
 generate_lang_dockerfile      # arg_gen_dockerfile
-detect_repo_language_and_build# arg_build_buildpacks（须在 repo_inject_file 前）
+detect_repo_language_and_build# arg_build_buildpacks（须在 repo_overlay_files 前）
 find_project_config           # 条件: arg_build 或 RUN_DEPLOY 非空 或 auto_mode
 system_proxy
 copy_docker_image             # arg_src（中国区需代理）
@@ -369,7 +369,7 @@ config_deploy_setup
 system_cert_renew             # arg_renew_cert（依赖 $HOME/.acme.sh 链接）
 config_build_env
 build_base_image_select       # arg_build_base（依赖 IS_CHINA）
-repo_inject_file
+repo_overlay_files
 stage_code_quality            # arg_code_quality
 stage_code_style              # arg_code_style
 stage_unit_test               # arg_test_unit
@@ -393,7 +393,7 @@ handle_notify                 # 恒执行（末尾）
 1. **仓库准备必须早于 config_repo_vars**：`get_git_branch`/`get_git_commit_sha` 在本地回退读 `G_REPO_DIR` 的 git（repo.sh:447/463），`setup_git_branch` 先切换分支。
 2. **kube_create_\* 必须晚于 kube_config_init**：直接用 `$KUBECTL_OPT`（kubernetes.sh:197/255）。
 3. **build_base_image_select 必须晚于 config_build_env**：读 `IS_CHINA`（kubernetes.sh:398），而 IS_CHINA 仅由 config_build_env 计算（deploy.sh:321），且其前须保持 unset（_set_mirror 依赖）。
-4. **generate_lang_dockerfile / buildpacks 必须早于 repo_inject_file**：先按源码生成 Dockerfile / 构建镜像，再注入环境配置，避免注入内容被构建进镜像。
+4. **generate_lang_dockerfile / buildpacks 必须早于 repo_overlay_files**：先按源码生成 Dockerfile / 构建镜像，再覆盖环境配置，避免覆盖内容被构建进镜像。
 5. **copy_docker_image 必须晚于 system_proxy**：中国区 skopeo 拉取需代理。
 6. **system_cert_renew 必须晚于 config_deploy_setup**：账号文件位于 `$HOME/.acme.sh`，config_deploy_setup 仅在 `G_DATA/.acme.sh` 存在时建链接（config.sh:254），软依赖。
 7. **find_project_config 为条件步骤**：仅计划含 stage_build / stage_deploy（含自动模式）时进入；独立功能与测试跳过，避免无关配置阻断或产生模板残留告警。`stage_build` 读 `PROJECT_BUILD_METHOD`（build.sh:382），`stage_deploy` 读 `G_CONF` hosts / `PROJECT_DEPLOY_METHOD`（deployment.sh:702/791），故这两条路径必须加载。
@@ -410,7 +410,7 @@ config_deploy_init ────────────────────�
    │                                                           ▼
    ├── config_repo_vars ────────────────────────────────── G_REPO_* / G_NAMESPACE / G_IMAGE_*
    │     ├── generate_lang_dockerfile           依赖 G_REPO_DIR
-   │     ├── detect_repo_language_and_build     依赖 G_REPO_DIR + G_IMAGE_*（须在注入前）
+   │     ├── detect_repo_language_and_build     依赖 G_REPO_DIR + G_IMAGE_*（须在覆盖前）
    │     └── find_project_config ──► system_proxy
    │           ├── copy_docker_image            中国区需代理
    │           └── kube_config_init ──► KUBECTL_OPT/HELM_OPT
@@ -421,13 +421,13 @@ config_deploy_init ────────────────────�
    │                       ├── system_cert_renew     依赖 acme 账号文件（软依赖）
    │                       └── config_build_env ──► IS_CHINA
    │                             ├── build_base_image_select  依赖 IS_CHINA + ENV_DOCKER_*
-   │                             └── repo_inject_file ──► G_REPO_DIR 注入
+   │                             └── repo_overlay_files ──► G_REPO_DIR 覆盖
     │                                   └── stage_*（13 个阶段）──► handle_notify
 ```
 
 ### 3.9 分支→命名空间映射
 
-`config_repo_vars` 中：`dev→develop`、`test/sit→testing`、`uat→release`、`prod/master→main`、其他→分支名本身。`G_NAMESPACE` 同时用于：镜像注入路径、helm namespace、rsync 目标目录前缀、通知分支禁用等。
+`config_repo_vars` 中：`dev→develop`、`test/sit→testing`、`uat→release`、`prod/master→main`、其他→分支名本身。`G_NAMESPACE` 同时用于：镜像覆盖路径、helm namespace、rsync 目标目录前缀、通知分支禁用等。
 
 ---
 
@@ -573,7 +573,7 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 ### C. GNU/macOS 兼容（GNU 专属命令/参数，BSD 报错）
 
-1. **repo.sh:74** `md5sum`：GNU coreutils，macOS 为 `md5`（输出格式也不同）。node 分支 `repo_inject_file` 会走到。
+1. **repo.sh:74** `md5sum`：GNU coreutils，macOS 为 `md5`（输出格式也不同）。node 分支 `repo_overlay_files` 会走到。
 2. **system.sh:356** `sleep "${random_minute}"m`：`m` 后缀是 GNU sleep 扩展，BSD/macOS 不支持。
 
 ### D. 小瑕疵（行为边界）

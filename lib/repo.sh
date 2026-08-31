@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 # Project configuration and file management module
 
-# Inject files into repository
+# Overlay files into repository
 # @param $1 G_DATA Directory containing data files
 # @return 0 on success, non-zero on failure
-repo_inject_file() {
-    local lang detected_lang arg_disable_inject="${arg_disable_inject:-false}"
+repo_overlay_files() {
+    local lang detected_lang arg_disable_overlay="${arg_disable_overlay:-false}"
 
     ## ========================================================================
     ## 项目语言探测
@@ -17,52 +17,52 @@ repo_inject_file() {
     detected_lang=$(detect_repo_language) # 完整语言标识: lang:ver:docker
     lang=${detected_lang%%:*}        # 仅语言类型: lang
 
-    ## dry-run: 只展示注入计划，不写仓库（Dockerfile/root/.dockerignore 均跳过）
+    ## dry-run: 只展示覆盖计划，不写仓库（Dockerfile/root/.dockerignore 均跳过）
     if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] repo_inject_file (lang=${lang}):"
-        _msg note "  rsync inject/${G_REPO_NAME}/${G_NAMESPACE:-} -> ${G_REPO_DIR}"
+        _msg note "[dry-run] repo_overlay_files (lang=${lang}):"
+        _msg note "  rsync overlay/${G_REPO_NAME}/${G_NAMESPACE:-} -> ${G_REPO_DIR}"
         _msg note "  generate Dockerfile / root/ / .dockerignore if missing"
         return 0
     fi
 
     command -v rsync >/dev/null || _install_packages rsync
 
-    _msg task "Initializing file injection"
+    _msg task "Initializing file overlay"
 
-    # Define paths for injection
+    # Define paths for overlay
     ## Priority 1: ${G_DATA} paths
-    local inject_code_path="${G_DATA}/inject/${G_REPO_NAME}"
-    local inject_code_path_branch="${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE}"
+    local overlay_code_path="${G_DATA}/overlay/${G_REPO_NAME}"
+    local overlay_code_path_branch="${G_DATA}/overlay/${G_REPO_NAME}/${G_NAMESPACE}"
 
-    ## 代码注入逻辑：
-    ## 1. 优先从 ${G_DATA}/inject/${G_REPO_NAME}/${G_NAMESPACE} 注入（对应项目的对应命名空间[git分支]的代码）
-    ## 2. 如果命名空间目录不存在，从 ${G_DATA}/inject/${G_REPO_NAME} 注入（对应项目通用代码）
+    ## 代码覆盖逻辑：
+    ## 1. 优先从 ${G_DATA}/overlay/${G_REPO_NAME}/${G_NAMESPACE} 覆盖（对应项目的对应命名空间[git分支]的代码）
+    ## 2. 如果命名空间目录不存在，从 ${G_DATA}/overlay/${G_REPO_NAME} 覆盖（对应项目通用代码）
     ## 3. 使用 rsync 进行文件同步，保持文件属性并覆盖目标文件
-    if [ -d "$inject_code_path_branch" ]; then
-        _msg note "inject code: ${inject_code_path_branch} -> ${G_REPO_DIR}"
-        rsync -a "$inject_code_path_branch/" "${G_REPO_DIR}/"
-    elif [ -d "$inject_code_path" ]; then
-        _msg note "inject code: ${inject_code_path} -> ${G_REPO_DIR}"
-        rsync -a "$inject_code_path/" "${G_REPO_DIR}/"
+    if [ -d "$overlay_code_path_branch" ]; then
+        _msg note "overlay code: ${overlay_code_path_branch} -> ${G_REPO_DIR}"
+        rsync -a "$overlay_code_path_branch/" "${G_REPO_DIR}/"
+    elif [ -d "$overlay_code_path" ]; then
+        _msg note "overlay code: ${overlay_code_path} -> ${G_REPO_DIR}"
+        rsync -a "$overlay_code_path/" "${G_REPO_DIR}/"
     fi
 
-    ## arg_disable_inject 参数可强制跳过 Dockerfile 和 root/ 注入
-    ${arg_disable_inject:-false} && {
-        _msg note "inject disabled by argument"
+    ## arg_disable_overlay 参数可强制跳过 Dockerfile 和 root/ 覆盖
+    ${arg_disable_overlay:-false} && {
+        _msg note "overlay disabled by argument"
         return 0
     }
 
-    ## 1. Dockerfile 注入
+    ## 1. Dockerfile 覆盖
     ## Dockerfile.multi：多阶段编译型（java/go/php/nginx）
     ## Dockerfile.single：单阶段运行时型（python/mysql/redis）
     ## node：特殊处理，Dockerfile.single 作为 base，生成只含 FROM 的 Dockerfile
     ## 存在 dockerfile 则跳过
     ## 不存在 dockerfile， 按照lang不同分开处理
     if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
-        _msg note "Found existing Dockerfile, skipping injection."
+        _msg note "Found existing Dockerfile, skipping overlay."
         ## 研发自提交 Dockerfile（git 跟踪中）：按其方式构建，提醒自行负责分层/镜像加速
         if lang_uses_deps_base "$lang" && ! detect_node_framework_static && repo_base_is_custom; then
-            _msg warn "[warn] 仓库自带 Dockerfile.base/Dockerfile，按仓库自带方式构建，不注入CI/CD程序的自动两段式加速模板"
+            _msg warn "[warn] 仓库自带 Dockerfile.base/Dockerfile，按仓库自带方式构建，不覆盖CI/CD程序的自动两段式加速模板"
             _msg warn "  请研发人员自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
         fi
         return 0
@@ -79,7 +79,7 @@ repo_inject_file() {
             ## 生成 conf/Dockerfile.web + nginx-spa.conf，不生成 Dockerfile.base
             local node_framework
             node_framework="$(detect_node_framework)"
-            _msg note "node framework=${node_framework} (static frontend), inject multi-stage nginx Dockerfile"
+            _msg note "node framework=${node_framework} (static frontend), overlay multi-stage nginx Dockerfile"
             cp -f "${G_PATH}/conf/Dockerfile.web" "${G_REPO_DIR}/Dockerfile"
             cp -f "${G_PATH}/conf/nginx-spa.conf" "${G_REPO_DIR}/nginx-spa.conf"
         else
@@ -121,29 +121,29 @@ repo_inject_file() {
         ;;
     esac
 
-    ## 同时注入 .dockerignore（如果不存在）
+    ## 同时覆盖 .dockerignore（如果不存在）
     if [[ ! -f "${G_REPO_DIR}/.dockerignore" ]]; then
-        _msg note "inject .dockerignore: ${G_PATH}/conf/.dockerignore -> ${G_REPO_DIR}/"
+        _msg note "overlay .dockerignore: ${G_PATH}/conf/.dockerignore -> ${G_REPO_DIR}/"
         cp -f "${G_PATH}/conf/.dockerignore" "${G_REPO_DIR}/"
     fi
 
-    ## 注入可能改变了仓库（新增 Dockerfile/Dockerfile.base），使语言缓存失效，
+    ## 覆盖可能改变了仓库（新增 Dockerfile/Dockerfile.base），使语言缓存失效，
     ## 让后续 detect_repo_language 重新探测
     unset G_REPO_LANG_CACHE G_REPO_LANG_CACHE_DIR
 
-    ## 2. Dockerfile 所需 root/ 目录结构注入
+    ## 2. Dockerfile 所需 root/ 目录结构覆盖
     local conf_root="${G_PATH}/conf/root" repo_root="${G_REPO_DIR}/root"
     local rsync_opts="rsync -r --exclude=*.cnf"
     ## 创建 root/ 目录（如果不存在）
     mkdir -p "${repo_root}"
-    ## 优先级1：从 conf/root/ 注入基础目录结构（如果不存在 root/opt）
+    ## 优先级1：从 conf/root/ 覆盖基础目录结构（如果不存在 root/opt）
     if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
-        _msg note "inject root/: ${conf_root} -> ${repo_root}"
+        _msg note "overlay root/: ${conf_root} -> ${repo_root}"
         ${rsync_opts} "${conf_root}/" "${repo_root}/"
     fi
-    ## 优先级2：从 data/dockerfile/root/ 注入自定义目录结构
+    ## 优先级2：从 data/dockerfile/root/ 覆盖自定义目录结构
     if [[ -d "${G_DATA}/dockerfile/root" ]]; then
-        _msg note "inject root/: ${G_DATA}/dockerfile/root -> ${repo_root}"
+        _msg note "overlay root/: ${G_DATA}/dockerfile/root -> ${repo_root}"
         ${rsync_opts} "${G_DATA}/dockerfile/root/" "${repo_root}/"
     fi
 }
@@ -167,7 +167,7 @@ detect_repo_language() {
     )
     local file lang_type version
 
-    ## 结果缓存: 同一次运行内 detect 被调用 3+ 次（repo_inject / stage_build / stage_code_style），
+    ## 结果缓存: 同一次运行内 detect 被调用 3+ 次（repo_overlay / stage_build / stage_code_style），
     ## 每次全仓 find 开销大；缓存到 G_REPO_LANG_CACHE 避免重复扫描。
     if [[ -n "${G_REPO_LANG_CACHE:-}" && "${G_REPO_LANG_CACHE_DIR:-}" == "$G_REPO_DIR" ]]; then
         echo "${G_REPO_LANG_CACHE}"
@@ -382,7 +382,7 @@ node_lockfile_warn() {
 }
 
 # 仓库中的 Dockerfile.base/Dockerfile 是否为研发提交（git 跟踪中）
-# 自动注入的产物不跟踪，返回 1；非 git 仓库视为自动注入，返回 1
+# 自动覆盖的产物不跟踪，返回 1；非 git 仓库视为自动覆盖，返回 1
 repo_base_is_custom() {
     git -C "${G_REPO_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
     git -C "${G_REPO_DIR}" ls-files --error-unmatch Dockerfile >/dev/null 2>&1 ||
