@@ -536,6 +536,7 @@ ram_grant_permission() {
 
     # 说明：AttachPolicyToUser 每次只能授权一个策略。优先使用 fzf -m 支持多选。
     local policies=(
+        AliyunDysmsFullAccess
         AliyunYundunCertFullAccess
         AliyunRAMFullAccess
         AliyunEIPFullAccess
