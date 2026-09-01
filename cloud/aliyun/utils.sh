@@ -328,7 +328,16 @@ list_all_services() {
 
     echo "================================"
     echo "DNS 记录："
-    handle_dns_commands get
+    local dns_domain_list dns_domain
+    dns_domain_list=$(call_aliyun_api alidns describe-domains --region public --pager 2>/dev/null | jq -r '.Domains.Domain[].DomainName' 2>/dev/null)
+    if [ -z "$dns_domain_list" ]; then
+        echo "没有找到 DNS 域名。"
+    else
+        for dns_domain in $dns_domain_list; do
+            echo "域名：$dns_domain"
+            handle_dns_commands get "$dns_domain"
+        done
+    fi
 
     echo "================================"
     echo "OSS 存储桶："
