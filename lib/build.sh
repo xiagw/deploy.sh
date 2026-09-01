@@ -550,7 +550,7 @@ stage_build() {
     # prefer_docker=false: 自动模式下直接走系统构建，跳过 Docker（由 Priority 2 承接）
     if [[ "${PROJECT_PREFER_DOCKER:-true}" == true ]] && [[ "$has_dockerfile" == true ]]; then
         if check_docker_available; then
-            _msg note "found Dockerfile and dockerd is available → attempting Docker build"
+            _msg note "attempting Docker build"
             # Check if lang already has :docker suffix, if not, try Docker build first
             if [[ "$lang" != *:docker ]]; then
                 # Try Docker build with fallback

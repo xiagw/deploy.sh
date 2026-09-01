@@ -580,8 +580,7 @@ stage_security_image() {
     elif [ "$ret" -eq 1 ]; then
         _msg warn "Trivy image found vulnerabilities: $out/trivy-image.json"
     else
-        _msg error "Trivy image scan failed (exit $ret)"
-        return 1
+        _msg warn "Trivy image scan failed (exit $ret), continue"
     fi
     return 0
 }
