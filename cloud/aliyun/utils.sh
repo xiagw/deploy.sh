@@ -182,7 +182,7 @@ query_account_balance() {
     local format=${1:-human}
 
     local result
-    result=$(call_aliyun_api bssopenapi query-account-balance)
+    result=$(call_aliyun_api bssopenapi query-account-balance --region cn-hangzhou)
     local ret=$?
     if [ $ret -eq 0 ]; then
         case "$format" in
@@ -265,7 +265,7 @@ balance_check() {
     current_month=$(date +%Y-%m -d yesterday)
 
     # 检查当前余额
-    current_balance=$(call_aliyun_api bssopenapi query-account-balance 2>/dev/null |
+    current_balance=$(call_aliyun_api bssopenapi query-account-balance --region cn-hangzhou 2>/dev/null |
         jq -r '.Data.AvailableAmount | gsub(","; "")')
 
     if [[ -z "$current_balance" ]]; then
@@ -280,7 +280,7 @@ balance_check() {
     fi
 
     # 检查昨日消费
-    daily_spending=$(call_aliyun_api bssopenapi query-account-bill --api-version 2017-12-14 --billing-cycle "$current_month" --billing-date "$yesterday" --granularity DAILY |
+    daily_spending=$(call_aliyun_api bssopenapi query-account-bill --region cn-hangzhou --api-version 2017-12-14 --billing-cycle "$current_month" --billing-date "$yesterday" --granularity DAILY |
         jq -r '.Data.Items.Item[].PretaxAmount | tostring | gsub(","; "")')
 
     if [[ -z "$daily_spending" ]]; then
@@ -397,7 +397,7 @@ query_daily_cost() {
 
     local result
     result=$(
-        call_aliyun_api bssopenapi query-account-bill --api-version 2017-12-14 --billing-cycle "$current_month" --billing-date "$query_date" --granularity DAILY
+        call_aliyun_api bssopenapi query-account-bill --region cn-hangzhou --api-version 2017-12-14 --billing-cycle "$current_month" --billing-date "$query_date" --granularity DAILY
     )
     local return_code=$?
     if [ $return_code -eq 0 ]; then

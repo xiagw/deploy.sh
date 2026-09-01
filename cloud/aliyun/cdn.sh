@@ -56,11 +56,11 @@ handle_cdn_commands() {
     esac
 }
 
-# 解析 CDN 域名（未提供时列表选择；cdn 无需区域旗标）
+# 解析 CDN 域名（未提供时列表选择；cdn 为中心化服务，固定 --region cn-hangzhou）
 _cdn_resolve_domain() {
     resolve_resource_id "$1" "${2:-选择 CDN 域名}" "错误：没有找到 CDN 域名。" \
         '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"' \
-        -- cdn describe-user-domains
+        -- cdn describe-user-domains --region cn-hangzhou
 }
 
 # 使用新框架的列表函数
@@ -72,7 +72,7 @@ cdn_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-38s  %-6s  %s\n", $1, $2, $3, $4}'
 
     local result
-    result=$(call_aliyun_api cdn describe-user-domains)
+    result=$(call_aliyun_api cdn describe-user-domains --region cn-hangzhou)
     local ret=$?
 
     if [ "$ret" -ne 0 ]; then
@@ -143,7 +143,7 @@ oss_private"
 
     echo "添加 CDN 加速域名："
     call_api_logged "cdn" "create" "错误：CDN 域名创建失败。" \
-        -- cdn add-cdn-domain \
+        -- cdn add-cdn-domain --region cn-hangzhou \
         --domain-name "$domain_name" \
         --sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]" \
         --cdn-type web \
@@ -161,7 +161,7 @@ cdn_delete() {
 
     echo "删除 CDN 加速域名："
     call_api_del_logged "cdn" "$domain_name" "CDN域名" "错误：CDN 域名删除失败。" \
-        -- cdn delete-cdn-domain --domain-name "$domain_name"
+        -- cdn delete-cdn-domain --region cn-hangzhou --domain-name "$domain_name"
 }
 
 # 使用新框架的更新函数
@@ -207,7 +207,7 @@ oss_private"
 
     echo "修改 CDN 域名配置："
     call_api_logged "cdn" "update" "错误：CDN 域名更新失败。" \
-        -- cdn modify-cdn-domain \
+        -- cdn modify-cdn-domain --region cn-hangzhou \
         --domain-name "$domain_name" \
         --sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]"
 }
@@ -275,7 +275,7 @@ regex"
 
     echo "刷新 CDN $type ：$path"
     call_api_logged "cdn" "refresh" "错误：CDN $type 刷新请求失败。" \
-        -- cdn refresh-object-caches \
+        -- cdn refresh-object-caches --region cn-hangzhou \
         --biz-force true \
         --object-path "$path" \
         --object-type "$object_type" || return 1
@@ -309,7 +309,7 @@ cdn_refresh_trigger() {
         [[ -z "$path" || "$path" == \#* ]] && continue
         echo "刷新 CDN $type ：$path"
         call_api_logged "cdn" "refresh" "错误：CDN $type 刷新请求失败。" \
-            -- cdn refresh-object-caches \
+            -- cdn refresh-object-caches --region cn-hangzhou \
             --biz-force true \
             --object-path "$path" \
             --object-type "$object_type" || echo "警告：$path 刷新失败，继续处理下一行" >&2
@@ -340,7 +340,7 @@ cdn_prefetch() {
 
     echo "预热 CDN 文件："
     call_api_logged "cdn" "prefetch" "错误：CDN 文件预热请求失败。" \
-        -- cdn push-object-cache \
+        -- cdn push-object-cache --region cn-hangzhou \
         --object-path "$path" || return 1
     echo "CDN 文件预热请求已提交。"
 }
@@ -377,7 +377,7 @@ cdn_pay() {
     local remaining_amount=0
     local remaining_https_request=0
 
-    query_result=$(call_aliyun_api bssopenapi query-resource-package-instances --product-code dcdn --pager path=Data.Instances.Instance 2>/dev/null) || {
+    query_result=$(call_aliyun_api bssopenapi query-resource-package-instances --region cn-hangzhou --product-code dcdn --pager path=Data.Instances.Instance 2>/dev/null) || {
         echo -e "[CDN] ${color_red}查询资源包失败${color_reset}"
         return 1
     }
@@ -429,7 +429,7 @@ cdn_pay() {
     # 查询账户可用余额（处理逗号分隔的数字）
     local available_balance
     local balance_result
-    balance_result=$(call_aliyun_api bssopenapi query-account-balance)
+    balance_result=$(call_aliyun_api bssopenapi query-account-balance --region cn-hangzhou)
     local ret=$?
     if [ "$ret" -ne 0 ]; then
         echo "错误：无法查询账户余额。" >&2

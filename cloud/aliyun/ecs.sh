@@ -12,7 +12,7 @@ show_ecs_help() {
     echo "  get                                      - 获取 ECS 实例"
     echo "  add [名称]                               - 添加 ECS 实例（名称可选，如未提供将自动生成）"
     echo "  set [<实例ID>] [<新名称>]                - 设置 ECS 实例（实例ID和新名称都是可选的，可使用fzf选择）"
-    echo "  del [<实例ID>]                           - 删除 ECS 实例（实例ID可选，可使用fzf选择）"
+    echo "  del [<实例ID>]                           - 删除 ECS 实例（实例ID可选，可使用fzf选择；包年包月实例仅已到期可释放）"
     echo "  get-key                                  - 列出 SSH 密钥对"
     echo "  add-key [密钥对名称]                     - 添加 SSH 密钥对（无参数时可交互选择创建/导入，名称默认 xkk）"
     echo "  set-key [<密钥对名称>] [<公钥内容> | github:<用户名>] - 导入 SSH 密钥对（参数可选，可使用fzf选择）"
@@ -572,13 +572,30 @@ ecs_delete() {
     raw=$(_ecs_resolve_instance_id "$1" "选择要删除的 ECS 实例") || return 1
     instance_id=$(echo "$raw" | awk '{print $1}')
 
+    # 包年包月实例不能直接 delete-instance：仅已到期实例可通过 TerminateSubscription 释放，未到期须等到期
+    local instance_attr charge_type expired_time now_utc
+    instance_attr=$(call_aliyun_api ecs describe-instances --biz-region-id "${region:-}" --instance-ids "$(jq -nc --arg i "$instance_id" '[$i]')" 2>/dev/null)
+    charge_type=$(echo "$instance_attr" | jq -r '.Instances.Instance[0].InstanceChargeType // ""')
+    expired_time=$(echo "$instance_attr" | jq -r '.Instances.Instance[0].ExpiredTime // ""')
+    if [ "$charge_type" = "PrePaid" ]; then
+        now_utc=$(date -u '+%Y-%m-%dT%H:%MZ')
+        if [ -z "$expired_time" ] || [[ "$now_utc" < "$expired_time" ]]; then
+            echo "错误：实例 $instance_id 为包年包月实例且未到期，无法删除。到期时间：${expired_time:-未知}" >&2
+            return 1
+        fi
+        echo "警告：实例 $instance_id 为已到期包年包月实例，将使用 TerminateSubscription 释放（数据不可恢复）。" >&2
+    fi
+
     confirm_action "删除 ECS 实例：$instance_id" || return 1
 
     echo "删除 ECS 实例："
+    local terminate_args=()
+    [ "$charge_type" = "PrePaid" ] && terminate_args+=(--terminate-subscription true)
     call_api_del_logged "ecs" "$instance_id" "ECS实例" "错误：ECS 实例删除失败。" \
         -- ecs delete-instance \
         --instance-id "$instance_id" \
-        --biz-force true
+        --biz-force true \
+        "${terminate_args[@]}"
 }
 
 # 更换操作系统（重装系统盘，保留数据盘；实例需处于已停止状态）

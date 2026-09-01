@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
+# shellcheck disable=SC2154
 
 # RAM (Resource Access Management) 相关函数 - 使用新框架重构
 
@@ -100,7 +101,7 @@ ram_list() {
     local status_mapper='BEGIN {FS="\t"; OFS="\t"} {printf "%-20s  %-20s  %s\n", $1, $2, $3}'
 
     local result
-    result=$(call_aliyun_api ram list-users --region "${region:-cn-hangzhou}" 2>/dev/null)
+    result=$(call_aliyun_api ram list-users --region cn-hangzhou 2>/dev/null)
     local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取子账号列表。请检查您的凭证和权限。" >&2
@@ -164,7 +165,7 @@ ram_create() {
     echo "密码：$password"
 
     local result
-    result=$(call_aliyun_api ram create-user --user-name "$username" --display-name "$display_name" --region "${region:-cn-hangzhou}")
+    result=$(call_aliyun_api ram create-user --user-name "$username" --display-name "$display_name" --region cn-hangzhou)
     local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：子账号创建失败。"
@@ -177,7 +178,7 @@ ram_create() {
 
     # 创建登录配置（失败不能吞：否则会打印一个登录不了的密码）
     local login_result
-    login_result=$(call_aliyun_api ram create-login-profile --user-name "$username" --password "$password" --password-reset-required false --region "${region:-cn-hangzhou}" 2>&1)
+    login_result=$(call_aliyun_api ram create-login-profile --user-name "$username" --password "$password" --password-reset-required false --region cn-hangzhou 2>&1)
     local login_ret=$?
     if [ $login_ret -ne 0 ]; then
         echo "警告：子账号已创建，但登录密码设置失败，请手动重设密码。" >&2
@@ -381,7 +382,7 @@ ram_create_key() {
 
     echo "为子账号创建 AccessKey："
     local result
-    result=$(call_aliyun_api ram create-access-key --user-name "$username" --region "${region:-cn-hangzhou}")
+    result=$(call_aliyun_api ram create-access-key --user-name "$username" --region cn-hangzhou)
     local ret=$?
     if [ $ret -eq 0 ]; then
         echo "AccessKey 创建成功："
@@ -399,7 +400,7 @@ ram_create_key() {
 _ram_resolve_user() {
     resolve_resource_id "$1" "${2:-选择子账号}" "错误：没有找到子账号。" \
         '.Users.User[] | "\(.UserName) (\(.DisplayName)) [\(.CreateDate)]"' \
-        -- ram list-users --region "${region:-cn-hangzhou}"
+        -- ram list-users --region cn-hangzhou
 }
 
 # 选择子账号（无参数时用 fzf），结果输出到 stdout（保持向后兼容）
@@ -425,7 +426,7 @@ ram_list_keys() {
     echo "用户名：$username"
 
     local result
-    result=$(call_aliyun_api ram list-access-keys --user-name "$username" --region "${region:-cn-hangzhou}")
+    result=$(call_aliyun_api ram list-access-keys --user-name "$username" --region cn-hangzhou)
     local ret=$?
     if [ $ret -eq 0 ]; then
         echo "$result" | jq '.'
@@ -453,7 +454,7 @@ ram_delete_key() {
     echo "用户名：$username"
 
     local result
-    result=$(call_aliyun_api ram list-access-keys --user-name "$username" --region "${region:-cn-hangzhou}")
+    result=$(call_aliyun_api ram list-access-keys --user-name "$username" --region cn-hangzhou)
     local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取 AccessKey 列表。" >&2
@@ -493,7 +494,7 @@ ram_delete_key() {
     for line in "${selected_keys[@]}"; do
         key_id=$(echo "$line" | awk '{print $1}')
 
-        result=$(call_aliyun_api ram delete-access-key --region "${region:-cn-hangzhou}" \
+        result=$(call_aliyun_api ram delete-access-key --region cn-hangzhou \
             --user-access-key-id "$key_id" \
             --user-name "$username")
         local ret=$?
@@ -574,7 +575,7 @@ ram_grant_permission() {
     fi
 
     for policy_name in "${selected_policies[@]}"; do
-        result=$(call_aliyun_api ram attach-policy-to-user --region "${region:-cn-hangzhou}" \
+        result=$(call_aliyun_api ram attach-policy-to-user --region cn-hangzhou \
             --policy-type System \
             --policy-name "$policy_name" \
             --user-name "$username")
@@ -618,7 +619,7 @@ ram_revoke_permission() {
     echo "用户名：$username"
 
     local result
-    result=$(call_aliyun_api ram list-policies-for-user --user-name "$username" --region "${region:-cn-hangzhou}")
+    result=$(call_aliyun_api ram list-policies-for-user --user-name "$username" --region cn-hangzhou)
     local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取用户权限列表。" >&2
@@ -635,7 +636,7 @@ ram_revoke_permission() {
     account_alias=$(call_aliyun_api ram get-account-alias 2>/dev/null | jq -r '.AccountAlias // empty')
     if [ -n "$account_alias" ]; then
         principal_name="${username}@${account_alias}.onaliyun.com"
-        rg_result=$(call_aliyun_api resourcemanager list-policy-attachments \
+        rg_result=$(call_aliyun_api resourcemanager list-policy-attachments --region cn-hangzhou \
             --principal-type IMSUser \
             --principal-name "$principal_name" 2>/dev/null)
         local rg_list
@@ -678,12 +679,12 @@ ram_revoke_permission() {
         policy_scope=$(echo "$line" | awk '{print $3}')
 
         if [ "$policy_scope" = "account" ]; then
-            result=$(call_aliyun_api ram detach-policy-from-user --region "${region:-cn-hangzhou}" \
+            result=$(call_aliyun_api ram detach-policy-from-user --region cn-hangzhou \
                 --policy-type "${policy_type:-System}" \
                 --policy-name "$policy_name" \
                 --user-name "$username")
         else
-            result=$(call_aliyun_api resourcemanager detach-policy \
+            result=$(call_aliyun_api resourcemanager detach-policy --region cn-hangzhou \
                 --policy-type "${policy_type:-System}" \
                 --policy-name "$policy_name" \
                 --principal-type IMSUser \
@@ -730,7 +731,7 @@ ram_list_permissions() {
     echo "用户名：$username"
 
     local result
-    result=$(call_aliyun_api ram list-policies-for-user --user-name "$username" --region "${region:-cn-hangzhou}")
+    result=$(call_aliyun_api ram list-policies-for-user --user-name "$username" --region cn-hangzhou)
     local ret=$?
     if [ $ret -ne 0 ]; then
         echo "错误：无法获取用户权限列表。"
@@ -745,7 +746,7 @@ ram_list_permissions() {
     local account_alias rg_result
     account_alias=$(call_aliyun_api ram get-account-alias 2>/dev/null | jq -r '.AccountAlias // empty')
     if [ -n "$account_alias" ]; then
-        rg_result=$(call_aliyun_api resourcemanager list-policy-attachments \
+        rg_result=$(call_aliyun_api resourcemanager list-policy-attachments --region cn-hangzhou \
             --principal-type IMSUser \
             --principal-name "${username}@${account_alias}.onaliyun.com" 2>/dev/null)
         if [ -n "$rg_result" ] && [ "$(echo "$rg_result" | jq '.PolicyAttachments.PolicyAttachment | length' 2>/dev/null)" -gt 0 ]; then

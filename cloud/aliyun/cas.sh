@@ -244,7 +244,7 @@ cas_batch_upload_deploy() {
     # 如果没有提供域名参数,则从CDN域名列表获取
     if [ ${#domains[@]} -eq 0 ]; then
         local cdn_result
-        cdn_result=$(call_aliyun_api cdn describe-user-domains --api-version 2018-05-10 --region "${region:-}" 2>/dev/null)
+        cdn_result=$(call_aliyun_api cdn describe-user-domains --api-version 2018-05-10 --region cn-hangzhou 2>/dev/null)
         local ret=$?
         if [ $ret -eq 0 ]; then
             readarray -t domains < <(echo "$cdn_result" |
@@ -320,7 +320,7 @@ cas_batch_upload_deploy() {
     # 为CDN域名部署证书
     echo "正在为CDN域名部署证书..."
     local cdn_result
-    cdn_result=$(call_aliyun_api cdn describe-user-domains --api-version 2018-05-10 --region "${region:-}" 2>/dev/null)
+    cdn_result=$(call_aliyun_api cdn describe-user-domains --api-version 2018-05-10 --region cn-hangzhou 2>/dev/null)
     local ret=$?
     if [ $ret -eq 0 ]; then
         local cdn_domains
@@ -332,7 +332,7 @@ cas_batch_upload_deploy() {
             echo "CDN域名: ${domain_cdn}"
             echo "设置证书: ${upload_name}"
 
-            call_aliyun_api cdn batch-set-cdn-domain-server-certificate --api-version 2018-05-10 --region "${region:-}" \
+            call_aliyun_api cdn batch-set-cdn-domain-server-certificate --api-version 2018-05-10 --region cn-hangzhou \
                 --ssl-protocol on \
                 --cert-type cas \
                 --domain-name "${domain_cdn}" \
