@@ -56,15 +56,18 @@ repo_overlay_files() {
     ## Dockerfile.multi：多阶段编译型（java/go/php/nginx）
     ## Dockerfile.single：单阶段运行时型（python/mysql/redis）
     ## node：特殊处理，Dockerfile.single 作为 base，生成只含 FROM 的 Dockerfile
-    ## 存在 dockerfile 则跳过
-    ## 不存在 dockerfile， 按照lang不同分开处理
-    if [[ -f "${G_REPO_DIR}/Dockerfile" ]]; then
-        _msg note "Found existing Dockerfile, skipping overlay."
-        ## 研发自提交 Dockerfile（git 跟踪中）：按其方式构建，提醒自行负责分层/镜像加速
-        if lang_uses_deps_base "$lang" && ! detect_node_framework_static && repo_base_is_custom; then
-            _msg warn "[warn] 仓库自带 Dockerfile.base/Dockerfile，按仓库自带方式构建，不覆盖CI/CD程序的自动两段式加速模板"
-            _msg warn "  请研发人员自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
-        fi
+    ## 研发 git 提交的 Dockerfile/Dockerfile.base 才跳过自动覆盖，按仓库自带方式构建；
+    ## Dockerfile.base 为可选组件，允许仅提交单个 Dockerfile（如 java 自带多阶段 Dockerfile）；
+    ## 上次自动生成的产物（未跟踪，node/python 两段式）不跳过，重新生成刷新（内容恒定，无副作用）。
+    if repo_base_is_custom; then
+        ## 列出实际跟踪存在的构建文件（git 索引跟踪但工作区缺失时兜底为通用名）
+        local custom_files=()
+        [[ -f "${G_REPO_DIR}/Dockerfile" ]] && custom_files+=(Dockerfile)
+        [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] && custom_files+=(Dockerfile.base)
+        [[ ${#custom_files[@]} -eq 0 ]] && custom_files+=(Dockerfile)
+        _msg note "检测到仓库自带 ${custom_files[*]} (git 跟踪)，跳过自动覆盖，按仓库自带方式构建"
+        _msg warn "仓库自带构建文件，不使用 CI/CD 程序的自动多阶段构建加速模板"
+        _msg warn "研发自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
         return 0
     fi
     local _single="${G_PATH}/conf/Dockerfile.single"
