@@ -83,6 +83,7 @@ config_repo_vars() {
     prod | master) G_NAMESPACE="main" ;;
     *) G_NAMESPACE="${G_REPO_BRANCH}" ;;
     esac
+    _msg note "k8s namespace: ${G_NAMESPACE} (branch: ${G_REPO_BRANCH})"
 
     ## 构建输出统一写入日志文件，固定 --progress=plain 保证日志完整
     export G_PROGRESS='--progress=plain'
@@ -563,6 +564,6 @@ fi
 ## - SSL: acme.sh
 ## - Cloud Providers: aliyun, huawei, tencent, aws, gcp
 ## - Container Orchestration: kubernetes
-## - Version Control: GitLab, python-gitlab
+## - Version Control: GitLab, glab
 ## - DNS: Aliyun, cloudflare
 ## - File Transfer: rsync

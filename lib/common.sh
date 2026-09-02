@@ -174,15 +174,11 @@ _msg() {
         cum_ms=$(( $(_now_ms) - _stage_start_ms ))
         shift
         msg="$*"
-        printf -v rule '%*s' 62 ''
-        rule="${rule// /━}"
         if [ "${silent_mode:-0}" -eq 0 ]; then
-            printf '\033[0;36m%s\033[0m\n' "$rule"
             local left="▶ STAGE ${_stage_num} · ${msg:0:40}"
             local pad=$((58 - $(_display_width "$left")))
             ((pad < 1)) && pad=1
             printf '\033[1;36m%s\033[0m\033[0;36m%*s\033[0m\n' "$left" "$pad" "$(_fmt_dur "$((cum_ms / 1000))")"
-            printf '\033[0;36m%s\033[0m\n' "$rule"
         fi
         return 0
         ;;
@@ -253,7 +249,6 @@ _check_root() {
 }
 
 _check_distribution() {
-    _msg task "Check distribution..."
     if [ -r /etc/os-release ]; then
         . /etc/os-release
         # lsb_dist="${ID,,}"
@@ -272,7 +267,7 @@ _check_distribution() {
         )
     fi
     lsb_dist="${lsb_dist:-unknown}"
-    _msg task "Your distribution is ${lsb_dist} ${VERSION_ID:-}, ARCH is $(uname -m)."
+    _msg task "distribution: ${lsb_dist}${VERSION_ID:+ ${VERSION_ID}}, arch: $(uname -m)"
 }
 
 _check_cmd() {
@@ -1076,6 +1071,79 @@ _install_python_gitlab() {
     fi
     _msg error "failed to install python-gitlab"
     return 1
+}
+
+
+## 安装 glab（GitLab 官方 CLI，单二进制，驱动 GitLab pipeline/API；替代 python-gitlab）
+_install_glab() {
+    local flag="${1:-}"
+    if [[ "$flag" != "upgrade" ]] && command -v glab >/dev/null; then
+        return
+    fi
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] install glab (gitlab-org/cli release)"
+        return 0
+    fi
+    _msg ok "Installing glab (GitLab CLI)..."
+
+    ## GitLab CLI 官方发布包: 仅提供 deb/rpm/apk 及部分 tar.gz；Debian/Ubuntu 用 deb，macOS 用 brew/mise 不覆盖
+    local os arch pkg_url
+    case "$OSTYPE" in
+    darwin*)
+        if command -v brew >/dev/null 2>&1; then
+            brew install glab >/dev/null && return 0
+        fi
+        _msg error "glab: macOS 请用 brew/mise 安装"
+        return 1
+        ;;
+    linux*) os="linux" ;;
+    *) _msg error "glab: unsupported OS $OSTYPE" && return 1 ;;
+    esac
+    case "$(uname -m | tr '[:upper:]' '[:lower:]')" in
+    x86_64 | x64 | amd64) arch="amd64" ;;
+    aarch64 | arm64) arch="arm64" ;;
+    *) _msg error "glab: unsupported arch $(uname -m)" && return 1 ;;
+    esac
+
+    ## 拉取最新版本号（gitlab-org/cli releases API；latest 端点匿名 404，用列表取首个）
+    local ver
+    ver=$(curl -s --max-time 15 "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases?per_page=5" \
+        | grep -o '"tag_name":"[^"]*"' | head -1 | sed 's/.*:"//;s/"//' 2>/dev/null)
+    [ -n "$ver" ] || { _msg error "glab: failed to fetch latest version" && return 1; }
+    ## 去掉 tag 前缀 v，下载路径/文件名均不含 v（如 v1.116.0 -> 1.116.0）
+    local ver_nov="${ver#v}"
+    local ver_esc="${ver_nov//./%2E}"
+    ## deb 包 URL（GitLab 官方 packages/generic）
+    pkg_url="https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${ver_esc}/glab_${ver_esc}_${os}_${arch}%2Edeb"
+
+    local temp_file
+    temp_file="$(mktemp)"
+    if ! curl -fsSL --retry 3 --retry-delay 2 -o "$temp_file" "$pkg_url"; then
+        _msg error "glab: download failed: $pkg_url"
+        rm -f "$temp_file"
+        return 1
+    fi
+    if command -v apt-get >/dev/null 2>&1; then
+        $use_sudo apt-get install -yqq "$temp_file" >/dev/null || {
+            _msg error "glab: dpkg install failed"
+            rm -f "$temp_file"
+            return 1
+        }
+    elif command -v dpkg >/dev/null 2>&1; then
+        $use_sudo dpkg -i "$temp_file" >/dev/null || {
+            _msg error "glab: dpkg install failed"
+            rm -f "$temp_file"
+            return 1
+        }
+    else
+        _msg error "glab: no apt-get/dpkg, install deb manually"
+        rm -f "$temp_file"
+        return 1
+    fi
+    rm -f "$temp_file"
+    _msg ok "glab installed successfully"
+    glab --version
+    return 0
 }
 
 _install_python_element() {

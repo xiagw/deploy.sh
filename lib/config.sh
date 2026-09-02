@@ -42,6 +42,7 @@ find_project_config() {
     local template_file="${G_PATH}/conf/templates/project-config.json"
     if [[ -f "${project_conf}" ]]; then
         G_CONF="${project_conf}"
+        _msg note "load project config: ${G_CONF}"
         ## 读取构建和部署配置覆盖（如果存在）
         _load_project_build_deploy_config "${project_conf}"
     elif [[ -f "${template_file}" ]]; then
@@ -211,11 +212,10 @@ _load_project_build_deploy_config() {
 ################################################################################
 config_deploy_setup() {
     ## dry-run: 不生成SSH密钥、不创建符号链接（仅本地环境配置，预览无意义）
-    dry_run_skip "config_deploy_setup (ssh keys, $HOME symlinks) — skipped in preview" && return 0
+    dry_run_skip "config_deploy_setup (ssh keys, $HOME symlinks)，dry-run 跳过" && return 0
 
     ## 需要创建符号链接的配置目录列表
     local conf_dirs=(".ssh" ".acme.sh" ".aws" ".kube" ".aliyun")
-    local file_python_gitlab="${G_DATA}/.python-gitlab.cfg"
 
     ## ========================================================================
     ## SSH 密钥配置
@@ -251,8 +251,11 @@ config_deploy_setup() {
         [[ ! -d "$HOME/${dir}" && -d "${G_DATA}/${dir}" ]] && ln -sf "${G_DATA}/${dir}" "$HOME/"
     done
 
-    ## 链接 python-gitlab 配置文件
-    [[ ! -f "$HOME/.python-gitlab.cfg" && -f "${file_python_gitlab}" ]] && ln -sf "${file_python_gitlab}" "$HOME/"
+    ## 链接 glab 配置目录（GitLab CLI，替代 python-gitlab）；确保父目录存在
+    if [[ ! -d "$HOME/.config/glab-cli" && -d "${G_DATA}/glab-cli" ]]; then
+        mkdir -p "$HOME/.config"
+        ln -sf "${G_DATA}/glab-cli" "$HOME/.config/glab-cli"
+    fi
 
     return 0
 }

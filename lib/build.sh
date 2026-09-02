@@ -480,7 +480,7 @@ DOCKERIGNORE
         _msg error "Full build log: $build_log"
         return 1
     fi
-    _msg task "Image build completed"
+    _msg ok "Image build completed"
 
     ## 不包含敏感信息的镜像可以推送到公开仓库 push to ttl.sh
     if [[ "${PIPELINE_TTL_SH:-false}" == "true" || "${ENV_IMAGE_TTL:-false}" == "true" ]]; then
@@ -515,7 +515,7 @@ stage_build() {
     local has_dockerfile=false
     local docker_build_failed=false
 
-    _msg task "Starting build process for ${lang}"
+    _msg task "Starting build process for ${lang%:}"
 
     ## 检查配置文件中的构建方式覆盖
     if [[ -n "${PROJECT_BUILD_METHOD:-}" && "${PROJECT_BUILD_METHOD}" != "auto" ]]; then

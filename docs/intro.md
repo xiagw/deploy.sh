@@ -43,7 +43,7 @@
 <div class="feat-card">
 <div class="feat-ic">🧮</div>
 <b>功能 &amp; 性能测试</b>
-<span>部署后冒烟/验收 · JMeter *.jmx · k6（含 p95 基线回归对比）</span>
+<span>部署后冒烟/验收 · 单元/功能/性能测试统一容器化（Dockerfile.tests）</span>
 </div>
 
 <div class="feat-card">
@@ -112,7 +112,7 @@ flowchart TD
   D -->|🌩️ 云| F
 
   F["🧪 功能测试<br/>部署后冒烟 / 验收"]
-  F --> P["📈 性能测试<br/>p95 基线回归"]
+  F --> P["📈 性能测试<br/>测试容器统一承载"]
   P --> SEC["🔐 安全扫描<br/>SAST · DAST · SCA · 密钥"]
   SEC --> N("📣 结果通知")
 ```

@@ -364,12 +364,14 @@ system_cert_renew() {
     if [ -f "$reload_nginx" ]; then
         rm -f "$reload_nginx"
         _msg ok "found $reload_nginx"
-        _install_python_gitlab ""
+        ## 使用 glab CLI 触发 pipeline（本机有则直接用，没有则安装单二进制，免 python-gitlab/pipx）
+        command -v glab >/dev/null || _install_glab
+        local glab_cmd="glab"
         ## 如果定义了变量数组 ENV_NGINX_PROJECT_ID，则使用该数组中的项目 ID 创建 GitLab pipeline
         if [[ -n "${ENV_NGINX_PROJECT_ID[*]:-}" ]]; then
             for id in "${ENV_NGINX_PROJECT_ID[@]}"; do
                 _msg note "create gitlab pipeline, project id is $id"
-                gitlab project-pipeline create --ref main --project-id "$id" || true
+                $glab_cmd api --method POST "projects/${id}/pipeline" --field "ref=main" || true
             done
         else
             ## 否则使用 gitlab 搜索 nginx 项目
@@ -377,8 +379,8 @@ system_cert_renew() {
             local id
             while read -r id; do
                 _msg note "create gitlab pipeline, project id is $id"
-                gitlab project-pipeline create --ref main --project-id "$id" || true
-            done < <(gitlab -ojson project list --search "nginx" | jq -r '.[].id' || true)
+                $glab_cmd api --method POST "projects/${id}/pipeline" --field "ref=main" || true
+            done < <($glab_cmd api "projects?search=nginx&simple=true" 2>/dev/null | jq -r '.[].id // empty' || true)
         fi
     else
         _msg warn "not found $reload_nginx, skip create giltab pipeline"
@@ -416,7 +418,7 @@ system_install_tools() {
         _install_kubectl
         _install_helm
         _install_python_element
-        _install_python_gitlab
+        _install_glab
     fi
 }
 
@@ -442,16 +444,24 @@ check_docker_available() {
 # 返回: 0=k8s可用, 1=k8s不可用
 ################################################################################
 check_k8s_available() {
-    # 检查 kubectl 是否可用
-    if ! command -v kubectl &>/dev/null; then
+    ## 本机有 kubectl 用本机（快），否则容器化探测（免安装）
+    local kubectl_cmd
+    if command -v kubectl &>/dev/null; then
+        kubectl_cmd="kubectl"
+    elif command -v docker &>/dev/null || command -v podman &>/dev/null; then
+        ## 容器化探测：bitnami 镜像默认非 root，kubeconfig 挂到容器内可读路径并指定 KUBECONFIG
+        kubectl_cmd="${G_DOCK:-docker} run --rm -e KUBECONFIG=/tmp/.kube/config -v ${HOME}/.kube:/tmp/.kube:ro bitnami/kubectl:latest"
+        ## 镜像未拉取时先拉取（cluster-info 需要真实连接，镜像缺失会直接失败）
+        "${G_DOCK:-docker}" pull -q bitnami/kubectl:latest >/dev/null 2>&1 || true
+    else
         return 1
     fi
     # 检查 kubectl 是否能连接到集群
-    if ! kubectl cluster-info &>/dev/null; then
+    if ! $kubectl_cmd cluster-info &>/dev/null; then
         return 1
     fi
     # 检查 helm 是否可用（可选，但推荐）
-    if ! command -v helm &>/dev/null; then
+    if ! command -v helm &>/dev/null && ! command -v docker &>/dev/null; then
         _msg warn "Helm is not installed, but kubectl is available" >&2
         return 0 # kubectl 可用即可
     fi

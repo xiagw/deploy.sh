@@ -17,6 +17,35 @@ repo_overlay_files() {
     detected_lang=$(detect_repo_language) # 完整语言标识: lang:ver:docker
     lang=${detected_lang%%:*}        # 仅语言类型: lang
 
+    ## 研发控制权清单：git 提交以下文件即可接管对应环节；tests 类默认跳过，需指定参数或环境变量启用。
+    ## 每行格式: 文件 -> 作用；启用方式
+    _msg note "研发可 git 提交以下文件接管对应环节:"
+    _msg note "  Dockerfile.base -> 构建基础镜像 (提交即生效)"
+    _msg note "    Dockerfile.base 作用: 基础镜像，预装依赖 (node: npm install [package.json]，python: pip install -r requirements.txt, php: composer install [composer.json]) ，首次构建慢，后续复用缓存加速"
+    _msg note "    package.json/composer.json/requirements.txt 等文件未变化时直接跳过构建基础镜像；变更时需重新构建基础镜像"
+    _msg note "  Dockerfile -> 构建业务镜像 (提交即生效)"
+    _msg note "    Dockerfile 作用: 业务镜像，复用 base 镜像，FROM base_image, 仅 COPY 代码/其他文件，构建快"
+    _msg note "    构建阶段 (auto 或 --build) 直接使用提交的文件; 未提交则自动生成"
+    _msg note "  Dockerfile.tests -> 单元/功能/性能测试 (默认跳过)"
+    _msg note "    作用: 测试镜像，镜像内定义测试入口 (CMD/ENTRYPOINT)，deploy.sh 只构建并运行"
+    _msg note "    业界框架参考: phpunit / npm test / mvn test / pytest / go test / cargo test / rspec / k6 / jmeter 等"
+    _msg note "    启用: --test-unit / --test-function / --test-performance 或 PIPELINE_*_TEST=true"
+
+    ## 研发 git 提交的 Dockerfile/Dockerfile.base 才跳过自动覆盖，按仓库自带方式构建；
+    ## Dockerfile.base 为可选组件，允许仅提交单个 Dockerfile（如 java 自带多阶段 Dockerfile）；
+    ## 上次自动生成的产物（未跟踪，node/python 两段式）不跳过，重新生成刷新（内容恒定，无副作用）。
+    if repo_base_is_custom; then
+        ## 列出实际跟踪存在的构建文件（git 索引跟踪但工作区缺失时兜底为通用名）
+        local custom_files=()
+        [[ -f "${G_REPO_DIR}/Dockerfile" ]] && custom_files+=(Dockerfile)
+        [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] && custom_files+=(Dockerfile.base)
+        [[ ${#custom_files[@]} -eq 0 ]] && custom_files+=(Dockerfile)
+        _msg note "检测到仓库自带 ${custom_files[*]} (git 跟踪)，跳过自动覆盖，按仓库自带方式构建"
+        _msg warn "仓库自带构建文件，不使用 CI/CD 程序的自动多阶段构建加速模板"
+        _msg warn "研发自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
+        return 0
+    fi
+
     ## dry-run: 只展示覆盖计划，不写仓库（Dockerfile/root/.dockerignore 均跳过）
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] repo_overlay_files (lang=${lang}):"
@@ -56,20 +85,6 @@ repo_overlay_files() {
     ## Dockerfile.multi：多阶段编译型（java/go/php/nginx）
     ## Dockerfile.single：单阶段运行时型（python/mysql/redis）
     ## node：特殊处理，Dockerfile.single 作为 base，生成只含 FROM 的 Dockerfile
-    ## 研发 git 提交的 Dockerfile/Dockerfile.base 才跳过自动覆盖，按仓库自带方式构建；
-    ## Dockerfile.base 为可选组件，允许仅提交单个 Dockerfile（如 java 自带多阶段 Dockerfile）；
-    ## 上次自动生成的产物（未跟踪，node/python 两段式）不跳过，重新生成刷新（内容恒定，无副作用）。
-    if repo_base_is_custom; then
-        ## 列出实际跟踪存在的构建文件（git 索引跟踪但工作区缺失时兜底为通用名）
-        local custom_files=()
-        [[ -f "${G_REPO_DIR}/Dockerfile" ]] && custom_files+=(Dockerfile)
-        [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] && custom_files+=(Dockerfile.base)
-        [[ ${#custom_files[@]} -eq 0 ]] && custom_files+=(Dockerfile)
-        _msg note "检测到仓库自带 ${custom_files[*]} (git 跟踪)，跳过自动覆盖，按仓库自带方式构建"
-        _msg warn "仓库自带构建文件，不使用 CI/CD 程序的自动多阶段构建加速模板"
-        _msg warn "研发自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
-        return 0
-    fi
     local _single="${G_PATH}/conf/Dockerfile.single"
     local _template="${G_PATH}/conf/Dockerfile.multi"
     ## 依赖 base 两段式：主 Dockerfile = FROM base；base 是否重建由 build_image 按依赖指纹决定
@@ -92,7 +107,7 @@ repo_overlay_files() {
                 _msg note "generate Dockerfile.base: ${_single} -> ${G_REPO_DIR}/Dockerfile.base"
             fi
             echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
-            _msg note "generate Dockerfile: FROM ${base_tag} (base 两段式) -> ${G_REPO_DIR}/Dockerfile"
+            _msg note "generate Dockerfile: FROM ${base_tag} -> ${G_REPO_DIR}/Dockerfile"
         fi
         ;;
     php)
@@ -108,7 +123,7 @@ repo_overlay_files() {
             _msg note "generate Dockerfile.base: ${_single} -> ${G_REPO_DIR}/Dockerfile.base"
         fi
         echo "FROM ${base_tag}" >"${G_REPO_DIR}/Dockerfile"
-        _msg note "generate Dockerfile: FROM ${base_tag} (base 两段式) -> ${G_REPO_DIR}/Dockerfile"
+        _msg note "generate Dockerfile: FROM ${base_tag} -> ${G_REPO_DIR}/Dockerfile"
         ;;
     java | go | golang | nginx)
         [[ -f "${_template}" ]] && {
@@ -551,7 +566,7 @@ get_git_branch() {
 
     # Try to determine branch name from different sources
     [ -z "$branch" ] && branch=${GITHUB_REF_NAME:-}
-    [ -z "$branch" ] && git rev-parse --git-dir >/dev/null 2>&1 && branch=$(git rev-parse --abbrev-ref HEAD)
+    [ -z "$branch" ] && git rev-parse --git-dir >/dev/null 2>&1 && branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
     # Default to main if branch is HEAD or not set
     branch=${branch:-main}
@@ -567,7 +582,7 @@ get_git_commit_sha() {
     # Try to get commit SHA from different sources
     sha=${CI_COMMIT_SHORT_SHA:-}
     [ -z "$sha" ] && [ -n "${GITHUB_SHA:-}" ] && sha=${GITHUB_SHA:0:8}
-    [ -z "$sha" ] && git rev-parse --git-dir >/dev/null 2>&1 && sha=$(git rev-parse HEAD | head -c8)
+    [ -z "$sha" ] && git rev-parse --git-dir >/dev/null 2>&1 && sha=$(git rev-parse HEAD 2>/dev/null | head -c8)
 
     # If all sources failed, generate a random 8-digit hex
     [ -z "$sha" ] && sha=$(LC_ALL=C head -c20 /dev/urandom | od -An -tx1 | LC_ALL=C tr -d ' \n' | head -c8)

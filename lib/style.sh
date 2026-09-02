@@ -202,7 +202,7 @@ stage_code_style() {
     lang="$(detect_repo_language | cut -d':' -f1)" # 获取语言类型
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，true 启用，false 禁用[default]
-    _msg task "Running code style checks"
+    _msg task "Code style check (optional: PIPELINE_CODE_STYLE=true)"
     [[ "${PIPELINE_CODE_STYLE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CODE_STYLE=false)"
     if ! ${PIPELINE_CODE_STYLE:-false}; then
         return 0

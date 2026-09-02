@@ -285,7 +285,8 @@ deploy_to_kubernetes() {
         --hide-notes
         --timeout "${ENV_HELM_TIMEOUT:-120s}"
         --set "image.pullPolicy=Always"
-        --set "image.repository=${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME},image.tag=${G_IMAGE_TAG}"
+        --set "image.repository=${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}"
+        --set "image.tag=${G_IMAGE_TAG}"
     )
     if [ "${G_NAMESPACE}" != main ]; then
         helm_args+=("--set" "replicaCount=1")
@@ -338,7 +339,7 @@ deploy_to_kubernetes() {
 
     execute_custom_deploy_hook
 
-    _msg task "Kubernetes deployment completed"
+    _msg ok "Kubernetes deployment completed"
     return "${G_DEPLOY_RESULT:-0}"
 }
 

@@ -10,6 +10,19 @@ kube_config_init() {
   local ns="${G_NAMESPACE}" kubectl_conf
   _install_kubectl
   _install_helm
+  ## 工具选择：本机有命令直接用（快），没有则 docker run 容器化（免安装）
+  ## 容器化时以相同绝对路径挂载 $HOME/.kube 与 $G_DATA，保证 --kubeconfig 路径在容器内一致
+  local kubectl_cmd helm_cmd
+  if command -v kubectl &>/dev/null; then
+    kubectl_cmd="kubectl"
+  else
+    kubectl_cmd="docker run --rm -i -v ${HOME}/.kube:${HOME}/.kube -v ${G_DATA}:${G_DATA} bitnami/kubectl:latest"
+  fi
+  if command -v helm &>/dev/null; then
+    helm_cmd="helm"
+  else
+    helm_cmd="docker run --rm -i -v ${HOME}/.kube:${HOME}/.kube -v ${G_DATA}:${G_DATA} alpine/helm:latest"
+  fi
   ## 当 deploy.env 已配置则返回
   if [[ -n "${KUBECTL_OPT:-}" ]] && [[ -n "${HELM_OPT:-}" ]]; then
     return 0
@@ -34,11 +47,11 @@ kube_config_init() {
   done
 
   if [[ -n "$kubectl_conf" ]]; then
-    KUBECTL_OPT="kubectl --kubeconfig $kubectl_conf"
-    HELM_OPT="helm --kubeconfig $kubectl_conf"
+    KUBECTL_OPT="${kubectl_cmd} --kubeconfig $kubectl_conf"
+    HELM_OPT="${helm_cmd} --kubeconfig $kubectl_conf"
   else
-    KUBECTL_OPT="kubectl"
-    HELM_OPT="helm"
+    KUBECTL_OPT="${kubectl_cmd}"
+    HELM_OPT="${helm_cmd}"
   fi
   # export KUBECTL_OPT HELM_OPT
   echo "$KUBECTL_OPT $HELM_OPT" >/dev/null
@@ -165,8 +178,15 @@ kube_setup_terraform() {
 
   _msg task "Creating k8s cluster"
   cd "$terraform_dir" || exit 1
+  ## 本机有 terraform 直接用（快），否则容器化（免安装）
+  local tf_cmd
+  if command -v terraform &>/dev/null; then
+    tf_cmd="terraform"
+  else
+    tf_cmd="docker run --rm -i -v ${G_DATA}/terraform:/workspace -w /workspace hashicorp/terraform:latest"
+  fi
 
-  if terraform init -input=false && terraform apply -auto-approve; then
+  if $tf_cmd init -input=false && $tf_cmd apply -auto-approve; then
     echo "Kubernetes cluster created successfully"
   else
     _msg error "Failed to create Kubernetes cluster"

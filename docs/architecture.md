@@ -96,7 +96,8 @@ flowchart TD
 - **dry-run**：`dry_run_note`（`G_DRY_RUN` 环境下预览命令不执行）。
 - **环境检查**：`_check_commands`、`_check_disk_space`、`_check_root`（+探测包管理器）、`_check_distribution`、`_check_cmd`、`_set_package_manager`、`_install_packages`、`_check_timezone`。
 - **交互/网络**：`_get_yes_no`、`_get_random_password`（5 级随机源降级）、`_get_current_ip`（macOS/OpenWrt/Linux 分支）。
-- **工具安装器**（幂等，已装跳过）：jmeter、wg、ossutil、aliyun cli、flarectl、kubectl、shellcheck、shfmt、helm、tencent cli、pipx、terraform、aws、python-gitlab、matrix-nio、docker、podman、k9s。统一套路：幂等跳过 → `_msg ok "Installing X..."` → 下载/安装 → `_msg ok "Showing version"`。
+- **工具安装器**（幂等，已装跳过）：wg、ossutil、aliyun cli、flarectl、shellcheck、shfmt、tencent cli、pipx、aws、matrix-nio、docker、podman、k9s、glab。统一套路：幂等跳过 → `_msg ok "Installing X..."` → 下载/安装 → `_msg ok "Showing version"`。
+- **容器化执行**（本机有命令则直接用；无则 docker run 免安装）：kubectl/helm（bitnami）、terraform（hashicorp）、测试（Dockerfile.tests）。
 - **镜像切换**：`_set_mirror`（仅 `IS_CHINA` 时生效，os/composer/node/python 四类源）。
 - **其他**：`_notify_wecom`、`get_oom_score`、`clean_snap`、`clean_runtime`、`get_github_latest_download`（解析 GitHub API 最新 release，grep/sed 免 jq）、`_install_acme_official/_github`、`_compress_pdf_with_gs/_compress_document`（PDF/PPT 压缩）。
 
@@ -134,9 +135,9 @@ flowchart TD
 - `setup_git_repo`（321） / `setup_svn_repo`（480）：clone/checkout 或更新已有仓库。
 - `get_git_branch`（440） / `get_git_commit_sha`（455） / `get_git_last_commit_message`（470）：从 CI 环境变量或 git 命令取信息，带多级回退。
 
-### 2.6 lib/test.sh — 92 行（测试）
+### 2.6 lib/test.sh — 187 行（测试）
 
-执行项目自带脚本 `tests/unit_test.sh` / `tests/func_test.sh`（候选：仓库内 → `$G_DATA/tests/`）。受 `PP_UNIT_TEST` / `PP_FUNCTION_TEST` 开关控制。
+三层测试（单元/功能/性能）统一容器化：构建仓库根 `Dockerfile.tests`（或 `ENV_TEST_IMAGE`）镜像，`docker run` 执行，测试入口由镜像 CMD/ENTRYPOINT 承载。受 `--test-unit` / `--test-function` / `--test-performance`（及 `PIPELINE_*_TEST`）开关控制；无测试镜像时跳过。
 
 ### 2.7 lib/analysis.sh — 621 行（代码分析/安全）
 
@@ -291,7 +292,7 @@ system_proxy        →  按 ENV_HTTP_PROXY/ENV_SOCK_PROXY 设置代理环境变
 kube_config_init    →  KUBECTL_OPT / HELM_OPT（读 G_NAMESPACE，找 kubeconfig）
 system_clean_disk   →  磁盘空间不足时清理
 system_install_tools→  按项目安装所需工具
-config_deploy_setup →  SSH 密钥、$HOME 符号链接（.ssh/.acme.sh/.aws/.kube/.aliyun）、python-gitlab
+config_deploy_setup →  SSH 密钥、$HOME 符号链接（.ssh/.acme.sh/.aws/.kube/.aliyun）、glab 配置
 config_build_env    →  G_DOCK / G_RUN / IS_CHINA（安装 docker/podman）
 repo_overlay_files    →  覆盖 conf/root、生成 Dockerfile.base/Dockerfile 到 G_REPO_DIR
 ```

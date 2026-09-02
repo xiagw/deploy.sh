@@ -58,8 +58,8 @@
 
 权限：运维部门/管理者/研发部门 可配置
 
-### .python-gitlab.cfg
-说明：python-gitlab config 文件，通过 gitlab API 获取 gitlab 服务器 项目/用户等信息
+### glab-cli/ 或 ~/.config/glab-cli/
+说明：glab（GitLab CLI）config 文件，通过 GitLab API 获取 gitlab 服务器 项目/用户等信息（替代 python-gitlab）
 
 权限：运维部门/管理者
 

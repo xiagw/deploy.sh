@@ -37,7 +37,7 @@ analysis_gitleaks() {
 # Run OWASP ZAP security scan
 stage_security_zap() {
     _msg stage "$(_t '安全扫描zap' 'security scan with zap')"
-    _msg task "ZAP scan"
+    _msg task "ZAP scan (optional: --security-zap)"
     if ! ${arg_security_zap:-false} && [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]]; then
         _msg note "$(_t '跳过' 'skipped') (--security-zap / PIPELINE_SCAN_ZAP=true)"
         return 0
@@ -45,8 +45,6 @@ stage_security_zap() {
 
     local target_url="${ENV_TARGET_URL}"
     local zap_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
-
-    _msg task "Running ZAP security scan"
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] stage_security_zap:"
@@ -67,7 +65,7 @@ stage_security_zap() {
 # Run Vulmap security scan
 stage_security_vulmap() {
     _msg stage "$(_t '安全扫描vulmap' 'security scan with vulmap')"
-    _msg task "vulmap scan"
+    _msg task "vulmap scan (optional: --security-vulmap)"
     if ! ${arg_security_vulmap:-false} && [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]]; then
         _msg note "$(_t '跳过' 'skipped') (--security-vulmap / PIPELINE_SCAN_VULMAP=true)"
         return 0
@@ -75,8 +73,6 @@ stage_security_vulmap() {
 
     local config_file="$G_DATA/conf/config.cfg"
     local output_file="vulmap_report.html"
-
-    _msg task "Running vulmap security scan"
 
     # Load environment variables from config file
     # shellcheck source=/dev/null
@@ -104,7 +100,7 @@ stage_code_quality() {
     _msg stage "$(_t '代码质量' 'code quality')"
 
     ## SonarQube（平台级质量门禁，PIPELINE_SONAR）
-    _msg task "Checking code with SonarQube"
+    _msg task "SonarQube code quality check (optional: PIPELINE_SONAR=true)"
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
     [[ "${PIPELINE_SONAR:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SONAR=false)"
     if ${PIPELINE_SONAR:-false}; then
@@ -169,7 +165,7 @@ EOF
 
 # Run PMD code analysis
 analysis_pmd() {
-    _msg task "Running PMD code analysis (java)"
+    _msg task "PMD code analysis (optional: PIPELINE_PMD=true)"
     [[ "${PIPELINE_PMD:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_PMD=false)"
     if ! ${PIPELINE_PMD:-false}; then
         return 0
@@ -213,7 +209,7 @@ analysis_pmd() {
 
 # Run CodeClimate analysis
 analysis_codeclimate() {
-    _msg task "Running CodeClimate analysis"
+    _msg task "CodeClimate analysis (optional: PIPELINE_CODECLIMATE=true)"
     [[ "${PIPELINE_CODECLIMATE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CODECLIMATE=false)"
     if ! ${PIPELINE_CODECLIMATE:-false}; then
         return 0
@@ -319,7 +315,7 @@ EOF
 
 # Run Spotbugs analysis for Java code
 analysis_spotbugs() {
-    _msg task "Running Spotbugs analysis (java)"
+    _msg task "Spotbugs analysis (optional: PIPELINE_SPOTBUGS=true)"
     [[ "${PIPELINE_SPOTBUGS:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SPOTBUGS=false)"
     if ! ${PIPELINE_SPOTBUGS:-false}; then
         return 0
@@ -378,7 +374,7 @@ EOF
 
 # Run Pylint analysis for Python code
 analysis_pylint() {
-    _msg task "Running Pylint analysis (python)"
+    _msg task "Pylint analysis (optional: PIPELINE_PYLINT=true)"
     [[ "${PIPELINE_PYLINT:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_PYLINT=false)"
     if ! ${PIPELINE_PYLINT:-false}; then
         return 0
@@ -425,7 +421,7 @@ analysis_pylint() {
 
 # Run Checkstyle analysis for Java code
 analysis_checkstyle() {
-    _msg task "Running Checkstyle analysis (java)"
+    _msg task "Checkstyle analysis (optional: PIPELINE_CHECKSTYLE=true)"
     [[ "${PIPELINE_CHECKSTYLE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CHECKSTYLE=false)"
     if ! ${PIPELINE_CHECKSTYLE:-false}; then
         return 0
@@ -504,7 +500,7 @@ EOF
 # Run Semgrep SAST scan（静态应用安全测试，多语言通用规则）
 stage_security_semgrep() {
     _msg stage "$(_t 'SAST扫描' 'SAST scan (semgrep)')"
-    _msg task "Semgrep SAST scan"
+    _msg task "Semgrep SAST scan (optional: --scan-semgrep)"
     if ! ${arg_security_semgrep:-false} && [[ "${PIPELINE_SEMGREP:-false}" != true ]]; then
         _msg note "$(_t '跳过' 'skipped') (--scan-semgrep / PIPELINE_SEMGREP=true)"
         return 0
@@ -530,7 +526,7 @@ stage_security_semgrep() {
 # Run Trivy SCA scan（软件成分分析，依赖漏洞）
 stage_security_sca() {
     _msg stage "$(_t '依赖漏洞扫描' 'dependency scan (SCA)')"
-    _msg task "Trivy SCA scan (dependency vulnerabilities)"
+    _msg task "Trivy SCA scan (optional: --scan-sca)"
     if ! ${arg_security_sca:-false} && [[ "${PIPELINE_SCA:-false}" != true ]]; then
         _msg note "$(_t '跳过' 'skipped') (--scan-sca / PIPELINE_SCA=true)"
         return 0
@@ -557,7 +553,7 @@ stage_security_sca() {
 # Run Trivy image scan（构建后镜像漏洞扫描，须在 stage_build 之后）
 stage_security_image() {
     _msg stage "$(_t '镜像漏洞扫描' 'image scan (trivy)')"
-    _msg task "Trivy image scan"
+    _msg task "Trivy image scan (optional: --scan-image)"
     if ! ${arg_security_image:-false} && [[ "${PIPELINE_SCAN_IMAGE:-false}" != true ]]; then
         _msg note "$(_t '跳过' 'skipped') (--scan-image / PIPELINE_SCAN_IMAGE=true)"
         return 0
@@ -588,7 +584,7 @@ stage_security_image() {
 # Run Gitleaks secret scan（密钥泄露扫描）
 stage_security_gitleaks() {
     _msg stage "$(_t '密钥扫描' 'secret scan (gitleaks)')"
-    _msg task "Gitleaks secret scan"
+    _msg task "Gitleaks secret scan (optional: --scan-gitleaks)"
     if ! ${arg_security_gitleaks:-false} && [[ "${PIPELINE_GITLEAKS:-false}" != true ]]; then
         _msg note "$(_t '跳过' 'skipped') (--scan-gitleaks / PIPELINE_GITLEAKS=true)"
         return 0
