@@ -306,51 +306,64 @@ add_account() {
     local user="$1" email_domain="$2" send_msg password_rand
     [ -z "$user" ] && return 1
     password_rand=$(_get_random_password 2>/dev/null)
-    _msg task "Check if user exists"
     if glab_api "users?username=$user" | jq -e '.[0].name' >/dev/null 2>&1; then
-        _msg warn "User [$user] already exists, skip create"
-        return 0
-    fi
-    _msg task "Create user"
-    glab_api --method POST "users" \
-        --raw-field "name=$user" \
-        --raw-field "username=$user" \
-        --raw-field "password=${password_rand}" \
-        --raw-field "email=${user}@${email_domain}" \
-        --raw-field "skip_confirmation=true" \
-        --raw-field "can_create_group=false"
+        _msg note "User [$user] already exists, skip create, continue to add groups"
+    else
+        _msg task "Create user"
+        glab_api --method POST "users" \
+            --raw-field "name=$user" \
+            --raw-field "username=$user" \
+            --raw-field "password=${password_rand}" \
+            --raw-field "email=${user}@${email_domain}" \
+            --raw-field "skip_confirmation=true" \
+            --raw-field "can_create_group=false" |
+            jq -e '.id' >/dev/null 2>&1
 
-    send_msg="${GITLAB_URL}
+        send_msg="${GITLAB_URL}
 username=$user
 password=$password_rand"
-    _msg log "$ME_LOG" "$send_msg"
-    _notify_wecom "${GITLAB_WECOM_KEY:? ERR: empty wecom_key}" "$send_msg"
+        _msg log "$ME_LOG" "$send_msg"
+        _notify_wecom "${GITLAB_WECOM_KEY:? ERR: empty wecom_key}" "$send_msg"
+    fi
+    add_account_to_groups "$user"
 }
 
 add_account_to_groups() {
     local user="$1" user_id level pms_id
     _msg task "Add user [$user] to groups..."
-    user_id=$(glab_api "users?username=$user" | jq -r '.[].id')
+    user_id=$(glab_api "users?username=$user" | jq -r '.[0].id // empty')
+    [[ -z "$user_id" ]] && {
+        _msg error "User [$user] not found"
+        return 1
+    }
 
     # GitLab access levels: 50=Owner, 40=Maintainer, 30=Developer, 20=Reporter, 10=Guest
     # 默认自动加入 pms 组，级别为 Developer，（因为需要读取CI/CD公共配置模版）
     pms_id=$(glab_api "groups?top_level_only=true&skip_groups=2&per_page=100" |
-        jq -r '.[] | select(.name=="pms") | .id')
+        jq -r '.[] | select(.name=="pms") | .id // empty')
     if [ -n "$pms_id" ]; then
-        glab_api --method POST "groups/${pms_id}/members" \
+        if glab_api --method POST "groups/${pms_id}/members" \
             --raw-field "access_level=30" \
-            --raw-field "user_id=${user_id}"
-        _msg task "Added user [$user] to group [pms]"
+            --raw-field "user_id=${user_id}" |
+            jq -e '.id' >/dev/null 2>&1; then
+            _msg task "Added user [$user] to group [pms]"
+        else
+            _msg warn "User [$user] already in group [pms], skip"
+        fi
     fi
 
     # Manually select additional groups using fzf multi-select
     if [ -t 1 ]; then
         while IFS=$'\t' read -r group_id group_name; do
             level=40
-            glab_api --method POST "groups/${group_id}/members" \
+            if glab_api --method POST "groups/${group_id}/members" \
                 --raw-field "access_level=${level}" \
-                --raw-field "user_id=${user_id}"
-            _msg task "Added user [$user] to group [$group_name]"
+                --raw-field "user_id=${user_id}" |
+                jq -e '.id' >/dev/null 2>&1; then
+                _msg task "Added user [$user] to group [$group_name]"
+            else
+                _msg warn "User [$user] already in group [$group_name], skip"
+            fi
         done < <(
             glab_api "groups?top_level_only=true&skip_groups=2&per_page=100" |
                 jq -r '.[] | select(.name!="pms") | "\(.id)\t\(.name)"' |
@@ -387,7 +400,8 @@ update_account_password() {
         --raw-field "username=${username}" \
         --raw-field "name=${name}" \
         --raw-field "password=${password_rand}" \
-        --raw-field "skip_reconfirmation=true"
+        --raw-field "skip_reconfirmation=true" |
+        jq -e '.id' >/dev/null 2>&1
 
     send_msg="${GITLAB_URL}
 username=$user
@@ -412,7 +426,7 @@ user_add_group() {
 block_account() {
     local user="$1" user_id
     user_id=$(glab_api "users?username=$user" | jq -r '.[].id')
-    glab_api --method POST "users/${user_id}/block"
+    glab_api --method POST "users/${user_id}/block" | jq -e '.id' >/dev/null 2>&1
     _msg log "$ME_LOG" "Blocked user: $user"
 }
 
@@ -453,7 +467,8 @@ add_user_to_project() {
 
     glab_api --method POST "projects/${project_id}/members" \
         --raw-field "access_level=${access_level}" \
-        --raw-field "username=${user}"
+        --raw-field "username=${user}" |
+        jq -e '.id' >/dev/null 2>&1
 }
 
 # ---- project 子命令 ----
@@ -504,7 +519,7 @@ delete_project_path() {
     id=$(glab_api "projects/${encoded_path}" | jq -r '.id // empty')
     [[ -z "$id" ]] && die "Project not found: $path"
 
-    glab_api --method DELETE "projects/${id}"
+    glab_api --method DELETE "projects/${id}" | cat >/dev/null
 }
 
 # Clean GitLab pipelines, keep the newest N pipelines per project
@@ -552,7 +567,7 @@ cleanup_pipelines() {
         del_count=$((del_count - keep))
         if [[ $del_count -gt 0 ]]; then
             printf '%s\n' "$ids" | sed -n "1,${del_count}p" | while read -r pipeline_id; do
-                glab_api --method DELETE "projects/${pid}/pipelines/${pipeline_id}" &
+                glab_api --method DELETE "projects/${pid}/pipelines/${pipeline_id}" | cat >/dev/null &
             done
             wait
         fi
@@ -666,14 +681,14 @@ EOF
     # Create projects if needed
 
     if _get_yes_no "[+] Create project [pms]?"; then
-        glab_api --method POST "projects" --raw-field "name=pms"
+        glab_api --method POST "projects" --raw-field "name=pms" | jq -e '.id' >/dev/null 2>&1
         git clone "git@${url_git#*//}:root/pms.git"
         mkdir -p pms/templates
         cp "$(dirname "$ME_PATH")/conf/templates/gitlab-ci.yml" pms/templates
         (cd pms && git add . && git commit -m 'add templates file' && git push origin main)
     fi
     if _get_yes_no "[+] Create project [devops]?"; then
-        glab_api --method POST "projects" --raw-field "name=devops"
+        glab_api --method POST "projects" --raw-field "name=devops" | jq -e '.id' >/dev/null 2>&1
     fi
 }
 
