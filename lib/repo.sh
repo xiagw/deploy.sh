@@ -33,21 +33,6 @@ repo_overlay_files() {
     _msg note "    业界框架参考: phpunit / npm test / mvn test / pytest / go test / cargo test / rspec / k6 / jmeter 等"
     _msg note "    启用: --test-unit / --test-function / --test-performance 或 PIPELINE_*_TEST=true"
 
-    ## 研发 git 提交的 Dockerfile/Dockerfile.base 才跳过自动覆盖，按仓库自带方式构建；
-    ## Dockerfile.base 为可选组件，允许仅提交单个 Dockerfile（如 java 自带多阶段 Dockerfile）；
-    ## 上次自动生成的产物（未跟踪，node/python 两段式）不跳过，重新生成刷新（内容恒定，无副作用）。
-    if repo_base_is_custom; then
-        ## 列出实际跟踪存在的构建文件（git 索引跟踪但工作区缺失时兜底为通用名）
-        local custom_files=()
-        [[ -f "${G_REPO_DIR}/Dockerfile" ]] && custom_files+=(Dockerfile)
-        [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] && custom_files+=(Dockerfile.base)
-        [[ ${#custom_files[@]} -eq 0 ]] && custom_files+=(Dockerfile)
-        _msg note "检测到仓库自带 ${custom_files[*]} (git 跟踪)，跳过自动覆盖，按仓库自带方式构建"
-        _msg warn "仓库自带构建文件，不使用 CI/CD 程序的自动多阶段构建加速模板"
-        _msg warn "研发自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
-        return 0
-    fi
-
     ## dry-run: 只展示覆盖计划，不写仓库（Dockerfile/root/.dockerignore 均跳过）
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] repo_overlay_files (lang=${lang}):"
@@ -60,19 +45,24 @@ repo_overlay_files() {
 
     _msg task "Initializing file overlay"
 
-    # Define paths for overlay
-    ## Priority 1: ${G_DATA} paths
-    local overlay_code_path="${G_DATA}/overlay/${G_REPO_NAME}"
-    local overlay_code_path_branch="${G_DATA}/overlay/${G_REPO_NAME}/${G_NAMESPACE}"
-
-    ## 代码覆盖逻辑：
+    ## ========================================================================
+    ## 代码覆盖（运维强制注入，必须先于仓库自带判断执行）
     ## 1. 优先从 ${G_DATA}/overlay/${G_REPO_NAME}/${G_NAMESPACE} 覆盖（对应项目的对应命名空间[git分支]的代码）
     ## 2. 如果命名空间目录不存在，从 ${G_DATA}/overlay/${G_REPO_NAME} 覆盖（对应项目通用代码）
     ## 3. 使用 rsync 进行文件同步，保持文件属性并覆盖目标文件
+    ## 注意：即使仓库 git 跟踪 Dockerfile/Dockerfile.base，data/overlay 的注入依然生效
+    ##       （运维可用它强制覆盖仓库文件，包括 Dockerfile）
+    ## ========================================================================
+    local overlay_code_path="${G_DATA}/overlay/${G_REPO_NAME}"
+    local overlay_code_path_branch="${G_DATA}/overlay/${G_REPO_NAME}/${G_NAMESPACE}"
+    ## overlay 是否接管构建文件（含 Dockerfile 时跳过模板生成，防止被 case 分支覆盖）
+    local overlay_has_dockerfile=false
     if [ -d "$overlay_code_path_branch" ]; then
+        [[ -f "$overlay_code_path_branch/Dockerfile" || -f "$overlay_code_path_branch/Dockerfile.base" ]] && overlay_has_dockerfile=true
         _msg note "overlay code: ${overlay_code_path_branch} -> ${G_REPO_DIR}"
         rsync -a "$overlay_code_path_branch/" "${G_REPO_DIR}/"
     elif [ -d "$overlay_code_path" ]; then
+        [[ -f "$overlay_code_path/Dockerfile" || -f "$overlay_code_path/Dockerfile.base" ]] && overlay_has_dockerfile=true
         _msg note "overlay code: ${overlay_code_path} -> ${G_REPO_DIR}"
         rsync -a "$overlay_code_path/" "${G_REPO_DIR}/"
     fi
@@ -82,6 +72,25 @@ repo_overlay_files() {
         _msg note "overlay disabled by argument"
         return 0
     }
+
+    ## 研发 git 提交的 Dockerfile/Dockerfile.base 或 data/overlay 接管构建文件时，跳过自动覆盖，按仓库自带方式构建；
+    ## Dockerfile.base 为可选组件，允许仅提交单个 Dockerfile（如 java 自带多阶段 Dockerfile）；
+    ## 上次自动生成的产物（未跟踪，node/python 两段式）不跳过，重新生成刷新（内容恒定，无副作用）。
+    if repo_base_is_custom || $overlay_has_dockerfile; then
+        ## 列出实际跟踪存在的构建文件（git 索引跟踪但工作区缺失时兜底为通用名）
+        local custom_files=()
+        [[ -f "${G_REPO_DIR}/Dockerfile" ]] && custom_files+=(Dockerfile)
+        [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] && custom_files+=(Dockerfile.base)
+        [[ ${#custom_files[@]} -eq 0 ]] && custom_files+=(Dockerfile)
+        if repo_base_is_custom; then
+            _msg note "检测到仓库自带 ${custom_files[*]} (git 跟踪)，跳过自动覆盖，按仓库自带方式构建"
+            _msg warn "仓库自带构建文件，不使用 CI/CD 程序的自动多阶段构建加速模板"
+            _msg warn "研发自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
+        else
+            _msg note "检测到 data/overlay 接管 ${custom_files[*]}，跳过自动覆盖，按覆盖后的文件构建"
+        fi
+        return 0
+    fi
 
     ## 1. Dockerfile 覆盖
     ## Dockerfile.multi：多阶段编译型（java/go/php/nginx）
