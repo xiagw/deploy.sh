@@ -19,13 +19,15 @@ repo_overlay_files() {
 
     ## 研发控制权清单：git 提交以下文件即可接管对应环节；tests 类默认跳过，需指定参数或环境变量启用。
     ## 每行格式: 文件 -> 作用；启用方式
+    _msg note "研发未提交 Dockerfile* 时，使用 CI/CD 程序提供的自动多阶段构建加速模板"
     _msg note "研发可 git 提交以下文件接管对应环节:"
-    _msg note "  Dockerfile.base -> 构建基础镜像 (提交即生效)"
-    _msg note "    Dockerfile.base 作用: 基础镜像，预装依赖 (node: npm install [package.json]，python: pip install -r requirements.txt, php: composer install [composer.json]) ，首次构建慢，后续复用缓存加速"
-    _msg note "    package.json/composer.json/requirements.txt 等文件未变化时直接跳过构建基础镜像；变更时需重新构建基础镜像"
-    _msg note "  Dockerfile -> 构建业务镜像 (提交即生效)"
-    _msg note "    Dockerfile 作用: 业务镜像，复用 base 镜像，FROM base_image, 仅 COPY 代码/其他文件，构建快"
-    _msg note "    构建阶段 (auto 或 --build) 直接使用提交的文件; 未提交则自动生成"
+    _msg note "  Dockerfile.base -> 构建基础镜像 (预装依赖,提交即生效)，首次构建慢，后续复用加速"
+    _msg note "    node: npm install (根据 package.json 的变更决定是否重建基础镜像)"
+    _msg note "    php: composer install (根据 composer.json 的变更决定是否重建基础镜像)"
+    _msg note "    python: pip install -r requirements.txt (根据 requirements.txt 的变更决定是否重建基础镜像), 等等其他语言自行处理"
+    _msg note "    基础镜像TAG: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
+    _msg note "  Dockerfile -> 构建业务镜像 (提交即生效)，每次构建都使用最新提交的代码/文件，复用基础镜像加速构建"
+    _msg note "    使用 [FROM ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}] 引用基础镜像 (基础镜像由 Dockerfile.base 决定)"
     _msg note "  Dockerfile.tests -> 单元/功能/性能测试 (默认跳过)"
     _msg note "    作用: 测试镜像，镜像内定义测试入口 (CMD/ENTRYPOINT)，deploy.sh 只构建并运行"
     _msg note "    业界框架参考: phpunit / npm test / mvn test / pytest / go test / cargo test / rspec / k6 / jmeter 等"
