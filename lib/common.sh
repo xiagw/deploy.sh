@@ -1113,34 +1113,29 @@ _install_glab() {
     ## 去掉 tag 前缀 v，下载路径/文件名均不含 v（如 v1.116.0 -> 1.116.0）
     local ver_nov="${ver#v}"
     local ver_esc="${ver_nov//./%2E}"
-    ## deb 包 URL（GitLab 官方 packages/generic）
-    pkg_url="https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${ver_esc}/glab_${ver_esc}_${os}_${arch}%2Edeb"
+    ## 官方 tar.gz URL（deb 包在 CI 上下载内容不可靠，统一用单二进制包）
+    pkg_url="https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${ver_esc}/glab_${ver_esc}_${os}_${arch}%2Etar%2Egz"
 
-    local temp_file
+    local temp_file temp_dir
     temp_file="$(mktemp)"
+    temp_dir="$(mktemp -d)"
     if ! curl -fsSL --retry 3 --retry-delay 2 -o "$temp_file" "$pkg_url"; then
         _msg error "glab: download failed: $pkg_url"
-        rm -f "$temp_file"
+        rm -rf "$temp_file" "$temp_dir"
         return 1
     fi
-    if command -v apt-get >/dev/null 2>&1; then
-        $use_sudo apt-get install -yqq "$temp_file" >/dev/null || {
-            _msg error "glab: dpkg install failed"
-            rm -f "$temp_file"
-            return 1
-        }
-    elif command -v dpkg >/dev/null 2>&1; then
-        $use_sudo dpkg -i "$temp_file" >/dev/null || {
-            _msg error "glab: dpkg install failed"
-            rm -f "$temp_file"
-            return 1
-        }
-    else
-        _msg error "glab: no apt-get/dpkg, install deb manually"
-        rm -f "$temp_file"
+    if ! tar -xzf "$temp_file" -C "$temp_dir"; then
+        _msg error "glab: tarball corrupted (not a valid tar.gz)"
+        rm -rf "$temp_file" "$temp_dir"
         return 1
     fi
     rm -f "$temp_file"
+    if ! $use_sudo install -m 0755 "$temp_dir/bin/glab" /usr/local/bin/glab; then
+        _msg error "glab: install to /usr/local/bin failed"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    rm -rf "$temp_dir"
     _msg ok "glab installed successfully"
     glab --version
     return 0
