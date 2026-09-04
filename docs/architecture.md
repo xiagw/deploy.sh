@@ -127,7 +127,21 @@ flowchart TD
 
 ### 2.5 lib/repo.sh — 629 行（仓库操作）
 
-- `repo_overlay_files`（8）：把 `data/overlay/<仓库名>/[<命名空间>/]` 代码覆盖 rsync 进仓库（exclude `Dockerfile.*` 构建文件），再把 conf/root 结构注入；仓库未 git 跟踪 `Dockerfile*` 时按模板生成 Dockerfile.base/Dockerfile。
+- `repo_overlay_files`（8）：把 `data/overlay/<仓库名>/[<命名空间>/]` 代码覆盖 rsync 进仓库（exclude `Dockerfile.*` 构建文件），再把 conf/root 结构注入；仓库未 git 跟踪 `Dockerfile*` 时按模板生成 Dockerfile.base/Dockerfile。注入顺序见下表：
+
+  | # | 步骤 | 条件 | 动作 | log 输出 | Runner `-e root/` 保留影响 |
+  |---|------|------|------|----------|----------------------|
+  | ① | 语言探测 | 无条件 | `detect_repo_language` 三段式 `lang:ver:docker` | —（内部） | 无 |
+  | ② | 研发控制权清单 | 无条件 | 4 条 `_msg note`（Dockerfile.base / Dockerfile / Dockerfile.tests） | 每次 | 无 |
+  | ③ | dry-run 分支 | `--dry` | 只打印计划，不写仓库（Dockerfile/root/.dockerignore 均跳过） | ✓ | — |
+  | ④ | 代码覆盖 | `${G_DATA}/overlay/<仓库名>/<namespace>` 存在用之；否则 `${G_DATA}/overlay/<仓库名>` 存在（每次幂等） | `rsync -a --exclude=Dockerfile.* --exclude=Dockerfile` → G_REPO_DIR | `overlay code:` 每次 | 无（ root/ 被覆盖） |
+  | ⑤ | 跳过分支 | `--disable-overlay` | 提前 return | `overlay disabled` | — |
+  | ⑥ | 研发接管判断 | git 跟踪了 Dockerfile/Dockerfile.base | 跳过生成 + 2 条 warn | 每次 | 无 |
+  | ⑦ | Dockerfile 生成（case lang） | node 静态：cp Dockerfile.web + nginx-spa.conf；node 后端/python：无 base 才 cp single 为 base，Dockerfile 每次 echo FROM；php/java/go/nginx：cp multi；其它：cp single | 写 G_REPO_DIR | `generate Dockerfile:` 每次（base 仅缺失时） | 无（仓库根文件） |
+  | ⑧ | .dockerignore | 仅不存在时 | cp | `overlay .dockerignore`（被清则每次） | 无（未配 `-e .dockerignore`） |
+  | ⑨ | 重置语言缓存 | 无条件 | `unset G_REPO_LANG_CACHE*` | — | 无 |
+  | ⑩ | root/ 基础注入 | conf/root 目录存在（每次幂等同步） | `rsync -r --exclude=*.cnf` → root/ | `overlay root:` 每次 | root/ 被 Runner 保留（GIT_CLEAN_FLAGS `-e root/`）后不再首启一次性，conf/root 模板更新随流水线即时生效 |
+  | ⑪ | overlay/root 注入 | data/overlay/root 目录存在（每次幂等） | `rsync -r --exclude=*.cnf` → root/ | `overlay root:` 每次 | 照常每次覆盖，运维自定义 root 更新不中断 |
 - `detect_repo_language`（176）：按文件表探测语言/版本/Docker 标志，输出 `lang:ver:docker`；兜底扩展名统计；可走 Docker Linguist。
 - `setup_git_repo`（440） / `setup_svn_repo`（606）：clone/checkout 或更新已有仓库。
 - `get_git_branch`（566） / `get_git_commit_sha`（581） / `get_git_last_commit_message`（596）：从 CI 环境变量或 git 命令取信息，带多级回退。
