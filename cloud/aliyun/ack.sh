@@ -850,8 +850,8 @@ ack_scale_pod() {
         if $is_php; then
             local CPU_WARN_FACTOR=${ACK_CPU_WARN_FACTOR:-1500}
             local CPU_NORMAL_FACTOR=${ACK_CPU_NORMAL_FACTOR:-500}
-            local MEM_WARN_FACTOR=${ACK_MEM_WARN_FACTOR:-1200}
-            local MEM_NORMAL_FACTOR=${ACK_MEM_NORMAL_FACTOR:-500}
+            local MEM_WARN_FACTOR=${ACK_MEM_WARN_FACTOR:-2500}
+            local MEM_NORMAL_FACTOR=${ACK_MEM_NORMAL_FACTOR:-1000}
         else
             local CPU_WARN_FACTOR=${ACK_POD_CPU_WARN_FACTOR:-2000}
             local CPU_NORMAL_FACTOR=${ACK_POD_CPU_NORMAL_FACTOR:-800}
