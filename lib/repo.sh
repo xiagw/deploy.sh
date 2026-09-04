@@ -54,7 +54,7 @@ repo_overlay_files() {
     ## ========================================================================
     local overlay_code_path="${G_DATA}/overlay/${G_REPO_NAME}"
     local overlay_code_path_branch="${G_DATA}/overlay/${G_REPO_NAME}/${G_NAMESPACE}"
-    local rsync_ov='rsync -a --exclude=Dockerfile --exclude=Dockerfile.base'
+    local rsync_ov='rsync -a --exclude=Dockerfile.* --exclude=Dockerfile'
     if [ -d "$overlay_code_path_branch" ]; then
         _msg note "overlay code: ${overlay_code_path_branch} -> ${G_REPO_DIR}"
         $rsync_ov "$overlay_code_path_branch/" "${G_REPO_DIR}/"
