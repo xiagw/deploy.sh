@@ -10,7 +10,7 @@
 
 variables:
   ## gitlab checkout 时不清理以下文件
-  GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e vendor/ -e yarn.lock -e composer.lock -e .dockerignore
+  GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e vendor/ -e root/ -e yarn.lock -e composer.lock -e .dockerignore
 
 ## CI/CD 流水线阶段：自上而下串行执行，前一阶段失败则后续阶段不执行
 stages:

@@ -157,8 +157,8 @@ repo_overlay_files() {
     local rsync_opts="rsync -r --exclude=*.cnf"
     ## 创建 root/ 目录（如果不存在）
     mkdir -p "${repo_root}"
-    ## 优先级1：从 conf/root/ 覆盖基础目录结构（如果不存在 root/opt）
-    if [[ ! -d "${repo_root}/opt" ]] && [[ -d "${conf_root}" ]]; then
+    ## 优先级1：从 conf/root/ 覆盖基础目录结构（每次幂等同步，模板更新即生效）
+    if [[ -d "${conf_root}" ]]; then
         _msg note "overlay root/: ${conf_root} -> ${repo_root}"
         ${rsync_opts} "${conf_root}/" "${repo_root}/"
     fi
