@@ -441,7 +441,7 @@ DOCKERIGNORE
             mkdir -p "$(dirname "$base_build_log")"
 
             set +e +o pipefail
-            $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} base 2>&1 | tee "$base_build_log" >/dev/null
+            $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} --provenance=false base 2>&1 | tee "$base_build_log" >/dev/null
             ret="${PIPESTATUS[0]}"
             set -eo pipefail
 
@@ -468,7 +468,7 @@ DOCKERIGNORE
     mkdir -p "$(dirname "$build_log")"
 
     set +e +o pipefail
-    $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} 2>&1 | tee "$build_log" >/dev/null
+    $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} --provenance=false 2>&1 | tee "$build_log" >/dev/null
     ret=${PIPESTATUS[0]}
     set -eo pipefail
 
