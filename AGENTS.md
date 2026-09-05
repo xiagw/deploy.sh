@@ -29,6 +29,6 @@ deploy.sh 部署系统开发约定。
 - 模块前缀按域统一，命令靠前:
   - 部署模块用 `deploy_*`（`deploy_to_kubernetes` / `deploy_via_rsync_ssh`）
   - 构建模块用 `build_*`（`build_image` 等内部构建函数）
-  - 阶段入口用 `stage_*`（`stage_build` / `stage_deploy` / `stage_test`），自打印 `_msg stage` 横幅并自守卫
+  - 阶段入口用 `stage_*`（`stage_build` / `stage_deploy` / `stage_unit_test`），自打印 `_msg stage` 横幅并自守卫
   - 探测用 `detect_*`（`detect_repo_language` / `detect_deployment_method`）
   - 可用性校验用 `check_*`（`check_docker_available` / `check_k8s_available`）
