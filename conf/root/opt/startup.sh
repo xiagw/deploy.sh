@@ -2,20 +2,20 @@
 
 ## laradock nginx 启动初始化
 
-## generate cert
+## generate cert（key/csr/pem 各自缺失才生成，避免 pem 残留时 key 缺失）
 ssl_dir="/etc/nginx/ssl"
 mkdir -p "$ssl_dir"
-if [ ! -f "$ssl_dir/default.pem" ]; then
-    openssl genrsa -out "$ssl_dir/default.key" 2048
+[ -f "$ssl_dir/default.key" ] || {
+    openssl ecparam -genkey -name prime256v1 -out "$ssl_dir/default.key"
     openssl req -new -key "$ssl_dir/default.key" -out "$ssl_dir/default.csr" -subj "/CN=default/O=default/C=CN"
-    openssl x509 -req -days 3650 -in "$ssl_dir/default.csr" -signkey "$ssl_dir/default.key" -out "$ssl_dir/default.pem"
-fi
-if [ ! -f "$ssl_dir/dhparams.pem" ]; then
-    openssl dhparam -dsaparam -out "$ssl_dir/dhparams.pem" 4096
-fi
+}
+[ -f "$ssl_dir/default.csr" ] || openssl req -new -key "$ssl_dir/default.key" -out "$ssl_dir/default.csr" -subj "/CN=default/O=default/C=CN"
+[ -f "$ssl_dir/default.pem" ] || openssl x509 -req -days 3650 -in "$ssl_dir/default.csr" -signkey "$ssl_dir/default.key" -out "$ssl_dir/default.pem"
 # chown 1000:1000 $html_path
-chmod 600 "$ssl_dir"/*.key
-chown -R nginx "$ssl_dir"/*.key
+if compgen -G "$ssl_dir"/*.key >/dev/null; then
+    chmod 600 "$ssl_dir"/*.key
+    chown nginx "$ssl_dir"/*.key
+fi
 
 html_path=/var/www/html
 log_path=/var/log/nginx
@@ -38,15 +38,15 @@ if [ ! -f "$html_path/5xx.html" ]; then
     echo 'Server error page: 5xx' >>"$html_path/5xx.html"
 fi
 
-## php upstream
-if ping -c 2 php-fpm >/dev/null 2>&1; then
+## php upstream（getent 走 DNS，不依赖 ICMP/ping 权限）
+if getent hosts php-fpm >/dev/null 2>&1; then
     server_name=php-fpm
 fi
 echo "upstream upstream-php { server ${server_name:-127.0.0.1}:9000; }" >/etc/nginx/conf.d/upstream-php.conf
 
-## remove log files / 自动清理超过15天的旧日志文件
+## remove log files / 自动清理超过15天的旧日志文件（-mtime: 内容最后写入时间）
 while [ -d "$log_path" ] && [ ! -f "$log_path/.keep_all_log" ]; do
-    find "$log_path" -type f -iname "*.log" -ctime +15 -delete
+    find "$log_path" -type f -iname "*.log" -mtime +15 -delete
     sleep 1d
 done &
 
