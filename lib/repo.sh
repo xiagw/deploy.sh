@@ -19,20 +19,17 @@ repo_overlay_files() {
 
     ## 研发控制权清单：git 提交以下文件即可接管对应环节；tests 类默认跳过，需指定参数或环境变量启用。
     ## 每行格式: 文件 -> 作用；启用方式
-    _msg note "研发未提交 Dockerfile* 时，使用 CI/CD 程序提供的自动多阶段构建加速模板"
-    _msg note "研发可 git 提交以下文件接管对应环节:"
-    _msg note "  Dockerfile.base -> 构建基础镜像 (预装依赖,提交即生效)，首次构建慢，后续复用加速"
-    _msg note "    node: npm install (根据 package.json 的变更决定是否重建基础镜像)"
-    _msg note "    php: composer install (根据 composer.json 的变更决定是否重建基础镜像)"
-    _msg note "    python: pip install -r requirements.txt (根据 requirements.txt 的变更决定是否重建基础镜像), 等等其他语言自行处理"
-    _msg note "    基础镜像TAG: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
-    _msg note "  Dockerfile -> 构建业务镜像 (提交即生效)，每次构建都使用最新提交的代码/文件，复用基础镜像加速构建"
-    _msg note "    第一行固定写法: ARG BASE_IMAGE"
-    _msg note "    第二行固定写法: FROM \${BASE_IMAGE} (deploy.sh 构建时自动注入 base 镜像 tag，无需写死 registry，其他行可自由定义)"
-    _msg note "  Dockerfile.tests -> 单元/功能/性能测试 (默认跳过)"
-    _msg note "    作用: 测试镜像，镜像内定义测试入口 (CMD/ENTRYPOINT)，deploy.sh 只构建并运行"
-    _msg note "    业界框架参考: phpunit / npm test / mvn test / pytest / go test / cargo test / rspec / k6 / jmeter 等"
-    _msg note "    启用: --test-unit / --test-function / --test-performance 或 PIPELINE_*_TEST=true"
+    _msg note "（默认使用 CI/CD 自动模板）研发可提交以下文件接管构建环节:"
+    _msg note "  Dockerfile.base -> 基础镜像 (可选/非必须; 预装依赖，相当于中间层缓存) "
+    _msg note "    重建时机: 首次构建 或 依赖声明变更 (node=package.json / php=composer.json / python=requirements.txt)"
+    _msg note "    声明未变且 registry 已有 base 时直接复用 (构建快), base 由 deploy.sh 自动构建并推送"
+    _msg note "    base TAG: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
+    _msg note "    示例: node=npm install / php=composer install / python=pip install -r requirements.txt, 其他语言自行处理"
+    _msg note "  Dockerfile -> 业务镜像 (支持单独提交 Dockerfile ，不必成对提交 base) 固定写法:"
+    _msg note "    ARG BASE_IMAGE"
+    _msg note "    FROM \${BASE_IMAGE} (deploy.sh 会自动注入 tag, 其余行自由)"
+    _msg note "  Dockerfile.tests -> 测试镜像 (默认跳过; 启用: --test-unit/--test-function/--test-performance 或 PIPELINE_*_TEST)"
+    _msg note "    镜像内 CMD/ENTRYPOINT 定义测试入口, 框架参考: phpunit/npm test/mvn test/pytest/go test/k6/jmeter 等"
 
     ## dry-run: 只展示覆盖计划，不写仓库（Dockerfile/root/.dockerignore 均跳过）
     if ${G_DRY_RUN:-false}; then
