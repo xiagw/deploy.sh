@@ -9,7 +9,7 @@
 
 show_rds_help() {
     echo "RDS (关系型数据库) 操作："
-    echo "  get [<域名>] [format]                    - 列出 RDS 实例（域名可选，支持fzf选择）"
+    echo "  get [<实例ID>] [format]             - 列出 RDS 实例；指定实例ID则查询该实例详情（format: human/json/tsv）"
     echo "  add <名称> <引擎> <版本> <规格> [地域]  - 创建 RDS 实例"
     echo "  set [<实例ID>] [<新名称>] [地域]        - 更新 RDS 实例（实例ID和新名称都是可选的，可使用fzf选择）"
     echo "  del [<实例ID>] [地域]                   - 删除 RDS 实例（实例ID可选，可使用fzf选择）"
@@ -33,8 +33,8 @@ show_rds_help() {
     echo
     echo "示例："
     echo "  $0 rds get"
-    echo "  $0 rds get example.com"
-    echo "  $0 rds get example.com json"
+    echo "  $0 rds get json"
+    echo "  $0 rds get pgm-xxx json        # 查看单个实例详情（DescribeDBInstances 按 ID 过滤）"
     echo "  $0 rds add my-rds MySQL 8.0 rds.mysql.x4.large"
     echo "  $0 rds set rm-xxx new-name"
     echo "  $0 rds del rm-xxx"
@@ -97,8 +97,16 @@ handle_rds_commands() {
 }
 
 # 使用新框架的列表函数
+# rds get [<实例ID>] [format]：不带实例ID列出全部实例；指定实例ID则查询该单个实例（DescribeDBInstances 按 ID 过滤）
 rds_list() {
-    local format=${1:-human}
+    local instance_id=$1
+    local format=${2:-human}
+
+    # 兼容：仅传 format（如 `rds get json`），则第一个位置参数其实是输出格式
+    if is_output_format "$instance_id"; then
+        format=$instance_id
+        instance_id=""
+    fi
 
     local table_header="DBInstanceId\tDBInstanceDescription\tDBInstanceStatus\tEngine\tEngineVersion\tDBInstanceClass\tRegionId\tCreateTime"
     local jq_filter=".Items.DBInstance[] | [.DBInstanceId, .DBInstanceDescription, .DBInstanceStatus, .Engine, .EngineVersion, .DBInstanceClass, .RegionId, .CreateTime] | @tsv"
@@ -111,16 +119,31 @@ rds_list() {
         printf "%-16s  %-18s  %-6s  %-6s  %-5s  %-17s  %-12s  %s\n", $1, $2, status, $4, $5, $6, $7, $8
     }'
 
-    generic_list \
-        "rds" \
-        "describe-db-instances" \
-        "rds" \
+    # 指定实例ID则按 ID 过滤，否则查当前 region 全部实例
+    local api_args=("--biz-region-id" "${region:-}")
+    if [ -n "$instance_id" ]; then
+        api_args+=(--db-instance-id "$instance_id")
+    fi
+
+    local result
+    if ! result=$(call_aliyun_api rds describe-db-instances "${api_args[@]}"); then
+        echo "错误：无法获取 RDS 实例。请检查您的凭证和权限。" >&2
+        return 1
+    fi
+
+    local title="列出 RDS 实例："
+    [ -n "$instance_id" ] && title="RDS 实例 $instance_id ："
+
+    format_output \
+        "$result" \
         "$format" \
+        "rds" \
+        "get" \
         "$table_header" \
         "$jq_filter" \
         "$status_mapper" \
         "没有找到 RDS 实例。" \
-        "列出 RDS 实例："
+        "$title"
 }
 
 # 使用新框架的创建函数
