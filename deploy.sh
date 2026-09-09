@@ -5,7 +5,7 @@
 #
 # Description: deploy.sh is a CI/CD program.
 # Author: xiagw <fxiaxiaoyu@gmail.com>
-# License: GNU/GPL, see http://www.gnu.org/copyleft/gpl.html
+# License: GNU/GPL, see https://www.gnu.org/copyleft/gpl.html
 # Create Date: 2019-04-03
 #
 ################################################################################
@@ -199,7 +199,7 @@ EOF
 #   - G_DEBUG_ON: 调试模式标志
 #   - arg_cron: 定时任务执行标志
 #   - arg_*: 各种命令行参数的值（布尔触发或参数）
-# 说明: 组装规则与依赖依据见函数尾部注释及 docs/execution-plan.md
+# 说明: 组装规则与依赖依据见 docs/execution-plan.md
 ################################################################################
 parse_args() {
     while [[ "$#" -gt 0 ]]; do
@@ -383,8 +383,6 @@ parse_args() {
 # 全局变量:
 #   - G_DOCK: Docker或Podman命令路径
 #   - G_RUN: Docker/Podman运行命令的基础参数
-#   - G_PROGRESS: buildx bake --progress 参数（plain/quiet）
-#   - ENV_ADD_HOST: 需要添加到容器中的主机映射数组
 ################################################################################
 config_build_env() {
     if ${ENV_IS_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
@@ -480,7 +478,7 @@ main() {
     ##   G_* : 全局变量，在多个函数间共享使用
     ##   ENV_*: 环境配置变量，从 deploy.env 文件加载
     ##   arg_*: 命令行参数变量
-    ##   CI_*: GitLab CI/CD平台提供的环境变量
+    ##   CI_*: CI平台外部注入变量
     ## ========================================================================
 
     ## 脚本基本信息
