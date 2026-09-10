@@ -205,7 +205,7 @@ _wait_kubernetes_rollout() {
         status_out="$($KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout "${poll_interval}s" 2>&1)"
         ret=$?
         if [ $ret -eq 0 ]; then
-            _msg task "[${release_name}] is ready"
+            _msg task "helm release name: [${release_name}] is ready"
             return 0
         fi
 

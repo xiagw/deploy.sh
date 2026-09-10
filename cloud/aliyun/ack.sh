@@ -32,7 +32,7 @@ show_ack_help() {
     echo "  set-pool [<集群ID>] restart [<节点池>]              - 重启节点池内所有节点上的 deployment"
     echo "  del-pool [<集群ID>] [<节点池>]          - 删除节点池（池内有节点时提示）"
     echo "  自动扩缩容："
-    echo "  scale-pod <deployment>[/namespace] [--watch] [--max N] - 通用 Deployment 自动扩缩容（namespace 默认 main；求和判断；--watch 常驻监控；--max 副本上限 缺省=真实节点数，0=不限；默认单次执行）"
+    echo "  scale-pod <deployment>[/namespace] [选项] - 通用 Deployment 自动扩缩容（namespace 默认 main；--watch 常驻；--min 缩容下限 缺省1(PHP2)；--max 副本上限 缺省=真实节点数,0=不限；--step 扩容增量 缺省1(PHP2)；--interval 检查间隔秒 缺省15；默认单次执行）"
     echo
     echo "示例："
     echo "  集群："
@@ -614,7 +614,7 @@ ack_node_remove() {
     fi
 
     # 安全删除：先 cordon 停新调度 -> 滚动重启全部 deployment（迁移业务）-> 再删（drain 只处理残余）
-    if ! confirm_action "从集群中移除节点：$node_name（将依次执行 cordon -> 重启全部 deployment -> 删除）"; then
+    if ! confirm_action "从集群中移除节点：${node_name}（将依次执行 cordon -> 重启全部 deployment -> 删除）"; then
         return 1
     fi
 
@@ -626,7 +626,7 @@ ack_node_remove() {
 
     echo "3) 删除节点（drain 残余 Pod）..."
     local result
-    result=$(call_aliyun_api cs DELETE "/clusters/$cluster_id/nodes" \
+    result=$(call_aliyun_api cs POST "/clusters/$cluster_id/nodes" \
         --region "$region" \
         --body "$(jq -nc --arg node_name "$node_name" '{nodes: [$node_name], release_node: true, drain_node: true}')")
     local ret=$?
