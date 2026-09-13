@@ -18,9 +18,9 @@ show_cdn_help() {
     echo "  prefetch <路径>                         - 预热 CDN 文件"
     echo "  logs [<域名>] [-s 开始] [-e 结束] [-f 格式] [--status 状态码] [-t 文件类型]"
     echo "                                         - 拉取 CDN 离线日志并分析（域名可选，可使用fzf选择；默认昨天）"
-    echo "  prune [--days N] [--domain <域名>] [--bucket <桶名>] [--dry-run]"
-    echo "                                         - 每日评估：按 CDN 日志找出 OSS 源站近 N 天无访问的目录，"
-    echo "                                           自动备份到本地并生成删除脚本（不自动执行；默认 N=30）"
+    echo "  access [--days N] [--domain <域名>] [--bucket <桶名>] [-s 开始] [-e 结束]"
+    echo "                                         - 每日归档 CDN 日志为 ≤3 层目录访问清单，并按 bucket 聚合"
+    echo "                                           （供 oss prune 比较；不做任何 OSS 操作）"
     echo "  pay [--dry-run]                         - 购买 CDN 资源包（自动判断余量；--dry-run 只展示不购买）"
     echo
     echo "示例："
@@ -36,8 +36,8 @@ show_cdn_help() {
     echo "  $0 cdn prefetch https://example.com/path/to/file.jpg     # 预热文件"
     echo "  $0 cdn logs example.com                                 # 查昨天离线日志"
     echo "  $0 cdn logs example.com -s 2026-08-01 -e 2026-08-10 --status 404  # 按状态码分析"
-    echo "  $0 cdn prune                                            # 每日评估：未访问目录 -> 备份 + 生成删除脚本"
-    echo "  $0 cdn prune --dry-run                                  # 只分析不出手（首次运行先看）"
+    echo "  $0 cdn access                                           # 归档昨日 CDN 日志并生成三层访问清单"
+    echo "  $0 cdn access --days 30                                 # 按窗口聚合"
     echo "  $0 cdn pay                                                 # 购买资源包"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
@@ -56,7 +56,7 @@ handle_cdn_commands() {
     trigger) cdn_refresh_trigger "$@" ;;
     prefetch) cdn_prefetch "$@" ;;
     logs) cdn_logs "$@" ;;
-    prune) cdn_prune "$@" ;;
+    access) cdn_access "$@" ;;
     pay) cdn_pay "$@" ;;
     help) show_cdn_help ;;
     *)
@@ -528,8 +528,8 @@ _cdn_sh_today() {
 _cdn_fetch_log_rows() {
     local domain=$1 start_day=$2 end_day=$3
     local s_epoch e_epoch start_utc end_utc result ret
-    s_epoch=$(_cdn_day_to_utc_epoch "$start_day") || { echo "错误：开始日期解析失败（$start_day）" >&2; return 1; }
-    e_epoch=$(_cdn_day_to_utc_epoch "$end_day") || { echo "错误：结束日期解析失败（$end_day）" >&2; return 1; }
+    s_epoch=$(_cdn_day_to_utc_epoch "$start_day") || { echo "错误：开始日期解析失败（${start_day}）" >&2; return 1; }
+    e_epoch=$(_cdn_day_to_utc_epoch "$end_day") || { echo "错误：结束日期解析失败（${end_day}）" >&2; return 1; }
     start_utc=$(_cdn_epoch_to_utc_iso $((s_epoch - 28800))) || { echo "错误：开始日期转换失败" >&2; return 1; }
     end_utc=$(_cdn_epoch_to_utc_iso $((e_epoch + 57600))) || { echo "错误：结束日期转换失败" >&2; return 1; }
 
@@ -540,7 +540,7 @@ _cdn_fetch_log_rows() {
         --page-size 1000 2>&1)
     ret=$?
     if [ $ret -ne 0 ]; then
-        echo "错误：获取 CDN 离线日志失败（$domain）。" >&2
+        echo "错误：获取 CDN 离线日志失败（${domain}）。" >&2
         echo "$result" >&2
         return 1
     fi
@@ -615,43 +615,13 @@ _cdn_analyze_log() {
     rm -rf "$work_dir"
 }
 
-# 从路径流提取 <=3 层目录前缀（去末尾文件名字段）并去重
-# 输入每行一个 URL 路径（/a/b/c/f.jpg）或 OSS key（a/b/c/f.jpg），两端规则一致保证可比
-# 根级单段路径（无子级）视作文件，不输出
-_cdn_extract_dir_prefixes() {
-    awk -F/ '
-        {
-            k = NF
-            if ($1 == "") k--
-            if (k <= 1) next
-            if ($NF != "") k--
-            if (k > 3) k = 3
-            prefix = ""
-            for (i = 1; i <= NF && k > 0; i++) {
-                if ($i == "") continue
-                prefix = prefix "/" $i
-                k--
-            }
-            if (prefix != "") print prefix
-        }' | sort -u
-}
-
-# 查询 bucket 所在区域（从 ossutil ls 全部桶输出的 Region 列，去掉 oss- 前缀），失败回退 profile 区域
-_cdn_bucket_region() {
-    local bucket=$1 map
-    map=$(aliyun --profile "${profile:-}" ossutil ls --endpoint "http://oss-${region:-cn-hangzhou}.aliyuncs.com" --region "${region:-cn-hangzhou}" 2>/dev/null |
-        awk '$4 == "CST" {print $NF, $5}')
-    local r
-    r=$(echo "$map" | awk -v b="oss://$bucket" '$1 == b {print $2}' | sed 's/^oss-//')
-    echo "${r:-${region:-cn-hangzhou}}"
-}
 
 # 抓取某域名某上海日期日志并归档访问目录/异常 URI 档案（覆盖写）；成功 0
 # 无日志时：archive_empty=1 建空档案（主任务语义=当天已评估过）；否则不建档案返回 2（补档语义=数据不可得）
 _cdn_fetch_parse_domain_day() {
     local domain=$1 day=$2 archive_empty=${3:-0}
     local prune_dir access_file abnormal_file rows log_name log_path
-    prune_dir="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/cdn/prune"
+    prune_dir="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/prune"
     access_file="${prune_dir}/access/${domain}/${day}.txt"
     abnormal_file="${prune_dir}/abnormal/${domain}/${day}.txt"
 
@@ -666,8 +636,11 @@ _cdn_fetch_parse_domain_day() {
         return 2
     fi
 
-    : >"$access_file"
-    : >"$abnormal_file"
+    # 原子写：先写 .tmp，全部日志下载成功后再 mv 成正式档案；中断/失败不留残缺档案被误当已归档
+    local tmp_access="${access_file}.tmp" tmp_abnormal="${abnormal_file}.tmp"
+    : >"$tmp_access"
+    : >"$tmp_abnormal"
+    local failed=0
     while IFS=$'\t' read -r _ _ _ log_name log_path; do
         [ -z "$log_path" ] && continue
         [[ "$log_path" != http* ]] && log_path="https://${log_path}"
@@ -675,7 +648,7 @@ _cdn_fetch_parse_domain_day() {
         local pipe_ok
         curl -sfL --connect-timeout 10 "$log_path" 2>/dev/null |
             gunzip -c 2>/dev/null |
-            awk -v af="$access_file" -v ab="$abnormal_file" '
+            awk -v af="$tmp_access" -v ab="$tmp_abnormal" '
                 {
                     for (i = 1; i <= NF; i++) {
                         if ($i ~ /^"(GET|POST|HEAD)$/) {
@@ -685,8 +658,11 @@ _cdn_fetch_parse_domain_day() {
                             sub(/\?.*$/, "", url)
                             status = $(i + 2)
                             if (url != "" && url != "/") {
-                                n = split(url, seg, "/")
-                                if (n > 1 && seg[n] != "") n--
+                                # 只取目录（去掉末尾文件名段），最多 3 层；去掉前导 / 以免多算一层
+                                path = url
+                                sub(/^\/+/, "", path)
+                                n = split(path, seg, "/")
+                                if (n > 0 && seg[n] != "") n--
                                 if (n > 3) n = 3
                                 prefix = ""
                                 for (j = 1; j <= n; j++) {
@@ -703,86 +679,26 @@ _cdn_fetch_parse_domain_day() {
         pipe_ok=${PIPESTATUS[0]}
         if [ "$pipe_ok" -ne 0 ]; then
             echo "警告：$log_name 下载失败，跳过" >&2
+            failed=$((failed + 1))
         fi
     done < <(echo "$rows")
-    sort -u -o "$access_file" "$access_file"
-    sort -u -o "$abnormal_file" "$abnormal_file"
+    if [ "$failed" -gt 0 ]; then
+        rm -f "$tmp_access" "$tmp_abnormal"
+        echo "错误：$domain $day 有 $failed 个日志下载失败，不落档案（下次重试）" >&2
+        return 1
+    fi
+    sort -u -o "$tmp_access" "$tmp_access"
+    sort -u -o "$tmp_abnormal" "$tmp_abnormal"
+    mv "$tmp_access" "$access_file"
+    mv "$tmp_abnormal" "$abnormal_file"
     return 0
 }
 
-# 备份候选目录（stdin 每行一个 /前缀）到本地并校验对象数一致，通过的追加 rm 命令到删除脚本
-# 参数: bucket bregion script_file back_dir
-# 校验口径：ossutil cp -r 成功且备份目录内存在文件（无全量对象清单时不再做精确计数比对）
-_cdn_backup_and_script() {
-    local bucket=$1 bregion=$2 script_file=$3 back_dir=$4
-    local added=0 p target local_cnt
-    while IFS= read -r p; do
-        [ -z "$p" ] && continue
-        target="${back_dir}${p}"
-        mkdir -p "$target"
-        echo "    备份 -> $target ..."
-        if aliyun --profile "${profile:-}" ossutil cp -r --endpoint "http://oss-${bregion}.aliyuncs.com" --region "$bregion" "oss://${bucket}${p}/" "$target/" >/dev/null 2>&1; then
-            local_cnt=$(find "$target" -type f | wc -l | tr -d ' ')
-            if [ "$local_cnt" -gt 0 ]; then
-                {
-                    echo ""
-                    echo "# ${p}（本地备份 ${local_cnt} 个文件）"
-                    echo "echo \"删除 oss://${bucket}${p}/\""
-                    echo "aliyun --profile \"${profile:-}\" ossutil rm -r -f --endpoint \"http://oss-${bregion}.aliyuncs.com\" --region \"$bregion\" \"oss://${bucket}${p}/\""
-                } >>"$script_file"
-                added=$((added + 1))
-            else
-                echo "    警告：$p 备份后无文件（目录可能为空），不加入删除脚本" >&2
-            fi
-        else
-            echo "    警告：$p 备份失败，不加入删除脚本" >&2
-        fi
-    done
-    if [ "$added" -eq 0 ]; then
-        rm -f "$script_file"
-        echo "  备份均失败或无有效候选，未生成脚本"
-    else
-        echo "  生成删除脚本: $script_file （$added 条）"
-    fi
-}
-
-# 递归列出 bucket 的 <=3 层目录清单（ossutil ls -d 逐层，秒级）；输出 /a/b 形式（前导斜杠、去尾斜杠）
-# 每个 ls 调用带 30s 超时保护：单个目录拉取挂起/失败时跳过该目录继续（不卡死整棵树）
-_cdn_bucket_dir_tree() {
-    local bucket=$1 bregion=$2
-    local base="oss://${bucket}/"
-    local level=("")
-    local depth=0 out=""
-    while [ "$depth" -lt 3 ] && [ "${#level[@]}" -gt 0 ]; do
-        local next=() p sub
-        for p in "${level[@]}"; do
-            local lsurl="${base}${p:+${p}/}"
-            local dirs
-            dirs=$(timeout 30 aliyun --profile "${profile:-}" ossutil ls --endpoint "http://oss-${bregion}.aliyuncs.com" --region "$bregion" "$lsurl" -d 2>/dev/null |
-                awk -v pre="$lsurl" '
-                    $1 ~ /^oss:\/\// && $1 ~ /\/$/ && index($1, pre) == 1 {
-                        sub(/\/$/, "", $1)
-                        print substr($1, length(pre) + 1)
-                    }')
-            while IFS= read -r sub; do
-                [ -z "$sub" ] && continue
-                out+="${out:+$'\n'}/${p:+${p}/}${sub}"
-                next+=("${p:+${p}/}${sub}")
-            done <<<"$dirs"
-        done
-        level=("${next[@]}")
-        depth=$((depth + 1))
-    done
-    [ -n "$out" ] && echo -e "$out" | sort -u
-}
-
-# 每日评估任务（数据源 CDN 离线日志，源站 OSS）：
-#   拉昨日日志 -> 提取 <=3 层目录访问集 + 4xx/5xx 异常 URI -> 与 OSS 桶对象目录比对
-#   -> 近 --days 天无访问的目录自动备份到本地 -> 生成删除脚本（不自动执行）
-# 用法: cdn prune [--days N] [--domain <域名>] [--bucket <桶名>] [-s YYYY-MM-DD] [-e YYYY-MM-DD] [--dry-run]
-cdn_prune() {
-    local days=30 domain_filter="" bucket_filter="" start_day="" end_day="" dry_run=0
-    local today_epoch today prune_dir back_root
+# 归档 CDN 离线日志为 ≤3 层目录访问清单，并按 bucket 聚合 access-<bucket>.txt / abnormal-<bucket>.txt
+# 用法: cdn access [--days N] [--domain <域名>] [--bucket <桶名>] [-s YYYY-MM-DD] [-e YYYY-MM-DD]
+cdn_access() {
+    local days=30 domain_filter="" bucket_filter="" start_day="" end_day=""
+    local today_epoch prune_dir
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -798,9 +714,8 @@ cdn_prune() {
         --bucket) bucket_filter="$2"; shift 2 ;;
         -s | --start-date) start_day="$2"; shift 2 ;;
         -e | --end-date) end_day="$2"; shift 2 ;;
-        --dry-run) dry_run=1; shift ;;
         -h | --help)
-            echo "用法: cdn prune [--days N] [--domain <域名>] [--bucket <桶名>] [-s 开始] [-e 结束] [--dry-run]"
+            echo "用法: cdn access [--days N] [--domain <域名>] [--bucket <桶名>] [-s 开始] [-e 结束]"
             return 0
             ;;
         *)
@@ -815,9 +730,7 @@ cdn_prune() {
         return 1
     fi
 
-    # 业务日统一按上海时区（UTC+8）口径：昨天 = 上海昨天（不依赖系统 TZ）
     today_epoch=$(date +%s)
-    today=$(_cdn_epoch_to_sh_day "$today_epoch") || { echo "错误：无法计算今天日期" >&2; return 1; }
     start_day=${start_day:-$(_cdn_epoch_to_sh_day $((today_epoch - 86400)))}
     end_day=${end_day:-$start_day}
     if ! _cdn_day_to_utc_epoch "$start_day" >/dev/null 2>&1 || ! _cdn_day_to_utc_epoch "$end_day" >/dev/null 2>&1; then
@@ -829,42 +742,64 @@ cdn_prune() {
         return 1
     fi
 
-    prune_dir="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/cdn/prune"
-    back_root="${SCRIPT_DATA:-.}/prune-backup"
-    mkdir -p "$prune_dir" "$back_root"
+    prune_dir="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/prune"
+    mkdir -p "$prune_dir"
 
-    echo "===== CDN 日志清理评估：范围=$start_day ~ $end_day （上海时区）/ 未访问阈值=$days 天 / dry-run=$dry_run ====="
+    echo "===== CDN 访问清单：范围=${start_day} ~ ${end_day}（上海时区）/ 聚合窗口=${days} 天 ====="
 
-    # 1. 发现 OSS 源站域名（按源站 bucket 分组）
-    local domain_info
-    domain_info=$(call_aliyun_api cdn describe-user-domains --region cn-hangzhou 2>/dev/null | jq -r '
-        .Domains.PageData[] | .DomainName as $d
+    # 1. 发现 OSS 源站域名（域名 -> bucket）
+    local origin_rows domain_info available_buckets
+    origin_rows=$(call_aliyun_api cdn describe-user-domains --region cn-hangzhou --pager path=Domains.PageData 2>/dev/null | jq -r '
+        .Domains.PageData[]? | .DomainName as $d
         | .Sources.Source[]? | select(.Type == "oss")
-        | [$d, (.Content | split(".")[0])] | @tsv' 2>/dev/null)
+        | [$d, .Content] | @tsv' 2>/dev/null)
+    domain_info=$(echo "$origin_rows" | awk -F'\t' '
+        NF < 2 { next }
+        {
+            n = split($2, p, ".")
+            if (n >= 2 && p[2] ~ /^oss-/) print $1 "\t" p[1] "\t" $2
+            else print $1 "\t" "" "\t" $2
+        }')
+    if [ -n "$domain_info" ] && echo "$domain_info" | awk -F'\t' '$2 == ""' | grep -q .; then
+        echo "警告：以下 OSS 源站不是标准 <bucket>.oss-*.aliyuncs.com 形式，推不出 bucket，已跳过：" >&2
+        echo "$domain_info" | awk -F'\t' '$2 == "" {printf "  %s -> %s\n", $1, $3}' >&2
+    fi
+    domain_info=$(echo "$domain_info" | awk -F'\t' '$2 != ""')
+    available_buckets=$(echo "$domain_info" | awk -F'\t' '{print $2}' | sort -u)
     if [ -n "$domain_filter" ]; then
         domain_info=$(echo "$domain_info" | awk -v d="$domain_filter" '$1 == d')
     fi
     if [ -n "$bucket_filter" ]; then
-        domain_info=$(echo "$domain_info" | awk -v b="$bucket_filter" '$2 == b')
+        domain_info=$(echo "$domain_info" | awk -F'\t' -v b="$bucket_filter" '$2 == b || index($3, b ".") == 1')
+        if [ -z "$domain_info" ]; then
+            echo "未找到 bucket=${bucket_filter} 的 OSS 源站。可用 bucket："
+            echo "${available_buckets:-（无）}" | sed 's/^/  /'
+            return 0
+        fi
     fi
     if [ -z "$domain_info" ]; then
         echo "没有匹配的 OSS 源站 CDN 域名。"
         return 0
     fi
     echo "OSS 源站域名："
-    echo "$domain_info" | awk -F'\t' '{printf "  %-20s -> %s\n", $1, $2}'
+    echo "$domain_info" | awk -F'\t' '{printf "  %-20s -> %-12s (%s)\n", $1, $2, $3}'
 
-    # 2. 拉日志归档：主任务日期范围 + 窗口内自动补档缺失天
+    # 2. 拉日志归档（原子写；补档每次每域名 ≤3 天）
     local access_base="${prune_dir}/access"
     local abnormal_base="${prune_dir}/abnormal"
+    local fmt_file="${prune_dir}/.access_format"
+    local access_format=2
+    if [ "$(cat "$fmt_file" 2>/dev/null)" != "$access_format" ]; then
+        [ -d "$access_base" ] && echo "访问档案格式升级（-> v${access_format}），清理旧档案重建"
+        rm -rf "$access_base" "$abnormal_base"
+        echo "$access_format" >"$fmt_file"
+    fi
     mkdir -p "$access_base" "$abnormal_base"
 
     echo "== 拉取并解析访问日志 =="
     local d
     while IFS=$'\t' read -r d _; do
         [ -z "$d" ] && continue
-        # 补档策略（应对中断）：仅当窗口内已有档案时执行（冷启动不补，反正覆盖不足只记录），
-        # 从昨天往前跳过已有档案，单次运行最多补 3 天（渐进补齐，避免单次下载过量）
         local i date2 i_min
         i_min=$((days - 1))
         [ "$i_min" -gt 28 ] && i_min=28
@@ -883,7 +818,7 @@ cdn_prune() {
                 [ "$backfilled" -ge 3 ] && break
                 echo "  自动补档 $d $date2 ..."
                 local fb_ret
-                _cdn_fetch_parse_domain_day "$d" "$date2"
+                _cdn_fetch_parse_domain_day "$d" "$date2" 1
                 fb_ret=$?
                 if [ "$fb_ret" -ne 0 ] && [ "$fb_ret" -ne 2 ]; then
                     echo "    警告：$d $date2 补档失败" >&2
@@ -892,7 +827,6 @@ cdn_prune() {
             done
         fi
 
-        # 主任务：start_day ~ end_day 建档（档案已存在则复用，同一天重复运行不重复下载）
         local day_cursor day_end_ep af_main main_ok
         day_end_ep=$(_cdn_day_to_utc_epoch "$end_day")
         day_cursor=$(_cdn_day_to_utc_epoch "$start_day")
@@ -912,112 +846,38 @@ cdn_prune() {
             day_cursor=$((day_cursor + 86400))
         done
         [ "$main_ok" -eq 0 ] && continue
-        echo "  $d 覆盖 $start_day ~ $end_day，昨日访问目录 $(wc -l <"${access_base}/${d}/${start_day}.txt" | tr -d ' ') 个，异常 URI $(wc -l <"${abnormal_base}/${d}/${start_day}.txt" | tr -d ' ') 条"
+        echo "  ${d} 覆盖 ${start_day} ~ ${end_day}，昨日访问目录 $(wc -l <"${access_base}/${d}/${start_day}.txt" | tr -d ' ') 个，异常 URI $(wc -l <"${abnormal_base}/${d}/${start_day}.txt" | tr -d ' ') 条"
     done < <(echo "$domain_info")
 
-    # 3. 每个 bucket：对象目录前缀 与 近 N 天访问目录并集 比对
+    # 3. 按 bucket 聚合最近 days 天的访问目录/异常并集
     local buckets bucket
     buckets=$(echo "$domain_info" | awk -F'\t' '{print $2}' | sort -u)
-    echo "== 比对 OSS 目录（${buckets//$'\n'/ } ）=="
+    echo "== 聚合三层访问清单（窗口 ${days} 天）=="
     for bucket in $buckets; do
-        local bregion oss_prefixes union_file candidates domains_of_bucket
-        bregion=$(_cdn_bucket_region "$bucket")
+        local domains_of_bucket d2 i date2 f
         domains_of_bucket=$(echo "$domain_info" | awk -F'\t' -v b="$bucket" '$2 == b {print $1}')
-
-        # 冷启动/中断后档案不足：本轮仅记录（不拉对象清单、不比对、不备份、不生成脚本）
-        local covered_days=0 i date2 d2 access_file2
-        for i in $(seq 1 "$days"); do
-            date2=$(_cdn_epoch_to_sh_day $((today_epoch - i * 86400)))
-            for d2 in $domains_of_bucket; do
-                [ -f "${access_base}/${d2}/${date2}.txt" ] && {
-                    covered_days=$((covered_days + 1))
-                    break
-                }
+        {
+            for i in $(seq 1 "$days"); do
+                date2=$(_cdn_epoch_to_sh_day $((today_epoch - i * 86400)))
+                for d2 in $domains_of_bucket; do
+                    f="${access_base}/${d2}/${date2}.txt"
+                    [ -f "$f" ] && cat "$f"
+                done
             done
-        done
-        if [ "$covered_days" -lt "$days" ]; then
-            echo "  档案覆盖 $covered_days/$days 天，数量不足：本轮仅记录不评估（自动补档已完成，剩余缺失天超出 CDN 日志保留期）"
-            echo
-            continue
-        fi
-
-        # 目录清单按日缓存（ossutil ls -d 逐层 ≤3 层；prune 每日一次，同日重复运行复用；tmp+mv 原子写防半截缓存）
-        local objects_cache
-        objects_cache="${prune_dir}/objects/${bucket}/${today}.txt"
-        mkdir -p "$(dirname "$objects_cache")"
-        if [ -s "$objects_cache" ]; then
-            echo "-- bucket=$bucket （region=$bregion ）复用当日目录清单缓存 ..."
-            oss_prefixes=$(cat "$objects_cache")
-        else
-            echo "-- bucket=$bucket （region=$bregion ）拉取目录清单（≤3 层）并缓存 ..."
-            oss_prefixes=$(_cdn_bucket_dir_tree "$bucket" "$bregion")
-            if [ -z "$oss_prefixes" ]; then
-                echo "警告：$bucket 目录清单为空（权限/区域问题），跳过" >&2
-                continue
-            fi
-            echo "$oss_prefixes" >"${objects_cache}.tmp" && mv "${objects_cache}.tmp" "$objects_cache"
-        fi
-
-        union_file=$(mktemp)
-        for i in $(seq 1 "$days"); do
-            date2=$(_cdn_epoch_to_sh_day $((today_epoch - i * 86400)))
-            for d2 in $domains_of_bucket; do
-                access_file2="${access_base}/${d2}/${date2}.txt"
-                [ -f "$access_file2" ] && cat "$access_file2"
+        } | sort -u >"${prune_dir}/access-${bucket}.txt"
+        {
+            for i in $(seq 1 "$days"); do
+                date2=$(_cdn_epoch_to_sh_day $((today_epoch - i * 86400)))
+                for d2 in $domains_of_bucket; do
+                    f="${abnormal_base}/${d2}/${date2}.txt"
+                    [ -f "$f" ] && cat "$f"
+                done
             done
-        done | sort -u >"$union_file"
-
-        # 保护：访问前缀的所有祖先链也视为已访问（防止父目录候选清掉访问过的子目录）
-        local blocked
-        blocked=$(cat "$union_file" | awk -F/ '{
-            p = ""
-            for (i = 1; i <= NF; i++) {
-                if ($i == "") continue
-                p = p "/" $i
-                print p
-            }
-        }' | sort -u)
-        candidates=$(comm -23 <(echo "$oss_prefixes") <(echo "$blocked"))
-        rm -f "$union_file"
-
-        local n_cand p
-        n_cand=$(echo -n "$candidates" | awk 'NF {c++} END {print c+0}')
-        if [ "$n_cand" -eq 0 ]; then
-            echo "  无候选目录"
-            continue
-        fi
-        echo "  候选未访问目录 $n_cand 个："
-        local script_file back_dir
-        back_dir="${back_root}/${today}/${bucket}"
-        script_file="${prune_dir}/rm-${today}-${bucket}.sh"
-        if [ "$dry_run" -eq 1 ]; then
-            echo "$candidates" | awk '{print "  " $0}'
-        else
-            mkdir -p "$back_dir"
-            cat >"$script_file" <<EOF
-#!/usr/bin/env bash
-# 生成时间: $today  来源: cdn prune --days $days（范围 $start_day ~ $end_day ）
-# 备份目录: $back_dir   人工复核后执行删除
-set -e
-EOF
-            chmod +x "$script_file"
-            _cdn_backup_and_script "$bucket" "$bregion" "$script_file" "$back_dir" <<<"$candidates"
-        fi
+        } | sort -u >"${prune_dir}/abnormal-${bucket}.txt"
+        echo "  ${bucket}：访问目录 $(wc -l <"${prune_dir}/access-${bucket}.txt" | tr -d ' ') 条，异常 $(wc -l <"${prune_dir}/abnormal-${bucket}.txt" | tr -d ' ') 条 -> access-${bucket}.txt"
     done
 
-    # 4. 异常 URI 汇总
-    echo "== 异常 URI（4xx/5xx）记录 =="
-    local total_ab=0 f dname n
-    for f in "${abnormal_base}"/*/"${start_day}.txt"; do
-        [ -f "$f" ] || continue
-        dname=$(basename "$(dirname "$f")")
-        n=$(wc -l <"$f" | tr -d ' ')
-        total_ab=$((total_ab + n))
-        echo "  $dname : $n 条 -> $f"
-    done
-    [ "$total_ab" -eq 0 ] && echo "  无 4xx/5xx 记录"
-
-    echo "===== 完成：备份目录 $back_root ；脚本目录 $prune_dir ====="
+    echo "===== 完成：${prune_dir}/access-<bucket>.txt ====="
 }
 
 # 购买资源包功能（保持原有实现，但使用框架函数）
