@@ -206,14 +206,34 @@ $PRUNE_DIR/rm-<日期>-<bucket>.sh
 
 ## 建议 cron
 
+cron 环境 PATH 极简，且本机 `jq` 由 mise 管理、`bash` 需 5.x，所以必须显式设置
+`PATH` 并用绝对路径的 bash；不加 `cd`（脚本按自身路径解析项目根）。
+
 ```cron
-# 每周：重建目录结构 + 大小清单（慢可等）
-0 3 * * 0  bash main.sh -p flyh6 oss dirsize pilihuo
-# 每天：取昨日日志，更新访问清单
-30 2 * * * bash main.sh -p flyh6 cdn access
-# 每月：比较并生成脚本（人工复核后执行脚本）
-0 4 1 * *  bash main.sh -p flyh6 oss prune pilihuo
+PATH=/usr/local/bin:/Users/xia/.local/share/mise/shims:/usr/bin:/bin
+
+# 每天 02:30：取日志、生成三层访问清单
+30 2 * * * /usr/local/bin/bash /Users/xia/Cursor/deploy.sh/cloud/aliyun/main.sh -p flyh6 cdn access >> /Users/xia/Cursor/deploy.sh/data/logs/aliyun/cron/cdn-access.log 2>&1
+
+# 每周日 03:00：重建目录结构 + 大小清单（慢，可等）
+0 3 * * 0 /usr/local/bin/bash /Users/xia/Cursor/deploy.sh/cloud/aliyun/main.sh -p flyh6 oss dirsize pilihuo >> /Users/xia/Cursor/deploy.sh/data/logs/aliyun/cron/oss-dirsize.log 2>&1
+
+# 每月 1 日 04:00：比较并生成备份/删除脚本（人工复核后执行脚本）
+0 4 1 * * /usr/local/bin/bash /Users/xia/Cursor/deploy.sh/cloud/aliyun/main.sh -p flyh6 oss prune pilihuo >> /Users/xia/Cursor/deploy.sh/data/logs/aliyun/cron/oss-prune.log 2>&1
 ```
+
+要点：
+
+1. **先建日志目录**（cron 不会自动建，缺目录会让重定向失败）：
+   `mkdir -p /Users/xia/Cursor/deploy.sh/data/logs/aliyun/cron`
+2. **`PATH` 必须包含**：`/usr/local/bin`（bash/aliyun/gdate/greadlink/gstat）与
+   `/Users/xia/.local/share/mise/shims`（`jq`）。否则 cron 里报 `jq: command not found`。
+3. **bash 用绝对路径** `/usr/local/bin/bash`（脚本用了 bash 4+ 语法，系统自带 3.2 会报错）。
+4. **日志分两类**：
+   - cron 包装日志（进度、警告、`ls -d`/`du` 输出）→ `>> .../data/logs/aliyun/cron/*.log 2>&1`。
+   - API 调用日志已由框架写入 `data/logs/aliyun/<profile>/<region>/<service>.log`，无需再定向。
+5. **日志增长**：`>>` 会持续追加；只想留最近一次改 `>`，想留历史就配 logrotate 或定期清理。
+6. **避免周期重叠**：`oss dirsize` 可能跑数分钟，不要用过高频的周期；必要时加锁文件互斥。
 
 ## 迁移（旧实现清理）
 
@@ -227,3 +247,6 @@ $PRUNE_DIR/rm-<日期>-<bucket>.sh
 - OSS 缓存缺失时，步骤 3 必须**跳过比较、不生成脚本**，防止误删。
 - `ls` 解析：只保留行内 URL 以 `/` 结尾者（目录）；文件（无尾斜杠）一律丢弃。
 - 访问集含 404/扫描器路径属正常，只会多 block、不会误删。
+- **内网 endpoint**：加全局 `-in/--internal`（`oss ... -in`）。生效范围：`oss dirsize` 的
+  `stat`/`ls -d`/`du` 与 `oss prune` 生成脚本里的 `ENDPOINT` 都切到
+  `http://oss-<region>-internal.aliyuncs.com`。**仅同地域 ECS/VPC 内可达**，默认走公网。

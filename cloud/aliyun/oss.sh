@@ -43,9 +43,11 @@ OSS (对象存储服务) 操作
   dirsize <存储桶> [--min-size 1G] [--exclude 前缀] [--depth 3] [--refresh]
                       列出存储桶 ≤N 层目录及大小（只用 ls -d + du），写入缓存清单，
                       供 prune 比较使用；不发起 CDN 请求
+                      （全局 -in/--internal 生效：改走内网 endpoint，仅同地域可达）
   prune <存储桶> [--days 30] [--min-size 1G] [--exclude 前缀] [--dry-run]
                       读 dirsize 目录/大小清单 + cdn access 访问清单，比较出长期未访问的
                       大目录，生成「先备份再删除」脚本（只生成、不执行）
+                      （全局 -in/--internal 生效：生成脚本的 ENDPOINT 用内网）
 
 示例：
 基本操作：
@@ -714,10 +716,17 @@ _oss_cache_age_days() {
     echo $(((now - ts) / 86400))
 }
 
+# 拼 OSS endpoint：_oss_internal=1 时用内网（仅同地域 ECS/VPC 可达）
+_oss_endpoint() {
+    local rg=$1 suffix=""
+    [ "${_oss_internal:-0}" -eq 1 ] && suffix="-internal"
+    echo "http://oss-${rg}${suffix}.aliyuncs.com"
+}
+
 # 解析 bucket 所在区域（ossutil stat 的 ExtranetEndpoint），失败回退 profile 区域
 _oss_bucket_region() {
     local bucket=$1 ep
-    ep=$(aliyun --profile "${profile:-}" ossutil stat --endpoint "http://oss-${region:-cn-hangzhou}.aliyuncs.com" --region "${region:-cn-hangzhou}" "oss://${bucket}" 2>/dev/null |
+    ep=$(aliyun --profile "${profile:-}" ossutil stat --endpoint "$(_oss_endpoint "${region:-cn-hangzhou}")" --region "${region:-cn-hangzhou}" "oss://${bucket}" 2>/dev/null |
         awk -F'[: ]+' '/^ExtranetEndpoint/{print $2; exit}')
     ep=${ep#oss-}
     echo "${ep%%.aliyuncs.com}"
@@ -725,7 +734,7 @@ _oss_bucket_region() {
 
 # 账号下的 bucket 名列表
 _oss_bucket_names() {
-    aliyun --profile "${profile:-}" ossutil ls --endpoint "http://oss-${region:-cn-hangzhou}.aliyuncs.com" --region "${region:-cn-hangzhou}" 2>/dev/null |
+    aliyun --profile "${profile:-}" ossutil ls --endpoint "$(_oss_endpoint "${region:-cn-hangzhou}")" --region "${region:-cn-hangzhou}" 2>/dev/null |
         awk -F/ '/oss:\/\// {print $NF}' | grep -v '^$'
 }
 
@@ -733,7 +742,8 @@ _oss_bucket_names() {
 _oss_ls_dir_tree() {
     local bucket=$1 bregion=$2 maxdepth=${3:-3}
     local base="oss://${bucket}/"
-    local endpoint="http://oss-${bregion}.aliyuncs.com"
+    local endpoint
+    endpoint=$(_oss_endpoint "$bregion")
     local jobs="${_OSS_LS_JOBS:-16}"
     local frontier=("$base")
     local depth=0 out="" raw rel r
@@ -786,6 +796,11 @@ oss_dirsize() {
             ;;
         esac
     done
+
+    # 沿用全局 -in/--internal（handle_oss_commands 已把 endpoint_url 设为内网）
+    _oss_internal=0
+    case "${endpoint_url:-}" in *-internal*) _oss_internal=1 ;; esac
+    if [ "$_oss_internal" -eq 1 ]; then echo "-- 使用内网 endpoint（仅同地域可达）"; fi
 
     if [ -z "$bucket" ]; then
         local list
@@ -846,7 +861,8 @@ oss_dirsize() {
         jobs="${_OSS_DU_JOBS:-8}"
         echo "-- 计算目录大小：du ${n_dirs} 个目录（-P ${jobs}）..."
         export _OSS_DU_PROFILE="${profile:-}"
-        export _OSS_DU_EP="http://oss-${bregion}.aliyuncs.com"
+        _OSS_DU_EP=$(_oss_endpoint "$bregion")
+        export _OSS_DU_EP
         export _OSS_DU_REGION="$bregion"
         export _OSS_DU_BUCKET="$bucket"
         xargs -P "$jobs" -I{} bash -c '
@@ -904,6 +920,11 @@ oss_prune() {
             ;;
         esac
     done
+
+    # 沿用全局 -in/--internal（写入生成脚本的 ENDPOINT）
+    _oss_internal=0
+    case "${endpoint_url:-}" in *-internal*) _oss_internal=1 ;; esac
+    if [ "$_oss_internal" -eq 1 ]; then echo "-- 生成脚本使用内网 endpoint（仅同地域 ECS 可达）"; fi
 
     if [ -z "$bucket" ]; then
         local list
@@ -986,7 +1007,7 @@ oss_prune() {
 set -e
 
 PROFILE="${profile:-}"
-ENDPOINT="http://oss-${bregion}.aliyuncs.com"
+ENDPOINT="$(_oss_endpoint "$bregion")"
 REGION="${bregion}"
 BACKUP_ROOT="${back_root}"
 EOF
