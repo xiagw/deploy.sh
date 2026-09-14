@@ -31,6 +31,7 @@ Bash wrapper around the Alibaba Cloud CLI (plugin mode, aliyun >= 3.4). Entry: `
 - RAM permissions have two scopes: account-level (`ram list-policies-for-user`) and resource-group-level (`resourcemanager ListPolicyAttachments --PrincipalType IMSUser --PrincipalName "<user>@<alias>.onaliyun.com"`). The console shows both; querying only the first looks "empty".
 - macOS: `main.sh` needs `greadlink` (Homebrew coreutils); `stat -c` in `load_module` is GNU-style.
 - macOS 兼容：脚本内禁用裸 `stat -c`/`date -d`（GNU 语法），须探测 `gstat`/`gdate` 回退；`${TMPDIR:-/tmp}` 要去尾斜杠再拼文件（macOS TMPDIR 带 `/` 会拼出 `//`）。ack.sh 的 `run_once` 中已有 `runtime_dir` 的现成模式可参考。
+- CDN 日志时间口径（cdn.sh，勿改错）：日志**时间戳/文件名是北京时(UTC+8)**，而 `describe-cdn-domain-logs` 的 `--start-time/--end-time` 是 **UTC**。**业务日按北京时**：北京日 `X` 的全天日志 → UTC 窗口 `[X-1 16:00Z, X 16:00Z)`（start=epoch(X)-8h，end=epoch(X)+16h）。**勿按 UTC 日历日 `[X 00:00Z, X+1 00:00Z)` 取数**（= 北京 `[X 08:00, X+1 08:00)`，整体偏移 8 小时）。实测北京 09-13 返回 24 个文件 `..._000000_010000.gz`~`..._230000_240000.gz`。
 
 
 ## ACK 扩缩容 / OpenKruise WorkloadSpread（ack.sh 机制，勿凭直觉改）

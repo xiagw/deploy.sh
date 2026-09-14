@@ -422,7 +422,7 @@ cdn_logs() {
 
     domain=$(_cdn_resolve_domain "$domain" "选择要查日志的 CDN 域名") || return 1
 
-    # 业务日统一按上海时区（UTC+8）口径：昨天 = 上海昨天，cdn 日志窗口由其换算（见 _cdn_fetch_log_rows）
+    # 业务日=本地(北京)日：昨天 = 北京昨天；对应 UTC 窗口见 _cdn_fetch_log_rows
     if [ -z "$start_day" ]; then
         local today_epoch
         today_epoch=$(date +%s)
@@ -480,7 +480,20 @@ cdn_logs() {
     log_result "${profile:-}" "${region:-}" "cdn" "logs" "$rows" "$format"
 }
 
-# ---------- 时区工具：业务日统一按 UTC+8（上海）计算，纯 epoch 算术，不依赖系统 TZ ----------
+# ---------- 时间工具：业务日按北京时(UTC+8)计算（CDN 日志戳/文件名用北京时），纯 epoch 算术，不依赖系统 TZ ----------
+#
+# 【时间口径，勿改错】
+#   - CDN 日志的“时间戳 / 文件名”是 北京时(UTC+8)：
+#       例 .vrupup.com_2026_09_13_000000_010000.gz 内容为 [13/Sep/2026:00:xx +0800]
+#   - describe-cdn-domain-logs 的 --start-time/--end-time 是 UTC(ISO8601 带 Z)
+#   - 业务日 = 北京时日历日；北京日 X 的“全天日志”→ UTC 窗口 [X-1 16:00Z, X 16:00Z)
+#       北京 X   00:00 = UTC X-1 16:00Z   （起点）
+#       北京 X+1 00:00 = UTC X   16:00Z   （终点，开区间）
+#   - 换算：start = epoch(X 00:00Z) - 8h ; end = epoch(X 00:00Z) + 16h（见 _cdn_fetch_log_rows）
+#   - 实测：北京 09-13 → UTC [2026-09-12T16:00:00Z, 2026-09-13T16:00:00Z)，返回 24 个文件：
+#       ..._2026_09_13_000000_010000.gz（内容 00:40 +0800）… ..._2026_09_13_230000_240000.gz（内容 23:54 +0800）
+#   - 反例（别再犯）：误按“UTC 日历日 [X 00:00Z, X+1 00:00Z)”取数 = 北京 [X 08:00, X+1 08:00)，整体偏移 8 小时。
+#
 # 日期字符串（YYYY-MM-DD）当 UTC 日零点解析成 epoch（这是确定性换算，非"本地时间"）
 _cdn_day_to_utc_epoch() {
     local day=$1
@@ -493,7 +506,7 @@ _cdn_day_to_utc_epoch() {
     TZ=UTC date -d "$day" +%s 2>/dev/null
 }
 
-# epoch -> UTC ISO8601
+# epoch -> UTC ISO8601（用于 API 的 --start-time/--end-time）
 _cdn_epoch_to_utc_iso() {
     local epoch=$1
     if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/date ]; then
@@ -505,7 +518,7 @@ _cdn_epoch_to_utc_iso() {
     TZ=UTC date -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null
 }
 
-# epoch -> 上海日期（YYYY-MM-DD）
+# epoch -> 本地业务日（北京时 UTC+8，与 CDN 日志时间戳/文件名一致）
 _cdn_epoch_to_sh_day() {
     local epoch=$1
     if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/date ]; then
@@ -517,19 +530,15 @@ _cdn_epoch_to_sh_day() {
     TZ=Asia/Shanghai date -d "@$epoch" +%F 2>/dev/null
 }
 
-# 上海时区今天
-_cdn_sh_today() {
-    _cdn_epoch_to_sh_day "$(date +%s)"
-}
-
 # 拉取域名指定日期范围的 CDN 离线日志清单（TSV 行：StartTime/EndTime/LogSize/LogName/LogPath）
-# 日期为上海日期（UTC+8）；调用方已确保格式合法
+# 日期为本地(北京)业务日（YYYY-MM-DD）；调用方已确保格式合法
 # 输出到 stdout；失败返回非 0 且错误信息写 stderr
 _cdn_fetch_log_rows() {
     local domain=$1 start_day=$2 end_day=$3
     local s_epoch e_epoch start_utc end_utc result ret
     s_epoch=$(_cdn_day_to_utc_epoch "$start_day") || { echo "错误：开始日期解析失败（${start_day}）" >&2; return 1; }
     e_epoch=$(_cdn_day_to_utc_epoch "$end_day") || { echo "错误：结束日期解析失败（${end_day}）" >&2; return 1; }
+    # 业务日=本地(北京)日；API 参数用 UTC：窗口 = [日 00:00+08, 次日 00:00+08) = [日前一天16:00Z, 日16:00Z)
     start_utc=$(_cdn_epoch_to_utc_iso $((s_epoch - 28800))) || { echo "错误：开始日期转换失败" >&2; return 1; }
     end_utc=$(_cdn_epoch_to_utc_iso $((e_epoch + 57600))) || { echo "错误：结束日期转换失败" >&2; return 1; }
 
@@ -616,7 +625,7 @@ _cdn_analyze_log() {
 }
 
 
-# 抓取某域名某上海日期日志并归档访问目录/异常 URI 档案（覆盖写）；成功 0
+# 抓取某域名某本地(北京)日期日志并归档访问目录/异常 URI 档案（覆盖写）；成功 0
 # 无日志时：archive_empty=1 建空档案（主任务语义=当天已评估过）；否则不建档案返回 2（补档语义=数据不可得）
 _cdn_fetch_parse_domain_day() {
     local domain=$1 day=$2 archive_empty=${3:-0}
@@ -745,7 +754,7 @@ cdn_access() {
     prune_dir="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/prune"
     mkdir -p "$prune_dir"
 
-    echo "===== CDN 访问清单：范围=${start_day} ~ ${end_day}（上海时区）/ 聚合窗口=${days} 天 ====="
+    echo "===== CDN 访问清单：范围=${start_day} ~ ${end_day}（北京时）/ 聚合窗口=${days} 天 ====="
 
     # 1. 发现 OSS 源站域名（域名 -> bucket）
     local origin_rows domain_info available_buckets
@@ -788,7 +797,7 @@ cdn_access() {
     local access_base="${prune_dir}/access"
     local abnormal_base="${prune_dir}/abnormal"
     local fmt_file="${prune_dir}/.access_format"
-    local access_format=2
+    local access_format=4
     if [ "$(cat "$fmt_file" 2>/dev/null)" != "$access_format" ]; then
         [ -d "$access_base" ] && echo "访问档案格式升级（-> v${access_format}），清理旧档案重建"
         rm -rf "$access_base" "$abnormal_base"
