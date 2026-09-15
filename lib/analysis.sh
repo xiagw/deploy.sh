@@ -48,13 +48,14 @@ stage_security_zap() {
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] stage_security_zap:"
-        _msg note "  ${G_RUN} -v $(pwd):/zap/wrk ${zap_image} zap-full-scan.sh ${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
+        _msg note "  ${G_RUN} -v ${G_ARTIFACT_DIR}/reports:/zap/wrk ${zap_image} zap-full-scan.sh ${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
         return 0
     fi
 
-    if $G_RUN -v "$(pwd):/zap/wrk" "$zap_image" zap-full-scan.sh "${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"; then
-        mv "report.html" "zap_report_latest.html" || _msg warn "ZAP report not found: report.html"
-        _msg ok "ZAP scan completed. Report saved to zap_report_latest.html"
+    mkdir -p "${G_ARTIFACT_DIR}/reports"
+    if $G_RUN -v "${G_ARTIFACT_DIR}/reports:/zap/wrk" "$zap_image" zap-full-scan.sh "${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"; then
+        mv "${G_ARTIFACT_DIR}/reports/report.html" "${G_ARTIFACT_DIR}/reports/zap_report_latest.html" || _msg warn "ZAP report not found: report.html"
+        _msg ok "ZAP scan completed. Report saved to ${G_ARTIFACT_DIR}/reports/zap_report_latest.html"
     else
         _msg error "ZAP scan failed."
         return 1
@@ -80,14 +81,15 @@ stage_security_vulmap() {
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] stage_security_vulmap:"
-        _msg note "  ${G_RUN} -v ${PWD}:/work vulmap -u ${ENV_TARGET_URL} -o /work/${output_file}"
+        _msg note "  ${G_RUN} -v ${G_ARTIFACT_DIR}/reports:/work vulmap -u ${ENV_TARGET_URL} -o /work/${output_file}"
         return 0
     fi
 
     # Run vulmap scan
-    $G_RUN -v "${PWD}:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/$output_file"
-    if [[ -f "$output_file" ]]; then
-        _msg ok "vulmap scan completed. Results saved to '$output_file'."
+    mkdir -p "${G_ARTIFACT_DIR}/reports"
+    $G_RUN -v "${G_ARTIFACT_DIR}/reports:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/$output_file"
+    if [[ -f "${G_ARTIFACT_DIR}/reports/$output_file" ]]; then
+        _msg ok "vulmap scan completed. Results saved to '${G_ARTIFACT_DIR}/reports/$output_file'."
     else
         _msg error "vulmap scan failed or no vulnerabilities found."
         return 1
@@ -181,24 +183,26 @@ analysis_pmd() {
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] analysis_pmd:"
-        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/src pmd/pmd:${pmd_version} pmd -d /src/${source_dir} -R ${pmd_rules} -f ${report_format} -r /src/${report_file}"
+        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/src -v ${G_ARTIFACT_DIR}/reports:/reports pmd/pmd:${pmd_version} pmd -d /src/${source_dir} -R ${pmd_rules} -f ${report_format} -r /reports/${report_file}"
         return 0
     fi
 
+    mkdir -p "${G_ARTIFACT_DIR}/reports"
     if ! $G_RUN \
         -v "${G_REPO_DIR}:/src" \
         -v "${G_REPO_DIR}/pmd-rules:/rules" \
+        -v "${G_ARTIFACT_DIR}/reports:/reports" \
         "pmd/pmd:${pmd_version}" pmd \
         -d "/src/${source_dir}" \
         -R "${pmd_rules}" \
         -f "${report_format}" \
-        -r "/src/${report_file}"; then
+        -r "/reports/${report_file}"; then
         _msg error "PMD analysis failed"
         return 1
     fi
 
-    if [[ -f "${G_REPO_DIR}/${report_file}" ]]; then
-        _msg ok "PMD analysis completed. Report saved to ${report_file}"
+    if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
+        _msg ok "PMD analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
     else
         _msg error "PMD report file not generated"
         return 1
@@ -221,7 +225,7 @@ analysis_codeclimate() {
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] analysis_codeclimate:"
-        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/code codeclimate/codeclimate analyze -f json > ${report_file}"
+        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/code codeclimate/codeclimate analyze -f json > ${G_ARTIFACT_DIR}/reports/${report_file}"
         return 0
     fi
 
@@ -274,20 +278,21 @@ EOF
 
     _msg task "Running CodeClimate analysis with configuration from ${config_file}"
 
+    mkdir -p "${G_ARTIFACT_DIR}/reports"
     if ! $G_RUN \
         -v "${G_REPO_DIR}":/code \
         -v "${config_file}":/code/.codeclimate.yml \
         -v /tmp/cc:/tmp/cc \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        codeclimate/codeclimate analyze -f json > "${G_REPO_DIR}/${report_file}"; then
+        codeclimate/codeclimate analyze -f json > "${G_ARTIFACT_DIR}/reports/${report_file}"; then
         _msg error "CodeClimate analysis failed"
         return 1
     fi
 
-    if [[ -f "${G_REPO_DIR}/${report_file}" ]]; then
+    if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
         # 生成可读性更好的HTML报告
         if command -v jq >/dev/null 2>&1; then
-            local html_report="${G_REPO_DIR}/codeclimate_report.html"
+            local html_report="${G_ARTIFACT_DIR}/reports/codeclimate_report.html"
             {
                 echo "<html><head><title>CodeClimate Report</title>"
                 echo "<style>body{font-family:Arial,sans-serif;margin:20px;} .issue{margin:10px 0;padding:10px;border:1px solid #ddd;} .high{background:#ffe6e6;} .medium{background:#fff3e6;} .low{background:#e6ffe6;}</style>"
@@ -296,14 +301,14 @@ EOF
                     <h3>[\(.severity)] \(.check_name)</h3>\
                     <p><strong>File:</strong> \(.location.path):\(.location.lines.begin)</p>\
                     <p><strong>Description:</strong> \(.description)</p>\
-                    </div>"' "${G_REPO_DIR}/${report_file}" 2>/dev/null
+                    </div>"' "${G_ARTIFACT_DIR}/reports/${report_file}" 2>/dev/null
                 echo "</body></html>"
             } > "$html_report"
             _msg ok "CodeClimate analysis completed. Reports saved to:"
             _msg ok "- JSON Report: ${report_file}"
             _msg ok "- HTML Report: $(basename "$html_report")"
         else
-            _msg ok "CodeClimate analysis completed. Report saved to ${report_file}"
+            _msg ok "CodeClimate analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
         fi
     else
         _msg error "CodeClimate report file not generated"
@@ -329,7 +334,7 @@ analysis_spotbugs() {
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] analysis_spotbugs:"
-        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/src spotbugs/spotbugs:${spotbugs_version} -textui -${report_format}:/src/${report_file} /src/${java_classes_dir}"
+        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/src -v ${G_ARTIFACT_DIR}/reports:/reports spotbugs/spotbugs:${spotbugs_version} -textui -${report_format}:/reports/${report_file} /src/${java_classes_dir}"
         return 0
     fi
 
@@ -351,19 +356,21 @@ EOF
 
     _msg task "Running Spotbugs analysis with version ${spotbugs_version}"
 
+    mkdir -p "${G_ARTIFACT_DIR}/reports"
     if ! $G_RUN \
         -v "${G_REPO_DIR}:/src" \
         -v "${exclude_file}:/opt/spotbugs/exclude.xml" \
+        -v "${G_ARTIFACT_DIR}/reports:/reports" \
         "spotbugs/spotbugs:${spotbugs_version}" \
-        -textui -"${report_format}":"/src/${report_file}" \
+        -textui -"${report_format}":"/reports/${report_file}" \
         -exclude "/opt/spotbugs/exclude.xml" \
         "/src/${java_classes_dir}"; then
         _msg error "Spotbugs analysis failed"
         return 1
     fi
 
-    if [[ -f "${G_REPO_DIR}/${report_file}" ]]; then
-        _msg ok "Spotbugs analysis completed. Report saved to ${report_file}"
+    if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
+        _msg ok "Spotbugs analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
     else
         _msg error "Spotbugs report file not generated"
         return 1
@@ -387,7 +394,7 @@ analysis_pylint() {
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] analysis_pylint:"
-        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/code python:${pylint_version}-slim bash -c 'pip install pylint && xargs pylint --output-format=html'"
+        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/code -v ${G_ARTIFACT_DIR}/reports:/reports python:${pylint_version}-slim bash -c 'pip install pylint && xargs pylint --output-format=html'"
         return 0
     fi
 
@@ -399,18 +406,20 @@ analysis_pylint() {
 
     _msg task "Running Pylint analysis with version ${pylint_version}"
 
+    mkdir -p "${G_ARTIFACT_DIR}/reports"
     if ! $G_RUN \
         -v "${G_REPO_DIR}:/code" \
+        -v "${G_ARTIFACT_DIR}/reports:/reports" \
         -w /code \
         "python:${pylint_version}-slim" bash -c "\
         pip install pylint==${pylint_version} && \
         find ${source_dir} -name '*.py' -not -path '*/\.*' -not -path '*/venv/*' -not -path '*/test*' | \
-        xargs pylint --rcfile=/code/.pylintrc --output-format=html > /code/${report_file}"; then
+        xargs pylint --rcfile=/code/.pylintrc --output-format=html > /reports/${report_file}"; then
         _msg warn "Pylint analysis completed with warnings"
     fi
 
-    if [[ -f "${G_REPO_DIR}/${report_file}" ]]; then
-        _msg ok "Pylint analysis completed. Report saved to ${report_file}"
+    if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
+        _msg ok "Pylint analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
     else
         _msg error "Pylint report file not generated"
         return 1
@@ -434,7 +443,7 @@ analysis_checkstyle() {
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] analysis_checkstyle:"
-        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/src checkstyle/checkstyle:${checkstyle_version} -c /src/checkstyle.xml -f html -o /src/${report_file} /src/${source_dir}"
+        _msg note "  ${G_RUN} -v ${G_REPO_DIR}:/src -v ${G_ARTIFACT_DIR}/reports:/reports checkstyle/checkstyle:${checkstyle_version} -c /src/checkstyle.xml -f html -o /reports/${report_file} /src/${source_dir}"
         return 0
     fi
 
@@ -476,19 +485,21 @@ EOF
 
     _msg task "Running Checkstyle analysis with version ${checkstyle_version}"
 
+    mkdir -p "${G_ARTIFACT_DIR}/reports"
     if ! $G_RUN \
         -v "${G_REPO_DIR}:/src" \
+        -v "${G_ARTIFACT_DIR}/reports:/reports" \
         "checkstyle/checkstyle:${checkstyle_version}" \
         -c "/src/checkstyle.xml" \
         -f html \
-        -o "/src/${report_file}" \
+        -o "/reports/${report_file}" \
         "/src/${source_dir}"; then
         _msg error "Checkstyle analysis failed"
         return 1
     fi
 
-    if [[ -f "${G_REPO_DIR}/${report_file}" ]]; then
-        _msg ok "Checkstyle analysis completed. Report saved to ${report_file}"
+    if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
+        _msg ok "Checkstyle analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
     else
         _msg error "Checkstyle report file not generated"
         return 1
@@ -508,7 +519,7 @@ stage_security_semgrep() {
 
     dry_run_skip "run semgrep: docker ... semgrep/semgrep scan --config=auto --json" && return 0
 
-    local out="$G_DATA/reports/security" ret=0
+    local out="${G_ARTIFACT_DIR}/reports/security" ret=0
     mkdir -p "$out"
     $G_RUN -v "$G_REPO_DIR:/src" -v "$out:/out" semgrep/semgrep scan \
         --config=auto --json -o /out/semgrep.json /src || ret=$?
@@ -534,7 +545,7 @@ stage_security_sca() {
 
     dry_run_skip "run trivy fs: docker ... aquasec/trivy fs --scanners vuln --exit-code 1" && return 0
 
-    local out="$G_DATA/reports/security" ret=0
+    local out="${G_ARTIFACT_DIR}/reports/security" ret=0
     mkdir -p "$out"
     $G_RUN -v "$G_REPO_DIR:/repo" -v "$out:/out" aquasec/trivy:latest fs \
         --scanners vuln --exit-code 1 --ignore-unfixed \
@@ -562,7 +573,7 @@ stage_security_image() {
     local image_tag="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
     dry_run_skip "run trivy image $image_tag" && return 0
 
-    local out="$G_DATA/reports/security" ret=0
+    local out="${G_ARTIFACT_DIR}/reports/security" ret=0
     mkdir -p "$out"
     $G_RUN \
         -e TRIVY_USERNAME="${ENV_DOCKER_USERNAME:-}" \

@@ -9,7 +9,7 @@
 # 测试镜像: 仓库根 Dockerfile.tests（提交即构建自定义环境）或 ENV_TEST_IMAGE 指定；
 #           两者都没有时测试阶段跳过。deploy.sh 只发现并调用，不提供模板。
 # 网络: 默认隔离；ENV_TEST_NETWORK=host 时加 --network host（功能测试访问被测服务/数据库）
-# 报告: ${G_DATA}/reports 挂载为容器内 /reports
+# 报告: ${G_ARTIFACT_DIR}/reports 挂载为容器内 /reports（CI 下为 ci-artifacts/reports）
 #
 # 触发方式（auto 模式默认全部跳过，需显式触发其一）:
 #   --test-unit (-u)          CLI 标志
@@ -19,7 +19,7 @@
 #   PIPELINE_FUNCTION_TEST=true CI 平台注入
 #   PIPELINE_PERF_TEST=true   CI 平台注入
 #
-# 产物目录（均在 data/reports 下）:
+# 产物目录（均在 G_ARTIFACT_DIR/reports 下，本地即 data/reports）:
 #   coverage/  单元测试覆盖率报告（容器内 /reports/coverage 写入）
 
 ## 解析测试容器镜像: 返回镜像名
@@ -63,7 +63,7 @@ _test_docker_cmd() {
     read -r -a docker_args <<<"${G_RUN}"
     docker_args+=(-u 1000:1000)
     docker_args+=(-v "${G_REPO_DIR}:/app" -w /app)
-    docker_args+=(-v "${G_DATA}/reports:/reports")
+    docker_args+=(-v "${G_ARTIFACT_DIR}/reports:/reports")
     [[ "${ENV_TEST_NETWORK:-}" == host ]] && docker_args+=(--network host)
     docker_args+=("${image}")
     printf '%s\0' "${docker_args[@]}"

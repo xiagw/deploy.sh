@@ -291,7 +291,7 @@ custom_base_hash() {
 build_log_hint() {
     local log_path="$1"
     if [[ -n "${CI_PROJECT_DIR:-}" ]]; then
-        _msg error "Full build log uploaded to artifacts: ci-artifacts/${log_path##*/}"
+        _msg error "Full build log uploaded to artifacts: ci-artifacts/logs/${log_path##*/}"
     else
         _msg error "Full build log: ${log_path}"
     fi
@@ -304,12 +304,9 @@ build_image() {
     local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror ret debug_flag
     local custom_build_ret build_base dep_hash node_base_record deps_base_custom
 
-    ## CI 下构建日志写入项目目录内 ci-artifacts/，供 GitLab artifacts 收集；本地仍写 G_DATA/logs
+    ## 构建日志写入 G_ARTIFACT_DIR/logs（CI 下为项目内 ci-artifacts/logs，供 artifacts 收集）
     ## 目录不预先创建，写日志时由 mkdir -p "$(dirname ...)" 按需创建，避免产生空目录/空 artifact
-    local build_log_dir="${G_DATA:-.}/logs"
-    if [[ -n "${CI_PROJECT_DIR:-}" ]]; then
-        build_log_dir="${CI_PROJECT_DIR}/ci-artifacts"
-    fi
+    local build_log_dir="${G_ARTIFACT_DIR}/logs"
 
     ## Ensure buildx builder is available
     enable_buildx_mode

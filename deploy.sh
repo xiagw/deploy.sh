@@ -486,6 +486,12 @@ main() {
     G_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" # 脚本所在目录的绝对路径
     G_LIB="${G_PATH}/lib"                                    # 功能模块库目录
     G_DATA="${G_PATH}/data"                                  # 数据目录（配置文件、日志等）
+    ## 每次运行的产物目录（构建日志/测试报告/扫描报告）:
+    ## CI 下指向项目目录内 ci-artifacts/，由 GitLab artifacts 收集；本地回落到 G_DATA
+    G_ARTIFACT_DIR="${G_DATA}"
+    if [[ -n "${CI_PROJECT_DIR:-}" ]]; then
+        G_ARTIFACT_DIR="${CI_PROJECT_DIR}/ci-artifacts"
+    fi
     ## 配置文件路径（JSON格式，由 find_project_config 函数设置）
     G_CONF="" # 部署配置文件
     ## 日志和配置文件路径
