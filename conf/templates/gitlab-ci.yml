@@ -84,13 +84,12 @@ cache:
 
 deploy:
   stage: deploy
-  # artifacts:
-  #   untracked: true
-  #   when: on_failure
-  #   expire_in: 3 days
-  #   paths:
-  #     - target/
-  #     - dist/
+  ## 构建日志由 deploy.sh 写入 $CI_PROJECT_DIR/ci-artifacts/，此处收集为 artifacts
+  artifacts:
+    when: always                   # 构建失败也要收
+    expire_in: 1 week
+    paths:
+      - ci-artifacts/
   script:
     - bash $HOME/runner/deploy.sh
     # - bash $HOME/runner/deploy.sh --deploy-rsync-ssh

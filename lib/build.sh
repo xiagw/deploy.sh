@@ -294,6 +294,13 @@ build_image() {
     local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror ret debug_flag
     local custom_build_ret build_base dep_hash node_base_record deps_base_custom
 
+    ## CI 下构建日志写入项目目录内 ci-artifacts/，供 GitLab artifacts 收集；本地仍写 G_DATA/logs
+    local build_log_dir="${G_DATA:-.}/logs"
+    if [[ -n "${CI_PROJECT_DIR:-}" ]]; then
+        build_log_dir="${CI_PROJECT_DIR}/ci-artifacts"
+    fi
+    mkdir -p "${build_log_dir}"
+
     ## Ensure buildx builder is available
     enable_buildx_mode
 
@@ -436,7 +443,7 @@ DOCKERIGNORE
             else
                 _msg note "[${lang_type}] ${manifest_name} 有改动，重建基础镜像 Dockerfile.base（本轮构建较慢）"
             fi
-            local base_build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-${G_REPO_BRANCH}-base-build.log"
+            local base_build_log="${build_log_dir}/${G_REPO_NAME}-${G_REPO_BRANCH}-base-build.log"
             _msg note "log file: $base_build_log"
             mkdir -p "$(dirname "$base_build_log")"
 
@@ -463,7 +470,7 @@ DOCKERIGNORE
 
     # Docker build 输出到日志文件，默认不显示构建详情
     # 构建失败时显示最后100行日志便于排查
-    local build_log="${G_DATA:-.}/logs/${G_REPO_NAME}-build-${G_REPO_BRANCH}.log"
+    local build_log="${build_log_dir}/${G_REPO_NAME}-build-${G_REPO_BRANCH}.log"
     _msg note "log file: $build_log"
     mkdir -p "$(dirname "$build_log")"
 

@@ -23,8 +23,8 @@ chown -R nginx "$log_path"
 mkdir -p "$html_path"/{s,tp,.well-known/acme-challenge}
 if [ ! -f "$html_path/.well-known/security.txt" ]; then
     (
-      echo "Contact: mailto:root@website.com"
-      echo "Expires: 2050-12-31T00:00:00Z"
+        echo "Contact: mailto:root@website.com"
+        echo "Expires: 2050-12-31T00:00:00Z"
     ) >"$html_path/.well-known/security.txt"
 fi
 [ -f "$html_path/index.html" ] || echo "INDEX Page: $(date)" >>"$html_path/index.html"
