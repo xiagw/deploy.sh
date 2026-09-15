@@ -287,13 +287,15 @@ custom_base_hash() {
     md5sum "${files[@]}" 2>/dev/null | md5sum | cut -d' ' -f1
 }
 
-## 构建日志位置提示：CI 下指向 job artifacts，本地指向文件路径
+## 构建日志链接提示：CI 下输出可点的 artifacts 链接，本地输出文件路径
 build_log_hint() {
     local log_path="$1"
-    if [[ -n "${CI_PROJECT_DIR:-}" ]]; then
-        _msg error "Full build log uploaded to artifacts: ci-artifacts/logs/${log_path##*/}"
+    if [[ -n "${CI_PROJECT_URL:-}" && -n "${CI_JOB_ID:-}" ]]; then
+        local url="${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts"
+        _msg note "Log: ${url}/file/ci-artifacts/logs/${log_path##*/}"
+        _msg note "Browse artifacts: ${url}/browse"
     else
-        _msg error "Full build log: ${log_path}"
+        _msg note "Build log: ${log_path}"
     fi
 }
 
@@ -450,7 +452,7 @@ DOCKERIGNORE
             else
                 _msg note "[${lang_type}] ${manifest_name} 有改动，重建基础镜像 Dockerfile.base（本轮构建较慢）"
             fi
-            local base_build_log="${build_log_dir}/${G_REPO_NAME}-${G_REPO_BRANCH}-base-build.log"
+            local base_build_log="${build_log_dir}/${G_REPO_NAME}-${G_REPO_BRANCH}-base-build.log.txt"
             mkdir -p "$(dirname "$base_build_log")"
 
             set +e +o pipefail
@@ -471,12 +473,13 @@ DOCKERIGNORE
                 mkdir -p "$(dirname "${node_base_record}")"
                 echo "${dep_hash}" >"${node_base_record}"
             fi
+            build_log_hint "$base_build_log"
         fi
     fi
 
     # Docker build 输出到日志文件，默认不显示构建详情
     # 构建失败时显示最后100行日志便于排查
-    local build_log="${build_log_dir}/${G_REPO_NAME}-build-${G_REPO_BRANCH}.log"
+    local build_log="${build_log_dir}/${G_REPO_NAME}-build-${G_REPO_BRANCH}.log.txt"
     mkdir -p "$(dirname "$build_log")"
 
     set +e +o pipefail
@@ -493,6 +496,7 @@ DOCKERIGNORE
         return 1
     fi
     _msg ok "Image build completed"
+    build_log_hint "$build_log"
 
     ## 不包含敏感信息的镜像可以推送到公开仓库 push to ttl.sh
     if [[ "${PIPELINE_TTL_SH:-false}" == "true" || "${ENV_IMAGE_TTL:-false}" == "true" ]]; then

@@ -9,7 +9,7 @@
 权限：运维部门/管理者
 
 ### logs/
-说明：运行时日志目录（deploy.sh.log、*-build.log 等）
+说明：运行时日志目录（deploy.sh.log、*-build.log.txt 等）
 
 权限：运维部门/管理者
 

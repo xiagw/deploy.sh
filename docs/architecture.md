@@ -596,6 +596,10 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 3. **style.sh:186-187** `$sc && shellcheck "$script" || exit_code=$?`：`sc=false`（shellcheck 未装到）时 `$?` 取到 `false` 的 1，误记失败。
 4. **kubernetes.sh:476** `build_base_image_select` 依赖 fzf，缺失时静默空跑退出 0。
 
+### E. 待办（功能增强）
+
+1. **artifacts 链接扩展到全部报告（B 方案）**（2026-09-15 记录）：目前只有 build 日志在成功/失败时打印可点的 GitLab artifacts 链接（`lib/build.sh` 的 `build_log_hint`，产物已统一到 `G_ARTIFACT_DIR/ci-artifacts`）。test/scan/analysis 各阶段的「Report saved to ...」仍只打印本地路径，未给 artifacts 直链。可抽公共函数统一生成链接，报告为 `.html`/`.json`，GitLab 可网页预览。
+
 ---
 
 ## 8. 关联文档
