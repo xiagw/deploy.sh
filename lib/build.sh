@@ -288,12 +288,16 @@ custom_base_hash() {
 }
 
 ## 构建日志链接提示：CI 下输出可点的 artifacts 链接，本地输出文件路径
+## $1 日志文件路径；$2 是否附加 Browse 链接（默认 true，base 构建传 false 避免重复）
 build_log_hint() {
     local log_path="$1"
+    local show_browse="${2:-true}"
     if [[ -n "${CI_PROJECT_URL:-}" && -n "${CI_JOB_ID:-}" ]]; then
         local url="${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts"
         _msg note "Log: ${url}/file/ci-artifacts/logs/${log_path##*/}"
-        _msg note "Browse artifacts: ${url}/browse"
+        if [[ "${show_browse}" == true ]]; then
+            _msg note "Browse artifacts: ${url}/browse"
+        fi
     else
         _msg note "Build log: ${log_path}"
     fi
@@ -465,7 +469,7 @@ DOCKERIGNORE
                 _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
                 echo "============================================================"
                 tail -100 "$base_build_log"
-                build_log_hint "$base_build_log"
+                build_log_hint "$base_build_log" false
                 return 1
             fi
             ## 构建成功：记录依赖指纹，依赖未变时下次直接复用
@@ -473,7 +477,7 @@ DOCKERIGNORE
                 mkdir -p "$(dirname "${node_base_record}")"
                 echo "${dep_hash}" >"${node_base_record}"
             fi
-            build_log_hint "$base_build_log"
+            build_log_hint "$base_build_log" false
         fi
     fi
 
