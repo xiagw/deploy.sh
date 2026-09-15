@@ -287,6 +287,16 @@ custom_base_hash() {
     md5sum "${files[@]}" 2>/dev/null | md5sum | cut -d' ' -f1
 }
 
+## 构建日志位置提示：CI 下指向 job artifacts，本地指向文件路径
+build_log_hint() {
+    local log_path="$1"
+    if [[ -n "${CI_PROJECT_DIR:-}" ]]; then
+        _msg error "Full build log uploaded to artifacts: ci-artifacts/${log_path##*/}"
+    else
+        _msg error "Full build log: ${log_path}"
+    fi
+}
+
 build_image() {
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
     local dry="${G_DRY_RUN:-false}"
@@ -444,7 +454,6 @@ DOCKERIGNORE
                 _msg note "[${lang_type}] ${manifest_name} 有改动，重建基础镜像 Dockerfile.base（本轮构建较慢）"
             fi
             local base_build_log="${build_log_dir}/${G_REPO_NAME}-${G_REPO_BRANCH}-base-build.log"
-            _msg note "log file: $base_build_log"
             mkdir -p "$(dirname "$base_build_log")"
 
             set +e +o pipefail
@@ -457,7 +466,7 @@ DOCKERIGNORE
                 _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
                 echo "============================================================"
                 tail -100 "$base_build_log"
-                _msg error "Full build log: $base_build_log"
+                build_log_hint "$base_build_log"
                 return 1
             fi
             ## 构建成功：记录依赖指纹，依赖未变时下次直接复用
@@ -471,7 +480,6 @@ DOCKERIGNORE
     # Docker build 输出到日志文件，默认不显示构建详情
     # 构建失败时显示最后100行日志便于排查
     local build_log="${build_log_dir}/${G_REPO_NAME}-build-${G_REPO_BRANCH}.log"
-    _msg note "log file: $build_log"
     mkdir -p "$(dirname "$build_log")"
 
     set +e +o pipefail
@@ -484,7 +492,7 @@ DOCKERIGNORE
         _msg error "Image build failed (exit code: $ret), showing last 100 lines of build log:"
         echo "============================================================"
         tail -100 "$build_log"
-        _msg error "Full build log: $build_log"
+        build_log_hint "$build_log"
         return 1
     fi
     _msg ok "Image build completed"
