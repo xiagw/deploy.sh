@@ -295,11 +295,11 @@ build_image() {
     local custom_build_ret build_base dep_hash node_base_record deps_base_custom
 
     ## CI 下构建日志写入项目目录内 ci-artifacts/，供 GitLab artifacts 收集；本地仍写 G_DATA/logs
+    ## 目录不预先创建，写日志时由 mkdir -p "$(dirname ...)" 按需创建，避免产生空目录/空 artifact
     local build_log_dir="${G_DATA:-.}/logs"
     if [[ -n "${CI_PROJECT_DIR:-}" ]]; then
         build_log_dir="${CI_PROJECT_DIR}/ci-artifacts"
     fi
-    mkdir -p "${build_log_dir}"
 
     ## Ensure buildx builder is available
     enable_buildx_mode
