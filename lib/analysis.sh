@@ -75,9 +75,13 @@ stage_security_vulmap() {
     local config_file="$G_DATA/conf/config.cfg"
     local output_file="vulmap_report.html"
 
-    # Load environment variables from config file
-    # shellcheck source=/dev/null
-    source "$config_file"
+    # Load optional config file (may set/override ENV_TARGET_URL and other scan vars)
+    if [[ -f "$config_file" ]]; then
+        # shellcheck source=/dev/null
+        source "$config_file"
+    else
+        _msg note "config file not found, using environment variables: $config_file"
+    fi
 
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] stage_security_vulmap:"

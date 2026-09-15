@@ -42,7 +42,17 @@ execute_custom_deploy_hook() {
     local custom_script="${G_REPO_DIR}/deploy.custom.sh"
     if [[ -f "${custom_script}" ]]; then
         _msg task "Executing custom deployment script: ${custom_script}"
-        source "${custom_script}"
+        ## 子壳内以 errexit 运行：钩子遇错即停，其 exit 只结束子壳、不杀主流程；
+        ## 失败标记 G_DEPLOY_RESULT=1 但不中断，保证 handle_notify 仍执行
+        local hook_rc=0
+        set +e
+        (set -e; source "${custom_script}")
+        hook_rc=$?
+        set -e
+        if [[ "${hook_rc}" -ne 0 ]]; then
+            _msg error "custom deploy hook failed (exit ${hook_rc}): ${custom_script}"
+            G_DEPLOY_RESULT=1
+        fi
     fi
 }
 
@@ -309,21 +319,25 @@ deploy_to_kubernetes() {
     printf '%s\n' "$$ $(date '+%F %T') helm deploy ${release_name}/${G_NAMESPACE}" > "$scale_all_lock"
     trap 'rm -f "$scale_all_lock"' RETURN
 
-    ## helm 部署
-    "${helm_args[@]}" >/dev/null || return 1
+    ## helm 部署：失败不静默 return，置 G_DEPLOY_RESULT 后统一走下方诊断/回滚提示块
+    "${helm_args[@]}" >/dev/null || G_DEPLOY_RESULT=1
 
-    # Pod health check / Pod 健康检查
-    local rollout_timeout
-    rollout_timeout="$(_duration_to_seconds "${ENV_HELM_TIMEOUT:-180s}")"
-    if ! _wait_kubernetes_rollout "${release_name}" "${rollout_timeout}"; then
-        G_DEPLOY_RESULT=1
+    # Pod health check / Pod 健康检查（helm 已失败则跳过等待）
+    if [[ "${G_DEPLOY_RESULT:-0}" -eq 0 ]]; then
+        local rollout_timeout
+        rollout_timeout="$(_duration_to_seconds "${ENV_HELM_TIMEOUT:-180s}")"
+        if ! _wait_kubernetes_rollout "${release_name}" "${rollout_timeout}"; then
+            G_DEPLOY_RESULT=1
+        fi
     fi
     # Display rollback cmd on failure / 部署失败时显示回滚命令
     if [[ "${G_DEPLOY_RESULT:-0}" -eq 1 ]]; then
-        _msg error "Rolling back deployment ${release_name}"
-        revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" | awk 'END {print $1}')"
-        ## helm rollback to previous revision / 回滚到上一个版本
-        echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))"
+        _msg error "Deployment failed: ${release_name}; rollback/diagnostic commands:"
+        revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" 2>/dev/null | awk 'END {print $1}' || true)"
+        if [[ -n "$revision" && "$revision" -gt 1 ]]; then
+            ## helm rollback to previous revision / 回滚到上一个版本
+            echo "helm -n ${G_NAMESPACE} rollback ${release_name} $((revision - 1))"
+        fi
         ## kubectl rollback to previous revision / 回滚到上一个版本
         echo "kubectl -n ${G_NAMESPACE} rollout undo deployment/${release_name}"
         ## Scale down deployment to 0 replicas / 将部署缩减为 0 个副本
@@ -866,7 +880,9 @@ detect_deployment_method() {
     # Step 4: Check for project config with valid hosts
     if [[ -n "${G_CONF:-}" && -f "${G_CONF}" ]]; then
         # Check if config has valid hosts for current namespace
-        if jq -e ".branches[] | select(.branch == \"${G_NAMESPACE:-}\") | .hosts[] | select(.host != null and .host != \"\")" "${G_CONF}" &>/dev/null; then
+        if jq -e --arg branch "${G_NAMESPACE:-}" \
+            '.branches[] | select(.branch == $branch) | .hosts[] | select(.host != null and .host != "")' \
+            "${G_CONF}" &>/dev/null; then
             has_project_config=true
         fi
     fi
@@ -1131,15 +1147,19 @@ clean_old_tags() {
     rm -f "$tags_file"
 
     # Delete old tags / 删除旧标签
+    local delete_failed=0
     if [ "${#tags_to_delete[@]}" -gt 0 ]; then
         _msg task "Deleting old tags... / 正在删除旧标签..."
         for tag in "${tags_to_delete[@]}"; do
             _msg note "Deleting / 正在删除: $tag"
-            skopeo delete "docker://${repository}:${tag}" &
+            if ! skopeo delete "docker://${repository}:${tag}"; then
+                _msg error "Failed to delete tag / 删除标签失败: ${tag}"
+                delete_failed=1
+            fi
             sleep 1
         done
     else
         _msg task "No old tags to delete / 没有需要删除的旧标签"
     fi
-    exit $?
+    exit "$delete_failed"
 }

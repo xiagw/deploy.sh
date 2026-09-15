@@ -39,6 +39,12 @@
 - 任何 shell 改动在交版前必须通过：`bash -n <file>` 与 `shellcheck -S warning <file>`（两者零输出/退出码 0）。
 - 禁止 `if [ $? -eq 0 ]` 判断命令结果：用 `result=$(cmd); local ret=$?; if [ $ret -eq 0 ]; then`。绝不允许在赋值和 `$?` 判断之间插入其它语句（shellcheck SC2181）。
 - 本机 /usr/local/bin 下 `gdate`、`gsed`、`gawk`、`greadlink`、`gtimeout` 等为 GNU 版；需要 GNU 扩展语法（`date -d`、`sed -r`、`readlink -f`）时优先 g 前缀版本。禁止硬编码 `date` / `sed` 并用 GNU 专属参数（macOS BSD 版会报错）。
+- **`set -Eeo pipefail` 下的错误处理陷阱**：`var=$(curl|grep|jq ...)` 这类赋值，命令失败时 errexit 会先杀脚本，后面的 `if [ -z "$var" ]` 错误分支与回退永不执行（死码）。触发面：grep 无匹配、jq 解析失败、API 限流/不可达、空仓库。修复约定：
+  1. 命令替换必须兜底：`var=$(cmd ...) || true`，或放进 `if !`。
+  2. `&&` 列表末尾加 `|| true`，避免 errexit 豁免仅在 `||` 前失效。
+  3. `_msg` 无错误时一律 `>&2`（检测链 stdout 只能有业务返回值）。
+  4. 布尔门控用 `[[ ... == true ]]`，不把字符串当命令。
+  5. 失败即 fail-fast：`|| { _msg error; return 1; }`，不吞码、不后台化。
 
 ## 提交规范
 

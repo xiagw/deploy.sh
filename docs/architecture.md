@@ -612,6 +612,5 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 | [../AGENTS.md](../AGENTS.md) | 项目开发约定：核心范围、命名规范、模块前缀 |
 | [development.md](./development.md) | 开发指南：如何补充功能、shell 硬性要求、提交规范 |
 | [intro.md](./intro.md) | 功能介绍与快速开始 |
-| [audit-lib-20260828.md](./audit-lib-20260828.md) | lib/ 代码审核报告：高危/中危/低危问题清单（已复核刷新行号） |
 
 > 原 `execution-plan.md` 已并入本章 §3（编排模型 RUN 单数组 + 依赖分层），不再单独维护。

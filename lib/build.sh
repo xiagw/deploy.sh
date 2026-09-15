@@ -17,17 +17,25 @@ ensure_buildx_builder() {
         local mirror="docker.m.daocloud.io/"
     fi
     if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
-        local c=0 append_flag=()
+        local c=0 created=0 append_flag=()
         local buildkit_image="${mirror}${ENV_BUILDX_IMAGE:-moby/buildkit:buildx-stable-1}"
         for dk_host in "${ENV_BUILDX_REMOTE_HOSTS[@]}"; do
             ((++c))
-            docker buildx create --name "$builder_name" "${append_flag[@]}" \
+            ## 容忍部分节点失败：任一成功即继续；仅全部失败才算构建失败
+            if docker buildx create --name "$builder_name" "${append_flag[@]}" \
                 --node "node$c" --driver docker-container --bootstrap \
                 --driver-opt image="${buildkit_image}" \
-                "$dk_host" ||
-                _msg error "创建buildx节点node$c失败: ${dk_host}"
-            append_flag=(--append)
+                "$dk_host"; then
+                created=$((created + 1))
+                append_flag=(--append)
+            else
+                _msg warn "创建buildx节点node$c失败，跳过: ${dk_host}"
+            fi
         done
+        if [[ "$created" -eq 0 ]]; then
+            _msg error "buildx builder 所有节点创建失败"
+            return 1
+        fi
     fi
     export G_BUILDER="--builder $builder_name"
 }
@@ -47,7 +55,10 @@ ensure_buildx_builder_kubernetes() {
             --driver-opt namespace="${ENV_BUILDX_KUBERNETES_NAMESPACE:-buildkit}" \
             --driver-opt replicas="${ENV_BUILDX_KUBERNETES_REPLICAS:-1}" \
             --driver-opt image="${buildkit_image}" \
-            --bootstrap || _msg error "创建 kubernetes buildx builder 失败"
+            --bootstrap || {
+            _msg error "创建 kubernetes buildx builder 失败"
+            return 1
+        }
     fi
     export G_BUILDER="--builder $builder_name"
 }
@@ -315,7 +326,7 @@ build_image() {
     local build_log_dir="${G_ARTIFACT_DIR}/logs"
 
     ## Ensure buildx builder is available
-    enable_buildx_mode
+    enable_buildx_mode || return 1
 
     ## If build.base.sh exists, run it and preserve its exit status
     custom_build_script="${G_REPO_DIR}/build.base.sh"

@@ -857,8 +857,8 @@ _install_shellcheck() {
     aarch64 | arm64) arch="aarch64" ;;
     *) arch="x86_64" ;;
     esac
-    release_info=$(curl -fsSL https://api.github.com/repos/koalaman/shellcheck/releases/latest)
-    download_url=$(printf '%s' "$release_info" | grep -Eo "https://[^\"]+shellcheck-[0-9.]+\.${os}\.${arch}\.tar\.xz" | head -n 1)
+    release_info=$(curl -fsSL https://api.github.com/repos/koalaman/shellcheck/releases/latest) || true
+    download_url=$(printf '%s' "$release_info" | grep -Eo "https://[^\"]+shellcheck-[0-9.]+\.${os}\.${arch}\.tar\.xz" | head -n 1) || true
     if [ -z "$download_url" ]; then
         _msg error "Failed to determine shellcheck download URL"
         rm -f "$temp_file"
@@ -912,8 +912,8 @@ _install_shfmt() {
     aarch64 | arm64) arch="arm64" ;;
     *) arch="amd64" ;;
     esac
-    release_info=$(curl -fsSL https://api.github.com/repos/mvdan/sh/releases/latest)
-    download_url=$(printf '%s' "$release_info" | grep -Eo "https://[^\"]+shfmt_[0-9.]+_${os}_${arch}\.tar\.gz" | head -n 1)
+    release_info=$(curl -fsSL https://api.github.com/repos/mvdan/sh/releases/latest) || true
+    download_url=$(printf '%s' "$release_info" | grep -Eo "https://[^\"]+shfmt_[0-9.]+_${os}_${arch}\.tar\.gz" | head -n 1) || true
     if [ -z "$download_url" ]; then
         _msg error "Failed to determine shfmt download URL"
         rm -f "$temp_file"
@@ -1143,6 +1143,7 @@ _install_glab() {
 
 _install_python_element() {
     local flag="$1"
+    ## TODO: matrix-nio 是纯库无 CLI，pipx install 恒失败
     # matrix-nio 是一个库，不提供命令行工具，所以只需要检查包是否安装
     if [ "$flag" != "upgrade" ] && python3 -m pip show --quiet matrix-nio >/dev/null 2>&1; then
         return
@@ -1268,7 +1269,7 @@ get_oom_score() {
         done | sort -k1,1nr | head -n 15
     )
     echo
-    dmesg -T 2>/dev/null | grep -Ei 'error|crash|segmentation|fault|panic'
+    dmesg -T 2>/dev/null | grep -Ei 'error|crash|segmentation|fault|panic' || true
 }
 
 clean_snap() {

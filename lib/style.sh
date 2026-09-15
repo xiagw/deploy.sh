@@ -17,7 +17,30 @@ style_check_php() {
     local php_image="jakzal/phpqa:latest"
 
     local style_result=0
-    for i in $(git --no-pager diff --name-only HEAD | awk '/\.php$/{if (NR>0){print $0}}'); do
+
+    ## 变更文件基线：CI 干净 checkout 下 `diff HEAD` 恒空，PHP 检查永远空转。
+    ## 按可用性选基线: MR 基线 > push 前一提交 > 上一提交 > HEAD(仅工作区变更)。
+    local diff_base="" candidate
+    for candidate in \
+        "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" \
+        "${CI_COMMIT_BEFORE_SHA:-}" \
+        "HEAD~1" \
+        "HEAD"; do
+        [[ -n "$candidate" ]] || continue
+        [[ "$candidate" != "0000000000000000000000000000000000000000" ]] || continue
+        git -C "$G_REPO_DIR" rev-parse --verify --quiet "${candidate}^{commit}" >/dev/null 2>&1 || continue
+        diff_base="$candidate"
+        break
+    done
+    if [[ -z "$diff_base" ]]; then
+        _msg warn "not a git repository, skip PHP style check"
+        return 0
+    fi
+
+    local php_files i
+    php_files=$(git -C "$G_REPO_DIR" diff --name-only "${diff_base}" -- '*.php')
+    while IFS= read -r i; do
+        [[ -n "$i" ]] || continue
         if [ ! -f "$G_REPO_DIR/$i" ]; then
             _msg warn "$G_REPO_DIR/$i not exists."
             continue
@@ -29,7 +52,7 @@ style_check_php() {
         if ! ${G_RUN} -v "$G_REPO_DIR":/project "$php_image" php-cs-fixer fix --dry-run --diff --using-cache=no "/project/$i"; then
             style_result=$((style_result + 1))
         fi
-    done
+    done <<<"$php_files"
     return "$style_result"
 }
 
@@ -183,8 +206,12 @@ style_check_shell() {
     # Process shell scripts
     while IFS= read -r script; do
         _msg note "Processing: ${script}"
-        $sc && shellcheck "$script" || exit_code=$?
-        $sf && shfmt -d "$script" || exit_code=$?
+        if ${sc}; then
+            shellcheck "$script" || exit_code=$?
+        fi
+        if ${sf}; then
+            shfmt -d "$script" || exit_code=$?
+        fi
     done < <(find "$G_REPO_DIR" -type f -name "*.sh") || true
 
     if [ $exit_code -eq 0 ]; then
@@ -203,8 +230,8 @@ stage_code_style() {
 
     ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_CODE_STYLE ，true 启用，false 禁用[default]
     _msg task "Code style check (optional: PIPELINE_CODE_STYLE=true)"
-    [[ "${PIPELINE_CODE_STYLE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CODE_STYLE=false)"
-    if ! ${PIPELINE_CODE_STYLE:-false}; then
+    if [[ "${PIPELINE_CODE_STYLE:-false}" != true ]]; then
+        _msg note "$(_t '跳过' 'skipped') (PIPELINE_CODE_STYLE=false)"
         return 0
     fi
 

@@ -69,7 +69,10 @@ notify_feishu() {
 
     [ -z "$webhook_url" ] && return 1
 
-    curl -s -X POST -H "Content-Type: application/json" -d "{\"text\": \"$message\"}" "$webhook_url"
+    ## Feishu 自定义机器人文本消息体；jq 负责 JSON 转义（引号/反斜杠/换行），--fail 让 4xx/5xx 返回非零
+    local payload
+    payload=$(jq -n --arg text "$message" '{msg_type: "text", content: {text: $text}}') || return 1
+    curl -sS --fail -X POST -H "Content-Type: application/json" -d "$payload" "$webhook_url"
 }
 
 # Main notification function that handles all channels

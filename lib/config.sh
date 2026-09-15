@@ -47,7 +47,10 @@ find_project_config() {
         _load_project_build_deploy_config "${project_conf}"
     elif [[ -f "${template_file}" ]]; then
         ## 项目专用配置文件不存在，从模板创建默认配置
-        command -v jq || _install_packages jq
+        command -v jq >/dev/null 2>&1 || _install_packages jq || {
+            _msg error "jq is required to create project config: ${project_conf}"
+            return 1
+        }
         ## 从模板创建配置文件，并替换项目路径
         if ! jq --arg project_path "${project_path}" '.project = $project_path' \
             "${template_file}" >"${project_conf}"; then

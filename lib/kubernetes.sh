@@ -256,7 +256,7 @@ kube_create_pv_pvc() {
   ## RUN 单数组成员（-P/--kube-pvc 触发，parse 组装并必填校验 arg_sub_path）
   ## 守卫: 依赖 kube_config_init 设置的 KUBECTL_OPT；防御性校验 arg_sub_path
   [[ -n "${arg_sub_path:-}" ]] || return 0
-  local subpath="${arg_sub_path}" namespace="${arg_pvc_namespace:-${G_NAMESPACE:-default}}" pvc_name cnfs_name
+  local subpath="${arg_sub_path}" namespace="${arg_pvc_namespace:-${G_NAMESPACE:-default}}" pvc_name pv_name cnfs_name sc_name
   # Remove pvc- prefix if it exists in the input
   subpath="${subpath#pvc-}"
   pvc_name="pvc-${subpath}" pv_name="pv-${subpath}-${namespace}"
