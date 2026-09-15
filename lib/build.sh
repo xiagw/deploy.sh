@@ -537,6 +537,20 @@ stage_build() {
 
     _msg task "Starting build process for ${lang%:}"
 
+    ## 研发控制权清单：git 提交以下文件即可接管对应环节；tests 类默认跳过，需指定参数或环境变量启用。
+    ## 每行格式: 文件 -> 作用；启用方式
+    _msg note "（默认使用 CI/CD 自动模板）研发可提交以下文件接管构建环节:"
+    _msg note "  Dockerfile.base -> 基础镜像 (可选/非必须; 预装依赖，相当于中间层缓存) "
+    _msg note "    重建时机: 首次构建 或 依赖声明变更 (node=package.json / php=composer.json / python=requirements.txt)"
+    _msg note "    声明未变且 registry 已有 base 时直接复用 (构建快), base 由 deploy.sh 自动构建并推送"
+    _msg note "    base TAG: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
+    _msg note "    示例: node=npm install / php=composer install / python=pip install -r requirements.txt, 其他语言自行处理"
+    _msg note "  Dockerfile -> 业务镜像 (支持单独提交 Dockerfile ，不必成对提交 base) 固定写法:"
+    _msg note "    ARG BASE_IMAGE"
+    _msg note "    FROM \${BASE_IMAGE} (deploy.sh 会自动注入 tag, 其余行自由)"
+    _msg note "  Dockerfile.tests -> 测试镜像 (默认跳过; 启用: --test-unit/--test-function/--test-performance 或 PIPELINE_*_TEST)"
+    _msg note "    镜像内 CMD/ENTRYPOINT 定义测试入口, 框架参考: phpunit/npm test/mvn test/pytest/go test/k6/jmeter 等"
+
     ## 检查配置文件中的构建方式覆盖
     if [[ -n "${PROJECT_BUILD_METHOD:-}" && "${PROJECT_BUILD_METHOD}" != "auto" ]]; then
         case "${PROJECT_BUILD_METHOD}" in

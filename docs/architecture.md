@@ -599,6 +599,9 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 ### E. 待办（功能增强）
 
 1. **artifacts 链接扩展到全部报告（B 方案）**（2026-09-15 记录）：目前只有 build 日志在成功/失败时打印可点的 GitLab artifacts 链接（`lib/build.sh` 的 `build_log_hint`，产物已统一到 `G_ARTIFACT_DIR/ci-artifacts`）。test/scan/analysis 各阶段的「Report saved to ...」仍只打印本地路径，未给 artifacts 直链。可抽公共函数统一生成链接，报告为 `.html`/`.json`，GitLab 可网页预览。
+2. **自仓库识别（deploy.sh 在自身仓库内运行）**（2026-09-15 记录）：无 `-w` 时 workspace 默认 `PWD`（`config_repo_vars`），在 deploy.sh 自身目录运行会把自身当作待部署目标——生成 `./Dockerfile`（源自 `conf/Dockerfile.single`）、把 `conf/root/` 覆盖到 `./root/`、触发 `stage_build`，并生成 `data/conf/<ns>/deploy.sh.json`。本项目自我构建用 `conf/Dockerfile.self`（见 `.github/workflows/main.yml`），generic 流水线对其无意义。
+   **期望行为**：识别「workspace 目录 == 脚本自身目录（`G_REPO_DIR` realpath == `G_PATH`）且未传 `-w`」→ 不追加 auto 阶段 + 跳过 Dockerfile/root 覆盖；传 `-w` 一律走正常流程（即使指向自身）。显式功能参数（`-B`/`-k`/`--gen-dockerfile` 等）不受影响。
+   **落点**：deploy.sh 新增 `is_self_workspace()`；`parse_args` 计算 `auto_mode` 后翻转；`repo_overlay_files` 加守卫。仅记录，未实现。
 
 ---
 

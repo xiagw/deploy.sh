@@ -17,20 +17,6 @@ repo_overlay_files() {
     detected_lang=$(detect_repo_language) # 完整语言标识: lang:ver:docker
     lang=${detected_lang%%:*}        # 仅语言类型: lang
 
-    ## 研发控制权清单：git 提交以下文件即可接管对应环节；tests 类默认跳过，需指定参数或环境变量启用。
-    ## 每行格式: 文件 -> 作用；启用方式
-    _msg note "（默认使用 CI/CD 自动模板）研发可提交以下文件接管构建环节:"
-    _msg note "  Dockerfile.base -> 基础镜像 (可选/非必须; 预装依赖，相当于中间层缓存) "
-    _msg note "    重建时机: 首次构建 或 依赖声明变更 (node=package.json / php=composer.json / python=requirements.txt)"
-    _msg note "    声明未变且 registry 已有 base 时直接复用 (构建快), base 由 deploy.sh 自动构建并推送"
-    _msg note "    base TAG: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
-    _msg note "    示例: node=npm install / php=composer install / python=pip install -r requirements.txt, 其他语言自行处理"
-    _msg note "  Dockerfile -> 业务镜像 (支持单独提交 Dockerfile ，不必成对提交 base) 固定写法:"
-    _msg note "    ARG BASE_IMAGE"
-    _msg note "    FROM \${BASE_IMAGE} (deploy.sh 会自动注入 tag, 其余行自由)"
-    _msg note "  Dockerfile.tests -> 测试镜像 (默认跳过; 启用: --test-unit/--test-function/--test-performance 或 PIPELINE_*_TEST)"
-    _msg note "    镜像内 CMD/ENTRYPOINT 定义测试入口, 框架参考: phpunit/npm test/mvn test/pytest/go test/k6/jmeter 等"
-
     ## dry-run: 只展示覆盖计划，不写仓库（Dockerfile/root/.dockerignore 均跳过）
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] repo_overlay_files (lang=${lang}):"
@@ -76,8 +62,7 @@ repo_overlay_files() {
         [[ -f "${G_REPO_DIR}/Dockerfile" ]] && custom_files+=(Dockerfile)
         [[ -f "${G_REPO_DIR}/Dockerfile.base" ]] && custom_files+=(Dockerfile.base)
         [[ ${#custom_files[@]} -eq 0 ]] && custom_files+=(Dockerfile)
-        _msg note "检测到仓库自带 ${custom_files[*]} (git 跟踪)，跳过自动覆盖，按仓库自带方式构建"
-        _msg warn "仓库自带构建文件，不使用 CI/CD 程序的自动多阶段构建加速模板"
+        _msg warn "检测到仓库自带 ${custom_files[*]} (git 跟踪)，跳过自动覆盖与自动多阶段加速模板，按仓库自带方式构建"
         _msg warn "研发自行处理：多阶段/分层、依赖缓存、国内镜像（apt/npm/基础镜像）加速，否则构建可能超时或卡死"
         return 0
     fi
