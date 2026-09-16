@@ -16,7 +16,7 @@ show_rds_help() {
     echo "  add-acc <实例ID> <账号> <密码> [描述] - 创建数据库账号"
     echo "  del-acc <实例ID> <账号>             - 删除数据库账号"
     echo "  get-acc <实例ID> [format]           - 列出数据库账号"
-    echo "  set-acc <实例ID> <账号> <数据库名> [权限]  - 设置账号数据库权限（只读/读写）"
+    echo "  set-acc <实例ID> <账号> <数据库名[,数据库名...]> [rw|ro] - 设置账号数据库权限（rw=读写 默认，ro=只读；支持多库）"
     echo "  get-db <实例ID> [format]                - 列出数据库"
     echo "  add-db <实例ID> <数据库名> [字符集]     - 创建数据库"
     echo "  del-db <实例ID> <数据库名>              - 删除数据库"
@@ -41,8 +41,9 @@ show_rds_help() {
     echo "  $0 rds add-acc rm-xxx myuser mypassword '测试账号'"
     echo "  $0 rds del-acc rm-xxx myuser"
     echo "  $0 rds get-acc rm-xxx"
-    echo "  $0 rds set-acc rm-xxx myuser mydb ReadWrite"
-    echo "  $0 rds set-acc rm-xxx myuser mydb 只读"
+    echo "  $0 rds set-acc rm-xxx myuser mydb rw"
+    echo "  $0 rds set-acc rm-xxx myuser mydb ro"
+    echo "  $0 rds set-acc rm-xxx myuser mydb1,mydb2 ro   # 一次授权多个库；权限可省略（默认 rw）；库名可省略用 fzf Tab 多选"
     echo "  $0 rds get-db rm-xxx"
     echo "  $0 rds add-db rm-xxx mydb utf8mb4"
     echo "  $0 rds del-db rm-xxx mydb"
@@ -541,6 +542,34 @@ _rds_resolve_db_name() {
         -- rds describe-databases --db-instance-id "$3" --biz-region-id "${region:-}"
 }
 
+_rds_csv_normalize() {
+    # 归一化逗号分隔列表：去空白、去空项，输出单行逗号分隔
+    echo "$1" | tr ',' '\n' | tr -d ' ' | awk 'NF' | paste -sd, -
+}
+
+_rds_pick_db_names_multi() {
+    # 多选数据库（fzf -m，Tab 多选）；唯一候选自动选中。stdout 输出逗号分隔库名
+    local instance_id=$1
+    local result cand picked
+    if ! result=$(call_aliyun_api rds describe-databases --db-instance-id "${instance_id}" --biz-region-id "${region:-}" 2>/dev/null); then
+        echo "错误：无法获取数据库列表。" >&2
+        return 1
+    fi
+    cand=$(echo "${result}" | jq -r '.Databases.Database[] | "\(.DBName) [\(.CharacterSetName)] [\(.DBStatus)]"' 2>/dev/null)
+    if [ -z "${cand}" ]; then
+        echo "错误：该实例没有数据库。" >&2
+        return 1
+    fi
+    if [ "$(echo "${cand}" | grep -c '[^[:space:]]')" -eq 1 ]; then
+        echo "${cand}" | awk '{print $1}'
+        return 0
+    fi
+    if ! picked=$(select_with_fzf "选择数据库（Tab 多选）" "${cand}" -m); then
+        return 1
+    fi
+    echo "${picked}" | awk '{print $1}' | paste -sd, -
+}
+
 # 删除数据库账号（使用框架函数）
 rds_account_delete() {
     local instance_id account_name=$2
@@ -728,9 +757,10 @@ rds_db_delete() {
 
 # 设置账号数据库权限（使用框架函数）
 rds_account_grant() {
+    # 支持一次授权多个库：API 的 DBName 接受英文逗号分隔多库，AccountPrivilege 需按序给等量值
     local instance_id=$1
     local account_name=$2
-    local db_name=$3
+    local db_names=$3
     local privilege=$4
 
     instance_id=$(_rds_resolve_instance_id "$instance_id" "选择 RDS 实例") || return 1
@@ -739,48 +769,42 @@ rds_account_grant() {
     raw_acc=$(_rds_resolve_account_name "$account_name" "选择 RDS 账号" "$instance_id") || return 1
     account_name=$(echo "$raw_acc" | awk '{print $1}')
 
-    local raw_db
-    raw_db=$(_rds_resolve_db_name "$db_name" "选择数据库" "$instance_id") || return 1
-    db_name=$(echo "$raw_db" | awk '{print $1}')
-
-    # 如果没有提供权限，则使用 fzf 选择（仅只读/读写）
-    if [ -z "$privilege" ]; then
-        local privilege_list="读写 (ReadWrite)
-只读 (ReadOnly)"
-        if type select_with_fzf >/dev/null 2>&1; then
-            privilege=$(select_with_fzf "选择权限级别" "$privilege_list")
-            if [ -z "$privilege" ]; then
-                privilege="ReadWrite"
-            elif [[ "$privilege" == *"ReadOnly"* ]]; then
-                privilege="ReadOnly"
-            else
-                privilege="ReadWrite"
-            fi
-        else
-            read -r -p "请输入权限 (读写/只读 或 ReadWrite/ReadOnly) [默认: 读写]: " privilege_input
-            privilege=${privilege_input:-ReadWrite}
-        fi
+    # 数据库：逗号分隔多库；未提供时 fzf 多选（Tab）
+    local db_list
+    if [ -n "${db_names}" ]; then
+        db_list=$(_rds_csv_normalize "${db_names}")
+    else
+        db_list=$(_rds_pick_db_names_multi "${instance_id}") || return 1
+    fi
+    if [ -z "${db_list}" ]; then
+        echo "错误：未选择数据库。" >&2
+        return 1
     fi
 
-    # 兼容中文权限输入
-    case "$privilege" in
-    读写 | readwrite | Readwrite | READWRITE)
+    # 权限：rw=ReadWrite（默认）/ ro=ReadOnly；兼容中英文全称
+    privilege=${privilege:-rw}
+    case "${privilege}" in
+    rw | RW | 读写 | readwrite | Readwrite | READWRITE | ReadWrite)
         privilege="ReadWrite"
         ;;
-    只读 | readonly | Readonly | READONLY)
+    ro | RO | 只读 | readonly | Readonly | READONLY | ReadOnly)
         privilege="ReadOnly"
+        ;;
+    *)
+        echo "错误：权限仅支持 rw/ro（或 读写/只读、ReadWrite/ReadOnly）。" >&2
+        return 1
         ;;
     esac
 
-    if [ "$privilege" != "ReadWrite" ] && [ "$privilege" != "ReadOnly" ]; then
-        echo "错误：权限仅支持 读写/只读（或 ReadWrite/ReadOnly）。" >&2
-        return 1
-    fi
+    # AccountPrivilege 需与 DBName 数量一致：同一权限按序重复 N 次
+    local n_db privilege_list
+    n_db=$(echo "${db_list}" | tr ',' '\n' | awk 'NF' | wc -l | tr -d ' ')
+    privilege_list=$(awk -v p="${privilege}" -v n="${n_db}" 'BEGIN { for (i = 0; i < n; i++) printf "%s%s", (i ? "," : ""), p }')
 
     echo "设置账号权限："
     echo "实例ID: $instance_id"
     echo "账号名: $account_name"
-    echo "数据库: $db_name"
+    echo "数据库: $db_list"
     echo "权限: $privilege"
 
     local result
@@ -789,9 +813,9 @@ rds_account_grant() {
         --db-instance-id "$instance_id" \
         --biz-region-id "$region" \
         --account-name "$account_name" \
-        --db-name "$db_name" \
-        --account-privilege "$privilege"; then
-        echo "账号 $account_name 已被授予 $privilege 权限，可访问数据库 $db_name"
+        --db-name "$db_list" \
+        --account-privilege "$privilege_list"; then
+        echo "账号 $account_name 已被授予 $privilege 权限，可访问数据库 $db_list"
     fi
 }
 
