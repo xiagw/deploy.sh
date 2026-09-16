@@ -31,13 +31,13 @@ OSS (对象存储服务) 操作
                       - OSS路径：oss://bucket-name/path/
                       - 本地路径：/path/to/local/dir/
                       选项：
-                        -l, --file-list FILE    指定包含文件类型列表的文件
+                        -l, --file-list FILE    指定包含文件类型列表的文件（缺省用仓库自带 oss.include.txt）
                         -s, --storage-class TYPE 指定存储类型(默认:IA)
                         -f, --force             不提示确认直接复制
   batch-delete <存储桶/路径> [选项...]
                       批量删除指定存储类型的对象
                       选项：
-                        -l, --file-list FILE    指定包含文件类型列表的文件
+                        -l, --file-list FILE    指定包含文件类型列表的文件（缺省用仓库自带 oss.include.txt）
                         -s, --storage-class TYPE 指定存储类型(默认:IA)
                         -f, --force             不提示确认直接删除
   inventory add <源桶> --dest <目标桶> [--id report1] [--prefix oss-inventory]
@@ -391,12 +391,21 @@ generate_large_files_list() {
     echo "$temp_file"
 }
 
+_oss_default_file_list() {
+    # 批量复制/删除的缺省文件类型清单：返回仓库自带 oss.include.txt 的路径；不存在则输出空串（由调用方回退生成）
+    local default_list="${SCRIPT_DIR:-}/oss.include.txt"
+    if [ -n "${SCRIPT_DIR:-}" ] && [ -f "${default_list}" ]; then
+        echo "${default_list}"
+    fi
+}
+
 # 修改 oss_batch_copy 函数
 oss_batch_copy() {
     local OPTIND OPTARG opt
     local source="$1"
     local dest="$2"
     local file_list=""
+    local temp_list_file=""
     local storage_class="IA"
     local force=false
 
@@ -437,12 +446,17 @@ oss_batch_copy() {
         esac
     done
 
-    # 如果没有提供文件列表，则自动生成
+    # 如果没有提供文件列表：优先用仓库自带 oss.include.txt，缺失则自动生成临时清单
     if [ -z "$file_list" ]; then
-        echo "未指定文件类型列表，将自动生成包含常见大文件类型的列表..."
-        temp_list_file=$(generate_large_files_list)
-        file_list="$temp_list_file"
-        echo "已生成临时文件类型列表：$file_list"
+        file_list=$(_oss_default_file_list)
+        if [ -n "$file_list" ]; then
+            echo "未指定文件类型列表，使用默认清单：$file_list"
+        else
+            echo "未指定文件类型列表，将自动生成包含常见大文件类型的列表..."
+            temp_list_file=$(generate_large_files_list)
+            file_list="$temp_list_file"
+            echo "已生成临时文件类型列表：$file_list"
+        fi
     elif [ ! -f "$file_list" ]; then
         echo "错误：指定的文件列表文件不存在：$file_list" >&2
         return 1
@@ -488,6 +502,7 @@ oss_batch_delete() {
     local OPTIND OPTARG opt
     local bucket_path="$1"
     local file_list=""
+    local temp_list_file=""
     local storage_class="IA"
     local force=false
 
@@ -525,12 +540,17 @@ oss_batch_delete() {
         esac
     done
 
-    # 如果没有提供文件列表，则自动生成
+    # 如果没有提供文件列表：优先用仓库自带 oss.include.txt，缺失则自动生成临时清单
     if [ -z "$file_list" ]; then
-        echo "未指定文件类型列表，将自动生成包含常见大文件类型的列表..."
-        temp_list_file=$(generate_large_files_list)
-        file_list="$temp_list_file"
-        echo "已生成临时文件类型列表：$file_list"
+        file_list=$(_oss_default_file_list)
+        if [ -n "$file_list" ]; then
+            echo "未指定文件类型列表，使用默认清单：$file_list"
+        else
+            echo "未指定文件类型列表，将自动生成包含常见大文件类型的列表..."
+            temp_list_file=$(generate_large_files_list)
+            file_list="$temp_list_file"
+            echo "已生成临时文件类型列表：$file_list"
+        fi
     elif [ ! -f "$file_list" ]; then
         echo "错误：指定的文件列表文件不存在：$file_list" >&2
         return 1
