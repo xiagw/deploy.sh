@@ -18,6 +18,7 @@ show_rds_help() {
     echo "  del-acc <实例ID> <账号>             - 删除数据库账号"
     echo "  get-acc <实例ID> [format]           - 列出数据库账号"
     echo "  set-acc <实例ID> <账号> <数据库名[,数据库名...]> [rw|ro] - 设置账号数据库权限（rw=读写 默认，ro=只读；支持多库）"
+    echo "  set-pass <实例ID> <账号> [新密码]       - 重置账号密码（省略密码则随机生成）"
     echo "  get-db <实例ID> [format]                - 列出数据库"
     echo "  add-db <实例ID> <数据库名> [字符集]     - 创建数据库"
     echo "  del-db <实例ID> <数据库名>              - 删除数据库"
@@ -45,6 +46,8 @@ show_rds_help() {
     echo "  $0 rds set-acc rm-xxx myuser mydb rw"
     echo "  $0 rds set-acc rm-xxx myuser mydb ro"
     echo "  $0 rds set-acc rm-xxx myuser mydb1,mydb2 ro   # 一次授权多个库；权限可省略（默认 rw）；库名可省略用 fzf Tab 多选"
+    echo "  $0 rds set-pass rm-xxx myuser                  # 重置密码（回车随机生成）"
+    echo "  $0 rds set-pass rm-xxx myuser 'NewPass123@'"
     echo "  $0 rds get-db rm-xxx"
     echo "  $0 rds add-db rm-xxx mydb utf8mb4"
     echo "  $0 rds del-db rm-xxx mydb"
@@ -76,6 +79,7 @@ handle_rds_commands() {
     del-acc) rds_account_delete "$@" ;;
     get-acc) rds_account_list "$@" ;;
     set-acc) rds_account_grant "$@" ;;
+    set-pass) rds_account_password_set "$@" ;;
     get-db) rds_db_list "$@" ;;
     add-db) rds_db_create "$@" ;;
     del-db) rds_db_delete "$@" ;;
@@ -424,32 +428,8 @@ rds_account_create() {
         fi
     fi
 
-    # 如果没有提供密码，则生成或交互式输入
-    if [ -z "$password" ]; then
-        read -r -p "请输入密码 (回车生成随机密码): " password_input
-        if [ -z "$password_input" ]; then
-            local try_count=0
-            local candidate_password=""
-            password=""
-            while [ $try_count -lt 10 ]; do
-                try_count=$((try_count + 1))
-                candidate_password=$(_get_random_password 14 2>/dev/null)
-                [ -z "$candidate_password" ] && continue
-                echo "$candidate_password" | grep -q "[A-Z]" || continue
-                echo "$candidate_password" | grep -q "[a-z]" || continue
-                echo "$candidate_password" | grep -q "[0-9]" || continue
-                password="$candidate_password"
-                break
-            done
-            if [ -z "$password" ]; then
-                echo "错误：无法生成密码，请手动指定密码。" >&2
-                return 1
-            fi
-            echo "生成的密码: $password"
-        else
-            password="$password_input"
-        fi
-    fi
+    # 密码：未提供则交互输入/随机生成，并统一校验
+    password=$(_rds_resolve_password "$password") || return 1
 
     # 如果没有提供描述，则交互式输入
     if [ -z "$description" ]; then
@@ -461,31 +441,6 @@ rds_account_create() {
         echo "用法：rds add-acc <实例ID> <账号> [密码] [描述]" >&2
         return 1
     fi
-
-    # 验证密码复杂度
-    if [ "${#password}" -lt 8 ] || [ "${#password}" -gt 32 ]; then
-        echo "错误：密码长度必须在8-32位之间。" >&2
-        return 1
-    fi
-
-    echo "$password" | grep -q "[A-Z]" || {
-        echo "错误：密码必须包含大写字母。" >&2
-        return 1
-    }
-
-    echo "$password" | grep -q "[a-z]" || {
-        echo "错误：密码必须包含小写字母。" >&2
-        return 1
-    }
-
-    echo "$password" | grep -q "[0-9]" || {
-        echo "错误：密码必须包含数字。" >&2
-        return 1
-    }
-
-    echo "$password" | grep -q '[^[:alnum:]]' || {
-        password="${password}@"
-    }
 
     # 先创建同名数据库（使用 rds_db_create 函数）
     echo "创建同名数据库..."
@@ -569,6 +524,56 @@ _rds_pick_db_names_multi() {
         return 1
     fi
     echo "${picked}" | awk '{print $1}' | paste -sd, -
+}
+
+_rds_resolve_password() {
+    # 解析并校验账号密码：入参为空则交互输入（回车生成随机 14 位）；最终密码写 stdout，提示写 stderr
+    # 规则：8-32 位，且含大写、小写、数字；缺特殊字符时自动补 @
+    local password=$1
+    if [ -z "${password}" ]; then
+        local password_input
+        read -r -p "请输入密码 (回车生成随机密码): " password_input
+        if [ -z "${password_input}" ]; then
+            local try_count=0 candidate_password=""
+            while [ "${try_count}" -lt 10 ]; do
+                try_count=$((try_count + 1))
+                candidate_password=$(_get_random_password 14 2>/dev/null)
+                [ -z "${candidate_password}" ] && continue
+                echo "${candidate_password}" | grep -q "[A-Z]" || continue
+                echo "${candidate_password}" | grep -q "[a-z]" || continue
+                echo "${candidate_password}" | grep -q "[0-9]" || continue
+                password="${candidate_password}"
+                break
+            done
+            if [ -z "${password}" ]; then
+                echo "错误：无法生成密码，请手动指定密码。" >&2
+                return 1
+            fi
+            echo "生成的密码: ${password}" >&2
+        else
+            password="${password_input}"
+        fi
+    fi
+
+    if [ "${#password}" -lt 8 ] || [ "${#password}" -gt 32 ]; then
+        echo "错误：密码长度必须在8-32位之间。" >&2
+        return 1
+    fi
+    echo "${password}" | grep -q "[A-Z]" || {
+        echo "错误：密码必须包含大写字母。" >&2
+        return 1
+    }
+    echo "${password}" | grep -q "[a-z]" || {
+        echo "错误：密码必须包含小写字母。" >&2
+        return 1
+    }
+    echo "${password}" | grep -q "[0-9]" || {
+        echo "错误：密码必须包含数字。" >&2
+        return 1
+    }
+    echo "${password}" | grep -q '[^[:alnum:]]' || password="${password}@"
+
+    echo "${password}"
 }
 
 # 删除数据库账号（使用框架函数）
@@ -817,6 +822,35 @@ rds_account_grant() {
         --db-name "$db_list" \
         --account-privilege "$privilege_list"; then
         echo "账号 $account_name 已被授予 $privilege 权限，可访问数据库 $db_list"
+    fi
+}
+
+rds_account_password_set() {
+    # 重置账号密码（ResetAccountPassword）：新密码可省略，回车随机生成
+    local instance_id=$1
+    local account_name=$2
+    local password=$3
+
+    instance_id=$(_rds_resolve_instance_id "$instance_id" "选择 RDS 实例") || return 1
+
+    local raw_acc
+    raw_acc=$(_rds_resolve_account_name "$account_name" "选择 RDS 账号" "$instance_id") || return 1
+    account_name=$(echo "$raw_acc" | awk '{print $1}')
+
+    password=$(_rds_resolve_password "$password") || return 1
+
+    echo "重置账号密码："
+    echo "实例ID: $instance_id"
+    echo "账号名: $account_name"
+    echo "新密码: $password"
+
+    if call_api_logged "rds" "account-password" "错误：密码重置失败。" \
+        -- rds reset-account-password \
+        --biz-region-id "$region" \
+        --db-instance-id "$instance_id" \
+        --account-name "$account_name" \
+        --account-password "$password"; then
+        echo "账号 $account_name 密码已重置"
     fi
 }
 
