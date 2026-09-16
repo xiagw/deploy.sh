@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016
 # -*- coding: utf-8 -*-
 
 # RDS (关系型数据库) 相关函数 - 使用新框架重构
