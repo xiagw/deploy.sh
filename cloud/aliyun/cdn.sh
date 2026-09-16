@@ -18,9 +18,9 @@ show_cdn_help() {
     echo "  prefetch <路径>                         - 预热 CDN 文件"
     echo "  logs [<域名>] [-s 开始] [-e 结束] [-f 格式] [--status 状态码] [-t 文件类型]"
     echo "                                         - 拉取 CDN 离线日志并分析（域名可选，可使用fzf选择；默认昨天）"
-    echo "  access [--days N] [--domain <域名>] [--bucket <桶名>] [-s 开始] [-e 结束]"
-    echo "                                         - 每日归档 CDN 日志为 ≤3 层目录访问清单，并按 bucket 聚合"
-    echo "                                           （供 oss prune 比较；不做任何 OSS 操作）"
+    echo "  logs [<域名>] --days N [--bucket <桶名>] [-s 开始] [-e 结束]"
+    echo "                                         - 归档模式（出现 --days/--bucket 即触发）：归档 CDN 日志为 ≤3 层"
+    echo "                                           目录访问清单并按 bucket 聚合（供 oss prune 比较；不做 OSS 操作）"
     echo "  pay [--dry-run]                         - 购买 CDN 资源包（自动判断余量；--dry-run 只展示不购买）"
     echo
     echo "示例："
@@ -36,8 +36,8 @@ show_cdn_help() {
     echo "  $0 cdn prefetch https://example.com/path/to/file.jpg     # 预热文件"
     echo "  $0 cdn logs example.com                                 # 查昨天离线日志"
     echo "  $0 cdn logs example.com -s 2026-08-01 -e 2026-08-10 --status 404  # 按状态码分析"
-    echo "  $0 cdn access                                           # 归档昨日 CDN 日志并生成三层访问清单"
-    echo "  $0 cdn access --days 30                                 # 按窗口聚合"
+    echo "  $0 cdn logs --days 30                                   # 归档模式：归档昨日日志并生成三层访问清单"
+    echo "  $0 cdn logs example.com --days 30                       # 指定域名 + 按窗口聚合"
     echo "  $0 cdn pay                                                 # 购买资源包"
     echo ""
     echo "注意：对于所有带有可选参数的命令，如果未提供参数，将使用 fzf 交互式选择。"
@@ -56,7 +56,6 @@ handle_cdn_commands() {
     trigger) cdn_refresh_trigger "$@" ;;
     prefetch) cdn_prefetch "$@" ;;
     logs) cdn_logs "$@" ;;
-    access) cdn_access "$@" ;;
     pay) cdn_pay "$@" ;;
     help) show_cdn_help ;;
     *)
@@ -67,14 +66,13 @@ handle_cdn_commands() {
     esac
 }
 
-# 解析 CDN 域名（未提供时列表选择；cdn 为中心化服务，固定 --region cn-hangzhou）
 _cdn_resolve_domain() {
+    # 未提供域名时 fzf 选择；cdn 为中心化服务，固定 --region cn-hangzhou
     resolve_resource_id "$1" "${2:-选择 CDN 域名}" "错误：没有找到 CDN 域名。" \
         '.Domains.PageData[] | "\(.DomainName) (\(.Cname)) [\(.DomainStatus)]"' \
         -- cdn describe-user-domains --region cn-hangzhou
 }
 
-# 使用新框架的列表函数
 cdn_list() {
     local format=${1:-human}
 
@@ -104,7 +102,6 @@ cdn_list() {
         "列出 CDN 域名："
 }
 
-# 使用新框架的创建函数
 cdn_create() {
     local domain_name=$1 sources=$2 source_type=$3
 
@@ -162,7 +159,6 @@ oss_private"
         --scope domestic
 }
 
-# 使用新框架的删除函数
 cdn_delete() {
     local domain_name
     domain_name=$(_cdn_resolve_domain "$1" "选择要删除的 CDN 域名") || return 1
@@ -176,7 +172,6 @@ cdn_delete() {
         -- cdn delete-cdn-domain --region cn-hangzhou --domain-name "$domain_name"
 }
 
-# 使用新框架的更新函数
 cdn_update() {
     local domain_name sources=$2 source_type=$3
     domain_name=$(_cdn_resolve_domain "$1" "选择要更新的 CDN 域名") || return 1
@@ -224,7 +219,6 @@ oss_private"
         --sources "[{\"content\":\"$sources\",\"type\":\"$source_type\",\"priority\":\"20\",\"port\":80,\"weight\":\"15\"}]"
 }
 
-# 刷新功能（保持原有实现，但使用框架函数并添加fzf选择）
 cdn_refresh() {
     local type=$1
     local path=$2
@@ -295,9 +289,8 @@ regex"
     touch "$lock_file"
 }
 
-# 根据触发文件批量刷新 CDN
-# 触发文件每行一个 URL，支持空行和 # 注释；执行后自动删除触发文件
 cdn_refresh_trigger() {
+    # 触发文件每行一个 URL，支持空行和 # 注释；执行后自动删除触发文件
     local trigger_file=${1:-/tmp/trigger.cdn.refresh}
     local type=${2:-directory}
 
@@ -337,7 +330,6 @@ cdn_refresh_trigger() {
     echo "共刷新 $count 条记录。"
 }
 
-# 预热功能（保持原有实现，但使用框架函数并添加fzf选择）
 cdn_prefetch() {
     local path=$1
 
@@ -357,10 +349,11 @@ cdn_prefetch() {
     echo "CDN 文件预热请求已提交。"
 }
 
-# CDN 离线日志拉取与分析（数据源为 CDN API describe-cdn-domain-logs，无 --status 时仅列文件清单）
-# 用法: cdn logs [<域名>] [-s YYYY-MM-DD] [-e YYYY-MM-DD] [-f human|json|tsv] [--status 404,500] [-t jpg,png]
 cdn_logs() {
+    # 数据源：CDN API describe-cdn-domain-logs；无 --status 时仅列文件清单
+    # 用法: cdn logs [<域名>] [-s YYYY-MM-DD] [-e YYYY-MM-DD] [-f human|json|tsv] [--status 404,500] [-t jpg,png]
     local domain="" start_day="" end_day="" format="human" status_codes="" file_types=""
+    local days="" bucket_filter="" archive_mode=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -404,6 +397,29 @@ cdn_logs() {
             file_types="$2"
             shift 2
             ;;
+        --days)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "错误：--days 选项需要指定天数" >&2
+                return 1
+            fi
+            days="$2"
+            archive_mode=1
+            shift 2
+            ;;
+        --bucket)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "错误：--bucket 选项需要指定桶名" >&2
+                return 1
+            fi
+            bucket_filter="$2"
+            archive_mode=1
+            shift 2
+            ;;
+        -h | --help)
+            echo "用法: cdn logs [<域名>] [-s 开始] [-e 结束] [-f 格式] [--status 状态码] [-t 文件类型]"
+            echo "      cdn logs [<域名>] --days N [--bucket <桶名>] [-s 开始] [-e 结束]   # 归档模式"
+            return 0
+            ;;
         -*)
             echo "错误：未知的选项：$1" >&2
             return 1
@@ -420,9 +436,18 @@ cdn_logs() {
         esac
     done
 
+    # 归档模式：出现 --days/--bucket 即触发（域名/bucket 为过滤器，-s/-e 为归档范围）
+    if [ "$archive_mode" -eq 1 ]; then
+        if [ -n "$status_codes" ] || [ -n "$file_types" ] || [ "$format" != "human" ]; then
+            echo "警告：归档模式忽略 --status/-t/-f" >&2
+        fi
+        _cdn_archive "$domain" "${days:-30}" "$bucket_filter" "$start_day" "$end_day"
+        return $?
+    fi
+
     domain=$(_cdn_resolve_domain "$domain" "选择要查日志的 CDN 域名") || return 1
 
-    # 业务日=本地(北京)日：昨天 = 北京昨天；对应 UTC 窗口见 _cdn_fetch_log_rows
+    # 本地(北京)昨天：默认取「今天 − 1 天」；取日志时转 UTC，见 _cdn_fetch_log_rows
     if [ -z "$start_day" ]; then
         local today_epoch
         today_epoch=$(date +%s)
@@ -437,6 +462,8 @@ cdn_logs() {
         echo "错误：开始日期不能晚于结束日期" >&2
         return 1
     fi
+
+    _cdn_cache_prune
 
     echo "CDN 离线日志：域名=$domain 日期=$start_day ~ $end_day"
     local rows
@@ -480,22 +507,9 @@ cdn_logs() {
     log_result "${profile:-}" "${region:-}" "cdn" "logs" "$rows" "$format"
 }
 
-# ---------- 时间工具：业务日按北京时(UTC+8)计算（CDN 日志戳/文件名用北京时），纯 epoch 算术，不依赖系统 TZ ----------
-#
-# 【时间口径，勿改错】
-#   - CDN 日志的“时间戳 / 文件名”是 北京时(UTC+8)：
-#       例 .vrupup.com_2026_09_13_000000_010000.gz 内容为 [13/Sep/2026:00:xx +0800]
-#   - describe-cdn-domain-logs 的 --start-time/--end-time 是 UTC(ISO8601 带 Z)
-#   - 业务日 = 北京时日历日；北京日 X 的“全天日志”→ UTC 窗口 [X-1 16:00Z, X 16:00Z)
-#       北京 X   00:00 = UTC X-1 16:00Z   （起点）
-#       北京 X+1 00:00 = UTC X   16:00Z   （终点，开区间）
-#   - 换算：start = epoch(X 00:00Z) - 8h ; end = epoch(X 00:00Z) + 16h（见 _cdn_fetch_log_rows）
-#   - 实测：北京 09-13 → UTC [2026-09-12T16:00:00Z, 2026-09-13T16:00:00Z)，返回 24 个文件：
-#       ..._2026_09_13_000000_010000.gz（内容 00:40 +0800）… ..._2026_09_13_230000_240000.gz（内容 23:54 +0800）
-#   - 反例（别再犯）：误按“UTC 日历日 [X 00:00Z, X+1 00:00Z)”取数 = 北京 [X 08:00, X+1 08:00)，整体偏移 8 小时。
-#
-# 日期字符串（YYYY-MM-DD）当 UTC 日零点解析成 epoch（这是确定性换算，非"本地时间"）
+# ---------- 时间工具：本地时间按北京时(UTC+8)，纯 epoch 算术，不依赖系统 TZ ----------
 _cdn_day_to_utc_epoch() {
+    # 按 UTC 日零点解析（确定性换算，非本地时间）
     local day=$1
     if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/date ]; then
         TZ=UTC /usr/bin/date -j -f "%Y-%m-%d" "$day" +%s 2>/dev/null && return 0
@@ -506,7 +520,6 @@ _cdn_day_to_utc_epoch() {
     TZ=UTC date -d "$day" +%s 2>/dev/null
 }
 
-# epoch -> UTC ISO8601（用于 API 的 --start-time/--end-time）
 _cdn_epoch_to_utc_iso() {
     local epoch=$1
     if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/date ]; then
@@ -518,8 +531,8 @@ _cdn_epoch_to_utc_iso() {
     TZ=UTC date -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null
 }
 
-# epoch -> 本地业务日（北京时 UTC+8，与 CDN 日志时间戳/文件名一致）
 _cdn_epoch_to_sh_day() {
+    # epoch -> 本地日期（北京时 UTC+8，与 CDN 日志戳/文件名一致）
     local epoch=$1
     if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/date ]; then
         TZ=Asia/Shanghai /usr/bin/date -r "$epoch" +%F 2>/dev/null && return 0
@@ -530,15 +543,17 @@ _cdn_epoch_to_sh_day() {
     TZ=Asia/Shanghai date -d "@$epoch" +%F 2>/dev/null
 }
 
-# 拉取域名指定日期范围的 CDN 离线日志清单（TSV 行：StartTime/EndTime/LogSize/LogName/LogPath）
-# 日期为本地(北京)业务日（YYYY-MM-DD）；调用方已确保格式合法
-# 输出到 stdout；失败返回非 0 且错误信息写 stderr
 _cdn_fetch_log_rows() {
+    # 拉取域名指定日期范围的 CDN 离线日志清单（TSV 行：StartTime/EndTime/LogSize/LogName/LogPath）
+    # 日期为本地(北京)日 YYYY-MM-DD；调用方已确保格式合法；输出到 stdout，失败非 0 且错误写 stderr
+    #
+    # 时间口径（勿改错）：日志文件名/内容时间戳是北京时(UTC+8)；API 的 --start-time/--end-time 与响应 StartTime/EndTime 是 UTC；
+    # 本地日 → UTC 窗口：今天 X → [X-1 16:00Z, X 16:00Z)；昨天 X-1 → [X-2 16:00Z, X-1 16:00Z)
     local domain=$1 start_day=$2 end_day=$3
     local s_epoch e_epoch start_utc end_utc result ret
     s_epoch=$(_cdn_day_to_utc_epoch "$start_day") || { echo "错误：开始日期解析失败（${start_day}）" >&2; return 1; }
     e_epoch=$(_cdn_day_to_utc_epoch "$end_day") || { echo "错误：结束日期解析失败（${end_day}）" >&2; return 1; }
-    # 业务日=本地(北京)日；API 参数用 UTC：窗口 = [日 00:00+08, 次日 00:00+08) = [日前一天16:00Z, 日16:00Z)
+    # 28800 = 8h、57600 = 16h（口径见函数首）
     start_utc=$(_cdn_epoch_to_utc_iso $((s_epoch - 28800))) || { echo "错误：开始日期转换失败" >&2; return 1; }
     end_utc=$(_cdn_epoch_to_utc_iso $((e_epoch + 57600))) || { echo "错误：结束日期转换失败" >&2; return 1; }
 
@@ -561,27 +576,77 @@ _cdn_fetch_log_rows() {
     return 0
 }
 
-# 下载并分析单个 CDN 离线日志（.gz）：状态码 + 文件类型过滤、排除敏感路径、URI 去重累积到本地缓存
+# ---------- CDN 离线日志本地缓存：下载复用 + TTL 清理 ----------
+#
+# 布局：<SCRIPT_DATA>/cache/<profile>/<region>/cdn/logs/<domain>/<log_name>（保留 .gz 原文件）
+#   - 存 .gz 而非解压明文：CDN 日志按小时分片、量大，压缩态占用小得多；解压成本远低于重新下载
+#   - 原子写（.tmp -> mv）：中断/失败不留残缺文件被误当缓存命中
+#   - 保留天数：默认 35，覆盖归档模式默认聚合窗口（--days 30）并留 5 天余量——缓存必须
+#     覆盖归档的操作窗口，否则窗口内后段的日志被提前清掉，补档/重建时全量重下
+#   - 归档模式用自身 --days 参与（_cdn_cache_prune "$days"），但保留期不会低于该下限
+CDN_LOG_CACHE_DAYS=${CDN_LOG_CACHE_DAYS:-35}
+
+_cdn_log_cache_dir() {
+    echo "${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/cdn/logs/${1}"
+}
+
+_cdn_fetch_log_gz() {
+    # 取单个日志的本地 .gz 路径；未缓存则下载。成功打印路径到 stdout，进度/错误走 stderr
+    local log_path=${1} log_name=${2} domain=${3}
+    local cache_dir local_gz tmp
+    cache_dir=$(_cdn_log_cache_dir "${domain}")
+    local_gz="${cache_dir}/${log_name}"
+    if [ -s "${local_gz}" ]; then
+        echo "${local_gz}"
+        return 0
+    fi
+    [[ "${log_path}" != http* ]] && log_path="https://${log_path}"
+    mkdir -p "${cache_dir}"
+    tmp="${local_gz}.tmp.$$"
+    echo "正在下载日志: ${domain}/${log_name} ..." >&2
+    if ! curl -sfL --connect-timeout 10 "${log_path}" -o "${tmp}"; then
+        rm -f "${tmp}"
+        return 1
+    fi
+    if [ ! -s "${tmp}" ]; then
+        rm -f "${tmp}"
+        return 1
+    fi
+    mv "${tmp}" "${local_gz}"
+    echo "${local_gz}"
+    return 0
+}
+
+_cdn_cache_prune() {
+    # 清理 CDN 日志缓存中超过 days 天未修改的文件及空目录
+    # 保留期下限 = CDN_LOG_CACHE_DAYS：传更小的值不会低于下限；传更大的值（如 --days 90）按更大的保留
+    local days=${1:-${CDN_LOG_CACHE_DAYS}}
+    case "${days}" in '' | *[!0-9]*) days=${CDN_LOG_CACHE_DAYS} ;; esac
+    [ "${days}" -ge "${CDN_LOG_CACHE_DAYS}" ] || days=${CDN_LOG_CACHE_DAYS}
+    local base="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/cdn/logs"
+    [ -d "${base}" ] || return 0
+    find "${base}" -type f -mtime "+${days}" -delete 2>/dev/null
+    find "${base}" -mindepth 1 -type d -empty -delete 2>/dev/null
+    return 0
+}
+
 _cdn_analyze_log() {
+    # 下载并分析单个 CDN 离线日志（.gz）：状态码 + 文件类型过滤、排除敏感路径、URI 去重累积到本地缓存
     local log_url=$1 log_name=$2 status_codes=$3
     local file_types=${4:-"mp3,mp4,avi,mov,wmv,flv,mkv,webm,jpg,jpeg,png,gif,bmp,tif,tiff,wof,tof,heic,webp,psd,ai,zip,rar,7z,tar,gz,iso,dmg,pdf,doc,docx,ppt,pptx,xls,xlsx,fbx"}
     local domain=$5
     local work_dir local_gz local_txt
 
-    [[ "$log_url" != http* ]] && log_url="https://${log_url}"
+    local_gz=$(_cdn_fetch_log_gz "${log_url}" "${log_name}" "${domain}") || {
+        echo "错误：下载日志失败: $log_name" >&2
+        return 1
+    }
 
     work_dir=$(mktemp -d)
-    local_gz="${work_dir}/${log_name}"
     local_txt="${work_dir}/${log_name%.gz}"
 
-    echo "正在下载日志: $log_name ..."
-    if ! curl -sfL --connect-timeout 10 "$log_url" -o "$local_gz"; then
-        echo "错误：下载日志失败: $log_name" >&2
-        rm -rf "$work_dir"
-        return 1
-    fi
     echo "正在解压日志: $log_name ..."
-    if ! gunzip -f "$local_gz"; then
+    if ! gunzip -c "$local_gz" >"$local_txt"; then
         echo "错误：解压日志失败: $log_name" >&2
         rm -rf "$work_dir"
         return 1
@@ -625,9 +690,9 @@ _cdn_analyze_log() {
 }
 
 
-# 抓取某域名某本地(北京)日期日志并归档访问目录/异常 URI 档案（覆盖写）；成功 0
-# 无日志时：archive_empty=1 建空档案（主任务语义=当天已评估过）；否则不建档案返回 2（补档语义=数据不可得）
 _cdn_fetch_parse_domain_day() {
+    # 抓取某域名某本地(北京)日期日志并归档访问目录/异常 URI 档案（覆盖写）；成功 0
+    # 无日志时：archive_empty=1 建空档案（主任务语义=当天已评估过）；否则不建档案返回 2（补档语义=数据不可得）
     local domain=$1 day=$2 archive_empty=${3:-0}
     local prune_dir access_file abnormal_file rows log_name log_path
     prune_dir="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/prune"
@@ -652,11 +717,13 @@ _cdn_fetch_parse_domain_day() {
     local failed=0
     while IFS=$'\t' read -r _ _ _ log_name log_path; do
         [ -z "$log_path" ] && continue
-        [[ "$log_path" != http* ]] && log_path="https://${log_path}"
-        echo "   $domain : $log_name"
-        local pipe_ok
-        curl -sfL --connect-timeout 10 "$log_path" 2>/dev/null |
-            gunzip -c 2>/dev/null |
+        local local_gz pipe_ok
+        if ! local_gz=$(_cdn_fetch_log_gz "$log_path" "$log_name" "$domain"); then
+            echo "警告：$log_name 下载失败，跳过" >&2
+            failed=$((failed + 1))
+            continue
+        fi
+        gunzip -c "$local_gz" 2>/dev/null |
             awk -v af="$tmp_access" -v ab="$tmp_abnormal" '
                 {
                     for (i = 1; i <= NF; i++) {
@@ -687,7 +754,8 @@ _cdn_fetch_parse_domain_day() {
                 }'
         pipe_ok=${PIPESTATUS[0]}
         if [ "$pipe_ok" -ne 0 ]; then
-            echo "警告：$log_name 下载失败，跳过" >&2
+            rm -f "$local_gz"
+            echo "警告：$log_name 解压失败，跳过（已清缓存待重试）" >&2
             failed=$((failed + 1))
         fi
     done < <(echo "$rows")
@@ -703,36 +771,11 @@ _cdn_fetch_parse_domain_day() {
     return 0
 }
 
-# 归档 CDN 离线日志为 ≤3 层目录访问清单，并按 bucket 聚合 access-<bucket>.txt / abnormal-<bucket>.txt
-# 用法: cdn access [--days N] [--domain <域名>] [--bucket <桶名>] [-s YYYY-MM-DD] [-e YYYY-MM-DD]
-cdn_access() {
-    local days=30 domain_filter="" bucket_filter="" start_day="" end_day=""
+_cdn_archive() {
+    # 归档 CDN 离线日志为 ≤3 层目录访问清单，并按 bucket 聚合 access-<bucket>.txt / abnormal-<bucket>.txt
+    # 由 cdn logs 在归档模式（出现 --days/--bucket）下调用
+    local domain_filter=$1 days=$2 bucket_filter=$3 start_day=$4 end_day=$5
     local today_epoch prune_dir
-
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-        --days)
-            if [[ -z "$2" || "$2" == -* ]]; then
-                echo "错误：--days 选项需要指定天数" >&2
-                return 1
-            fi
-            days="$2"
-            shift 2
-            ;;
-        --domain) domain_filter="$2"; shift 2 ;;
-        --bucket) bucket_filter="$2"; shift 2 ;;
-        -s | --start-date) start_day="$2"; shift 2 ;;
-        -e | --end-date) end_day="$2"; shift 2 ;;
-        -h | --help)
-            echo "用法: cdn access [--days N] [--domain <域名>] [--bucket <桶名>] [-s 开始] [-e 结束]"
-            return 0
-            ;;
-        *)
-            echo "错误：未知的选项：$1" >&2
-            return 1
-            ;;
-        esac
-    done
 
     if ! [ "$days" -gt 0 ] 2>/dev/null; then
         echo "错误：--days 必须是正整数" >&2
@@ -750,6 +793,8 @@ cdn_access() {
         echo "错误：开始日期不能晚于结束日期" >&2
         return 1
     fi
+
+    _cdn_cache_prune "$days"
 
     prune_dir="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/prune"
     mkdir -p "$prune_dir"
@@ -889,9 +934,8 @@ cdn_access() {
     echo "===== 完成：${prune_dir}/access-<bucket>.txt ====="
 }
 
-# 购买资源包功能（保持原有实现，但使用框架函数）
-# 用法: cdn_pay [--dry-run]   --dry-run 仅计算余量/价格并展示，不真正下单（便于调试）
 cdn_pay() {
+    # 用法: cdn_pay [--dry-run]   --dry-run 仅计算余量/价格并展示，不真正下单（便于调试）
     local color_reset="\033[0m"
     local color_green="\033[0;32m"
     local color_red="\033[0;31m"

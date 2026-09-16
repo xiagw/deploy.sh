@@ -53,7 +53,7 @@ OSS (对象存储服务) 操作
                       --source du：ls -d 目录结构 + 只 du 叶子后上卷（约 1 遍扫描）
                       （全局 -in/--internal 生效：改走内网 endpoint，仅同地域可达）
   prune <存储桶> [--days 30] [--min-size 1G] [--exclude 前缀] [--dry-run]
-                      读 dirsize 目录/大小清单 + cdn access 访问清单，比较出长期未访问的
+                      读 dirsize 目录/大小清单 + cdn logs --days 访问清单，比较出长期未访问的
                       大目录，生成「先备份再删除」脚本（只生成、不执行）
                       （全局 -in/--internal 生效：生成脚本的 ENDPOINT 用内网）
 
@@ -1256,7 +1256,7 @@ oss_dirsize() {
     echo "===== 完成：$dirs_file ；$sizes_file ====="
 }
 
-# 读 dirsize 清单 + cdn access 清单，比较生成候选与备份/删除脚本（只生成、不执行）
+# 读 dirsize 清单 + cdn logs --days 清单，比较生成候选与备份/删除脚本（只生成、不执行）
 oss_prune() {
     local bucket="" days=30 min_size="1G" dry_run=0
     local excludes=("oss-inventory/")
@@ -1307,7 +1307,7 @@ oss_prune() {
     local access_file="${prune_dir}/access-${bucket}.txt"
     [ -s "$dirs_file" ] || { echo "错误：缺少目录清单，请先跑：oss dirsize ${bucket}" >&2; return 1; }
     [ -s "$sizes_file" ] || { echo "错误：缺少大小清单，请先跑：oss dirsize ${bucket}" >&2; return 1; }
-    [ -s "$access_file" ] || { echo "错误：缺少访问清单，请先跑：cdn access --bucket ${bucket}" >&2; return 1; }
+    [ -s "$access_file" ] || { echo "错误：缺少访问清单，请先跑：cdn logs --bucket ${bucket}" >&2; return 1; }
 
     local bregion
     bregion=$(_oss_bucket_region "$bucket")

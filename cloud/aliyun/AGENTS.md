@@ -31,7 +31,8 @@ Bash wrapper around the Alibaba Cloud CLI (plugin mode, aliyun >= 3.4). Entry: `
 - RAM permissions have two scopes: account-level (`ram list-policies-for-user`) and resource-group-level (`resourcemanager ListPolicyAttachments --PrincipalType IMSUser --PrincipalName "<user>@<alias>.onaliyun.com"`). The console shows both; querying only the first looks "empty".
 - macOS: `main.sh` needs `greadlink` (Homebrew coreutils); `stat -c` in `load_module` is GNU-style.
 - macOS 兼容：脚本内禁用裸 `stat -c`/`date -d`（GNU 语法），须探测 `gstat`/`gdate` 回退；`${TMPDIR:-/tmp}` 要去尾斜杠再拼文件（macOS TMPDIR 带 `/` 会拼出 `//`）。ack.sh 的 `run_once` 中已有 `runtime_dir` 的现成模式可参考。
-- CDN 日志时间口径（cdn.sh，勿改错）：日志**时间戳/文件名是北京时(UTC+8)**，而 `describe-cdn-domain-logs` 的 `--start-time/--end-time` 是 **UTC**。**业务日按北京时**：北京日 `X` 的全天日志 → UTC 窗口 `[X-1 16:00Z, X 16:00Z)`（start=epoch(X)-8h，end=epoch(X)+16h）。**勿按 UTC 日历日 `[X 00:00Z, X+1 00:00Z)` 取数**（= 北京 `[X 08:00, X+1 08:00)`，整体偏移 8 小时）。实测北京 09-13 返回 24 个文件 `..._000000_010000.gz`~`..._230000_240000.gz`。
+- CDN 日志时间口径（cdn.sh，勿改错）：日志**文件名/内容时间戳是北京时(UTC+8)**，而 `describe-cdn-domain-logs` 的 `--start-time/--end-time` 与响应 `StartTime/EndTime` 是 **UTC**。**本地时间（北京时）**：本地日 → UTC 窗口，今天 `X` → `[X-1 16:00Z, X 16:00Z)`、昨天 `X-1` → `[X-2 16:00Z, X-1 16:00Z)`（start=epoch(本地日)-8h，end=epoch(本地日)+16h）——**只有取日志这一步转 UTC**，其余全程本地时间。**勿按 UTC 日历日 `[X 00:00Z, X+1 00:00Z)` 取数**（= 北京 `[X 08:00, X+1 08:00)`，整体偏移 8 小时）。实测北京 09-13 返回 24 个文件 `..._000000_010000.gz`~`..._230000_240000.gz`。
+- CDN 离线日志下载缓存（cdn.sh）：下载统一走 `_cdn_fetch_log_gz`（`cdn logs` 查询/归档共用），缓存在 `<SCRIPT_DATA>/cache/<profile>/<region>/cdn/logs/<domain>/<log_name>`，保留 **.gz 原文件**、原子写。`_cdn_cache_prune` 在 `cdn logs` 启动时（查询/归档）清理超期文件及空目录；保留期 `CDN_LOG_CACHE_DAYS` 默认 **35**（归档默认窗口 30 + 5 天余量），且为**下限**：归档模式把自身 `--days` 传给 `_cdn_cache_prune`，小于下限时不生效、更大时按更大的保留——缓存保留期必须 ≥ 归档聚合窗口，否则窗口内后段日志被提前清掉、补档时全量重下。注意与 `prune/access/*.txt` 归档（不清理）区分：缓存只是下载复用层。
 
 
 ## ACK 扩缩容 / OpenKruise WorkloadSpread（ack.sh 机制，勿凭直觉改）

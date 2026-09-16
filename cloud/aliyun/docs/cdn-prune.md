@@ -7,15 +7,15 @@
 | 步骤 | 命令 | 归属 | 产出 |
 |---|---|---|---|
 | 1 | `oss dirsize` | `oss.sh` | 目录列表 + 大小清单（倒序） |
-| 2 | `cdn access` | `cdn.sh` | 三层访问清单（按 bucket） |
+| 2 | `cdn logs --days 30` | `cdn.sh` | 三层访问清单（按 bucket） |
 | 3 | `oss prune` | `oss.sh` | 比较两个清单 → 备份/删除脚本 |
 
 ```
-步骤1  oss dirsize ──► dirs-<bucket>.txt / sizes-<bucket>.tsv
-                                    │
-步骤2  cdn access  ──► access-<bucket>.txt ─────┤
-                                    ▼
-步骤3  oss prune   ──► candidates-<日期>-<bucket>.txt
+步骤1  oss dirsize    ──► dirs-<bucket>.txt / sizes-<bucket>.tsv
+                                     │
+步骤2  cdn logs --days ──► access-<bucket>.txt ─────┤
+                                     ▼
+步骤3  oss prune      ──► candidates-<日期>-<bucket>.txt
                        backup-<日期>-<bucket>.sh（只备份）
                        rm-<日期>-<bucket>.sh（只删除 --all-versions，备份存在才删）
 ```
@@ -263,26 +263,27 @@ bash main.sh -p <profile> oss dirsize <源桶> \
 - 清单更新后想立刻重取：加 `--refresh`。
 
 
-## 步骤 2：`cdn access`（获取日志，生成三层访问清单）
+## 步骤 2：`cdn logs --days`（获取日志，生成三层访问清单）
 
 ### 时间口径（关键，勿改错）
 
-- CDN 日志的**时间戳 / 文件名用北京时（UTC+8）**：
-  例 `.vrupup.com_2026_09_13_000000_010000.gz` 内容是 `[13/Sep/2026:00:40:47 +0800]`。
-- `describe-cdn-domain-logs` 的 `--start-time/--end-time` 用 **UTC**（ISO8601，结尾 `Z`）。
-- **业务日 = 北京时日历日**。北京日 `X` 的"全天日志"→ UTC 窗口 **`[X-1 16:00Z, X 16:00Z)`**：
-  - 北京 `X 00:00` = UTC `X-1 16:00Z`（起点）
-  - 北京 `X+1 00:00` = UTC `X 16:00Z`（终点，开区间）
-- 换算：`start = epoch(X 00:00Z) - 8h`，`end = epoch(X 00:00Z) + 16h`。
-- 实测：北京 `09-13` → UTC `[2026-09-12T16:00:00Z, 2026-09-13T16:00:00Z)`，返回 **24** 个文件
-  `..._2026_09_13_000000_010000.gz`（内容 `00:40 +0800`）… `..._2026_09_13_230000_240000.gz`（内容 `23:54 +0800`）。
-- **反例（别再犯）**：误按"UTC 日历日 `[X 00:00Z, X+1 00:00Z)`"取数 = 北京 `[X 08:00, X+1 08:00)`，整体偏移 8 小时。
+- **文件名/路径 + 日志内容时间戳 = 本地时间（北京时 UTC+8）**：
+  `.ysdzedu.com_2026_09_01_020000_030000.gz` 就是本地 09-01 02:00–03:00
+  （该文件 API 返回的 `StartTime` 是 `2026-08-31T18:00:00Z`，+8h 正好对上）；内容形如 `[13/Sep/2026:00:40:47 +0800]`。
+- **只有调 API 这一步是 UTC**：请求 `--start-time/--end-time` 与响应里的 `StartTime/EndTime` 都是 **UTC**（ISO8601，结尾 `Z`）。
+- 本地日 → UTC 窗口（本地比 UTC 快 8h，窗口因此跨在 UTC 的前一天）：
+  - 本地今天 `X` → UTC `[X-1 16:00Z, X 16:00Z)`
+  - 本地昨天 `X-1` → UTC `[X-2 16:00Z, X-1 16:00Z)`
+  - 换算：`start = epoch(本地日 00:00Z) - 8h`，`end = epoch(本地日 00:00Z) + 16h`
+- 例（今天=本地 `09-14`）：本地昨天 `09-13` → UTC `[2026-09-12T16:00:00Z, 2026-09-13T16:00:00Z)`，返回 **24** 个文件。
+- **下载不改名**：按原始 `LogName` 落缓存（`cache/<profile>/<region>/cdn/logs/<域名>/<LogName>`）；只有归档文件名用本地日（`access/<域名>/<本地日>.txt`）。
+- **反例（别再犯）**：误按"UTC 日历日 `[X 00:00Z, X+1 00:00Z)`"取数 = 本地 `[X 08:00, X+1 08:00)`，整体偏移 8 小时。
 
 ### 用法
 
 ```
-bash main.sh -p <profile> [-r <region>] cdn access \
-    [--days 30] [--domain <域名>] [--bucket <桶名>] [-s 起] [-e 止]
+bash main.sh -p <profile> [-r <region>] cdn logs \
+    [<域名>] --days 30 [--bucket <桶名>] [-s 起] [-e 止]
 ```
 
 ### 流程
@@ -307,8 +308,7 @@ $PRUNE_DIR/abnormal-<bucket>.txt
 ### 边界
 
 - 只负责"日志 → 目录清单"，不做任何 OSS 列目录或 `du`。
-- 业务日按**本地（北京时 UTC+8）**：CDN 日志的时间戳/文件名都是北京时，而 API 参数用 UTC。
-  所以本地昨天 `X` 的窗口 = `[X-1 16:00Z, X 16:00Z)`（= 北京 `[X 00:00, X+1 00:00)`）。
+- 全程本地时间（北京时），只有取日志转 UTC；换算见上面「时间口径」，勿另立口径。
 - 该命令可每日跑；窗口内档案靠补档逐步补齐。
 
 ---
@@ -404,20 +404,19 @@ $PRUNE_DIR/rm-<日期>-<bucket>.sh
 |---|---|---|---|---|
 | `<bucket>.dirs.txt` | `oss dirsize` | `oss prune` | 每行 `/目录` | 7 天 |
 | `<bucket>.sizes.tsv` | `oss dirsize` | `oss prune` | `路径<TAB>字节`（倒序） | 30 天 |
-| `access-<bucket>.txt` | `cdn access` | `oss prune` | 每行 `/目录`（≤3 层并集） | 每次运行覆盖 |
-| `abnormal-<bucket>.txt` | `cdn access` | 人工/报表 | `状态码<TAB>uri` | 每次运行覆盖 |
+| `access-<bucket>.txt` | `cdn logs --days` | `oss prune` | 每行 `/目录`（≤3 层并集） | 每次运行覆盖 |
+| `abnormal-<bucket>.txt` | `cdn logs --days` | 人工/报表 | `状态码<TAB>uri` | 每次运行覆盖 |
 
 ## 建议 cron
 
-**业务日按本地（北京时 UTC+8）**：CDN 日志的时间戳/文件名都是北京时，API 参数用 UTC。
-本地昨天 `X` 的窗口 = `[X-1 16:00Z, X 16:00Z)`（= 北京 `[X 00:00, X+1 00:00)`）。该窗口在
-北京 `X+1 00:00`（= UTC `X 16:00Z`）关闭；留投递延迟，**上午 10 点**跑。
+全程本地时间（北京时），只有取日志转 UTC；换算见「步骤 2 §时间口径」，勿另立口径。
+本地昨天的窗口在次日 `00:00`（= UTC `X 16:00Z`）关闭；留投递延迟，**上午 10 点**跑。
 
 cron 环境 PATH 极简，且本机 `jq` 由 mise 管理、`bash` 需 5.x，所以要显式设 PATH 并用绝对路径 bash；
 不加 `cd`（脚本按自身路径解析项目根）。
 
 > 算例（现在=北京 09-14）：
-> - 本地昨天 = 09-13。
+> - 本地昨天 `X` = 09-13。
 > - 抓取窗口 = UTC `[09-12 16:00Z, 09-13 16:00Z)` = 北京 `[09-13 00:00, 09-14 00:00)`。
 > - 该窗口在北京 09-14 00:00（UTC 09-13 16:00Z）关闭 → 10:00 跑时已过 10 小时（含投递延迟余地）。
 > - 实测 `.vrupup.com` 该窗口返回 24 个文件，文件名 `..._2026_09_13_000000_010000.gz` ~ `..._230000_240000.gz`（北京全日）。
@@ -427,7 +426,7 @@ cron 环境 PATH 极简，且本机 `jq` 由 mise 管理、`bash` 需 5.x，所�
 PATH=/usr/local/bin:/usr/bin:/bin:<home>/.local/share/mise/shims
 
 # 每天 10:00：取本地(北京)昨天日志、生成三层访问清单
-0 10 * * * /usr/local/bin/bash /path/to/deploy.sh/cloud/aliyun/main.sh -p <profile> cdn access >> /tmp/aliyun-cdn-access.log 2>&1
+0 10 * * * /usr/local/bin/bash /path/to/deploy.sh/cloud/aliyun/main.sh -p <profile> cdn logs --days 30 >> /tmp/aliyun-cdn-access.log 2>&1
 
 # 每周日 08:00：读清单生成目录 + 大小清单
 #   注意：dirsize 有 30 天缓存，定时刷新必须加 --refresh（否则每周跑也会复用缓存不更新）
@@ -439,7 +438,7 @@ PATH=/usr/local/bin:/usr/bin:/bin:<home>/.local/share/mise/shims
 
 要点：
 
-1. **按天的任务上午 10:00**：本地昨天窗口在北京 00:00 关窗，10 点已过 10 小时（留足投递延迟）。
+1. **按天的任务上午 10:00**：本地昨天的窗口在次日 `00:00` 关闭，10 点已过 10 小时（留足投递延迟）。
 2. **日志写 `/tmp`**：`/tmp` 通常已存在，无需建目录；注意系统会定期清理 `/tmp`（macOS periodic / Linux tmpfiles），日志是易失的，需要留存请自行转存。
 3. **`PATH` 顶部定义一次即可**：需含 `/usr/local/bin`（bash/aliyun/gdate/greadlink/gstat）与
    mise shims（`jq`）。注意 **cron 的赋值行不展开变量**，故 PATH 要写绝对路径（`<home>` 换成家目录）。
@@ -458,14 +457,14 @@ PATH=/usr/local/bin:/usr/bin:/bin:<home>/.local/share/mise/shims
 
 ## 待办（未实现，待决定）
 
-- **旧档案清理**：`cdn access` 目前**不清理**超出聚合窗口的每日档案
+- **旧档案清理**：`cdn logs --days` 目前**不清理**超出聚合窗口的每日档案
   （`access/<域名>/<日>.txt`、`abnormal/<域名>/<日>.txt` 只增不减）。
   后续可加：每次运行删除早于 `today - days` 的 `.txt` 及残留 `.tmp`（保留最近 `days` 天，与聚合窗口一致）。
 
 ## 迁移（旧实现清理）
 
 - `cdn.sh` 中旧 `cdn prune` 及其专属辅助函数（`_cdn_bucket_region`、`_cdn_bucket_dir_tree`）随本次拆分**删除**。
-- 保留并复用：时区换算函数、`_cdn_fetch_log_rows`、`_cdn_fetch_parse_domain_day`（供 `cdn access`）。
+- 保留并复用：时区换算函数、`_cdn_fetch_log_rows`、`_cdn_fetch_parse_domain_day`（供 `cdn logs` 归档模式）。
 - 旧内置 30 天计时器（`last_compare`）删除，比较周期交由 cron。
 
 ## 注意事项
