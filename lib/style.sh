@@ -2,13 +2,10 @@
 # -*- coding: utf-8 -*-
 # shellcheck disable=2154,2034
 
-################################################################################
-# Description: Consolidated style checking functions for various programming languages
+# 各语言的代码风格校验函数集合
 # Author: xiagw <fxiaxiaoyu@gmail.com>
 # License: GNU/GPL
-################################################################################
 
-# PHP Style Check
 style_check_php() {
     _msg task '[style] Running PHP Code Sniffer (PSR12) + php-cs-fixer'
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && return 0
@@ -56,7 +53,6 @@ style_check_php() {
     return "$style_result"
 }
 
-# Android Style Check
 style_check_android() {
     _msg task "Checking Android code style"
     echo "PIPELINE_ANDROID_CODE_STYLE: ${PIPELINE_ANDROID_CODE_STYLE:-0}"
@@ -68,7 +64,6 @@ style_check_android() {
     fi
 }
 
-# Python Style Check
 style_check_python() {
     _msg task "Checking Python code style (pylint + black + isort)"
     if [[ "${PIPELINE_PYTHON_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -79,7 +74,6 @@ style_check_python() {
     fi
 }
 
-# Node.js Style Check
 style_check_node() {
     _msg task "Checking Node.js code style (eslint + prettier)"
     if [[ "${PIPELINE_NODE_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -90,7 +84,6 @@ style_check_node() {
     fi
 }
 
-# Java Style Check
 style_check_java() {
     _msg task "Checking Java code style"
     if [[ "${PIPELINE_JAVA_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -101,7 +94,6 @@ style_check_java() {
     fi
 }
 
-# Go Style Check
 style_check_go() {
     _msg task "Checking Go code style (gofmt + golangci-lint)"
     if [[ "${PIPELINE_GO_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -113,7 +105,6 @@ style_check_go() {
     fi
 }
 
-# Rust Style Check
 style_check_rust() {
     _msg task "Checking Rust code style (rustfmt + clippy)"
     if [[ "${PIPELINE_RUST_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -124,7 +115,6 @@ style_check_rust() {
     fi
 }
 
-# .NET Style Check
 style_check_dotnet() {
     _msg task "Checking .NET code style (dotnet format)"
     if [[ "${PIPELINE_DOTNET_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -135,7 +125,6 @@ style_check_dotnet() {
     fi
 }
 
-# Ruby Style Check
 style_check_ruby() {
     _msg task "Checking Ruby code style"
     if [[ "${PIPELINE_RUBY_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -146,7 +135,6 @@ style_check_ruby() {
     fi
 }
 
-# C/C++ Style Check
 style_check_c() {
     _msg task "Checking C/C++ code style"
     if [[ "${PIPELINE_C_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -157,7 +145,6 @@ style_check_c() {
     fi
 }
 
-# Docker Style Check
 style_check_docker() {
     _msg task "Checking Dockerfile style"
     if [[ "${PIPELINE_DOCKER_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -168,7 +155,6 @@ style_check_docker() {
     fi
 }
 
-# iOS Style Check
 style_check_ios() {
     _msg task "Checking iOS code style"
     if [[ "${PIPELINE_IOS_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -180,7 +166,6 @@ style_check_ios() {
     fi
 }
 
-# Django Style Check
 style_check_django() {
     _msg task "Checking Django code style"
     if [[ "${PIPELINE_DJANGO_CODE_STYLE:-0}" -eq 1 ]]; then
@@ -191,8 +176,8 @@ style_check_django() {
     fi
 }
 
-# Shell Style Check / Shell 风格校验（shellcheck + shfmt）
 style_check_shell() {
+    # Shell 风格校验（shellcheck + shfmt）
     _msg task "Running shell style check"
     [[ "${G_DEBUG_ON:-false}" == true ]] && return 0
     _install_shellcheck
@@ -222,8 +207,8 @@ style_check_shell() {
     return $exit_code
 }
 
-# Main style check function that determines which specific checker to run
 stage_code_style() {
+    # 风格检查主入口：按语言分发到对应 style_check_*
     _msg stage "$(_t '代码风格' 'code style')"
     local lang
     lang="$(detect_repo_language | cut -d':' -f1)" # 获取语言类型

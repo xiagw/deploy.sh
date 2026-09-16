@@ -8,9 +8,9 @@
 # - Security scanning (Gitleaks, ZAP, Vulmap)
 # - Configuration validation
 
-# Check for sensitive information leaks in git repository
-# Usage: analysis_gitleaks /path/to/repo /path/to/config.toml
 analysis_gitleaks() {
+    # 检测 git 仓库敏感信息泄露
+    # Usage: analysis_gitleaks /path/to/repo /path/to/config.toml
     local path="$1"
     local config_file="$2"
 
@@ -34,8 +34,8 @@ analysis_gitleaks() {
     _msg task "Gitleaks scan completed"
 }
 
-# Run OWASP ZAP security scan
 stage_security_zap() {
+    # OWASP ZAP 安全扫描
     _msg stage "$(_t '安全扫描zap' 'security scan with zap')"
     _msg task "ZAP scan (optional: --security-zap)"
     if ! ${arg_security_zap:-false} && [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]]; then
@@ -63,8 +63,8 @@ stage_security_zap() {
     _msg task "ZAP scan completed"
 }
 
-# Run Vulmap security scan
 stage_security_vulmap() {
+    # Vulmap 漏洞扫描
     _msg stage "$(_t '安全扫描vulmap' 'security scan with vulmap')"
     _msg task "vulmap scan (optional: --security-vulmap)"
     if ! ${arg_security_vulmap:-false} && [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]]; then
@@ -169,8 +169,8 @@ EOF
     return 0
 }
 
-# Run PMD code analysis
 analysis_pmd() {
+    # PMD 代码分析
     _msg task "PMD code analysis (optional: PIPELINE_PMD=true)"
     [[ "${PIPELINE_PMD:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_PMD=false)"
     if ! ${PIPELINE_PMD:-false}; then
@@ -215,8 +215,8 @@ analysis_pmd() {
     _msg task "PMD code analysis completed"
 }
 
-# Run CodeClimate analysis
 analysis_codeclimate() {
+    # CodeClimate 代码质量分析
     _msg task "CodeClimate analysis (optional: PIPELINE_CODECLIMATE=true)"
     [[ "${PIPELINE_CODECLIMATE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CODECLIMATE=false)"
     if ! ${PIPELINE_CODECLIMATE:-false}; then
@@ -322,8 +322,8 @@ EOF
     _msg task "CodeClimate analysis completed"
 }
 
-# Run Spotbugs analysis for Java code
 analysis_spotbugs() {
+    # Spotbugs 分析（Java）
     _msg task "Spotbugs analysis (optional: PIPELINE_SPOTBUGS=true)"
     [[ "${PIPELINE_SPOTBUGS:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SPOTBUGS=false)"
     if ! ${PIPELINE_SPOTBUGS:-false}; then
@@ -383,8 +383,8 @@ EOF
     _msg task "Spotbugs analysis completed"
 }
 
-# Run Pylint analysis for Python code
 analysis_pylint() {
+    # Pylint 分析（Python）
     _msg task "Pylint analysis (optional: PIPELINE_PYLINT=true)"
     [[ "${PIPELINE_PYLINT:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_PYLINT=false)"
     if ! ${PIPELINE_PYLINT:-false}; then
@@ -432,8 +432,8 @@ analysis_pylint() {
     _msg task "Pylint analysis completed"
 }
 
-# Run Checkstyle analysis for Java code
 analysis_checkstyle() {
+    # Checkstyle 分析（Java）
     _msg task "Checkstyle analysis (optional: PIPELINE_CHECKSTYLE=true)"
     [[ "${PIPELINE_CHECKSTYLE:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_CHECKSTYLE=false)"
     if ! ${PIPELINE_CHECKSTYLE:-false}; then
@@ -512,8 +512,8 @@ EOF
     _msg task "Checkstyle analysis completed"
 }
 
-# Run Semgrep SAST scan（静态应用安全测试，多语言通用规则）
 stage_security_semgrep() {
+    # Semgrep SAST 扫描（静态应用安全测试，多语言通用规则）
     _msg stage "$(_t 'SAST扫描' 'SAST scan (semgrep)')"
     _msg task "Semgrep SAST scan (optional: --scan-semgrep)"
     if ! ${arg_security_semgrep:-false} && [[ "${PIPELINE_SEMGREP:-false}" != true ]]; then
@@ -538,8 +538,8 @@ stage_security_semgrep() {
     return 0
 }
 
-# Run Trivy SCA scan（软件成分分析，依赖漏洞）
 stage_security_sca() {
+    # Trivy SCA 扫描（软件成分分析，依赖漏洞）
     _msg stage "$(_t '依赖漏洞扫描' 'dependency scan (SCA)')"
     _msg task "Trivy SCA scan (optional: --scan-sca)"
     if ! ${arg_security_sca:-false} && [[ "${PIPELINE_SCA:-false}" != true ]]; then
@@ -565,8 +565,8 @@ stage_security_sca() {
     return 0
 }
 
-# Run Trivy image scan（构建后镜像漏洞扫描，须在 stage_build 之后）
 stage_security_image() {
+    # Trivy 镜像扫描（构建后镜像漏洞扫描，须在 stage_build 之后）
     _msg stage "$(_t '镜像漏洞扫描' 'image scan (trivy)')"
     _msg task "Trivy image scan (optional: --scan-image)"
     if ! ${arg_security_image:-false} && [[ "${PIPELINE_SCAN_IMAGE:-false}" != true ]]; then
@@ -596,8 +596,8 @@ stage_security_image() {
     return 0
 }
 
-# Run Gitleaks secret scan（密钥泄露扫描）
 stage_security_gitleaks() {
+    # Gitleaks 密钥泄露扫描
     _msg stage "$(_t '密钥扫描' 'secret scan (gitleaks)')"
     _msg task "Gitleaks secret scan (optional: --scan-gitleaks)"
     if ! ${arg_security_gitleaks:-false} && [[ "${PIPELINE_GITLEAKS:-false}" != true ]]; then

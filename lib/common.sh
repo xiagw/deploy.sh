@@ -83,21 +83,21 @@ _check_disk_space() {
     _log $LOG_LEVEL_INFO "Sufficient disk space available. Required: ${required_space_gb}GB, Available: $((available_space / 1024 / 1024))GB"
 }
 
-# 校验下载的 shell 脚本：非空 + 首行 shebang + bash 语法可解析（防 200 错误页 / 截断 / 伪装内容）
 _check_downloaded_script() {
+    # 校验下载的 shell 脚本：非空 + 首行 shebang + bash 语法可解析（防 200 错误页 / 截断 / 伪装内容）
     local file="$1"
     [ -s "$file" ] || return 1
     bash -n "$file" 2>/dev/null || return 1
 }
 
-# Convert seconds to H/M/S cumulative duration (e.g. 0h01m05s)
 _fmt_dur() {
+    # 秒 → 累计时长 H/M/S（如 0h01m05s）
     local s=$1
     printf '%dh%02dm%02ds' $((s / 3600)) $(((s / 60) % 60)) $((s % 60))
 }
 
-# 当前时间毫秒数（整数）。bash>=5 用 EPOCHREALTIME；GNU date 支持 %3N；否则退化为整秒
 _now_ms() {
+    # 当前时间毫秒数（整数）。bash>=5 用 EPOCHREALTIME；GNU date 支持 %3N；否则退化为整秒
     local out sec us
     if [[ -n "${EPOCHREALTIME:-}" ]]; then
         sec=${EPOCHREALTIME%.*}
@@ -114,18 +114,18 @@ _now_ms() {
     printf '%d' "$((SECONDS * 1000))"
 }
 
-# dry-run 辅助（--dry）：打印将要执行的命令，不执行。
-# 用法: dry_run_note "<完整命令>"
-# 非 dry-run 下为空操作；dry-run 下输出统一前缀 [dry-run] 的 note。
 dry_run_note() {
+    # dry-run 辅助（--dry）：打印将要执行的命令，不执行。
+    # 用法: dry_run_note "<完整命令>"
+    # 非 dry-run 下为空操作；dry-run 下输出统一前缀 [dry-run] 的 note。
     ${G_DRY_RUN:-false} || return 0
     _msg note "[dry-run] $*"
 }
 
-# dry-run 守卫：dry-run 下打印将要执行的整段说明并返回 0（跳过真实执行），
-# 非 dry-run 下返回 1（继续执行）。用于收掉 "if G_DRY_RUN; then <note>; return 0; fi" 的块。
-# 用法: dry_run_skip "跳过原因/描述" && return 0
 dry_run_skip() {
+    # dry-run 守卫：dry-run 下打印将要执行的整段说明并返回 0（跳过真实执行），
+    # 非 dry-run 下返回 1（继续执行）。用于收掉 "if G_DRY_RUN; then <note>; return 0; fi" 的块。
+    # 用法: dry_run_skip "跳过原因/描述" && return 0
     ${G_DRY_RUN:-false} || return 1
     _msg note "[dry-run] $*"
     return 0
@@ -135,11 +135,11 @@ dry_run_skip() {
 _stage_start_ms=0
 _stage_num=0
 
-# Inline bilingual structural strings: _t "中文" "English"
-# Only for framework sentences we own; technical content stays single-language.
-# Output language: zh|en. Priority: CLI --lang (_msg_lang_val) > ENV_LANG (deploy.env) > zh
-# _msg_lang_val 由 deploy.sh parse_args 直接赋值（模块加载晚于参数解析，勿在此初始化）
 _t() {
+    # 双语结构化字符串：_t "中文" "English"
+    # Only for framework sentences we own; technical content stays single-language.
+    # Output language: zh|en. Priority: CLI --lang (_msg_lang_val) > ENV_LANG (deploy.env) > zh
+    # _msg_lang_val 由 deploy.sh parse_args 直接赋值（模块加载晚于参数解析，勿在此初始化）
     if [ "${_msg_lang_val:-${ENV_LANG:-zh}}" = zh ]; then
         printf '%s' "$1"
     else
@@ -147,8 +147,8 @@ _t() {
     fi
 }
 
-# 计算字符串在终端中的显示宽度（CJK/emoji 等多字节字符按 2 列计），用于阶段横幅对齐补位
 _display_width() {
+    # 计算字符串在终端中的显示宽度（CJK/emoji 等多字节字符按 2 列计），用于阶段横幅对齐补位
     local s="$1" i bytes w=0
     for ((i = 0; i < ${#s}; i++)); do
         bytes=$(printf '%s' "${s:i:1}" | wc -c | tr -d '[:space:]')
@@ -217,11 +217,11 @@ _msg() {
     fi
 }
 
-# use_sudo 语义（勿改勿加兜底）：root → 空串（直接执行）；非 root 有 sudo 权限 → sudo
-# 警告：调用点一律用 $use_sudo，禁止写成 ${use_sudo:-sudo} —— CI/容器以 root 运行且无 sudo，
-#       sudo 兜底必炸（曾因 _install_aws 用 ${use_sudo:-sudo} 导致 "sudo: command not found"）。
-#       同理 root 分支不可 unset use_sudo（unset 与空串都会被 :- 兜底误判）
 _check_root() {
+    # use_sudo 语义（勿改勿加兜底）：root → 空串（直接执行）；非 root 有 sudo 权限 → sudo
+    # 警告：调用点一律用 $use_sudo，禁止写成 ${use_sudo:-sudo} —— CI/容器以 root 运行且无 sudo，
+    #       sudo 兜底必炸（曾因 _install_aws 用 ${use_sudo:-sudo} 导致 "sudo: command not found"）。
+    #       同理 root 分支不可 unset use_sudo（unset 与空串都会被 :- 兜底误判）
     ${already_check_root:-false} && return 0
     case "$(id -u)" in
     0)
@@ -353,7 +353,7 @@ _install_packages() {
 }
 
 _check_timezone() {
-    ## change UTC to CST
+    ## 时区 UTC 改 CST
     local time_zone='Asia/Shanghai'
     _msg task "Check timezone $time_zone."
     if timedatectl show --property=Timezone --value | grep -q "^$time_zone$"; then
@@ -491,8 +491,8 @@ _install_jmeter() {
     source /etc/profile.d/jmeter.sh
 }
 
-# 安装或升级 k6（性能测试工具，单二进制）
 _install_k6() {
+    # 安装或升级 k6（性能测试工具，单二进制）
     if [ "$1" != "upgrade" ] && command -v k6 >/dev/null; then
         return
     fi
@@ -1074,8 +1074,8 @@ _install_python_gitlab() {
 }
 
 
-## 安装 glab（GitLab 官方 CLI，单二进制，驱动 GitLab pipeline/API；替代 python-gitlab）
 _install_glab() {
+    ## 安装 glab（GitLab 官方 CLI，单二进制，驱动 GitLab pipeline/API；替代 python-gitlab）
     local flag="${1:-}"
     if [[ "$flag" != "upgrade" ]] && command -v glab >/dev/null; then
         return
@@ -1257,7 +1257,7 @@ _set_mirror() {
 }
 
 get_oom_score() {
-    ## Get top 15 processes by OOM score
+    ## 取 OOM score 最高的 15 个进程
     printf "%-8s %-19s %s\n" "OOMScore" "PID" "Command"
     while read -r score pid cmd; do
         printf "%2d      %5d       %s\n" "$score" "$pid" "$cmd"
@@ -1273,7 +1273,7 @@ get_oom_score() {
 }
 
 clean_snap() {
-    ## Removes old revisions of snaps
+    ## 清理 snap 旧版本
     ## CLOSE ALL SNAPS BEFORE RUNNING THIS
     while read -r snapname revision; do
         sudo snap remove "$snapname" --revision="$revision"
@@ -1281,7 +1281,7 @@ clean_snap() {
 }
 
 clean_runtime() {
-    ## clean thinkphp runtime/log
+    ## 清理 thinkphp runtime/log
     while read -r line; do
         echo "$line"
         sudo rm -rf "$line"/log/*
@@ -1290,8 +1290,8 @@ clean_runtime() {
     done < <(find . -type d -iname runtime)
 }
 
-# 获取 GitHub 仓库的最新发布版本下载链接
 get_github_latest_download() {
+    # 获取 GitHub 仓库的最新发布版本下载链接
     local repo="$1"
     local source_only="false" # 是否只获取源码包
     local arch="amd64"        # 架构，默认amd64
@@ -1393,8 +1393,8 @@ get_github_latest_download() {
     echo "https://github.com/$repo/archive/refs/tags/${latest_ver}.tar.gz"
 }
 
-# 安装或升级 acme.sh with official
 _install_acme_official() {
+    # 安装或升级 acme.sh with official
     local force=${1:-}
     local cmd_acme="$HOME/.acme.sh/acme.sh"
     if [ "$force" != "upgrade" ] && [ -x "$cmd_acme" ]; then
@@ -1438,8 +1438,8 @@ _install_acme_official() {
     "$cmd_acme" --version
 }
 
-# 安装或升级 acme.sh via source code on github
 _install_acme_github() {
+    # 安装或升级 acme.sh via source code on github
     local force=${1:-}
     if [ "$force" != "upgrade" ] && command -v acme.sh >/dev/null; then
         return
@@ -1475,8 +1475,8 @@ _install_acme_github() {
     "$HOME/.acme.sh/acme.sh" --version
 }
 
-# 压缩 PDF 文件的内部函数
 _compress_pdf_with_gs() {
+    # 压缩 PDF 文件的内部函数
     local input_pdf="$1"
     local output_pdf="$2"
     local quality="${3:-ebook}"

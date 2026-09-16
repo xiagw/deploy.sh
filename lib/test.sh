@@ -22,9 +22,9 @@
 # 产物目录（均在 G_ARTIFACT_DIR/reports 下，本地即 data/reports）:
 #   coverage/  单元测试覆盖率报告（容器内 /reports/coverage 写入）
 
-## 解析测试容器镜像: 返回镜像名
-## 优先级: ENV_TEST_IMAGE > 仓库根 Dockerfile.tests（构建）> 无（返回空，测试跳过）
 _test_resolve_image() {
+    ## 解析测试容器镜像: 返回镜像名
+    ## 优先级: ENV_TEST_IMAGE > 仓库根 Dockerfile.tests（构建）> 无（返回空，测试跳过）
     local image
     local dockerfile="${G_REPO_DIR}/Dockerfile.tests"
     if [[ -n "${ENV_TEST_IMAGE:-}" ]]; then
@@ -52,10 +52,10 @@ _test_resolve_image() {
     printf '%s' "$image"
 }
 
-## 构造测试容器命令数组（无执行）：G_RUN + 挂载 repo:/app、reports:/reports + 可选 host 网络 + 镜像
-## 输出每行一个参数（mapfile 逐行读取），含空参数时以 NUL 结尾行规避
-## 无可用镜像时输出为空（调用方据此跳过）
 _test_docker_cmd() {
+    ## 构造测试容器命令数组（无执行）：G_RUN + 挂载 repo:/app、reports:/reports + 可选 host 网络 + 镜像
+    ## 输出每行一个参数（mapfile 逐行读取），含空参数时以 NUL 结尾行规避
+    ## 无可用镜像时输出为空（调用方据此跳过）
     local image
     image="$(_test_resolve_image)" || return 1
     [[ -n "$image" ]] || return 0
@@ -70,8 +70,8 @@ _test_docker_cmd() {
     return 0
 }
 
-## 单元测试: 构建并运行测试镜像（Dockerfile.tests / ENV_TEST_IMAGE），测试入口由镜像承载
 test_unit() {
+    ## 单元测试: 构建并运行测试镜像（Dockerfile.tests / ENV_TEST_IMAGE），测试入口由镜像承载
     local -a docker_cmd
     mapfile -d '' -t docker_cmd < <(_test_docker_cmd)
     [[ ${#docker_cmd[@]} -gt 0 ]] || {
@@ -89,8 +89,8 @@ test_unit() {
     return 1
 }
 
-## 功能测试: 构建并运行测试镜像（Dockerfile.tests / ENV_TEST_IMAGE），测试入口由镜像承载
 test_function() {
+    ## 功能测试: 构建并运行测试镜像（Dockerfile.tests / ENV_TEST_IMAGE），测试入口由镜像承载
     local -a docker_cmd
     mapfile -d '' -t docker_cmd < <(_test_docker_cmd)
     [[ ${#docker_cmd[@]} -gt 0 ]] || {
@@ -108,8 +108,8 @@ test_function() {
     return 1
 }
 
-## 性能测试: 构建并运行测试镜像（Dockerfile.tests / ENV_TEST_IMAGE），性能引擎/脚本由镜像承载
 test_performance() {
+    ## 性能测试: 构建并运行测试镜像（Dockerfile.tests / ENV_TEST_IMAGE），性能引擎/脚本由镜像承载
     local -a docker_cmd
     mapfile -d '' -t docker_cmd < <(_test_docker_cmd)
     [[ ${#docker_cmd[@]} -gt 0 ]] || {

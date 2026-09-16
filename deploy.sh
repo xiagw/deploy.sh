@@ -1,32 +1,15 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
 # shellcheck disable=1090,1091,2034
-################################################################################
-#
-# Description: deploy.sh is a CI/CD program.
+# deploy.sh —— CI/CD 部署主程序
 # Author: xiagw <fxiaxiaoyu@gmail.com>
 # License: GNU/GPL, see https://www.gnu.org/copyleft/gpl.html
 # Create Date: 2019-04-03
-#
-################################################################################
 
-################################################################################
-# 函数: config_repo_vars
-# 描述: 配置部署相关的全局变量，包括仓库信息、分支映射、命名空间等
-# 参数: 无
-# 返回: 无（设置全局变量）
-# 全局变量:
-#   - G_REPO_DIR: 仓库目录路径
-#   - G_REPO_NAME: 仓库名称
-#   - G_REPO_NS: 仓库命名空间
-#   - G_REPO_GROUP_PATH: 仓库完整路径（命名空间/仓库名）
-#   - G_REPO_GROUP_PATH_SLUG: 仓库路径的URL友好格式
-#   - G_REPO_BRANCH: 当前Git分支名
-#   - G_REPO_SHORT_SHA: Git提交哈希的简短版本
-#   - G_NAMESPACE: Kubernetes命名空间（根据分支映射）
-#   - G_IMAGE_TAG: Docker镜像标签（时间戳格式）
-################################################################################
 config_repo_vars() {
+    # 配置部署相关全局变量（仓库信息、分支映射、命名空间）
+    # 写入: G_REPO_DIR / G_REPO_NAME / G_REPO_NS / G_REPO_GROUP_PATH / G_REPO_GROUP_PATH_SLUG /
+    #       G_REPO_BRANCH / G_REPO_SHORT_SHA / G_NAMESPACE / G_IMAGE_TAG
     ## 仓库目录优先级: -w/--workspace > CI_PROJECT_DIR (GitLab CI) > PWD
     G_REPO_DIR="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
     ## 去掉尾部斜杠，否则 ${G_REPO_DIR##*/} 取到空仓库名
@@ -113,13 +96,8 @@ config_repo_vars() {
     fi
 }
 
-################################################################################
-# 函数: usage
-# 描述: 显示脚本使用帮助信息
-# 参数: 无
-# 返回: 无（输出到标准输出）
-################################################################################
 usage() {
+    # 显示用法帮助（输出到 stdout）
     cat <<EOF
 Usage: $0 [parameters ...]
 
@@ -188,20 +166,10 @@ Parameters:
 EOF
 }
 
-################################################################################
-# 函数: parse_args
-# 描述: 解析命令行参数并组装执行计划 RUN（位置即依赖顺序）
-# 参数: "$@" - 所有命令行参数
-# 返回: 无（填充 RUN/RUN_DEPLOY 及相关 arg_* 变量）
-# 全局变量:
-#   - RUN:       执行计划单数组，位置即依赖顺序（必备步骤 + 条件可选函数 + 阶段 + handle_notify）
-#   - RUN_DEPLOY: 部署方式 key 数组，供 stage_deploy 按优先级选型（非循环）
-#   - G_DEBUG_ON: 调试模式标志
-#   - arg_cron: 定时任务执行标志
-#   - arg_*: 各种命令行参数的值（布尔触发或参数）
-# 说明: 组装规则与依赖依据见 docs/architecture.md §3
-################################################################################
 parse_args() {
+    # 解析命令行参数并组装执行计划 RUN（位置即依赖顺序）
+    # 写入: RUN（必备步骤+条件函数+阶段+handle_notify）/ RUN_DEPLOY（部署方式 key，供 stage_deploy 选型）/
+    #       G_DEBUG_ON / arg_*；组装规则见 docs/architecture.md §3
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
         # Basic options
@@ -375,16 +343,9 @@ parse_args() {
     RUN+=(handle_notify)
 }
 
-################################################################################
-# 函数: config_build_env
-# 描述: 配置Docker/Podman构建环境
-# 参数: 无
-# 返回: 无（设置全局变量 G_DOCK, G_RUN）
-# 全局变量:
-#   - G_DOCK: Docker或Podman命令路径
-#   - G_RUN: Docker/Podman运行命令的基础参数
-################################################################################
 config_build_env() {
+    # 配置 Docker/Podman 构建环境
+    # 写入: G_DOCK（命令路径）、G_RUN（run 基础参数）
     if ${ENV_IS_CHINA:-false} || ${CHANGE_SOURCE:-false}; then
         export IS_CHINA=true
     else
@@ -414,8 +375,8 @@ config_build_env() {
     export G_DOCK G_RUN
 }
 
-## 白名单（root/pms、root/devops 等 namespace/path）内的仓库直接执行其 ci.sh，跳过部署流程
 run_project_ci() {
+    ## 白名单（root/pms、root/devops 等 namespace/path）内的仓库直接执行其 ci.sh，跳过部署流程
     ## 仅 CI 平台注入的仓库路径参与白名单判断；本地直接运行（无 CI 变量）时跳过
     local ci_project_path="${CI_PROJECT_PATH:-${GITHUB_REPOSITORY:-}}"
     [[ -n "$ci_project_path" ]] || return 0
@@ -431,22 +392,8 @@ run_project_ci() {
     return 0
 }
 
-################################################################################
-# 函数: main
-# 描述: 主函数，执行CI/CD流程的完整生命周期
-# 参数: "$@" - 所有命令行参数
-# 返回: 部署结果状态码（0=成功, 非0=失败）
-# 执行流程:
-#   1. 初始化环境和变量
-#   2. 解析命令行参数
-#   3. 加载功能模块
-#   4. 配置依赖和系统环境
-#   5. 仓库操作（Git/SVN检出）
-#   6. 语言探测和构建环境配置
-#   7. 执行任务（测试、构建、部署、安全扫描等）
-#   8. 发送通知
-################################################################################
 main() {
+    # 主流程：初始化 → 解析参数 → 加载模块 → 配置环境 → 仓库检出 → 构建环境 → 执行任务 → 通知
     ## 设置错误处理: 遇到错误立即退出，管道中任何命令失败都会导致脚本退出
     set -Eeo pipefail
 

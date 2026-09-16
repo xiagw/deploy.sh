@@ -5,11 +5,11 @@
 # System maintenance and cleanup operations module
 # This module provides functions for system maintenance tasks like disk cleanup
 
-# Check if the current commit has already been executed in crontab
-# Returns:
-#   0 if execution should continue
-#   1 if execution should be skipped
 check_crontab_execution() {
+    # 检查当前 commit 是否已在 crontab 执行过
+    # Returns:
+    #   0 if execution should continue
+    #   1 if execution should be skipped
     local script_data="$1" repo_id="$2" commit_sha="$3"
     ## Install crontab if not exists
     command -v crontab &>/dev/null || _install_packages cron
@@ -36,11 +36,11 @@ check_crontab_execution() {
     return 0
 }
 
-# Clean up disk space when usage exceeds threshold
-# Returns:
-#   0 if cleanup was successful or not needed
-#   1 if cleanup failed to free up space
 system_clean_disk() {
+    # 磁盘使用率超阈值时清理空间
+    # Returns:
+    #   0 if cleanup was successful or not needed
+    #   1 if cleanup failed to free up space
     local disk_usage clean_disk_threshold="${ENV_DISK_THRESHOLD:-80}" aggressive=false disk_usage_after
 
     # Get disk usage more reliably
@@ -110,8 +110,8 @@ system_clean_disk() {
     fi
 }
 
-# 系统环境检查和设置
 system_check() {
+    # 系统环境检查和设置
     local -a pkgs
     _check_distribution
 
@@ -173,8 +173,8 @@ system_check() {
     fi
 }
 
-# 设置系统代理
 system_proxy() {
+    # 设置系统代理
     case "$1" in
     0 | off | disable)
         _msg task "unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY"
@@ -208,9 +208,9 @@ system_proxy() {
 # Certificate management module for deployment script
 # Handles SSL certificate operations using acme.sh
 
-# Internal function to renew SSL certificates
-# This function handles the actual certificate renewal process
 system_cert_renew() {
+    # 续期 SSL 证书（内部函数）
+    # This function handles the actual certificate renewal process
     ## RUN 单数组成员（-r/--renew-cert 触发，parse 组装），无守卫直接执行
     # 读取 ${HOME}/.acme.sh/account.conf.*.dns_* 账号文件；由 config_deploy_setup 在
     # G_DATA/.acme.sh 存在时链接 $HOME/.acme.sh，故 RUN 中须排在其之后
@@ -398,15 +398,15 @@ system_cert_renew() {
     exit 0
 }
 
-# Install base tools (jq) unconditionally.
-# In CI (GITHUB_ACTIONS=true), install all dependencies for validation
-# (jmeter/docker skipped since CI runs inside a container).
-# Other tools are installed on-demand via _install_* at point of use
-# (each _install_* function is idempotent — skips if already present).
-# Returns:
-#   0 if all installations were successful
-#   1 if any installation failed
 system_install_tools() {
+    # 无条件安装基础工具（jq）
+    # In CI (GITHUB_ACTIONS=true), install all dependencies for validation
+    # (jmeter/docker skipped since CI runs inside a container).
+    # Other tools are installed on-demand via _install_* at point of use
+    # (each _install_* function is idempotent — skips if already present).
+    # Returns:
+    #   0 if all installations were successful
+    #   1 if any installation failed
     ## 基础工具安装
     command -v jq >/dev/null || _install_packages jq
 
@@ -422,12 +422,8 @@ system_install_tools() {
     fi
 }
 
-################################################################################
-# 函数: check_docker_available
-# 描述: 检查 Docker 是否可用
-# 返回: 0=Docker可用, 1=Docker不可用
-################################################################################
 check_docker_available() {
+    # 检查 Docker 可用（命令存在 + daemon 在跑）；不可用返回 1
     if ! command -v docker &>/dev/null; then
         return 1
     fi
@@ -438,12 +434,8 @@ check_docker_available() {
     return 0
 }
 
-################################################################################
-# 函数: check_k8s_available
-# 描述: 检查 Kubernetes 环境是否可用（kubectl 和 helm）
-# 返回: 0=k8s可用, 1=k8s不可用
-################################################################################
 check_k8s_available() {
+    # 检查 k8s 可用：优先本机 kubectl，否则用容器化 kubectl 探测；连不上集群返回 1
     ## 本机有 kubectl 用本机（快），否则容器化探测（免安装）
     local kubectl_cmd
     if command -v kubectl &>/dev/null; then
@@ -468,15 +460,8 @@ check_k8s_available() {
     return 0
 }
 
-################################################################################
-# 函数: check_helm_charts_exist
-# 描述: 检查 Helm charts 目录是否存在
-# 参数:
-#   $1 - release_name: Release 名称（可选）
-# 返回: 0=存在, 1=不存在
-# 说明: 检查多个可能的 Helm charts 目录位置
-################################################################################
 check_helm_charts_exist() {
+    # 检查 Helm charts 目录是否存在（依次尝试多个可能位置）；不存在返回 1
     local release_name="${1:-}"
     local helm_dirs
 

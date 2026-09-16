@@ -5,8 +5,8 @@
 # Kubernetes management module for deployment script
 # Handles Kubernetes cluster operations using Terraform
 
-# kubectl config 配置初始化
 kube_config_init() {
+    # 初始化 kubectl config
   local ns="${G_NAMESPACE}" kubectl_conf
   _install_kubectl
   _install_helm
@@ -57,9 +57,9 @@ kube_config_init() {
   echo "$KUBECTL_OPT $HELM_OPT" >/dev/null
 }
 
-# Create Helm chart with customized configuration
-# @param $1 helm_chart_path The path where to create the Helm chart
 create_helm_chart() {
+    # 生成带自定义配置的 Helm chart
+    # @param $1 helm_chart_path The path where to create the Helm chart
   local helm_chart_path="$1" protocol port port2 pvc_name mount_path dockerfile
 
   # 从 Dockerfile 读取端口配置
@@ -163,9 +163,9 @@ EOF
   # sed -i -e "/serviceAccountName/s/^/#/" "$file_deploy"
 }
 
-# Setup Kubernetes cluster using Terraform
-# This function is independent and non-blocking for the main process
 kube_setup_terraform() {
+    # 用 Terraform 搭建 k8s 集群
+    # This function is independent and non-blocking for the main process
   ## RUN 单数组成员（-K/--create-k8s 触发，parse 组装），无守卫直接执行
   local terraform_dir="${G_DATA}/terraform"
   [[ -d "$terraform_dir" ]] || exit 0
@@ -195,9 +195,9 @@ kube_setup_terraform() {
   exit 0
 }
 
-# Create CNFS storage class and related resources
-# @param $1 namespace The namespace to create resources in
 kube_create_storage_class() {
+    # 创建 CNFS StorageClass 及相关资源
+    # @param $1 namespace The namespace to create resources in
   ## RUN 单数组成员（--create-storage-class 触发，parse 组装），无守卫直接执行
   local cnfs_name="cnfs01"
   local sc_name="alicloud-cnfs-nas"
@@ -249,10 +249,10 @@ EOF
   exit $?
 }
 
-# Create PV and PVC for a specific subpath, or ensure PVC exists
-# @param $1 namespace The namespace to create resources in
-# @param $2 subpath The NAS subpath to use (optional)
 kube_create_pv_pvc() {
+    # 为指定子路径创建 PV/PVC（已存在则复用）
+    # @param $1 namespace The namespace to create resources in
+    # @param $2 subpath The NAS subpath to use (optional)
   ## RUN 单数组成员（-P/--kube-pvc 触发，parse 组装并必填校验 arg_sub_path）
   ## 守卫: 依赖 kube_config_init 设置的 KUBECTL_OPT；防御性校验 arg_sub_path
   [[ -n "${arg_sub_path:-}" ]] || return 0
@@ -322,9 +322,9 @@ EOF
   exit $?
 }
 
-# Build base Docker images for the project
-# @param $1 image_tag The tag of the base image to build (e.g. mysql:8.0, amazoncorretto:17)
 build_base_image() {
+    # 构建项目的基础镜像
+    # @param $1 image_tag The tag of the base image to build (e.g. mysql:8.0, amazoncorretto:17)
   local image_tag="$1" mirror registry proxy_url bake_target tag_left tag_right
   local bake_file="${G_DATA}/cache/base-bake.hcl"
   mkdir -p "${G_DATA}/cache"
@@ -456,9 +456,9 @@ EOF
   rm -f "${bake_file}" 2>/dev/null || true
 }
 
-# Build selected base images
-# @param $@ Optional specific image tags to build
 build_base_image_select() {
+    # 构建选定的基础镜像
+    # @param $@ Optional specific image tags to build
   ## RUN 单数组成员（-x/--build-base 触发，parse 组装），无守卫直接执行
   local all_tags=() tags=()
 

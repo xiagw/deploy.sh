@@ -3,7 +3,6 @@
 
 # Notification module for handling different notification channels
 
-# Send notification to WeChat Work
 notify_wecom() {
     local key="$1" message="$2"
 
@@ -13,7 +12,6 @@ notify_wecom() {
     curl -sSL -X POST -H "Content-Type: application/json" -d "{\"msgtype\": \"text\", \"text\": {\"content\": \"$message\"}}" "$wecom_api"
 }
 
-# Send notification to Telegram
 notify_telegram() {
     local api_key="$1" group_id="$2" message="$3"
 
@@ -25,7 +23,6 @@ notify_telegram() {
     curl -sSLo /dev/null -X POST -d "chat_id=${group_id}&text=$message" "$telegram_api"
 }
 
-# Send notification to Element
 notify_element() {
     local script_path="$1" server="$2" userid="$3" password="$4" roomid="$5" message="$6"
     _install_python_element ""
@@ -35,7 +32,6 @@ notify_element() {
     echo "$message" | python3 "$script_path/element.py" "$server" "$userid" "$password" "$roomid"
 }
 
-# Send notification via Email
 notify_email() {
     local project_root="$1" server="$2" from="$3" to="$4" subject="$5" message="$6" username="$7" password="$8"
 
@@ -54,7 +50,6 @@ notify_email() {
     "$send_email" "${email_args[@]}"
 }
 
-# Send notification to Zoom
 notify_zoom() {
     local channel="$1" message="$2"
 
@@ -63,7 +58,6 @@ notify_zoom() {
     curl -s -X POST -H "Content-Type: application/json" -d "{\"text\": \"$message\"}" "$channel"
 }
 
-# Send notification to Feishu
 notify_feishu() {
     local webhook_url="$1" message="$2"
 
@@ -75,8 +69,8 @@ notify_feishu() {
     curl -sS --fail -X POST -H "Content-Type: application/json" -d "$payload" "$webhook_url"
 }
 
-# Main notification function that handles all channels
 handle_notify() {
+    # 通知主入口：按配置分发到各渠道
     # Skip notification in GitHub Actions
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] && G_DEPLOY_RESULT=0 && return 0
 

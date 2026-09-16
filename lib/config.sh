@@ -2,23 +2,9 @@
 # -*- coding: utf-8 -*-
 # shellcheck disable=2154
 
-################################################################################
-# 函数: find_project_config
-# 描述: 查找项目配置文件，仅使用项目专用配置
-# 参数:
-#   $1 - project_path: 项目路径，格式为 "namespace/project_name"
-# 返回: 配置文件路径（通过全局变量 G_CONF 返回）
-# 说明:
-#   - 仅使用项目专用配置: data/conf/namespace/project-name.json
-#   - 如果配置文件不存在且模板存在，自动从模板创建
-#   - 自动创建后支持auto或修改配置后都可以继续部署
-#   优势:
-#     - 支持成千上万项目，每个项目独立配置文件
-#     - 避免单文件过大导致的性能问题
-#     - 减少版本冲突，不同项目可以独立管理配置
-#     - 更好的权限控制和安全性
-################################################################################
 find_project_config() {
+    # 查找项目专用配置 data/conf/<namespace>/<project>.json；不存在且模板存在时自动从模板创建
+    # 写入: G_CONF（配置路径）
     local project_path="${G_REPO_GROUP_PATH:-}"
     local namespace project_name
     local project_conf
@@ -75,20 +61,9 @@ find_project_config() {
     check_project_config_template "$G_CONF" || return 1
 }
 
-################################################################################
-# 函数: check_project_config_template
-# 描述: 校验项目配置文件中是否残留模板示例值
-# 说明:
-#   - 模板示例值使用 RFC 5737 文档保留地址 192.0.2.2/192.0.2.3（全球不可路由）
-#     与 RFC 2606 保留域名 *.example.com，物理上不可能被真实生产环境使用。
-#   - 递归扫描全量字符串字段，覆盖 .host/.db_host 等任意位置的残留。
-#   - 在 find_project_config 公共层拦截；当 deploy.method=auto 时降级为 warn（探测链路不读 hosts），
-#     仅显式指定部署方式（k8s/rsync/docker/fc/ftp/sftp/oss）时残留值阻断上线。
-# 参数:
-#   $1 - config_file: 项目配置文件路径
-# 返回: 模板残留时返回 1，否则返回 0
-################################################################################
 check_project_config_template() {
+    # 校验项目配置是否残留模板示例值：递归扫全部字符串字段，命中 RFC5737 192.0.2.x / RFC2606 *.example.com
+    # 残留返回 1；deploy.method=auto 时降级为 warn（探测链路不读 hosts），显式指定部署方式时残留即阻断
     local config_file="${1:-}"
     [[ -z "$config_file" || ! -f "$config_file" ]] && return 0
 
@@ -117,21 +92,9 @@ check_project_config_template() {
     return 0
 }
 
-################################################################################
-# 函数: config_deploy_init
-# 描述: 初始化部署环境配置文件
-# 参数: 无
-# 返回: 无
-# 全局变量:
-#   - G_ENV: 环境变量配置文件路径
-#   - G_DATA: 数据目录路径
-#   - G_PATH: 脚本根目录路径
-# 说明:
-#   - 初始化环境变量配置文件（deploy.env）
-#   - 注意: 此函数在项目路径确定之前调用
-#   - 项目专用配置会在 config_repo_vars 之后通过 find_project_config 查找并设置 G_CONF
-################################################################################
 config_deploy_init() {
+    # 初始化部署环境配置（deploy.env，不存在则从模板复制）
+    # 写入: G_ENV / G_DATA / G_PATH；在项目路径确定前调用（G_CONF 由 config_repo_vars 之后设置）
     ## 初始化环境变量配置文件
     mkdir -p "${G_DATA}/conf"
     [[ -f "${G_ENV}" ]] || cp -v "${G_PATH}/conf/templates/deploy.env" "${G_ENV}"
@@ -164,19 +127,10 @@ config_deploy_init() {
     export PATH
 }
 
-################################################################################
-# 函数: _load_project_build_deploy_config
-# 描述: 从项目配置文件中加载构建和部署方式配置
-# 参数:
-#   $1 - config_file: 项目配置文件路径
-# 返回: 无（设置全局变量）
-# 全局变量:
-#   - PROJECT_BUILD_METHOD: 构建方式 (auto/docker/system)
-#   - PROJECT_DEPLOY_METHOD: 部署方式 (auto/k8s/docker/rsync)
-#   - PROJECT_PREFER_DOCKER: 自动构建时是否优先 Docker (true/false)
-#   - PROJECT_PREFER_K8S: 自动部署时是否优先 k8s (true/false)
-################################################################################
 _load_project_build_deploy_config() {
+    # 从项目配置加载构建/部署方式
+    # 写入: PROJECT_BUILD_METHOD(auto/docker/system)、PROJECT_DEPLOY_METHOD(auto/k8s/docker/rsync)、
+    #       PROJECT_PREFER_DOCKER、PROJECT_PREFER_K8S
     local config_file="${1:-}"
     [[ -z "$config_file" || ! -f "$config_file" ]] && return
 
@@ -203,17 +157,8 @@ _load_project_build_deploy_config() {
     fi
 }
 
-################################################################################
-# 函数: config_deploy_setup
-# 描述: 设置部署环境配置，包括SSH密钥、配置文件链接等
-# 参数: 无
-# 返回: 无
-# 说明:
-#   - 创建SSH密钥对（如果不存在）
-#   - 创建配置目录的符号链接
-#   - 设置适当的文件权限
-################################################################################
 config_deploy_setup() {
+    # 设置部署环境：创建 SSH 密钥对、配置目录符号链接、设置文件权限
     ## dry-run: 不生成SSH密钥、不创建符号链接（仅本地环境配置，预览无意义）
     dry_run_skip "config_deploy_setup (ssh keys, $HOME symlinks)，dry-run 跳过" && return 0
 

@@ -29,12 +29,15 @@ stages:
   ## 性能验收：发布后手动触发性能测试（JMeter / k6）
   - perf
 
+## 依赖缓存：跨流水线/job 复用依赖安装目录，加速 composer/npm 安装（缓存为尽力而为，不保证命中）
 cache:
   # untracked: true
+  ## 缓存键：用项目路径 slug 命名，避免多项目共用本模板时落到默认键 default 上互相污染
   key: "$CI_PROJECT_PATH_SLUG"
+  ## 缓存路径：依赖目录（lockfile 本已由 git 跟踪，缓存它们属冗余）
   paths:
-    - vendor/
-    - node_modules/
+    - vendor/       # PHP composer 依赖
+    - node_modules/ # Node 依赖
     - composer.lock
     - yarn.lock
 

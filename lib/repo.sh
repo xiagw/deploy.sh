@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 # Project configuration and file management module
 
-# Overlay files into repository
-# @param $1 G_DATA Directory containing data files
-# @return 0 on success, non-zero on failure
 repo_overlay_files() {
+    # 把 overlay 文件覆盖进仓库
+    # @param $1 G_DATA Directory containing data files
+    # @return 0 on success, non-zero on failure
     local lang detected_lang arg_disable_overlay="${arg_disable_overlay:-false}"
 
     ## ========================================================================
@@ -152,11 +152,11 @@ repo_overlay_files() {
     fi
 }
 
-# Detect the programming language of the project
-# Uses various project files to determine the language
-# Sets:
-#   lang_type: The detected programming language
 detect_repo_language() {
+    # 探测项目语言
+    # Uses various project files to determine the language
+    # Sets:
+    #   lang_type: The detected programming language
     local lang_files=(
         "pom.xml" "build.gradle" "gradle.build" # Java
         "composer.json"                         # PHP
@@ -315,10 +315,10 @@ detect_repo_language() {
     G_REPO_LANG_CACHE_DIR="$G_REPO_DIR"
 }
 
-# Detect the frontend framework/build tool of a Node.js project
-# Reads dependencies+devDependencies keys from package.json
-# Returns: nuxt | next | vuecli | cra | umi | vite | nodejs
 detect_node_framework() {
+    # 探测 Node 项目的前端框架/构建工具
+    # Reads dependencies+devDependencies keys from package.json
+    # Returns: nuxt | next | vuecli | cra | umi | vite | nodejs
     local pkg="${G_REPO_DIR}/package.json"
     [[ -f "${pkg}" ]] || { echo "nodejs"; return 0; }
     local out
@@ -335,25 +335,25 @@ detect_node_framework() {
     echo "${out:-nodejs}"
 }
 
-# true when framework produces pure static assets served by nginx
-# (vuecli/vite/cra/umi), false for SSR/backend (nodejs/next/nuxt)
 detect_node_framework_static() {
+    # 框架是否产出纯静态资源（由 nginx 直接服务）
+    # (vuecli/vite/cra/umi), false for SSR/backend (nodejs/next/nuxt)
     case "$(detect_node_framework)" in
     vuecli | cra | umi | vite) return 0 ;;
     *) return 1 ;;
     esac
 }
 
-# 运行时依赖语言（node 后端/python）是否走"依赖 base"两段式模式
 lang_uses_deps_base() {
+    # 运行时依赖语言（node 后端/python）是否走"依赖 base"两段式模式
     case "${1:-}" in
     node | python) return 0 ;;
     *) return 1 ;;
     esac
 }
 
-# 依赖声明 manifest 路径（用 JSON/声明文件，不用 lockfile）
 lang_dep_manifest() {
+    # 依赖声明 manifest 路径（用 JSON/声明文件，不用 lockfile）
     case "${1:-}" in
     node)   echo "${G_REPO_DIR}/package.json" ;;
     php)    echo "${G_REPO_DIR}/composer.json" ;;
@@ -362,15 +362,15 @@ lang_dep_manifest() {
     esac
 }
 
-# 依赖指纹：以声明 manifest 为准（声明变化即重建 base）
 lang_dep_hash() {
+    # 依赖指纹：以声明 manifest 为准（声明变化即重建 base）
     local m
     m="$(lang_dep_manifest "${1:-}")"
     [[ -n "${m}" && -f "${m}" ]] && md5sum "${m}" 2>/dev/null | cut -d' ' -f1
 }
 
-# 检查 lockfile 与声明 manifest 是否同步；不同步时仅告警（决策仍以声明文件为准）
 node_lockfile_warn() {
+    # 检查 lockfile 与声明 manifest 是否同步；不同步时仅告警（决策仍以声明文件为准）
     local pkg="${G_REPO_DIR}/package.json" lock="${G_REPO_DIR}/package-lock.json"
     [[ -f "${pkg}" ]] || return 0
     [[ -f "${lock}" ]] || return 0
@@ -385,18 +385,18 @@ node_lockfile_warn() {
         _msg warn "[node] package-lock.json 与 package.json 依赖不一致，建议重新生成 lockfile"
 }
 
-# 仓库中的 Dockerfile.base/Dockerfile 是否为研发提交（git 跟踪中）
-# 自动覆盖的产物不跟踪，返回 1；非 git 仓库视为自动覆盖，返回 1
 repo_base_is_custom() {
+    # 仓库中的 Dockerfile.base/Dockerfile 是否为研发提交（git 跟踪中）
+    # 自动覆盖的产物不跟踪，返回 1；非 git 仓库视为自动覆盖，返回 1
     git -C "${G_REPO_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
     git -C "${G_REPO_DIR}" ls-files --error-unmatch Dockerfile >/dev/null 2>&1 ||
         git -C "${G_REPO_DIR}" ls-files --error-unmatch Dockerfile.base >/dev/null 2>&1
 }
 
-# Detect repository languages using Docker and GitHub Linguist
-# Uses crazymax/linguist Docker image, fallback: "ghcr.io/crazy-max/linguist:latest"
-# @return String containing detected languages and their percentages
 detect_repo_language_docker() {
+    # 用 Docker + GitHub Linguist 探测仓库语言
+    # Uses crazymax/linguist Docker image, fallback: "ghcr.io/crazy-max/linguist:latest"
+    # @return String containing detected languages and their percentages
     local target_dir="${1:-.}" format="${2:-}" docker_image="crazymax/linguist:latest"
 
     # Run linguist in Docker container
@@ -418,9 +418,8 @@ detect_repo_language_docker() {
 # - Git repository management
 # - SVN repository management
 
-# GITHUB_WORKSPACE=/home/ops/.cache/act/1298bce48350a805/hostexecutor
-# Git related functions
 setup_git_repo() {
+    # 准备 git 仓库：CI 直接用 GITHUB_WORKSPACE，否则 clone 到工作区（Gitea 走 ENV_GITEA_SERVER）
     ## RUN 单数组成员（-g/--git-clone 或 GITEA_ACTIONS 触发，parse 组装）
     ## 守卫: Gitea Actions 下无论是否传参都执行；-g 时 git_repo_url 由 parse 必填校验
     local is_gitea="${GITEA_ACTIONS:-false}" git_repo_url="${arg_git_clone_url:-}" git_repo_branch="${arg_git_clone_branch:-main}"
@@ -504,13 +503,13 @@ setup_git_repo() {
     fi
 }
 
-# Switch an existing workspace repo to a target branch
-# Local changes are discarded by default (git clean -fxd), same as setup_git_repo.
-# - branch exists (local/remote): fetch + checkout + pull
-# - branch missing: create from the default branch (origin/HEAD, fallback main)
-# @param $1 branch name
-# @param $2 workspace dir
 setup_git_branch() {
+    # 把已有工作区仓库切到目标分支
+    # Local changes are discarded by default (git clean -fxd), same as setup_git_repo.
+    # - branch exists (local/remote): fetch + checkout + pull
+    # - branch missing: create from the default branch (origin/HEAD, fallback main)
+    # @param $1 branch name
+    # @param $2 workspace dir
     ## RUN 单数组成员（-b/--git-branch 触发，parse 组装）
     ## 守卫: 仅 -w/-b（非克隆场景）时切换分支；-g 克隆时分支由 setup_git_repo 处理，此处跳过
     local git_repo_branch="${arg_git_clone_branch:-}" git_repo_dir="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
@@ -585,7 +584,6 @@ get_git_last_commit_message() {
     fi
 }
 
-# SVN related functions
 setup_svn_repo() {
     ## RUN 单数组成员（-s/--svn-checkout 触发，parse 组装）
     ## 守卫: svn_repo_url 由 parse 必填校验，此处防御

@@ -34,11 +34,11 @@ format_release_name() {
     echo "${release_name}"
 }
 
-# Execute optional project-level custom deployment hook.
-# The hook is sourced so it can access deployment variables like
-# G_NAMESPACE, release_name, and other environment state.
-# If the hook is absent, this is a no-op.
 execute_custom_deploy_hook() {
+    # 执行项目自定义部署钩子（可选）
+    # The hook is sourced so it can access deployment variables like
+    # G_NAMESPACE, release_name, and other environment state.
+    # If the hook is absent, this is a no-op.
     local custom_script="${G_REPO_DIR}/deploy.custom.sh"
     if [[ -f "${custom_script}" ]]; then
         _msg task "Executing custom deployment script: ${custom_script}"
@@ -56,23 +56,23 @@ execute_custom_deploy_hook() {
     fi
 }
 
-# 输出当前命名空间下项目配置中的所有 hosts 行（每行一个 JSON），无配置时输出为空
 _project_hosts() {
+    # 输出当前命名空间下项目配置中的所有 hosts 行（每行一个 JSON），无配置时输出为空
     [[ -f "${G_CONF:-}" ]] || return 0
     jq -c --arg branch "${G_NAMESPACE:-}" \
         '.branches[] | select(.branch == $branch) | .hosts[]? | select(. != null)' \
         "$G_CONF" 2>/dev/null
 }
 
-# 返回 rsync exclude 文件路径: 项目内优先，否则使用脚本自带默认
 _rsync_exclude_file() {
+    # 返回 rsync exclude 文件路径: 项目内优先，否则使用脚本自带默认
     local f="${G_REPO_DIR}/rsync.exclude"
     [[ -f "$f" ]] || f="${G_PATH}/conf/rsync.exclude"
     printf '%s' "$f"
 }
 
-# 根据语言返回默认上传源目录
 _project_rsync_src() {
+    # 根据语言返回默认上传源目录
     local lang="${1:-}"
     case "$lang" in
     java) printf '%s' "$G_REPO_DIR/build_output/" ;;
@@ -81,8 +81,8 @@ _project_rsync_src() {
     esac
 }
 
-# 返回当前命名空间的 OSS 目标地址（oss:// 开头）: 项目配置优先，其次 ENV_OSS_DEST
 _project_oss_dest() {
+    # 返回当前命名空间的 OSS 目标地址（oss:// 开头）: 项目配置优先，其次 ENV_OSS_DEST
     local dest=""
     if [[ -n "${G_CONF:-}" && -f "${G_CONF}" ]]; then
         dest=$(jq -r --arg branch "${G_NAMESPACE:-}" \
@@ -93,9 +93,9 @@ _project_oss_dest() {
     printf '%s' "$dest"
 }
 
-# Record the currently deployed image reference for this release/namespace,
-# and optionally delete the previous image if the deployment succeeded.
 record_deployed_image() {
+    # 记录本次 release/namespace 当前部署的镜像引用
+    # and optionally delete the previous image if the deployment succeeded.
     local release_name="${1:?release_name is required}"
     local deploy_ok="${2:-0}"
     local image_record_dir="${G_DATA}/cache"
@@ -140,8 +140,8 @@ record_deployed_image() {
     printf '%s\n' "${current_image}" >"${image_record_file}"
 }
 
-# Clean up Evicted pods in the given namespace.
 cleanup_evicted_pods() {
+    # 清理指定 namespace 下 Evicted 的 pod
     local namespace="${1:-${G_NAMESPACE}}"
     {
         while read -r bad_pod; do
@@ -152,8 +152,8 @@ cleanup_evicted_pods() {
     } &
 }
 
-# Convert k8s-style duration ("120s"/"5m"/"1h30m") or bare seconds into seconds.
 _duration_to_seconds() {
+    # k8s 时长（"120s"/"5m"/"1h30m"）或裸秒 → 秒
     local d="${1:-}" num unit total=0
     [[ "$d" =~ ^[0-9]+$ ]] && { printf '%s' "$d"; return 0; }
     while [[ -n "$d" ]]; do
@@ -172,8 +172,8 @@ _duration_to_seconds() {
     printf '%s' "$total"
 }
 
-# Collect and print pod status + logs to diagnose a failed rollout.
 _rollout_diagnostics() {
+    # 收集并打印 pod 状态 + 日志，诊断 rollout 失败
     local release_name="${1:?release_name is required}"
     local diag_pods=()
     _msg task "Fetching pod status and logs for [${release_name}] to diagnose"
@@ -198,11 +198,11 @@ _rollout_diagnostics() {
 # Poll the rollout until Ready (fast return), a terminal pod error (fail fast),
 # or the overall deadline (fail with diagnostics). Returns 0 on success, 1 on failure.
 #
-# 滚动更新期间旧 pod 一直健康，deployment 的 Available 条件恒为 True，
-# 不能用 pod/condition 判断完成状态，只有 `kubectl rollout status` 才能准确反馈。
-# 因此这里用 rollout status 短超时轮询：返回 0 即就绪，非 0 且仍在进展则继续等，
-# 命中终态错误/进度卡死则快速失败。
 _wait_kubernetes_rollout() {
+    # 滚动更新期间旧 pod 一直健康，deployment 的 Available 条件恒为 True，
+    # 不能用 pod/condition 判断完成状态，只有 `kubectl rollout status` 才能准确反馈。
+    # 因此这里用 rollout status 短超时轮询：返回 0 即就绪，非 0 且仍在进展则继续等，
+    # 命中终态错误/进度卡死则快速失败。
     local release_name="${1:?release_name is required}"
     local timeout="${2:-180}" poll_interval="${3:-5}"
     local deadline bad_pod current ret status_out
@@ -247,8 +247,8 @@ _wait_kubernetes_rollout() {
     done
 }
 
-# Deploy to Kubernetes cluster
 deploy_to_kubernetes() {
+    # 部署到 k8s 集群
     _msg task "Deploy to Kubernetes with Helm"
     local release_name previous_image bad_pod helm_dir helm_dirs revision
     release_name="$(format_release_name)"
@@ -357,9 +357,9 @@ deploy_to_kubernetes() {
     return "${G_DEPLOY_RESULT:-0}"
 }
 
-# Deploy to Aliyun Functions
-# @param $1 lang The programming language of the project
 deploy_aliyun_functions() {
+    # 部署到阿里云函数计算
+    # @param $1 lang The programming language of the project
     local release_name lang functions_conf functions_conf_tmpl
     lang="${1:?'lang parameter is required'}"
     release_name="$(format_release_name)"
@@ -431,9 +431,9 @@ EOF
     [[ "${G_DEPLOY_RESULT:-0}" -eq 0 ]] && _msg task "Aliyun Functions deployment completed"
 }
 
-# Deploy via Rsync+SSH
-# @param $1 lang The programming language of the project
 deploy_via_rsync_ssh() {
+    # 通过 rsync+ssh 部署
+    # @param $1 lang The programming language of the project
     local lang="${1:?'lang parameter is required'}"
     _msg task "Deploy files with Rsync+SSH"
     local rsync_exclude ssh_user ssh_host_ip ssh_port rsync_src_from_conf rsync_dest
@@ -537,10 +537,10 @@ deploy_via_rsync_ssh() {
     done < <(_project_hosts)
 }
 
-# Deploy to Aliyun OSS
-# @param $1 source_path The source path to upload from
-# @param $2 oss_dest The OSS destination path (format: oss://bucket-name/path)
 deploy_aliyun_oss() {
+    # 部署到阿里云 OSS
+    # @param $1 source_path The source path to upload from
+    # @param $2 oss_dest The OSS destination path (format: oss://bucket-name/path)
     local source_path="${1:?'source_path parameter is required'}"
     local oss_dest="${2:?'oss_dest parameter is required (format: oss://bucket-name/path)'}"
 
@@ -550,11 +550,11 @@ deploy_aliyun_oss() {
     _msg task "Aliyun OSS deployment completed"
 }
 
-# Private helper: install ossutil and upload a directory to OSS
-# Reused by deploy_aliyun_oss (standalone -O) and deploy_via_rsync_ssh (oss:// branch)
-# @param $1 source_path The source path to upload from
-# @param $2 oss_dest The OSS destination path (format: oss://bucket-name/path)
 _oss_upload() {
+    # 内部函数：安装 ossutil 并把目录上传到 OSS
+    # Reused by deploy_aliyun_oss (standalone -O) and deploy_via_rsync_ssh (oss:// branch)
+    # @param $1 source_path The source path to upload from
+    # @param $2 oss_dest The OSS destination path (format: oss://bucket-name/path)
     local source_path="${1:?'source_path parameter is required'}"
     local oss_dest="${2:?'oss_dest parameter is required (format: oss://bucket-name/path)'}"
     _install_ossutil
@@ -567,9 +567,9 @@ _oss_upload() {
     fi
 }
 
-# Deploy via Rsync (rsyncd daemon, module-based)
-# 连接参数读取顺序: data/conf/rsyncd.conf (旧配置) > ENV_RSYNC_* (deploy.env)
 deploy_via_rsync() {
+    # 通过 rsync（rsyncd 守护进程，模块式）部署
+    # 连接参数读取顺序: data/conf/rsyncd.conf (旧配置) > ENV_RSYNC_* (deploy.env)
     _msg task "Deploy files to Rsyncd server"
     local rsyncd_conf
     rsyncd_conf="$G_DATA/conf/rsyncd.conf"
@@ -598,9 +598,9 @@ deploy_via_rsync() {
     fi
 }
 
-# Deploy via FTP
-# 凭据来自 deploy.env: ENV_FTP_HOST / ENV_FTP_USERNAME / ENV_FTP_PASSWORD / ENV_FTP_DIRECTORY
 deploy_via_ftp() {
+    # 通过 FTP 部署
+    # 凭据来自 deploy.env: ENV_FTP_HOST / ENV_FTP_USERNAME / ENV_FTP_PASSWORD / ENV_FTP_DIRECTORY
     _msg task "Deploy files to FTP server"
     local ftp_host="${ENV_FTP_HOST:-}" ftp_username="${ENV_FTP_USERNAME:-}"
     local ftp_password="${ENV_FTP_PASSWORD:-}" ftp_directory="${ENV_FTP_DIRECTORY:-}"
@@ -637,10 +637,10 @@ EOF
     rm -f "$upload_file"
 }
 
-# Deploy via SFTP
-# 目标主机读取顺序: 项目配置 hosts[].{user,host,port,rsync_dest} > ENV_SFTP_HOST/USERNAME/PORT/DIRECTORY
-# 上传方式: tar 打包后 sftp 批量命令上传; 若设置 ENV_SFTP_PASSWORD 则使用 sshpass 密码认证
 deploy_via_sftp() {
+    # 通过 SFTP 部署
+    # 目标主机读取顺序: 项目配置 hosts[].{user,host,port,rsync_dest} > ENV_SFTP_HOST/USERNAME/PORT/DIRECTORY
+    # 上传方式: tar 打包后 sftp 批量命令上传; 若设置 ENV_SFTP_PASSWORD 则使用 sshpass 密码认证
     local lang="${1:-}"
     _msg task "Deploy files to SFTP server"
 
@@ -688,8 +688,8 @@ deploy_via_sftp() {
     [[ "${G_DEPLOY_RESULT:-0}" -eq 0 ]] && _msg task "SFTP deployment completed"
 }
 
-# 单台主机 SFTP 上传（内部函数）
 _sftp_upload_one() {
+    # 单台主机 SFTP 上传（内部函数）
     local ssh_user="$1" ssh_host_ip="$2" ssh_port="$3" remote_dir="$4" upload_file="$5"
     local ssh_host sftp_batch sftp_cmd
     ssh_host="${ssh_user:+${ssh_user}@}${ssh_host_ip}"
@@ -720,10 +720,10 @@ EOF
     rm -f "$sftp_batch"
 }
 
-# Deploy with Docker Compose
-# 目标主机读取项目配置 hosts[]，上传源码/构建产物后执行 docker compose up -d --build
-# @param $1 lang The programming language of the project
 deploy_to_docker_compose() {
+    # 用 docker compose 部署
+    # 目标主机读取项目配置 hosts[]，上传源码/构建产物后执行 docker compose up -d --build
+    # @param $1 lang The programming language of the project
     local lang="${1:-}"
     _msg task "Deploy with Docker Compose"
     local rsync_exclude ssh_user ssh_host_ip ssh_port rsync_src_from_conf rsync_dest service
@@ -770,16 +770,16 @@ deploy_to_docker_compose() {
     fi
 }
 
-# Determine the deployment method based on project files and environment
-# Priority order:
-#   1. Helm charts (if exist and k8s available) → deploy_k8s
-#   2. Dockerfile (if exist and k8s available) → deploy_k8s
-#   3. docker-compose.yml → deploy_docker
-#   4. Project config with hosts → deploy_rsync_ssh
-#   5. Default → deploy_rsync_ssh (with warning)
-# Returns:
-#   deploy_method: The determined deployment method
 detect_deployment_method() {
+    # 依据项目文件与环境探测部署方式
+    # Priority order:
+    #   1. Helm charts (if exist and k8s available) → deploy_k8s
+    #   2. Dockerfile (if exist and k8s available) → deploy_k8s
+    #   3. docker-compose.yml → deploy_docker
+    #   4. Project config with hosts → deploy_rsync_ssh
+    #   5. Default → deploy_rsync_ssh (with warning)
+    # Returns:
+    #   deploy_method: The determined deployment method
     local file
     local release_name has_dockerfile=false has_docker_compose=false has_project_config=false
 
@@ -903,8 +903,8 @@ detect_deployment_method() {
     return 0
 }
 
-# Main deployment function
 stage_deploy() {
+    # 部署主入口：按方式分发到对应 deploy_*
     _msg stage "$(_t '部署' 'deployment')"
     ## 部署方式单一来源: 用户显式指定（RUN_DEPLOY 非空）时按优先级取首个启用项；
     ## 自动模式（RUN_DEPLOY 为空）留空 type，走下方 detect_deployment_method 探测链路
@@ -983,10 +983,10 @@ stage_deploy() {
 # Export the function
 # export -f detect_deployment_method
 
-# Copy Docker image from source to target registry
-# @param $1 source_image Source image name (e.g., nginx:latest)
-# @param $2 target_registry Target registry (e.g., registry.example.com)
 copy_docker_image() {
+    # 把镜像从源仓库复制到目标仓库
+    # @param $1 source_image Source image name (e.g., nginx:latest)
+    # @param $2 target_registry Target registry (e.g., registry.example.com)
     ## RUN 单数组成员（-c/--copy-image 触发，parse 组装并必填校验 arg_src）
     ## 守卫: 防御性校验 arg_src（parse 的 ${2:?} 已保证非空）
     [[ -n "${arg_src:-}" ]] || return 0
@@ -1067,9 +1067,9 @@ copy_docker_image() {
 #
 # @note 无时间戳标签是否强制删除由 ENV_CLEAN_TAGS_FORCE 控制（true 时删除，默认 false）。
 #
-# Example usage / 使用示例:
-# clean_old_tags "registry.example.com/myapp"
 clean_old_tags() {
+    # 用法示例:
+    # clean_old_tags "registry.example.com/myapp"
     ## RUN 单数组成员（--clean-tags 触发，parse 组装并必填校验 arg_clean_tags）
     ## 守卫: 防御性校验 arg_clean_tags（parse 的 ${2:?} 已保证非空）
     [[ -n "${arg_clean_tags:-}" ]] || return 0

@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
 # shellcheck disable=2154,2034,1090,1091,2086
-################################################################################
-# Description: Consolidated build functions for various programming languages
+# 各语言的构建函数集合
 # Author: xiagw <fxiaxiaoyu@gmail.com>
 # License: GNU/GPL
-################################################################################
 
-## 在中国区环境下启用 buildx builder
 ensure_buildx_builder() {
+    ## 在中国区环境下启用 buildx builder
     [[ "${G_DEBUG_ON:-false}" == true ]] && return
     [[ -z "${ENV_BUILDX_REMOTE_HOSTS[*]:-}" ]] && return
 
@@ -40,9 +38,9 @@ ensure_buildx_builder() {
     export G_BUILDER="--builder $builder_name"
 }
 
-# 在 k8s 中创建 buildx builder
-# docker buildx create --driver kubernetes --name deploy-builder --driver-opt namespace=buildkit,replicas=1 --driver-opt image=docker.m.daocloud.io/moby/buildkit:buildx-stable-1 --bootstrap
 ensure_buildx_builder_kubernetes() {
+    # 在 k8s 中创建 buildx builder
+    # docker buildx create --driver kubernetes --name deploy-builder --driver-opt namespace=buildkit,replicas=1 --driver-opt image=docker.m.daocloud.io/moby/buildkit:buildx-stable-1 --bootstrap
     [[ "${G_DEBUG_ON:-false}" == true ]] && return
     [[ -z "${ENV_BUILDX_KUBERNETES_NAMESPACE:-}" ]] && return
     if "${IS_CHINA:-false}"; then
@@ -98,10 +96,10 @@ enable_buildx_mode() {
     esac
 }
 
-# 根据 lang（固定三段式 lang:ver:docker_flag，字段可为空）生成 docker-bake.hcl
-# $1 lang, $2 bake 文件路径, $3 应用镜像 tag, $4 可选 base 镜像 tag（存在 Dockerfile.base 时）
-# $5 是否生成 base target（复用时仅注入 BASE_IMAGE 参数，不生成 base target）
 generate_bake_file() {
+    # 根据 lang（固定三段式 lang:ver:docker_flag，字段可为空）生成 docker-bake.hcl
+    # $1 lang, $2 bake 文件路径, $3 应用镜像 tag, $4 可选 base 镜像 tag（存在 Dockerfile.base 时）
+    # $5 是否生成 base target（复用时仅注入 BASE_IMAGE 参数，不生成 base target）
     local lang="${1:?lang required}" bake_file="${2:?bake file required}"
     local repo_tag="${3:?repo tag required}" base_tag="${4:-}" build_base_target="${5:-false}"
     local lang_type ver docker_flag lang_args="" extra_args="" mirror="${ENV_DOCKER_MIRROR:+${ENV_DOCKER_MIRROR%/}/}"
@@ -263,8 +261,8 @@ EOF
     fi
 }
 
-# 自动生成两段式时的说明（每个项目/分支首次构建输出一次，marker 记录）
 base_explain() {
+    # 自动生成两段式时的说明（每个项目/分支首次构建输出一次，marker 记录）
     local lang="${1:-}" manifest_name
     manifest_name="$(lang_dep_manifest "${lang}")"
     manifest_name="${manifest_name##*/}"
@@ -279,10 +277,10 @@ base_explain() {
     _msg note "      base tag: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
 }
 
-# 研发自提交 base 指纹：Dockerfile.base（环境定义）+ 全部 workspace package.json + lockfile
-# monorepo 依赖散落在 apps/*/packages/* 的 package.json，逐一纳入；lockfile 有则一并计算（frozen 权威）
-# 兼容不提交 lockfile 的仓库：package.json 即依赖声明唯一来源，纳入后依赖变化必然触发重建
 custom_base_hash() {
+    # 研发自提交 base 指纹：Dockerfile.base（环境定义）+ 全部 workspace package.json + lockfile
+    # monorepo 依赖散落在 apps/*/packages/* 的 package.json，逐一纳入；lockfile 有则一并计算（frozen 权威）
+    # 兼容不提交 lockfile 的仓库：package.json 即依赖声明唯一来源，纳入后依赖变化必然触发重建
     local base_file="${1:-}" lang="${2:-}"
     [[ -f "${base_file}" ]] || { echo ""; return 0; }
     local files=("${base_file}") m f pkg_json
@@ -298,9 +296,9 @@ custom_base_hash() {
     md5sum "${files[@]}" 2>/dev/null | md5sum | cut -d' ' -f1
 }
 
-## 构建日志链接提示：CI 下输出可点的 artifacts 链接，本地输出文件路径
-## $1 日志文件路径；$2 是否附加 Browse 链接（默认 true，base 构建传 false 避免重复）
 build_log_hint() {
+    ## 构建日志链接提示：CI 下输出可点的 artifacts 链接，本地输出文件路径
+    ## $1 日志文件路径；$2 是否附加 Browse 链接（默认 true，base 构建传 false 避免重复）
     local log_path="$1"
     local show_browse="${2:-true}"
     if [[ -n "${CI_PROJECT_URL:-}" && -n "${CI_JOB_ID:-}" ]]; then
@@ -535,9 +533,9 @@ DOCKERIGNORE
     fi
 }
 
-# Main build function that determines which specific builder to run
-# Priority: Docker build (if available) > System command build
 stage_build() {
+    # 构建主入口：按语言分发到对应 build_*
+    # Priority: Docker build (if available) > System command build
     _msg stage "$(_t '构建' 'build')"
     local lang
     ## 语言由构建流程内部探测（detect_repo_language 有缓存，重复调用廉价）
@@ -642,7 +640,6 @@ stage_build() {
     fi
 }
 
-# Java Build
 build_java() {
     local jars_path="$G_REPO_DIR/build_output"
     ## 统一构建镜像: ENV_BASE_BUILD_IMAGE 可覆盖默认 maven 工具镜像
@@ -712,7 +709,6 @@ build_java() {
     _msg note "[build] java build"
 }
 
-# Node.js Build
 build_node() {
     local path_for_rsync='dist/'
     local file_json
@@ -786,7 +782,6 @@ build_node() {
     _msg note "[build] node (${pkg_man}, script=${build_opt})"
 }
 
-# Python Build
 build_python() {
     _msg task "Running python build"
     if [ -f "$G_REPO_DIR/requirements.txt" ]; then
@@ -795,7 +790,6 @@ build_python() {
     _msg note "[build] python build"
 }
 
-# Android Build
 build_android() {
     _msg task "Running android build"
     if [ -f "$G_REPO_DIR/gradlew" ]; then
@@ -807,7 +801,6 @@ build_android() {
     _msg note "[build] android build"
 }
 
-# iOS Build
 build_ios() {
     _msg task "Running iOS build"
     if [ -f "$G_REPO_DIR/Podfile" ]; then
@@ -824,7 +817,6 @@ build_ios() {
     _msg note "[build] iOS build"
 }
 
-# Ruby Build
 build_ruby() {
     _msg task "Running ruby build"
     if [ -f "$G_REPO_DIR/Gemfile" ]; then
@@ -833,14 +825,12 @@ build_ruby() {
     _msg note "[build] ruby build"
 }
 
-# Go Build
 build_go() {
     _msg task "Running go build"
     go build -v ./...
     _msg note "[build] go build"
 }
 
-# C/C++ Build
 build_c() {
     _msg task "Running C/C++ build"
     if [ -f "$G_REPO_DIR/CMakeLists.txt" ]; then
@@ -854,7 +844,6 @@ build_c() {
     _msg note "[build] C/C++ build"
 }
 
-# Docker Build
 build_docker() {
     _msg task "Running docker build"
     if [ -f "$G_REPO_DIR/Dockerfile" ]; then
@@ -863,7 +852,6 @@ build_docker() {
     _msg note "[build] docker build"
 }
 
-# Django Build
 build_django() {
     _msg task "Running django build"
     if [ -f "$G_REPO_DIR/manage.py" ]; then
@@ -873,7 +861,6 @@ build_django() {
     _msg note "[build] django build"
 }
 
-# PHP Build
 build_php() {
     _msg task "Running php build"
     if [ -f "$G_REPO_DIR/composer.json" ]; then
@@ -882,10 +869,9 @@ build_php() {
     _msg note "[build] php build"
 }
 
-# Shell Build
-# 用 shc 将仓库内 *.sh 编译为 native 可执行文件（混淆源码，防明文误读/复制篡改）。
-# shc 产物是 glibc/arch 绑定的 native 二进制，跨机器分发受限，但满足部署场景防护。
 build_shell() {
+    # 用 shc 将仓库内 *.sh 编译为 native 可执行文件（混淆源码，防明文误读/复制篡改）。
+    # shc 产物是 glibc/arch 绑定的 native 二进制，跨机器分发受限，但满足部署场景防护。
     _msg task "Running shell build with shc"
     dry_run_skip "run shc on shell scripts under ${G_REPO_DIR}" && return 0
 
@@ -981,8 +967,8 @@ docker_login() {
     esac
 }
 
-# Common layers for all images
 generate_base_dockerfile() {
+    # 所有镜像的公共层
     # Base images for different languages
     declare -A BASE_IMAGES=(
         ["java"]="eclipse-temurin:17-jre-alpine"
@@ -1008,8 +994,8 @@ ENV LANG=en_US.UTF-8
 EOF
 }
 
-# Language specific layers
 generate_lang_dockerfile() {
+    # 语言专属层
     ## RUN 单数组成员（--gen-dockerfile 触发，parse 组装），无守卫直接执行
     local lang dockerfile
     lang="$(detect_repo_language | cut -d: -f1)"
