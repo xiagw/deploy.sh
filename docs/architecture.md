@@ -47,7 +47,7 @@ deploy.sh/
 │   ├── overlay/          # 覆盖仓库的文件（按 仓库名/命名空间 分层）
 │   ├── helm/            # 各项目生成的 helm charts
 │   ├── bin/             # 下载的可执行文件（sendEmail 等）
-│   ├── logs/            # 日志 deploy.sh.log、各项目构建日志
+│   ├── logs/            # 本地构建日志 + bin/ 脚本日志（deploy.sh 启动时 mkdir 保证存在；CI 下构建日志在 ci-artifacts/logs/）
 │   └── cache/           # md5 缓存、已部署镜像记录、buildx 登录锁
 ├── builds/              # git clone / svn checkout 的工作目录
 ├── bin/                 # 运维辅助脚本（backup/gitlab/gitea/mysql/openwrt 等）
@@ -274,7 +274,7 @@ main "$@"
 ├─ set -Eeo pipefail          # 遇错即退，管道任一失败退出
 ├─ SECONDS=0                  # 总耗时计时
 ├─ unset G_* STAGE_* 等       # 清理上次状态
-├─ 定义 G_NAME/G_PATH/G_LIB/G_DATA/G_ENV/G_LOG
+├─ 定义 G_NAME/G_PATH/G_LIB/G_DATA/G_ENV
 ├─ parse_args "$@"    # 解析参数 → arg_* / deploy_method，并组装 RUN 单数组
 ├─ source lib/*.sh（11 模块，固定顺序）   # common config system repo test analysis style build deployment kubernetes notify
 ├─ _stage_start_ms=$(_now_ms)  # 阶段横幅累计耗时锚点（从脚本开始）
@@ -555,7 +555,7 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 | `ok` | `✓ msg` | 绿 | 成功状态 |
 | `warn` | `! msg` | 黄 | 警告 |
 | `error` | `✗ msg` | 红 | 失败 |
-| `log` | 原样 | — | 写 G_LOG 日志文件（含完整日期时间） |
+| `log` | 原样 | — | 写入 `$1` 指定文件（含完整日期时间；`bin/` 脚本使用，如 gitlab.sh） |
 | `question` | 紫色 | — | 交互提问 |
 
 ### 5.1 stage 横幅语义（重要注释，勿改）

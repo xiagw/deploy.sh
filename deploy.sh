@@ -472,10 +472,12 @@ main() {
     fi
     ## 配置文件路径（JSON格式，由 find_project_config 函数设置）
     G_CONF="" # 部署配置文件
-    ## 日志和配置文件路径
-    G_ENV="${G_DATA}/deploy.env"         # 环境变量配置文件
-    G_LOG="${G_DATA}/logs/${G_NAME}.log" # 日志文件路径
-    mkdir -p "$(dirname "$G_LOG")"
+    ## 环境变量配置文件路径
+    G_ENV="${G_DATA}/deploy.env" # 环境变量配置文件
+    ## 保证 data/logs 存在：本地构建日志（G_ARTIFACT_DIR=G_DATA）落这里；bin/ 脚本的日志
+    ## （gitlab/gitea/zentao/backup）也落这里，而它们只建父目录或走 _msg log 的目录判断，
+    ## 删掉这行会导致新环境下这些脚本落盘失败 / 静默降级为只打屏
+    mkdir -p "${G_DATA}/logs"
     ## 镜像引用索引（单文件，两种标记行）: `push <ref>` = 本工具推过待跟踪；`live <release>-<ns> <ref>` = 当前部署在用
     G_IMAGE_INDEX="${G_DATA}/cache/image-refs.index"
     ## 构建状态索引（单文件）: `<repo>-<branch> <field> <value>`，field ∈ base_md5 / base_custom_md5 / yarn_md5 / explained

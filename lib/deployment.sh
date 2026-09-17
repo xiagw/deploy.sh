@@ -268,10 +268,6 @@ deploy_to_kubernetes() {
         _msg note "  ${helm_args[*]}"
         return 0
     fi
-    ## 显示可复用命令
-    echo "helm upgrade/install command (reusable):"
-    echo "  ${helm_args[*]}" | sed "s#$HOME#\$HOME#g" | tee -a "$G_LOG"
-
     ## 自动扩缩容互斥锁：helm 发布期间创建 per-user 锁（含 PID/时间/发布对象），
     ## ack scale-php/scale-pod 检测到则跳过扩缩容（mtime 5 分钟内生效）
     ## 运行时目录去尾斜杠：macOS $TMPDIR 带 / 会拼出 //，与 ack.sh run_once 同口径
@@ -295,6 +291,9 @@ deploy_to_kubernetes() {
     # Display rollback cmd on failure / 部署失败时显示回滚命令
     if [[ "${G_DEPLOY_RESULT:-0}" -eq 1 ]]; then
         _msg error "Deployment failed: ${release_name}; rollback/diagnostic commands:"
+        ## 可复用命令：仅在失败时输出，便于本机修复后手工重跑（$HOME 脱敏）
+        echo "helm upgrade/install command (reusable):"
+        echo "  ${helm_args[*]}" | sed "s#$HOME#\$HOME#g"
         revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" 2>/dev/null | awk 'END {print $1}' || true)"
         if [[ -n "$revision" && "$revision" -gt 1 ]]; then
             ## helm rollback to previous revision / 回滚到上一个版本
