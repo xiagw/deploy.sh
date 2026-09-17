@@ -6,14 +6,32 @@
 # License: GNU/GPL, see https://www.gnu.org/copyleft/gpl.html
 # Create Date: 2019-04-03
 
+_default_workspace() {
+    # 默认 workspace 目录，优先级: -w/--workspace > CI_PROJECT_DIR (GitLab CI) > PWD，去尾部斜杠
+    # 供 config_repo_vars 与 is_self_workspace 共用（两处需保持一致，勿各写一份）
+    local ws="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
+    printf '%s' "${ws%/}"
+}
+
+is_self_workspace() {
+    # 判定"当前 workspace 就是本脚本自身所在目录"（自仓库，见 docs/architecture.md §7 E-2）
+    # 传了 -w 一律返回假：-w 即声明按正常流程对待（即使指向自身）
+    # 比较前用 cd + pwd -P 归一，兼容相对路径与符号链接
+    local ws self
+    [[ -n "${arg_workspace:-}" ]] && return 1
+    ws="$(_default_workspace)"
+    [[ -d "${ws}" && -d "${G_PATH}" ]] || return 1
+    ws="$(cd "${ws}" && pwd -P)" || return 1
+    self="$(cd "${G_PATH}" && pwd -P)" || return 1
+    [[ "${ws}" == "${self}" ]]
+}
+
 config_repo_vars() {
     # 配置部署相关全局变量（仓库信息、分支映射、命名空间）
     # 写入: G_REPO_DIR / G_REPO_NAME / G_REPO_NS / G_REPO_GROUP_PATH / G_REPO_GROUP_PATH_SLUG /
     #       G_REPO_BRANCH / G_REPO_SHORT_SHA / G_NAMESPACE / G_IMAGE_TAG
-    ## 仓库目录优先级: -w/--workspace > CI_PROJECT_DIR (GitLab CI) > PWD
-    G_REPO_DIR="${arg_workspace:-${CI_PROJECT_DIR:-$PWD}}"
-    ## 去掉尾部斜杠，否则 ${G_REPO_DIR##*/} 取到空仓库名
-    G_REPO_DIR="${G_REPO_DIR%/}"
+    ## 仓库目录优先级: -w/--workspace > CI_PROJECT_DIR (GitLab CI) > PWD（_default_workspace 已去尾斜杠）
+    G_REPO_DIR="$(_default_workspace)"
 
     ## 切换到仓库目录，确保后续 git 命令在正确目录执行
     [[ -d "$G_REPO_DIR" ]] || {
@@ -272,6 +290,11 @@ parse_args() {
         [[ ${#RUN_DEPLOY[@]} -gt 0 ]]; then
         auto_mode=false
     fi
+
+    ## 自仓库（workspace 即本脚本自身目录）且未传 -w：翻转 auto 模式，
+    ## 不再追加 auto 阶段，find_project_config 也随之跳过（不得污染工具自身仓库，见 docs/architecture.md §7 E-2）
+    ## 静默翻转：此处早于模块加载（common.sh 的 _msg/_t 尚未定义），提示语由 repo_overlay_files 的守卫输出
+    $auto_mode && is_self_workspace && auto_mode=false
 
     ## 必备步骤
     RUN+=(config_deploy_init)

@@ -8,6 +8,14 @@ repo_overlay_files() {
     # @return 0 on success, non-zero on failure
     local lang detected_lang arg_disable_overlay="${arg_disable_overlay:-false}"
 
+    ## 自仓库（workspace 即本脚本自身目录）且未传 -w：整体跳过，避免把 conf/root、conf/Dockerfile.single
+    ## 覆盖进工具自身仓库；同时 parse_args 已翻转 auto 模式（跳过自动流水线），此处输出统一提示
+    ## （见 docs/architecture.md §7 E-2）
+    if is_self_workspace; then
+        _msg note "$(_t 'workspace 即本工具自身目录：跳过文件覆盖与自动流水线（如需照常执行请传 -w）' 'workspace is the tool own directory: skip file overlay and auto pipeline (pass -w to force)')"
+        return 0
+    fi
+
     ## ========================================================================
     ## 项目语言探测
     ## 自动探测项目的编程语言、版本和Dockerfile信息

@@ -83,6 +83,7 @@ flowchart TD
 
 | 函数 | 功能 |
 |---|---|
+| `_default_workspace` / `is_self_workspace` | workspace 目录优先级解析（`-w` > `CI_PROJECT_DIR` > `PWD`，共用于 `config_repo_vars`）/ 判定 workspace 即本脚本自身目录（自仓库，见 §7 E-2） |
 | `config_repo_vars` | 设定仓库信息、分支→命名空间映射、镜像标签等全局变量 |
 | `usage` | 打印全部 CLI 参数帮助 |
 | `parse_args` | 解析参数，组装 `RUN` 数组（位置即依赖顺序，见 §3.1） |
@@ -328,6 +329,7 @@ repo_overlay_files    →  覆盖 conf/root、生成 Dockerfile.base/Dockerfile 
 ### 3.4 两种模式与阶段调度
 
 - **auto（无参数）**：`parse_args` 检测到所有开关为 0 → 全部置 1。各阶段守卫条件恒真，全流程执行。`deploy_method` 保持空 → 走 `detect_deployment_method` 自动探测。
+- **auto 的自仓库例外**：`auto_mode` 且 `is_self_workspace`（workspace == 脚本自身目录、未传 `-w`）→ 翻转回 spec（不追加 auto 阶段，`find_project_config` 一并跳过），并由 `repo_overlay_files` 守卫跳过文件覆盖；提示语由该守卫输出（解析阶段早于模块加载，不能用 `_msg`）。详见 §7 E-2。
 - **spec（带参数）**：只跑被置 1 的开关对应阶段；`deploy_method` 由 deploy 参数显式指定（单一方法）。
 
 阶段总数 `STAGE_TOTAL` 已在精简中移除；阶段横幅序号由 `_msg stage` 自动递增（`▶ STAGE N`）。
@@ -613,9 +615,10 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 ### E. 待办（功能增强）
 
 1. **artifacts 链接扩展到全部报告（B 方案）**（2026-09-15 记录）：目前只有 build 日志在成功/失败时打印可点的 GitLab artifacts 链接（`lib/build.sh` 的 `build_log_hint`，产物已统一到 `G_ARTIFACT_DIR/ci-artifacts`）。test/scan/analysis 各阶段的「Report saved to ...」仍只打印本地路径，未给 artifacts 直链。可抽公共函数统一生成链接，报告为 `.html`/`.json`，GitLab 可网页预览。
-2. **自仓库识别（deploy.sh 在自身仓库内运行）**（2026-09-15 记录）：无 `-w` 时 workspace 默认 `PWD`（`config_repo_vars`），在 deploy.sh 自身目录运行会把自身当作待部署目标——生成 `./Dockerfile`（源自 `conf/Dockerfile.single`）、把 `conf/root/` 覆盖到 `./root/`、触发 `stage_build`，并生成 `data/conf/<ns>/deploy.sh.json`。本项目自我构建用 `conf/Dockerfile.self`（见 `.github/workflows/main.yml`），generic 流水线对其无意义。
-   **期望行为**：识别「workspace 目录 == 脚本自身目录（`G_REPO_DIR` realpath == `G_PATH`）且未传 `-w`」→ 不追加 auto 阶段 + 跳过 Dockerfile/root 覆盖；传 `-w` 一律走正常流程（即使指向自身）。显式功能参数（`-B`/`-k`/`--gen-dockerfile` 等）不受影响。
-   **落点**：deploy.sh 新增 `is_self_workspace()`；`parse_args` 计算 `auto_mode` 后翻转；`repo_overlay_files` 加守卫。仅记录，未实现。
+2. **自仓库识别（deploy.sh 在自身仓库内运行）**（2026-09-15 记录，已实现）：无 `-w` 时 workspace 默认 `PWD`，在 deploy.sh 自身目录运行会把自身当作待部署目标——生成 `./Dockerfile`（源自 `conf/Dockerfile.single`）、把 `conf/root/` 覆盖到 `./root/`、触发 `stage_build`，并生成 `data/conf/<ns>/deploy.sh.json`。
+   **实现**：`is_self_workspace()` 判定「未传 `-w` 且 realpath(workspace) == realpath(`G_PATH`)」（`cd`+`pwd -P` 归一，兼容符号链接/相对路径）；`parse_args` 在算出 `auto_mode` 后静默翻转（解析阶段早于 `common.sh` 加载，不能调 `_msg`）；`repo_overlay_files` 开头守卫跳过覆盖并输出统一提示；`.gitignore` 锚定忽略 `/Dockerfile`、`/root/` 作兜底（必须锚定，否则会误伤 `conf/root/`）。
+   **不受影响**：传 `-w`（即使指向自身）一律正常流程；显式功能参数（`-B`/`-k`/`--gen-dockerfile` 等）照常；GitLab 自身流水线（`$HOME/runner/deploy.sh` + workspace=`CI_PROJECT_DIR`）目录不等，不命中。
+   **预期命中**：`conf/Dockerfile.self` 的 `RUN bash ./deploy.sh -d`（`WORKDIR /runner` + `COPY . /runner/`）里 workspace 就是脚本目录 → 命中守卫，镜像内不再生成 `Dockerfile`/`root/`；镜像构建依赖的 `system_install_tools`（`GITHUB_ACTIONS=true` 全量装）等非 auto 门控步骤照常执行。
 
 ---
 

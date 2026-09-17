@@ -22,6 +22,11 @@ tmp/
 .qoder/
 .cursorignore
 
+## 自仓库 overlay 产物：在工具自身目录跑非 dry-run 会生成（路径必须锚定，
+## 否则会误伤 conf/root/ 与后续可能新增的 conf/Dockerfile）
+/Dockerfile
+/root/
+
 .serena/
 opencode.json
 .opencode/
