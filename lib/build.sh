@@ -518,7 +518,7 @@ DOCKERIGNORE
 
     # Docker build 输出到日志文件，默认不显示构建详情
     # 构建失败时显示最后100行日志便于排查
-    local build_log="${build_log_dir}/${G_REPO_NAME}-build-${G_REPO_BRANCH}.log.txt"
+    local build_log="${build_log_dir}/${G_REPO_NAME}-${G_REPO_BRANCH}-build.log.txt"
     mkdir -p "$(dirname "$build_log")"
 
     ## push 前登记引用：中断或后续删除失败时仍可追溯（见 deployment.sh _clean_indexed_images）
