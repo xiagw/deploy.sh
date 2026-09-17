@@ -357,18 +357,18 @@ parse_args() {
     [[ ${#RUN_DEPLOY[@]} -gt 0 ]] && RUN+=(stage_deploy)
     [[ "${arg_test_func:-false}" == true ]] && RUN+=(stage_functional_test)
     [[ "${arg_test_perf:-false}" == true ]] && RUN+=(stage_performance_test)
-    [[ "${arg_security_zap:-false}" == true ]] && RUN+=(stage_security_zap)
-    [[ "${arg_security_vulmap:-false}" == true ]] && RUN+=(stage_security_vulmap)
-    [[ "${arg_security_semgrep:-false}" == true ]] && RUN+=(stage_security_semgrep)
-    [[ "${arg_security_sca:-false}" == true ]] && RUN+=(stage_security_sca)
-    [[ "${arg_security_gitleaks:-false}" == true ]] && RUN+=(stage_security_gitleaks)
+    ## 安全扫描（zap/vulmap/semgrep/sca/gitleaks 共用一个 stage，各自内部开关）；镜像扫描见上方 stage_security_image
+    if [[ "${arg_security_zap:-false}" == true || "${arg_security_vulmap:-false}" == true ||
+        "${arg_security_semgrep:-false}" == true || "${arg_security_sca:-false}" == true ||
+        "${arg_security_gitleaks:-false}" == true ]]; then
+        RUN+=(stage_security_scan)
+    fi
 
     ## 自动模式: 未请求任何功能 → 追加全部阶段
     ## 独立功能不进自动模式，避免 -r/-K/--clean-tags 等单独执行时误跑完整流水线
     $auto_mode && RUN+=(
         stage_code_quality stage_code_style stage_unit_test stage_build stage_security_image stage_deploy
-        stage_functional_test stage_performance_test stage_security_zap stage_security_vulmap
-        stage_security_semgrep stage_security_sca stage_security_gitleaks
+        stage_functional_test stage_performance_test stage_security_scan
     )
 
     RUN+=(handle_notify)

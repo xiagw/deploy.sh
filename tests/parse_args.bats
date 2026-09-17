@@ -26,7 +26,7 @@ index_in() {
 ## 自动模式（仅修饰参数：无任何功能请求）→ 追加全部阶段
 @test "auto mode with no functional args appends all stages" {
     parse_args -w /tmp
-    [[ "${RUN[*]}" == *stage_code_quality*stage_deploy*stage_security_gitleaks*handle_notify* ]]
+    [[ "${RUN[*]}" == *stage_code_quality*stage_deploy*stage_security_scan*handle_notify* ]]
     [[ "${RUN[0]}" == config_deploy_init ]]
     [[ "${RUN[1]}" == system_check ]]
 }
@@ -76,13 +76,19 @@ index_in() {
     [[ "${RUN[*]}" == *stage_code_style* ]]
 }
 
-## 安全扫描: 各标志加对应 stage
-@test "security flags add their stages" {
+## 安全扫描: 5 个扫描标志任一置位 → 只加一个共用 stage_security_scan（不重复）
+@test "security flags add a single shared security scan stage" {
     parse_args --scan-gitleaks --scan-semgrep -z -m
-    [[ "${RUN[*]}" == *stage_security_gitleaks* ]]
-    [[ "${RUN[*]}" == *stage_security_semgrep* ]]
-    [[ "${RUN[*]}" == *stage_security_zap* ]]
-    [[ "${RUN[*]}" == *stage_security_vulmap* ]]
+    local i hits=0
+    for i in "${RUN[@]}"; do [[ "$i" == stage_security_scan ]] && hits=$((hits + 1)); done
+    [[ $hits -eq 1 ]]
+}
+
+## 安全扫描: 单独一个标志也只加一个 stage
+@test "single security flag adds the shared stage" {
+    parse_args --scan-sca
+    [[ "${RUN[*]}" == *stage_security_scan* ]]
+    [[ "${RUN[*]}" != *stage_build* ]]
 }
 
 ## git clone: setup_git_repo 必须早于 config_repo_vars

@@ -157,20 +157,22 @@ flowchart TD
 | 函数 | 工具（Docker） | 开关 |
 |---|---|---|
 | `analysis_gitleaks` | zricethezav/gitleaks:v7.5.0 | — |
-| `stage_security_zap` | owasp/zap2docker-stable | `PP_SCAN_ZAP` / `-z` |
-| `stage_security_vulmap` | 本地 vulmap | `PP_SCAN_VULMAP` / `-m` |
-| `stage_code_quality` | sonar + 语言分析分发 | `PP_SONAR` + `PP_PMD/CODECLIMATE/SPOTBUGS/PYLINT/CHECKSTYLE` |
-| `analysis_pmd` | pmd/pmd:6.55.0 | `PP_PMD` |
-| `analysis_codeclimate` | codeclimate/codeclimate | `PP_CODECLIMATE` |
-| `analysis_spotbugs` | spotbugs/spotbugs:4.7.3 | `PP_SPOTBUGS` |
-| `analysis_pylint` | python:2.17.5-slim | `PP_PYLINT` |
-| `analysis_checkstyle` | checkstyle/checkstyle:10.12.4 | `PP_CHECKSTYLE` |
-| `stage_security_semgrep` | semgrep/semgrep（SAST） | `PP_SEMGREP` / `--scan-semgrep` |
-| `stage_security_sca` | aquasec/trivy（SCA fs） | `PP_SCA` / `--scan-sca` |
-| `stage_security_image` | aquasec/trivy（镜像，build 后） | `PP_SCAN_IMAGE` / `--scan-image` |
-| `stage_security_gitleaks` | gitleaks（密钥） | `PP_GITLEAKS` / `--scan-gitleaks` |
+| `stage_security_scan` | 安全扫描统一入口：一个横幅下按开关派发下面 5 个扫描 | 各行开关 |
+| `_scan_zap` | owasp/zap2docker-stable | `PIPELINE_SCAN_ZAP` / `-z` |
+| `_scan_vulmap` | 本地 vulmap | `PIPELINE_SCAN_VULMAP` / `-m` |
+| `stage_code_quality` | sonar + 语言分析分发 | `PIPELINE_SONAR` + `PIPELINE_PMD/CODECLIMATE/SPOTBUGS/PYLINT/CHECKSTYLE` |
+| `analysis_pmd` | pmd/pmd:6.55.0 | `PIPELINE_PMD` |
+| `analysis_codeclimate` | codeclimate/codeclimate | `PIPELINE_CODECLIMATE` |
+| `analysis_spotbugs` | spotbugs/spotbugs:4.7.3 | `PIPELINE_SPOTBUGS` |
+| `analysis_pylint` | python:2.17.5-slim | `PIPELINE_PYLINT` |
+| `analysis_checkstyle` | checkstyle/checkstyle:10.12.4 | `PIPELINE_CHECKSTYLE` |
+| `_scan_semgrep` | semgrep/semgrep（SAST） | `PIPELINE_SEMGREP` / `--scan-semgrep` |
+| `_scan_sca` | aquasec/trivy（SCA fs） | `PIPELINE_SCA` / `--scan-sca` |
+| `_scan_gitleaks` | gitleaks（密钥） | `PIPELINE_GITLEAKS` / `--scan-gitleaks` |
+| `stage_security_image` | aquasec/trivy（镜像，build 后；独立 stage，非上述 5 个） | `PIPELINE_SCAN_IMAGE` / `--scan-image` |
 
-统一模式：开关未启用输出 `⋯ 跳过 (PP_XX=false)`；失败 `✗ ... failed` return 1（pylint 例外，仅 warn）。
+统一模式：开关未启用输出 `⋯ 跳过 (PIPELINE_XX=false)`；失败 `✗ ... failed` return 1（pylint 例外，仅 warn）。
+`stage_security_scan` 例外：5 个扫描全未启用时只输出一行汇总跳过提示，不再逐个打印；各 `_scan_*` 由它按开关派发，自身不再判开关。
 报告统一落在 `data/reports/security/`（semgrep.json / trivy-fs.json / trivy-image.json）。
 
 ### 2.8 lib/style.sh（代码风格）
@@ -341,8 +343,7 @@ repo_overlay_files    →  覆盖 conf/root、生成 Dockerfile.base/Dockerfile 
 阶段 4: 镜像安全扫描      security_image → stage_security_image（DOM，须在 build 后）
 阶段 5: 部署              deploy_first 非空 → stage_deploy "${deploy_method:-}" ...
 阶段 6: 功能/性能测试      test_func|test_perf → stage_functional_test / stage_performance_test
-阶段 7: 动态安全扫描      security_zap|vulmap → stage_security_zap / stage_security_vulmap
-阶段 8: 源码安全扫描      security_semgrep|sca|gitleaks → stage_security_*（SAST/SCA/密钥）
+阶段 7: 动态安全扫描      security_zap|vulmap|semgrep|sca|gitleaks → stage_security_scan（内部派发 _scan_*，各自独立开关）
 收尾:   handle_notify → _msg anchor END（累计耗时）
 ```
 
@@ -404,15 +405,11 @@ stage_security_image          # arg_security_image（扫构建产物镜像，须
 stage_deploy                  # RUN_DEPLOY 非空；自动模式下走 detect_deployment_method
 stage_functional_test         # arg_test_func
 stage_performance_test        # arg_test_perf
-stage_security_zap            # arg_security_zap
-stage_security_vulmap         # arg_security_vulmap
-stage_security_semgrep        # arg_security_semgrep（SAST）
-stage_security_sca            # arg_security_sca（依赖漏洞）
-stage_security_gitleaks       # arg_security_gitleaks（密钥）
+stage_security_scan           # 5 个扫描任一开关置位；内部按开关派发 _scan_zap/_scan_vulmap/_scan_semgrep/_scan_sca/_scan_gitleaks
 handle_notify                 # 恒执行（末尾）
 ```
 
-自动模式（auto_mode=true）时 `stage_code_quality .. stage_security_gitleaks` 全部阶段加入。
+自动模式（auto_mode=true）时 `stage_code_quality .. stage_security_scan` 全部阶段加入。
 
 ### 3.7 关键约束说明
 
@@ -467,7 +464,7 @@ config_deploy_init ────────────────────�
 | `ENV_*` | 环境配置 | `data/deploy.env` |
 | `arg_*` | 命令行参数 | CLI |
 | `CI_*` | CI/CD 平台变量 | GitLab/GitHub 等 |
-| `PP_*` | 功能开关（控制是否执行） | deploy.env |
+| `PIPELINE_*` | 功能开关（控制是否执行） | CI 平台注入 / `data/deploy.env` |
 
 ### 4.2 优先级链（重要注释）
 
@@ -608,7 +605,7 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 ### D. 小瑕疵（行为边界）
 
 1. **`deployment.sh _sftp_upload_one`** 缺 sshpass 时 `return 1`，调用方裸调用 → errexit 中断整条流水线；同函数失败分支只设 `G_DEPLOY_RESULT` 不 return，不一致。
-2. **`analysis.sh stage_security_vulmap`** 中 `source "$config_file"`，`config.cfg` 缺失时 errexit 硬中断。
+2. **`analysis.sh _scan_vulmap`** 中 `source "$config_file"`，`config.cfg` 缺失时 errexit 硬中断。
 3. **`style.sh style_check_shell`** `$sc && shellcheck "$script" || exit_code=$?`：`sc=false`（shellcheck 未装到）时 `$?` 取到 `false` 的 1，误记失败。
 4. **`kubernetes.sh build_base_image_select`** 依赖 fzf，缺失时静默空跑退出 0。
 

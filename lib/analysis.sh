@@ -34,20 +34,40 @@ analysis_gitleaks() {
     _msg task "Gitleaks scan completed"
 }
 
-stage_security_zap() {
-    # OWASP ZAP 安全扫描
-    _msg stage "$(_t '安全扫描zap' 'security scan with zap')"
-    _msg task "ZAP scan (optional: --security-zap)"
-    if ! ${arg_security_zap:-false} && [[ "${PIPELINE_SCAN_ZAP:-false}" != true ]]; then
-        _msg note "$(_t '跳过' 'skipped') (--security-zap / PIPELINE_SCAN_ZAP=true)"
+stage_security_scan() {
+    # 安全扫描统一入口：一个横幅下按固定顺序派发 5 个可选扫描
+    # 每个扫描保留独立开关（flag 或 PIPELINE_*）；全部未启用时只输出一行汇总跳过提示
+    # 镜像扫描 stage_security_image 不属本组：它扫构建产物镜像，位置固定 build 后 / deploy 前
+    _msg stage "$(_t '安全扫描' 'security scan')"
+
+    ## 顺序即执行顺序；&& 链在 [[ ]] 失败时不触发 errexit（同 config_stages 既有写法）
+    local -a todo=()
+    [[ "${arg_security_zap:-false}" == true || "${PIPELINE_SCAN_ZAP:-false}" == true ]] && todo+=(_scan_zap)
+    [[ "${arg_security_vulmap:-false}" == true || "${PIPELINE_SCAN_VULMAP:-false}" == true ]] && todo+=(_scan_vulmap)
+    [[ "${arg_security_semgrep:-false}" == true || "${PIPELINE_SEMGREP:-false}" == true ]] && todo+=(_scan_semgrep)
+    [[ "${arg_security_sca:-false}" == true || "${PIPELINE_SCA:-false}" == true ]] && todo+=(_scan_sca)
+    [[ "${arg_security_gitleaks:-false}" == true || "${PIPELINE_GITLEAKS:-false}" == true ]] && todo+=(_scan_gitleaks)
+
+    if [[ ${#todo[@]} -eq 0 ]]; then
+        _msg note "$(_t '跳过' 'skipped') (--security-zap / --security-vulmap / --scan-semgrep / --scan-sca / --scan-gitleaks，或对应 PIPELINE_*=true)"
         return 0
     fi
+
+    local fn
+    for fn in "${todo[@]}"; do
+        "$fn"
+    done
+}
+
+_scan_zap() {
+    # OWASP ZAP 安全扫描（由 stage_security_scan 按开关派发）
+    _msg task "ZAP scan (optional: --security-zap)"
 
     local target_url="${ENV_TARGET_URL}"
     local zap_image="${ENV_ZAP_IMAGE:-owasp/zap2docker-stable}"
 
     if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] stage_security_zap:"
+        _msg note "[dry-run] _scan_zap:"
         _msg note "  ${G_RUN} -v ${G_ARTIFACT_DIR}/reports:/zap/wrk ${zap_image} zap-full-scan.sh ${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"
         return 0
     fi
@@ -63,14 +83,9 @@ stage_security_zap() {
     _msg task "ZAP scan completed"
 }
 
-stage_security_vulmap() {
-    # Vulmap 漏洞扫描
-    _msg stage "$(_t '安全扫描vulmap' 'security scan with vulmap')"
+_scan_vulmap() {
+    # Vulmap 漏洞扫描（由 stage_security_scan 按开关派发）
     _msg task "vulmap scan (optional: --security-vulmap)"
-    if ! ${arg_security_vulmap:-false} && [[ "${PIPELINE_SCAN_VULMAP:-false}" != true ]]; then
-        _msg note "$(_t '跳过' 'skipped') (--security-vulmap / PIPELINE_SCAN_VULMAP=true)"
-        return 0
-    fi
 
     local config_file="$G_DATA/conf/config.cfg"
     local output_file="vulmap_report.html"
@@ -84,7 +99,7 @@ stage_security_vulmap() {
     fi
 
     if ${G_DRY_RUN:-false}; then
-        _msg note "[dry-run] stage_security_vulmap:"
+        _msg note "[dry-run] _scan_vulmap:"
         _msg note "  ${G_RUN} -v ${G_ARTIFACT_DIR}/reports:/work vulmap -u ${ENV_TARGET_URL} -o /work/${output_file}"
         return 0
     fi
@@ -512,14 +527,9 @@ EOF
     _msg task "Checkstyle analysis completed"
 }
 
-stage_security_semgrep() {
-    # Semgrep SAST 扫描（静态应用安全测试，多语言通用规则）
-    _msg stage "$(_t 'SAST扫描' 'SAST scan (semgrep)')"
+_scan_semgrep() {
+    # Semgrep SAST 扫描（静态应用安全测试，多语言通用规则；由 stage_security_scan 派发）
     _msg task "Semgrep SAST scan (optional: --scan-semgrep)"
-    if ! ${arg_security_semgrep:-false} && [[ "${PIPELINE_SEMGREP:-false}" != true ]]; then
-        _msg note "$(_t '跳过' 'skipped') (--scan-semgrep / PIPELINE_SEMGREP=true)"
-        return 0
-    fi
 
     dry_run_skip "run semgrep: docker ... semgrep/semgrep scan --config=auto --json" && return 0
 
@@ -538,14 +548,9 @@ stage_security_semgrep() {
     return 0
 }
 
-stage_security_sca() {
-    # Trivy SCA 扫描（软件成分分析，依赖漏洞）
-    _msg stage "$(_t '依赖漏洞扫描' 'dependency scan (SCA)')"
+_scan_sca() {
+    # Trivy SCA 扫描（软件成分分析，依赖漏洞；由 stage_security_scan 派发）
     _msg task "Trivy SCA scan (optional: --scan-sca)"
-    if ! ${arg_security_sca:-false} && [[ "${PIPELINE_SCA:-false}" != true ]]; then
-        _msg note "$(_t '跳过' 'skipped') (--scan-sca / PIPELINE_SCA=true)"
-        return 0
-    fi
 
     dry_run_skip "run trivy fs: docker ... aquasec/trivy fs --scanners vuln --exit-code 1" && return 0
 
@@ -596,14 +601,9 @@ stage_security_image() {
     return 0
 }
 
-stage_security_gitleaks() {
-    # Gitleaks 密钥泄露扫描
-    _msg stage "$(_t '密钥扫描' 'secret scan (gitleaks)')"
+_scan_gitleaks() {
+    # Gitleaks 密钥泄露扫描（由 stage_security_scan 派发）
     _msg task "Gitleaks secret scan (optional: --scan-gitleaks)"
-    if ! ${arg_security_gitleaks:-false} && [[ "${PIPELINE_GITLEAKS:-false}" != true ]]; then
-        _msg note "$(_t '跳过' 'skipped') (--scan-gitleaks / PIPELINE_GITLEAKS=true)"
-        return 0
-    fi
 
     dry_run_skip "run gitleaks: docker ... gitleaks --path=$G_REPO_DIR --config=conf/templates/config.toml" && return 0
 

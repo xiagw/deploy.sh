@@ -577,7 +577,7 @@ stage_build() {
 
     ## 研发控制权清单：git 提交以下文件即可接管对应环节；tests 类默认跳过，需指定参数或环境变量启用。
     ## 每行格式: 文件 -> 作用；启用方式
-    _msg note "（默认使用 CI/CD 自动模板）研发可提交以下文件接管构建环节:"
+    _msg note "研发可提交以下文件接管自动构建环节（默认使用 CI/CD 自动模板）:"
     _msg note "  Dockerfile.base -> 基础镜像 (可选/非必须; 预装依赖，相当于中间层缓存) "
     _msg note "    重建时机: 首次构建 或 依赖声明变更 (node=package.json / php=composer.json / python=requirements.txt)"
     _msg note "    声明未变且 registry 已有 base 时直接复用 (构建快), base 由 deploy.sh 自动构建并推送"
