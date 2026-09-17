@@ -253,7 +253,7 @@ deploy_to_kubernetes() {
         --install
         --namespace "${G_NAMESPACE:?namespace parameter is required}"
         --create-namespace
-        --history-max "${ENV_HELM_HISTORY_MAX:-3}"
+        --history-max "${ENV_HELM_HISTORY_MAX:-2}"
         --hide-notes
         --timeout "${ENV_HELM_TIMEOUT:-120s}"
         --set "image.pullPolicy=Always"
