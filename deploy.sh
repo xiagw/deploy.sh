@@ -75,10 +75,15 @@ config_repo_vars() {
     G_IMAGE_TAG="t$(date +%s%3N)"
 
     ## Docker镜像仓库路径配置
-    ## 如果启用 ENV_DOCKER_IMAGE_RANDOM=true，会在仓库路径中添加随机字符前缀
+    ## ENV_DOCKER_IMAGE_RANDOM=true 的动因：阿里云 ACR 个人版（免费）配额为命名空间 3 个 /
+    ##   仓库 300 个，且不提供 OpenAPI 与「版本自动清理」（官方文档：该能力仅企业版有），
+    ##   发布频繁时单仓库 tag 会无限堆积、只能靠 --clean-tags 手动清。故按 a-o 两字符散列到
+    ##   225 个仓库把 tag 摊薄（官方文档未给出 tag 数影响性能的依据；个人版的性能口径是拉取
+    ##   QPS 不保障、并发拉取建议 <10，与仓库/tag 数无关）。
+    ## 代价：仓库名每次运行重新随机、不可推导，清理需遍历这 225 个名字，且占掉 300 配额中的 225 个。
     ## 格式说明:
     ##   1. ENV_DOCKER_IMAGE_RANDOM=false: $ENV_DOCKER_REGISTRY/$G_REPO_NAME:$G_IMAGE_TAG
-    ##   2. ENV_DOCKER_IMAGE_RANDOM=true:  $ENV_DOCKER_REGISTRY/$RANDOM_CHARS:$G_IMAGE_TAG
+    ##   2. ENV_DOCKER_IMAGE_RANDOM=true:  $ENV_DOCKER_REGISTRY/<两个 a-o 字符>:$G_IMAGE_TAG
     ENV_DOCKER_REGISTRY="${ENV_DOCKER_REGISTRY:-example.com/myrepo}"
     if [[ "${ENV_DOCKER_IMAGE_RANDOM:-${ENV_DOCKER_RANDOM:-false}}" = true ]]; then
         local chars

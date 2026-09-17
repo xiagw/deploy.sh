@@ -109,30 +109,15 @@ record_deployed_image() {
         previous_image=$(<"${image_record_file}")
         if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
             _msg task "Deleting previous image: ${previous_image}"
+            ## 删除只走 registry v2 协议（skopeo）：ACR 个人版官方明确不提供 OpenAPI；
+            ## 企业版的 delete-repo-tag 需要实例ID + 仓库ID（还须先 list-repository 查），
+            ## 本工具没有这些配置项，故不再保留 aliyun CLI 兜底。
             if command -v skopeo >/dev/null 2>&1; then
-                skopeo delete "docker://${previous_image}" &
-            elif command -v aliyun >/dev/null 2>&1; then
-                # Try aliyun CLI for ACR deletion when registry matches
-                # previous_image format: <registry>/<repo_path>:<tag>
-                local registry_prefix="${ENV_DOCKER_REGISTRY%/}"
-                if [[ "${previous_image}" == "${registry_prefix}"* ]]; then
-                    local rest repo_and_tag image_repo image_tag repo_ns repo_name
-                    rest="${previous_image#"${registry_prefix}"/}"
-                    repo_and_tag="${rest}"
-                    image_repo="${repo_and_tag%:*}"
-                    image_tag="${repo_and_tag#*:}"
-                    if [[ "${image_repo}" == "${image_tag}" ]]; then
-                        image_tag="latest"
-                    fi
-                    repo_ns="${image_repo%/*}"
-                    repo_name="${image_repo##*/}"
-                    _msg task "Deleting ACR image via aliyun CLI: ${repo_ns}/${repo_name}:${image_tag}"
-                    aliyun -p "${ENV_ALIYUN_CLI_PROFILE:-default}" cr DeleteImage --RepoNamespace "${repo_ns}" --RepoName "${repo_name}" --ImageTag "${image_tag}" >/dev/null &
-                else
-                    _msg warn "Previous image registry does not match ENV_DOCKER_REGISTRY, skipping aliyun delete"
+                if ! skopeo delete "docker://${previous_image}"; then
+                    _msg warn "Failed to delete previous image (ignored): ${previous_image}"
                 fi
             else
-                _msg warn "Neither skopeo nor aliyun CLI found; skip remote delete of ${previous_image}"
+                _msg warn "skopeo not found; skip remote delete of ${previous_image}"
             fi
         fi
     fi

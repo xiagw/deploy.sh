@@ -79,17 +79,17 @@ flowchart TD
 
 ## 2. 功能（按模块）
 
-### 2.1 deploy.sh（主脚本）— 569 行
+### 2.1 deploy.sh（主脚本）
 
-| 函数 | 行号 | 功能 |
-|---|---|---|
-| `config_repo_vars` | 29 | 设定仓库信息、分支→命名空间映射、镜像标签等全局变量 |
-| `usage` | 122 | 打印全部 CLI 参数帮助 |
-| `parse_args` | 204 | 解析参数，组装 `RUN` 数组（位置即依赖顺序，见 §3.1） |
-| `config_build_env` | 389 | 选择 docker/podman，配置 `G_DOCK`/`G_RUN`/`G_PROGRESS` 与 `IS_CHINA` |
-| `main` | 451 | 主流程编排（见第 3 节） |
+| 函数 | 功能 |
+|---|---|
+| `config_repo_vars` | 设定仓库信息、分支→命名空间映射、镜像标签等全局变量 |
+| `usage` | 打印全部 CLI 参数帮助 |
+| `parse_args` | 解析参数，组装 `RUN` 数组（位置即依赖顺序，见 §3.1） |
+| `config_build_env` | 选择 docker/podman，配置 `G_DOCK`/`G_RUN`/`G_PROGRESS` 与 `IS_CHINA` |
+| `main` | 主流程编排（见第 3 节） |
 
-### 2.2 lib/common.sh — 1746 行（基础设施）
+### 2.2 lib/common.sh（基础设施）
 
 - **日志/消息**：`_log`（级别+颜色+时间戳，写文件/终端）、`_msg`（统一消息分发，9 种类型）、`_t`/`_msg_lang`（中英 i18n）。
 - **时间工具**：`_fmt_dur`（秒→`0h01m05s`）、`_now_ms`（毫秒，三级回退：`EPOCHREALTIME`→`date +%s%3N`→`SECONDS*1000`）。
@@ -101,31 +101,31 @@ flowchart TD
 - **镜像切换**：`_set_mirror`（仅 `IS_CHINA` 时生效，os/composer/node/python 四类源）。
 - **其他**：`_notify_wecom`、`get_oom_score`、`clean_snap`、`clean_runtime`、`get_github_latest_download`（解析 GitHub API 最新 release，grep/sed 免 jq）、`_install_acme_official/_github`、`_compress_pdf_with_gs/_compress_document`（PDF/PPT 压缩）。
 
-### 2.3 lib/config.sh — 260 行（配置管理）
+### 2.3 lib/config.sh（配置管理）
 
-| 函数 | 行号 | 功能 |
-|---|---|---|
-| `find_project_config` | 21 | 定位/从模板创建 `data/conf/<ns>/<project>.json`，设 `G_CONF` |
-| `check_project_config_template` | 88 | 校验项目配置残留模板示例值（RFC 5737/保留域名） |
-| `config_deploy_init` | 131 | 初始化 `deploy.env`（无则复制模板）、建 data 目录、PATH 追加工具目录 |
-| `_load_project_build_deploy_config` | 176 | 用 jq 解析 JSON，导出 `PROJECT_BUILD_METHOD`/`PROJECT_DEPLOY_METHOD` 等覆盖项 |
-| `config_deploy_setup` | 213 | 生成 SSH ed25519 密钥、为 .ssh/.acme.sh/.aws/.kube/.aliyun 建 $HOME 符号链接、glab 配置目录链接 |
+| 函数 | 功能 |
+|---|---|
+| `find_project_config` | 定位/从模板创建 `data/conf/<ns>/<project>.json`，设 `G_CONF` |
+| `check_project_config_template` | 校验项目配置残留模板示例值（RFC 5737/保留域名） |
+| `config_deploy_init` | 初始化 `deploy.env`（无则复制模板）、建 data 目录、PATH 追加工具目录 |
+| `_load_project_build_deploy_config` | 用 jq 解析 JSON，导出 `PROJECT_BUILD_METHOD`/`PROJECT_DEPLOY_METHOD` 等覆盖项 |
+| `config_deploy_setup` | 生成 SSH ed25519 密钥、为 .ssh/.acme.sh/.aws/.kube/.aliyun 建 $HOME 符号链接、glab 配置目录链接 |
 
-### 2.4 lib/system.sh — 502 行（系统维护）
+### 2.4 lib/system.sh（系统维护）
 
-| 函数 | 行号 | 功能 |
-|---|---|---|
-| `check_crontab_execution` | 12 | cron 触发时按 `data/crontab.<project_id>.<sha>` 标记避免同 commit 重复执行 |
-| `system_clean_disk` | 43 | 根分区 ≥80% 触发清理：docker prune/registry 镜像、/tmp、/var/log，>90% 进 aggressive（+system prune、/var/crash） |
-| `system_check` | 114 | 识别发行版并按发行版补齐 git/git-lfs/curl/rsync/pip 等工具 |
-| `system_proxy` | 177 | 开/关 http(s)/socks/all/no_proxy 环境变量（带回退） |
-| `system_cert_renew` | 213 | acme.sh 多账号续签全部证书 + glab API 触发 gitlab nginx 流水线（免 python-gitlab） |
-| `system_install_tools` | 409 | 装 jq；CI 模式装全量工具 |
-| `check_docker_available` | 430 | 检测 docker 命令与 daemon |
-| `check_k8s_available` | 446 | 检测 kubectl + 集群连通（helm 可选）；本机 kubectl 优先，缺则 bitnami 镜像容器化探测 |
-| `check_helm_charts_exist` | 479 | 检查 6 个候选 helm charts 目录 |
+| 函数 | 功能 |
+|---|---|
+| `check_crontab_execution` | cron 触发时按 `data/crontab.<project_id>.<sha>` 标记避免同 commit 重复执行 |
+| `system_clean_disk` | 根分区 ≥80% 触发清理：docker prune/registry 镜像、/tmp、/var/log，>90% 进 aggressive（+system prune、/var/crash） |
+| `system_check` | 识别发行版并按发行版补齐 git/git-lfs/curl/rsync/pip 等工具 |
+| `system_proxy` | 开/关 http(s)/socks/all/no_proxy 环境变量（带回退） |
+| `system_cert_renew` | acme.sh 多账号续签全部证书 + glab API 触发 gitlab nginx 流水线（免 python-gitlab） |
+| `system_install_tools` | 装 jq；CI 模式装全量工具 |
+| `check_docker_available` | 检测 docker 命令与 daemon |
+| `check_k8s_available` | 检测 kubectl + 集群连通（helm 可选）；本机 kubectl 优先，缺则 bitnami 镜像容器化探测 |
+| `check_helm_charts_exist` | 检查 6 个候选 helm charts 目录 |
 
-### 2.5 lib/repo.sh — 629 行（仓库操作）
+### 2.5 lib/repo.sh（仓库操作）
 
 - `repo_overlay_files`（8）：把 `data/overlay/<仓库名>/[<命名空间>/]` 代码覆盖 rsync 进仓库（exclude `Dockerfile.*` 构建文件），再把 conf/root 结构注入；仓库未 git 跟踪 `Dockerfile*` 时按模板生成 Dockerfile.base/Dockerfile。注入顺序见下表：
 
@@ -146,85 +146,85 @@ flowchart TD
 - `setup_git_repo`（440） / `setup_svn_repo`（606）：clone/checkout 或更新已有仓库。
 - `get_git_branch`（566） / `get_git_commit_sha`（581） / `get_git_last_commit_message`（596）：从 CI 环境变量或 git 命令取信息，带多级回退。
 
-### 2.6 lib/test.sh — 184 行（测试）
+### 2.6 lib/test.sh（测试）
 
 三层测试（单元/功能/性能）统一容器化：构建仓库根 `Dockerfile.tests`（或 `ENV_TEST_IMAGE`）镜像，`docker run` 执行，测试入口由镜像 CMD/ENTRYPOINT 承载。受 `--test-unit` / `--test-function` / `--test-performance`（及 `PIPELINE_*_TEST`）开关控制；无测试镜像时跳过。
 
-### 2.7 lib/analysis.sh — 602 行（代码分析/安全）
+### 2.7 lib/analysis.sh（代码分析/安全）
 
-| 函数 | 行号 | 工具（Docker） | 开关 |
-|---|---|---|---|
-| `analysis_gitleaks` | 13 | zricethezav/gitleaks:v7.5.0 | — |
-| `stage_security_zap` | 38 | owasp/zap2docker-stable | `PP_SCAN_ZAP` / `-z` |
-| `stage_security_vulmap` | 66 | 本地 vulmap | `PP_SCAN_VULMAP` / `-m` |
-| `stage_code_quality` | 99 | sonar + 语言分析分发 | `PP_SONAR` + `PP_PMD/CODECLIMATE/SPOTBUGS/PYLINT/CHECKSTYLE` |
-| `analysis_pmd` | 167 | pmd/pmd:6.55.0 | `PP_PMD` |
-| `analysis_codeclimate` | 211 | codeclimate/codeclimate | `PP_CODECLIMATE` |
-| `analysis_spotbugs` | 317 | spotbugs/spotbugs:4.7.3 | `PP_SPOTBUGS` |
-| `analysis_pylint` | 376 | python:2.17.5-slim | `PP_PYLINT` |
-| `analysis_checkstyle` | 423 | checkstyle/checkstyle:10.12.4 | `PP_CHECKSTYLE` |
-| `stage_security_semgrep` | 501 | semgrep/semgrep（SAST） | `PP_SEMGREP` / `--scan-semgrep` |
-| `stage_security_sca` | 527 | aquasec/trivy（SCA fs） | `PP_SCA` / `--scan-sca` |
-| `stage_security_image` | 554 | aquasec/trivy（镜像，build 后） | `PP_SCAN_IMAGE` / `--scan-image` |
-| `stage_security_gitleaks` | 585 | gitleaks（密钥） | `PP_GITLEAKS` / `--scan-gitleaks` |
+| 函数 | 工具（Docker） | 开关 |
+|---|---|---|
+| `analysis_gitleaks` | zricethezav/gitleaks:v7.5.0 | — |
+| `stage_security_zap` | owasp/zap2docker-stable | `PP_SCAN_ZAP` / `-z` |
+| `stage_security_vulmap` | 本地 vulmap | `PP_SCAN_VULMAP` / `-m` |
+| `stage_code_quality` | sonar + 语言分析分发 | `PP_SONAR` + `PP_PMD/CODECLIMATE/SPOTBUGS/PYLINT/CHECKSTYLE` |
+| `analysis_pmd` | pmd/pmd:6.55.0 | `PP_PMD` |
+| `analysis_codeclimate` | codeclimate/codeclimate | `PP_CODECLIMATE` |
+| `analysis_spotbugs` | spotbugs/spotbugs:4.7.3 | `PP_SPOTBUGS` |
+| `analysis_pylint` | python:2.17.5-slim | `PP_PYLINT` |
+| `analysis_checkstyle` | checkstyle/checkstyle:10.12.4 | `PP_CHECKSTYLE` |
+| `stage_security_semgrep` | semgrep/semgrep（SAST） | `PP_SEMGREP` / `--scan-semgrep` |
+| `stage_security_sca` | aquasec/trivy（SCA fs） | `PP_SCA` / `--scan-sca` |
+| `stage_security_image` | aquasec/trivy（镜像，build 后） | `PP_SCAN_IMAGE` / `--scan-image` |
+| `stage_security_gitleaks` | gitleaks（密钥） | `PP_GITLEAKS` / `--scan-gitleaks` |
 
 统一模式：开关未启用输出 `⋯ 跳过 (PP_XX=false)`；失败 `✗ ... failed` return 1（pylint 例外，仅 warn）。
 报告统一落在 `data/reports/security/`（semgrep.json / trivy-fs.json / trivy-image.json）。
 
-### 2.8 lib/style.sh — 229 行（代码风格）
+### 2.8 lib/style.sh（代码风格）
 
 每个语言一个 `style_check_<lang>`（phpcs+php-cs-fixer/ktlint/pylint+black+isort/eslint+prettier/checkstyle/gofmt+golangci-lint/rustfmt+clippy/rubocop/clang-format/hadolint/dotnet format），全部走 Docker 容器执行，由 `PIPELINE_*_CODE_STYLE` 开关控制。`stage_code_style` 总调度。
 
-### 2.9 lib/build.sh — 1083 行（构建）
+### 2.9 lib/build.sh（构建）
 
-| 函数 | 行号 | 功能 |
-|---|---|---|
-| `ensure_buildx_builder` | 11 | 用 `ENV_BUILDX_REMOTE_HOSTS` 创建 docker-container 驱动多节点 builder |
-| `ensure_buildx_builder_kubernetes` | 37 | 创建 kubernetes 驱动 builder |
-| `enable_buildx_mode` | 55 | 按 `ENV_BUILDX_MODE`（auto/kubernetes/remote）选 builder |
-| `generate_bake_file` | 93 | 生成 `docker-bake.hcl`（default + base 双 target；支持多架构 `ENV_BUILDX_PLATFORMS`、BuildKit 缓存 `ENV_BUILDX_CACHE`） |
-| `build_image` | 290 | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略 |
-| `stage_build` | 509 | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
-| `build_<lang>` | 601+ | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建（java/node 工具镜像可用 `ENV_BASE_BUILD_IMAGE` 覆盖） |
-| `docker_login` | 893 | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
-| `generate_base_dockerfile` / `generate_lang_dockerfile` | 940/967 | 生成基础/语言 Dockerfile |
-| `detect_repo_language_and_build` | 995 | 用 Cloud Native Buildpacks（pack）构建 |
+| 函数 | 功能 |
+|---|---|
+| `ensure_buildx_builder` | 用 `ENV_BUILDX_REMOTE_HOSTS` 创建 docker-container 驱动多节点 builder |
+| `ensure_buildx_builder_kubernetes` | 创建 kubernetes 驱动 builder |
+| `enable_buildx_mode` | 按 `ENV_BUILDX_MODE`（auto/kubernetes/remote）选 builder |
+| `generate_bake_file` | 生成 `docker-bake.hcl`（default + base 双 target；支持多架构 `ENV_BUILDX_PLATFORMS`、BuildKit 缓存 `ENV_BUILDX_CACHE`） |
+| `build_image` | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略 |
+| `stage_build` | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
+| `build_<lang>` | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建（java/node 工具镜像可用 `ENV_BASE_BUILD_IMAGE` 覆盖） |
+| `docker_login` | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
+| `generate_base_dockerfile` / `generate_lang_dockerfile` | 生成基础/语言 Dockerfile |
+| `detect_repo_language_and_build` | 用 Cloud Native Buildpacks（pack）构建 |
 
-### 2.10 lib/deployment.sh — 1145 行（部署）
+### 2.10 lib/deployment.sh（部署）
 
-| 函数 | 行号 | 功能 |
-|---|---|---|
-| `format_release_name` | 8 | 规范化 helm release 名 |
-| `execute_custom_deploy_hook` | 41 | 执行项目自定义部署钩子 |
-| `_project_hosts` / `_rsync_exclude_file` / `_project_rsync_src` | 50/58/65 | 从项目配置取主机/排除规则/上传源目录 |
-| `_project_oss_dest` | 75 | 从项目配置取 OSS 目标路径 |
-| `record_deployed_image` | 88 | 记录当前镜像，成功后用 skopeo/aliyun 删旧镜像 |
-| `cleanup_evicted_pods` | 134 | 后台清理 Evicted pod |
-| `deploy_to_kubernetes` | 241 | helm upgrade/install + rollout 探活 + 回滚 |
-| `deploy_aliyun_functions` | 348 | 阿里云函数计算创建/更新 + HTTP trigger |
-| `deploy_via_rsync_ssh` | 422 | 逐台主机 rsync+ssh（含模板配置校验、oss:// 分流） |
-| `deploy_aliyun_oss` | 529 | ossutil 递归上传 |
-| `deploy_via_rsync` | 558 | rsyncd daemon 模式 |
-| `deploy_via_ftp` / `deploy_via_sftp` | 589/629 | tar 打包后 ftp/sftp 批量上传 |
-| `deploy_to_docker_compose` | 712 | rsync + ssh 执行 `compose up -d --build` |
-| `detect_deployment_method` | 768 | 自动探测部署方式（见 4.4） |
-| `stage_deploy` | 891 | 部署入口分发，返回 `G_DEPLOY_RESULT` |
-| `copy_docker_image` | 973 | skopeo 多架构镜像跨 registry 复制 |
-| `clean_old_tags` | 1056 | 删除 180 天前的旧 tag（含无时间戳处理） |
+| 函数 | 功能 |
+|---|---|
+| `format_release_name` | 规范化 helm release 名 |
+| `execute_custom_deploy_hook` | 执行项目自定义部署钩子 |
+| `_project_hosts` / `_rsync_exclude_file` / `_project_rsync_src` | 从项目配置取主机/排除规则/上传源目录 |
+| `_project_oss_dest` | 从项目配置取 OSS 目标路径 |
+| `record_deployed_image` | 记录当前镜像，成功后用 skopeo 删旧镜像 |
+| `cleanup_evicted_pods` | 后台清理 Evicted pod |
+| `deploy_to_kubernetes` | helm upgrade/install + rollout 探活 + 回滚 |
+| `deploy_aliyun_functions` | 阿里云函数计算创建/更新 + HTTP trigger |
+| `deploy_via_rsync_ssh` | 逐台主机 rsync+ssh（含模板配置校验、oss:// 分流） |
+| `deploy_aliyun_oss` | ossutil 递归上传 |
+| `deploy_via_rsync` | rsyncd daemon 模式 |
+| `deploy_via_ftp` / `deploy_via_sftp` | tar 打包后 ftp/sftp 批量上传 |
+| `deploy_to_docker_compose` | rsync + ssh 执行 `compose up -d --build` |
+| `detect_deployment_method` | 自动探测部署方式（见 4.4） |
+| `stage_deploy` | 部署入口分发，返回 `G_DEPLOY_RESULT` |
+| `copy_docker_image` | skopeo 多架构镜像跨 registry 复制 |
+| `clean_old_tags` | 删除 180 天前的旧 tag（含无时间戳处理） |
 
-### 2.11 lib/kubernetes.sh — 482 行（K8s）
+### 2.11 lib/kubernetes.sh（K8s）
 
-| 函数 | 行号 | 功能 |
-|---|---|---|
-| `kube_config_init` | 9 | 配 kubectl/helm 执行上下文（本机命令优先，缺则 bitnami 镜像容器化，见 §2.2），按 7 路径搜 kubeconfig，设 `KUBECTL_OPT`/`HELM_OPT` |
-| `create_helm_chart` | 62 | helm create 脚手架 + sed 定制（端口/资源/探针/PVC/dnsConfig） |
-| `kube_setup_terraform` | 168 | terraform 创建集群（本机 terraform 优先，缺则容器化） |
-| `kube_create_storage_class` | 200 | 阿里云 CNFS NAS + StorageClass |
-| `kube_create_pv_pvc` | 255 | NAS subpath 的 PV/PVC |
-| `build_base_image` | 327 | buildx bake 多平台构建基础镜像（tag 加 `-base`） |
-| `build_base_image_select` | 461 | fzf 交互选择基础镜像 tag |
+| 函数 | 功能 |
+|---|---|
+| `kube_config_init` | 配 kubectl/helm 执行上下文（本机命令优先，缺则 bitnami 镜像容器化，见 §2.2），按 7 路径搜 kubeconfig，设 `KUBECTL_OPT`/`HELM_OPT` |
+| `create_helm_chart` | helm create 脚手架 + sed 定制（端口/资源/探针/PVC/dnsConfig） |
+| `kube_setup_terraform` | terraform 创建集群（本机 terraform 优先，缺则容器化） |
+| `kube_create_storage_class` | 阿里云 CNFS NAS + StorageClass |
+| `kube_create_pv_pvc` | NAS subpath 的 PV/PVC |
+| `build_base_image` | buildx bake 多平台构建基础镜像（tag 加 `-base`） |
+| `build_base_image_select` | fzf 交互选择基础镜像 tag |
 
-### 2.12 lib/notify.sh — 156 行（通知）
+### 2.12 lib/notify.sh（通知）
 
 `handle_notify` 构造消息（Repo/Branche/Pipeline/Who/Describe/Result/Test_Result），按 `ENV_NOTIFY_TYPE` 分发到 wecom/telegram/element/email/zoom/feishu。受 `PIPELINE_NOTIFY`、`ENV_DISABLE_NOTIFY`、`ENV_DISABLE_NOTIFY_BRANCH`（默认 develop|testing）控制。
 
@@ -309,10 +309,10 @@ repo_overlay_files    →  覆盖 conf/root、生成 Dockerfile.base/Dockerfile 
 
 链内强顺序约束（依据）：
 
-- `config_repo_vars` 必须在仓库准备（setup_git_branch）之后：`get_git_branch` 优先读 CI 变量，本地场景回退 `git rev-parse`（repo.sh:566），分支切换必须先于该读取。
-- `find_project_config`（若进入）必须在 `config_repo_vars` 之后：读 `G_REPO_GROUP_PATH`。仅在计划含 stage_build（读 PROJECT_BUILD_METHOD，build.sh:521）或 stage_deploy（读 G_CONF hosts / PROJECT_DEPLOY_METHOD，deployment.sh:768/778）时进入；独立功能与测试跳过，避免无关配置阻断或模板残留告警。
+- `config_repo_vars` 必须在仓库准备（setup_git_branch）之后：`get_git_branch` 优先读 CI 变量，本地场景回退 `git rev-parse`（`repo.sh get_git_branch`），分支切换必须先于该读取。
+- `find_project_config`（若进入）必须在 `config_repo_vars` 之后：读 `G_REPO_GROUP_PATH`。仅在计划含 stage_build（读 PROJECT_BUILD_METHOD，`build.sh stage_build`）或 stage_deploy（读 G_CONF hosts / PROJECT_DEPLOY_METHOD，`deployment.sh detect_deployment_method`）时进入；独立功能与测试跳过，避免无关配置阻断或模板残留告警。
 - `kube_config_init` 必须在 `config_repo_vars` 之后：读 `G_NAMESPACE`。
-- `config_build_env` 计算 `IS_CHINA`，此前必须保持 unset：`_install_packages → _set_mirror`（common.sh:1218）读 `IS_CHINA` 决定是否改写 apt 源。
+- `config_build_env` 计算 `IS_CHINA`，此前必须保持 unset：`_install_packages → _set_mirror`（`common.sh _set_mirror`）读 `IS_CHINA` 决定是否改写 apt 源。
 
 ### 3.4 两种模式与阶段调度
 
@@ -343,14 +343,14 @@ repo_overlay_files    →  覆盖 conf/root、生成 Dockerfile.base/Dockerfile 
 | `setup_svn_repo` | `-s` | config_deploy_init，自装 svn | 链首 |
 | `setup_git_branch` | `-b` 且无 `-g` | git + G_REPO_DIR | 链首；须在 config_repo_vars 前 |
 | `clean_old_tags` | `--clean-tags` | 仅 ENV_CLEAN_TAGS_* + skopeo（不自装） | config_deploy_init 后即可 |
-| `kube_setup_terraform` | `-K` | 仅 G_DATA/terraform，terraform 本机优先，缺则容器化（common.sh:994 _install_terraform） | config_deploy_init 后即可 |
+| `kube_setup_terraform` | `-K` | 仅 G_DATA/terraform，terraform 本机优先，缺则容器化（`common.sh _install_terraform`） | config_deploy_init 后即可 |
 | `copy_docker_image` | `-c` | ENV_DOCKER_MIRROR + skopeo + system_proxy（中国区代理） | system_proxy 后 |
-| `system_cert_renew` | `-r` | `$HOME/.acme.sh` 账号文件 + config_deploy_setup（软依赖，仅当 G_DATA/.acme.sh 存在才建链接，config.sh:251）+ glab API 触发流水线 | config_deploy_setup 后 |
+| `system_cert_renew` | `-r` | `$HOME/.acme.sh` 账号文件 + config_deploy_setup（软依赖，仅当 G_DATA/.acme.sh 存在才建链接，见 `config.sh config_deploy_setup`）+ glab API 触发流水线 | config_deploy_setup 后 |
 | `generate_lang_dockerfile` | `--gen-dockerfile` | G_REPO_DIR + detect_repo_language | config_repo_vars 后 |
 | `detect_repo_language_and_build` | `--build-buildpacks` | G_REPO_DIR + G_IMAGE_NAME/TAG + pack | config_repo_vars 后；须在 repo_overlay_files 前（构建语义） |
 | `kube_create_storage_class` | `--create-storage-class` | KUBECTL_OPT（kube_config_init）+ G_NAMESPACE + ENV_NAS_URL | kube_config_init 后 |
 | `kube_create_pv_pvc` | `-P` | KUBECTL_OPT + G_NAMESPACE | kube_config_init 后 |
-| `build_base_image_select` | `-x` | ENV_DOCKER_* + G_PATH/conf + **IS_CHINA**（kubernetes.sh:419/446 读 `IS_CHINA:-true`） | config_build_env 后 |
+| `build_base_image_select` | `-x` | ENV_DOCKER_* + G_PATH/conf + **IS_CHINA**（`kubernetes.sh build_base_image_select` 读 `IS_CHINA:-true`） | config_build_env 后 |
 
 > 注：`build_base_image_select` 不依赖 `find_project_config`，但依赖 `config_build_env` 设置的
 > `IS_CHINA`（提前会令 `${IS_CHINA:-true}` 默认命中中国镜像源），故只能放到 config_build_env 之后，无法更早。
@@ -403,13 +403,13 @@ handle_notify                 # 恒执行（末尾）
 
 ### 3.7 关键约束说明
 
-1. **仓库准备必须早于 config_repo_vars**：`get_git_branch`/`get_git_commit_sha` 在本地回退读 `G_REPO_DIR` 的 git（repo.sh:566/581），`setup_git_branch` 先切换分支。
-2. **kube_create_\* 必须晚于 kube_config_init**：直接用 `$KUBECTL_OPT`（kubernetes.sh:200/255）。
-3. **build_base_image_select 必须晚于 config_build_env**：读 `IS_CHINA`（kubernetes.sh:419/446），而 IS_CHINA 仅由 config_build_env 计算（deploy.sh:390-393），且其前须保持 unset（_set_mirror 依赖）。
+1. **仓库准备必须早于 config_repo_vars**：`get_git_branch`/`get_git_commit_sha` 在本地回退读 `G_REPO_DIR` 的 git（`repo.sh get_git_branch`/`get_git_commit_sha`），`setup_git_branch` 先切换分支。
+2. **kube_create_\* 必须晚于 kube_config_init**：直接用 `$KUBECTL_OPT`（`kubernetes.sh kube_create_storage_class`/`kube_create_pv_pvc`）。
+3. **build_base_image_select 必须晚于 config_build_env**：读 `IS_CHINA`（`kubernetes.sh build_base_image_select`），而 IS_CHINA 仅由 config_build_env 计算（`deploy.sh config_build_env`），且其前须保持 unset（_set_mirror 依赖）。
 4. **generate_lang_dockerfile / buildpacks 必须早于 repo_overlay_files**：先按源码生成 Dockerfile / 构建镜像，再覆盖环境配置，避免覆盖内容被构建进镜像。
 5. **copy_docker_image 必须晚于 system_proxy**：中国区 skopeo 拉取需代理。
-6. **system_cert_renew 必须晚于 config_deploy_setup**：账号文件位于 `$HOME/.acme.sh`，config_deploy_setup 仅在 `G_DATA/.acme.sh` 存在时建链接（config.sh:251），软依赖。
-7. **find_project_config 为条件步骤**：仅计划含 stage_build / stage_deploy（含自动模式）时进入；独立功能与测试跳过，避免无关配置阻断或产生模板残留告警。`stage_build` 读 `PROJECT_BUILD_METHOD`（build.sh:521），`stage_deploy` 读 `G_CONF` hosts / `PROJECT_DEPLOY_METHOD`（deployment.sh:768/778），故这两条路径必须加载。
+6. **system_cert_renew 必须晚于 config_deploy_setup**：账号文件位于 `$HOME/.acme.sh`，config_deploy_setup 仅在 `G_DATA/.acme.sh` 存在时建链接（`config.sh config_deploy_setup`），软依赖。
+7. **find_project_config 为条件步骤**：仅计划含 stage_build / stage_deploy（含自动模式）时进入；独立功能与测试跳过，避免无关配置阻断或产生模板残留告警。`stage_build` 读 `PROJECT_BUILD_METHOD`（`build.sh stage_build`），`stage_deploy` 读 `G_CONF` hosts / `PROJECT_DEPLOY_METHOD`（`deployment.sh detect_deployment_method`），故这两条路径必须加载。
 
 ### 3.8 依赖分层图
 
@@ -446,7 +446,7 @@ config_deploy_init ────────────────────�
 
 ## 4. 关键逻辑
 
-### 4.1 变量命名规范（deploy.sh:399 注释）
+### 4.1 变量命名规范（见 `deploy.sh main` 注释）
 
 | 前缀 | 含义 | 来源 |
 |---|---|---|
@@ -458,11 +458,11 @@ config_deploy_init ────────────────────�
 
 ### 4.2 优先级链（重要注释）
 
-- **仓库目录**：`-w/--workspace` > `CI_PROJECT_DIR` > `$PWD`（deploy.sh:31）。
-- **仓库名**：`GITHUB_REPOSITORY` > `CI_PROJECT_NAME` > 目录名（deploy.sh:42）。
-- **命名空间**：`GITHUB_REPOSITORY_OWNER` > `CI_PROJECT_NAMESPACE` > `root`（deploy.sh:52）。
-- **容器构建工具**：`podman` > `docker`（deploy.sh:398）。
-- **语言**：`-L/--lang` > `ENV_LANG` > `zh`（common.sh:143）。
+- **仓库目录**：`-w/--workspace` > `CI_PROJECT_DIR` > `$PWD`（`deploy.sh config_repo_vars`）。
+- **仓库名**：`GITHUB_REPOSITORY` > `CI_PROJECT_NAME` > 目录名（`deploy.sh config_repo_vars`）。
+- **命名空间**：`GITHUB_REPOSITORY_OWNER` > `CI_PROJECT_NAMESPACE` > `root`（`deploy.sh config_repo_vars`）。
+- **容器构建工具**：`podman` > `docker`（`deploy.sh config_build_env`）。
+- **语言**：`-L/--lang` > `ENV_LANG` > `zh`（`common.sh _t`）。
 - **项目配置 vs deploy.env**：JSON 中的 `build.method`/`deploy.method` 覆盖自动探测（config.sh）。
 
 ### 4.3 语言探测链
@@ -502,6 +502,7 @@ auto 优先级链：
 
 - `G_IMAGE_TAG="t$(date +%s%3N)"`（毫秒时间戳）。
 - `G_IMAGE_NAME`：`ENV_DOCKER_IMAGE_RANDOM=true` 时取 2 个随机字符（a-o），否则仓库名去 `-_` 截 10 字符。
+- 随机仓库名的动因：ACR 个人版配额为 3 命名空间 / 300 仓库，且无 OpenAPI、无「版本自动清理」（官方仅企业版支持），发布频繁会让单仓库 tag 无限堆积；故按 a-o 两字符散列到 225 个仓库摊薄 tag。代价：仓库名不可推导、清理需遍历 225 个名字（占用 300 配额中的 225）。
 - 目标镜像：`${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}`——build、deploy、record、buildpack、base image 多处复用的全工具核心命名。
 
 ### 4.7 dry-run 模式（`--dry`）
@@ -547,9 +548,9 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 ### 5.1 stage 横幅语义（重要注释，勿改）
 
-> common.sh `_msg stage` 注释：右侧耗时是**从脚本开始（`_stage_start_ms` 锚点）到当前的累计耗时**，不是"距上一阶段"的差值。累计值单调递增，任何阶段都能看出脚本已运行多久；差值会让快速阶段显示 +0s 且各阶段不直观。
+> common.sh `_msg stage 注释：右侧耗时是**从脚本开始（`_stage_start_ms` 锚点）到当前的累计耗时**，不是"距上一阶段"的差值。累计值单调递增，任何阶段都能看出脚本已运行多久；差值会让快速阶段显示 +0s 且各阶段不直观。
 
-锚点在 `deploy.sh` 中于模块加载后、BEGIN 之前设置：`_stage_start_ms=$(_now_ms)`（deploy.sh:537）。
+锚点在 `deploy.sh` 中于模块加载后、BEGIN 之前设置：`_stage_start_ms=$(_now_ms)`（`deploy.sh main`）。
 
 ### 5.2 i18n
 
@@ -567,12 +568,12 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 这些注释是历史踩坑后的结论，改动前务必先读：
 
-1. **`deploy.sh:29-119`** config_repo_vars 位置勿动——后续步骤依赖这些变量。
+1. **`deploy.sh config_repo_vars`** 位置勿动——后续步骤依赖这些变量。
 2. **`deploy.sh`** kube_config_init 须在一切 `KUBECTL_OPT`/`HELM_OPT` 用法（含 create_storage_class / kube_pvc / 部署阶段）之前。
-3. **`deploy.sh:320`** 只使用项目专用配置（`data/conf/<ns>/<project>.json`），替代单文件：避免单文件过大、减少版本冲突、更好权限控制。
-4. **`deploy.sh:92`** G_IMAGE_TAG 已简化为纯时间戳（旧格式注释保留）。
+3. **`deploy.sh parse_args`** 只使用项目专用配置（`data/conf/<ns>/<project>.json`），替代单文件：避免单文件过大、减少版本冲突、更好权限控制。
+4. **`deploy.sh config_repo_vars`** G_IMAGE_TAG 已简化为纯时间戳（旧格式注释保留）。
 5. **parse_args** 任务列表用 `RUN` 单数组组装（位置即依赖顺序），不用关联数组迭代——关联数组迭代顺序不稳定（见 §3.1 v3）。
-6. **common.sh:1-3** 需兼容 sh/bash/zsh，尽量少用不兼容命令/数组/subshell。
+6. **`common.sh` 文件头** 需兼容 sh/bash/zsh，尽量少用不兼容命令/数组/subshell。
 7. **`_msg stage`** 累计耗时语义（见 5.1），勿改成差值。
 8. **部署分发决策**：同一次运行只执行一种部署方法；多目标走 GitLab 多 job。`deploy_method` 已改为阶段 4 从 `deploy_display` 顺序表单一派生（R-3，2026-08-12），不再在 parse 双写；多方法同传 `_msg warn` 后取顺序表首个。
 9. **AGENTS.md 约定**：不保留向后兼容；用成熟库；`bash -n` + `shellcheck -S warning` 必须零输出。
@@ -586,15 +587,15 @@ Test_Result = <G_TEST_RESULT>      # 非空才追加
 
 ### C. GNU/macOS 兼容（GNU 专属命令/参数，BSD 报错）
 
-1. **repo.sh:386** `md5sum`：GNU coreutils，macOS 为 `md5`（输出格式也不同）。node 分支 `repo_overlay_files` 会走到。
-2. **system.sh:355** `sleep "${random_minute}"m`：`m` 后缀是 GNU sleep 扩展，BSD/macOS 不支持。
+1. **`repo.sh lang_dep_hash`** `md5sum`：GNU coreutils，macOS 为 `md5`（输出格式也不同）。node 分支 `repo_overlay_files` 会走到。
+2. **`system.sh system_cert_renew`** `sleep "${random_minute}"m`：`m` 后缀是 GNU sleep 扩展，BSD/macOS 不支持。
 
 ### D. 小瑕疵（行为边界）
 
-1. **deployment.sh:654/678** `_sftp_upload_one` 缺 sshpass 时 `return 1`，调用方裸调用 → errexit 中断整条流水线；同函数 654-671 失败分支只设 `G_DEPLOY_RESULT` 不 return，不一致。
-2. **analysis.sh:79** `stage_security_vulmap` 中 `source "$config_file"`，`config.cfg` 缺失时 errexit 硬中断。
-3. **style.sh:186-187** `$sc && shellcheck "$script" || exit_code=$?`：`sc=false`（shellcheck 未装到）时 `$?` 取到 `false` 的 1，误记失败。
-4. **kubernetes.sh:476** `build_base_image_select` 依赖 fzf，缺失时静默空跑退出 0。
+1. **`deployment.sh _sftp_upload_one`** 缺 sshpass 时 `return 1`，调用方裸调用 → errexit 中断整条流水线；同函数失败分支只设 `G_DEPLOY_RESULT` 不 return，不一致。
+2. **`analysis.sh stage_security_vulmap`** 中 `source "$config_file"`，`config.cfg` 缺失时 errexit 硬中断。
+3. **`style.sh style_check_shell`** `$sc && shellcheck "$script" || exit_code=$?`：`sc=false`（shellcheck 未装到）时 `$?` 取到 `false` 的 1，误记失败。
+4. **`kubernetes.sh build_base_image_select`** 依赖 fzf，缺失时静默空跑退出 0。
 
 ### E. 待办（功能增强）
 
