@@ -513,7 +513,7 @@ auto 优先级链：
 - `G_IMAGE_TAG="t$(date +%s%3N)"`（毫秒时间戳）。
 - `G_IMAGE_NAME`：`ENV_DOCKER_IMAGE_RANDOM=true` 时取 2 个随机字符（a-o），否则仓库名去 `-_` 截 10 字符。
 - 随机仓库名的动因：ACR 个人版配额为 3 命名空间 / 300 仓库，且无 OpenAPI、无「版本自动清理」（官方仅企业版支持），发布频繁会让单仓库 tag 无限堆积；故按 a-o 两字符散列到 225 个仓库摊薄 tag。代价：仓库名不可推导、清理需遍历 225 个名字（占用 300 配额中的 225）。
-- 遗留镜像治理（单文件索引 `data/cache/image-refs.index`，两种标记行）：`push <ref>` 台账行由 `build_image` 在 push 前登记；`live <release>-<ns> <ref>` 存活行由 `record_deployed_image` 在部署成功后标记。`stage_deploy` 收尾调 `_clean_indexed_images` 删除非存活 `push` 行（存活 = `live` 行或本次引用）。随机池是所有项目共用的，因此只能按"本工具推过的引用"删，不能按仓库或年龄扫；索引损坏时放弃清理而非误删。
+- 遗留镜像治理（单文件索引 `data/cache/image-refs.index`，两种标记行）：`push <ref>` 台账行由 `build_image` 在 push 前登记；`live <release>-<ns> <ref>` 存活行由 `record_deployed_image` 在部署成功后标记。`stage_deploy` 收尾调 `_clean_indexed_images` 删除非存活 `push` 行（存活 = `live` 行或本次引用）。随机池是所有项目共用的，因此只能按"本工具推过的引用"删，不能按仓库或年龄扫；索引损坏时放弃清理而非误删。清理输出默认全静默（自动收尾，普通用户无需关注），`-d` 时打印逐条明细与 `deleted=/kept=` 汇总；删除失败仍打 `warn`（会自动重试，且常指向删除权限问题）。
 - `data/cache/` 终态只有少量文件：`image-refs.index`（镜像引用）、`build-state.index`（构建指纹与提示标记，按 `<repo>-<branch>` 存值）、`.docker.login.<type>.lock`（登录锁）、`base-bake.hcl`（临时 bake 文件）；早期"一仓库一分支多小文件"的命名（`*-base.md5`、`*-base-custom.md5`、`*-base.explained`、`*-yarn`、`*-last-tag`、`*_last_image`、`*.current`）由 `config_clean_legacy_cache` 每次运行自动清掉。
 - 目标镜像：`${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}`——build、deploy、record、buildpack、base image 多处复用的全工具核心命名。
 

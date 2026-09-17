@@ -314,7 +314,8 @@ deploy_to_kubernetes() {
 
     execute_custom_deploy_hook
 
-    _msg ok "Kubernetes deployment completed"
+    ## 这一步完成（非阶段结论）：阶段结论由 stage_deploy 在索引清理之后统一输出
+    _msg task "Kubernetes deployment completed"
     return "${G_DEPLOY_RESULT:-0}"
 }
 
@@ -943,6 +944,8 @@ stage_deploy() {
     ## 此处固定返回 0，避免 set -e 中断流水线导致 handle_notify 被跳过
     ## 部署后清理索引里已失效的镜像引用（随机仓库池的遗留 + 删除失败重试）
     _clean_indexed_images || true
+    ## 阶段结论放在清理之后：否则日志停在清理明细上，且 ✓ 之后还有动作
+    [[ "${G_DEPLOY_RESULT:-0}" -eq 0 ]] && _msg ok "$(_t '部署完成' 'deployment completed')"
     return 0
 }
 
@@ -1126,15 +1129,15 @@ _clean_indexed_images() {
             continue
         fi
         if skopeo delete "docker://${ref}" >/dev/null 2>&1; then
-            ## 与 _clean_tags_one 的粒度一致：逐条删除用 note，批次结果用 task
-            _msg note "Deleted stale image: ${ref}"
+            ## 逐条明细默认不打（对部署者无行动价值，数量由下方汇总行体现），-d 调试时才显示
+            [[ "${G_DEBUG_ON:-false}" == true ]] && _msg note "Deleted stale image: ${ref}"
             deleted=$((deleted + 1))
         elif _image_ref_exists "${ref}"; then
             _msg warn "Failed to delete stale image, keep for retry: ${ref}"
             keep+=("push ${ref}")
             kept=$((kept + 1))
         else
-            _msg note "Stale image already gone: ${ref}"
+            [[ "${G_DEBUG_ON:-false}" == true ]] && _msg note "Stale image already gone: ${ref}"
         fi
     done
 
@@ -1143,9 +1146,10 @@ _clean_indexed_images() {
     [[ "${#live_lines[@]}" -gt 0 ]] && printf '%s\n' "${live_lines[@]}" >>"${tmp}"
     [[ "${#keep[@]}" -gt 0 ]] && printf '%s\n' "${keep[@]}" >>"${tmp}"
     mv -f "${tmp}" "${G_IMAGE_INDEX}"
-    ## 无删除也无保留（绝大多数部署）时不打印，避免每次部署一条 deleted=0, kept=0 噪音
-    if [[ "${deleted}" -gt 0 || "${kept}" -gt 0 ]]; then
-        _msg task "Indexed image cleanup: deleted=${deleted}, kept=${kept}"
+    ## 默认全静默：索引维护是自动收尾动作，普通用户无需关注；-d 调试时才输出逐条明细与汇总
+    ## 删除失败仍走上方 warn（会自动重试，且往往指向权限问题，需要可见）
+    if [[ "${G_DEBUG_ON:-false}" == true ]]; then
+        _msg note "Indexed image cleanup: deleted=${deleted}, kept=${kept}"
     fi
 }
 
