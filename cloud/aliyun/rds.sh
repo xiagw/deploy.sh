@@ -18,7 +18,7 @@ show_rds_help() {
     echo "  del-acc <实例ID> <账号>             - 删除数据库账号"
     echo "  get-acc <实例ID> [format]           - 列出数据库账号"
     echo "  set-acc <实例ID> <账号> <数据库名[,数据库名...]> [rw|ro] - 设置账号数据库权限（rw=读写 默认，ro=只读；支持多库）"
-    echo "  set-pass <实例ID> <账号> [新密码]       - 重置账号密码（省略密码则随机生成）"
+    echo "  set-pass <实例ID> <账号> [新密码]       - 重置账号密码（省略密码则随机生成两段式 xxxxxxx-yyyyyyy）"
     echo "  get-db <实例ID> [format]                - 列出数据库"
     echo "  add-db <实例ID> <数据库名> [字符集]     - 创建数据库"
     echo "  del-db <实例ID> <数据库名>              - 删除数据库"
@@ -428,8 +428,8 @@ rds_account_create() {
         fi
     fi
 
-    # 密码：未提供则交互输入/随机生成，并统一校验
-    password=$(_rds_resolve_password "$password") || return 1
+    # 未提供密码则用 _gen_password 生成合规口令（7-7 两段式，自带 -）；手传的不做本地校验
+    [ -n "$password" ] || password=$(_gen_password)
 
     # 如果没有提供描述，则交互式输入
     if [ -z "$description" ]; then
@@ -524,56 +524,6 @@ _rds_pick_db_names_multi() {
         return 1
     fi
     echo "${picked}" | awk '{print $1}' | paste -sd, -
-}
-
-_rds_resolve_password() {
-    # 解析并校验账号密码：入参为空则交互输入（回车生成随机 14 位）；最终密码写 stdout，提示写 stderr
-    # 规则：8-32 位，且含大写、小写、数字；缺特殊字符时自动补 @
-    local password=$1
-    if [ -z "${password}" ]; then
-        local password_input
-        read -r -p "请输入密码 (回车生成随机密码): " password_input
-        if [ -z "${password_input}" ]; then
-            local try_count=0 candidate_password=""
-            while [ "${try_count}" -lt 10 ]; do
-                try_count=$((try_count + 1))
-                candidate_password=$(_get_random_password 14 2>/dev/null)
-                [ -z "${candidate_password}" ] && continue
-                echo "${candidate_password}" | grep -q "[A-Z]" || continue
-                echo "${candidate_password}" | grep -q "[a-z]" || continue
-                echo "${candidate_password}" | grep -q "[0-9]" || continue
-                password="${candidate_password}"
-                break
-            done
-            if [ -z "${password}" ]; then
-                echo "错误：无法生成密码，请手动指定密码。" >&2
-                return 1
-            fi
-            echo "生成的密码: ${password}" >&2
-        else
-            password="${password_input}"
-        fi
-    fi
-
-    if [ "${#password}" -lt 8 ] || [ "${#password}" -gt 32 ]; then
-        echo "错误：密码长度必须在8-32位之间。" >&2
-        return 1
-    fi
-    echo "${password}" | grep -q "[A-Z]" || {
-        echo "错误：密码必须包含大写字母。" >&2
-        return 1
-    }
-    echo "${password}" | grep -q "[a-z]" || {
-        echo "错误：密码必须包含小写字母。" >&2
-        return 1
-    }
-    echo "${password}" | grep -q "[0-9]" || {
-        echo "错误：密码必须包含数字。" >&2
-        return 1
-    }
-    echo "${password}" | grep -q '[^[:alnum:]]' || password="${password}@"
-
-    echo "${password}"
 }
 
 # 删除数据库账号（使用框架函数）
@@ -826,7 +776,7 @@ rds_account_grant() {
 }
 
 rds_account_password_set() {
-    # 重置账号密码（ResetAccountPassword）：新密码可省略，回车随机生成
+    # 重置账号密码（ResetAccountPassword）：未提供密码则用 _gen_password 生成合规口令
     local instance_id=$1
     local account_name=$2
     local password=$3
@@ -837,7 +787,7 @@ rds_account_password_set() {
     raw_acc=$(_rds_resolve_account_name "$account_name" "选择 RDS 账号" "$instance_id") || return 1
     account_name=$(echo "$raw_acc" | awk '{print $1}')
 
-    password=$(_rds_resolve_password "$password") || return 1
+    [ -n "$password" ] || password=$(_gen_password)
 
     echo "重置账号密码："
     echo "实例ID: $instance_id"

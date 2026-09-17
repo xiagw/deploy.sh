@@ -10,6 +10,24 @@ _version_ge() {
     [[ "$(printf '%s\n' "$right" "$left" | sort -V | head -1)" == "$right" ]]
 }
 
+_gen_password() {
+    # 生成合格的账号口令：7-7 两段式 xxxxxxx-yyyyyyy（自带 - 作特殊字符，且保证含大写、小写、数字）
+    # 适用"大写/小写/数字/特殊 任意三类"规则（RDS / PolarDB / RAM 账号通用）
+    # _get_random_password 只保证字符集、不保证类别 → 不合格重试；只写 stdout，10 次仍失败返回 1
+    local try_count=0 p=""
+    while [ "${try_count}" -lt 10 ]; do
+        try_count=$((try_count + 1))
+        p=$(_get_random_password 14 2>/dev/null)
+        [ -z "${p}" ] && continue
+        echo "${p}" | grep -q "[A-Z]" || continue
+        echo "${p}" | grep -q "[a-z]" || continue
+        echo "${p}" | grep -q "[0-9]" || continue
+        echo "${p:0:7}-${p:7}"
+        return 0
+    done
+    return 1
+}
+
 check_dependencies() {
     if ! command -v aliyun &>/dev/null; then
         echo "错误：未安装阿里云 CLI。请先安装阿里云 CLI。" >&2

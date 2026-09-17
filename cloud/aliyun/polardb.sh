@@ -290,39 +290,18 @@ polardb_delete() {
 polardb_account_create() {
     local cluster_id=$1
     local account_name=$2
-    local password=${3:-$(_get_random_password 2>/dev/null)}
+    local password=${3:-}
     local description=${4:-"Created by CLI"}
+
+    # 未提供密码则用 _gen_password 生成合规口令（7-7 两段式，自带 -，保证大写/小写/数字）
+    # 手传密码不做本地校验，交给 API
+    [ -n "$password" ] || password=$(_gen_password)
 
     if [ -z "$cluster_id" ] || [ -z "$account_name" ] || [ -z "$password" ]; then
         echo "错误：集群ID、账号名和密码不能为空。" >&2
         echo "用法：polardb add-acc <集群ID> <账号> <密码> [描述]" >&2
         return 1
     fi
-
-    # 验证密码复杂度
-    if [ "${#password}" -lt 8 ] || [ "${#password}" -gt 32 ]; then
-        echo "错误：密码长度必须在8-32位之间。" >&2
-        return 1
-    fi
-
-    echo "$password" | grep -q "[A-Z]" || {
-        echo "错误：密码必须包含大写字母。" >&2
-        return 1
-    }
-
-    echo "$password" | grep -q "[a-z]" || {
-        echo "错误：密码必须包含小写字母。" >&2
-        return 1
-    }
-
-    echo "$password" | grep -q "[0-9]" || {
-        echo "错误：密码必须包含数字。" >&2
-        return 1
-    }
-
-    echo "$password" | grep -q '[^[:alnum:]]' || {
-        password="${password}@"
-    }
 
     echo "创建 PolarDB 账号："
     echo "集群ID: $cluster_id"

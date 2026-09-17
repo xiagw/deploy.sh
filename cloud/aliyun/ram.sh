@@ -8,33 +8,6 @@
 # shellcheck source=/dev/null
 [ -f "${SCRIPT_DIR}/base.sh" ] && source "${SCRIPT_DIR}/base.sh"
 
-# 生成 RAM 登录用随机密码：随机串 + 补齐缺失的字符类 + 末尾 @@（满足大小写、数字、特殊字符策略）
-# 优先使用 common.sh 的 _get_random_password，否则用 openssl 等本地生成
-_ram_random_password() {
-    # 易错字符排除（0/O/o、1/I/l），与 lib/common.sh 的 _get_random_password 保持一致
-    local p extra="" chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
-    if declare -f _get_random_password >/dev/null 2>&1; then
-        p=$(_get_random_password 14 2>/dev/null)
-    fi
-    if [ -z "$p" ]; then
-        p=$(openssl rand -base64 16 2>/dev/null | LC_ALL=C tr -dc "$chars" | head -c 14)
-    fi
-    if [ -z "$p" ]; then
-        p=$(LC_ALL=C tr -dc "$chars" </dev/urandom 2>/dev/null | head -c 14)
-    fi
-    if [ -z "$p" ]; then
-        echo "无法生成随机密码" >&2
-        return 1
-    fi
-
-    # 补齐缺失的字符类，保证同时包含大写、小写、数字（补的数字用 2，避开易混淆的 0/O、1/I/l）
-    [[ "$p" =~ [A-Z] ]] || extra+="A"
-    [[ "$p" =~ [a-z] ]] || extra+="a"
-    [[ "$p" =~ [0-9] ]] || extra+="2"
-
-    echo "${p}${extra}@@"
-}
-
 show_ram_help() {
     echo "RAM (Resource Access Management) 操作："
     echo "  get                                     - 列出所有子账号"
@@ -153,7 +126,7 @@ ram_create() {
 
     # 生成随机密码
     local password
-    password=$(_ram_random_password)
+    password=$(_gen_password)
     if [ -z "$password" ]; then
         echo "错误：无法生成随机密码。" >&2
         return 1
@@ -256,7 +229,7 @@ ram_update() {
             fi
             ;;
         "只修改密码（随机生成）")
-            new_password=$(_ram_random_password)
+            new_password=$(_gen_password)
             if [ -z "$new_password" ]; then
                 echo "错误：无法生成随机密码。" >&2
                 return 1
@@ -269,7 +242,7 @@ ram_update() {
                 echo "错误：显示名称不能为空。" >&2
                 return 1
             fi
-            new_password=$(_ram_random_password)
+            new_password=$(_gen_password)
             if [ -z "$new_password" ]; then
                 echo "错误：无法生成随机密码。" >&2
                 return 1
