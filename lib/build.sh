@@ -495,6 +495,9 @@ DOCKERIGNORE
     local build_log="${build_log_dir}/${G_REPO_NAME}-build-${G_REPO_BRANCH}.log.txt"
     mkdir -p "$(dirname "$build_log")"
 
+    ## push 前登记引用：中断或后续删除失败时仍可追溯（见 deployment.sh _clean_indexed_images）
+    _image_index_add "${target_image_tag}"
+
     set +e +o pipefail
     $G_DOCK buildx bake ${G_BUILDER:-} --file "${bake_file_path}" ${buildx_push_option} ${G_PROGRESS} --provenance=false 2>&1 | tee "$build_log" >/dev/null
     ret=${PIPESTATUS[0]}

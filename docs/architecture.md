@@ -210,7 +210,15 @@ flowchart TD
 | `detect_deployment_method` | 自动探测部署方式（见 4.4） |
 | `stage_deploy` | 部署入口分发，返回 `G_DEPLOY_RESULT` |
 | `copy_docker_image` | skopeo 多架构镜像跨 registry 复制 |
-| `clean_old_tags` | 删除 180 天前的旧 tag（含无时间戳处理） |
+| `record_deployed_image` | 部署成功后把 `<release>-<ns>` 的当前引用标记为 `live`（部署失败不动指针，交下次清理删） |
+| `_image_index_add` | push 前登记台账行 `push <ref>`（去重）；中断/删除失败时引用不丢 |
+| `_image_index_set_live` | 把该 key 引用升为 `live` 行、旧 live 引用降级为 `push`、吸收其 `push` 行；整文件 tmp+mv 原子重写 |
+| `_image_ref_exists` | 用 `skopeo list-tags` 判断引用是否仍在 registry（区分"删除失败"与"本就不存在"） |
+| `_clean_indexed_images` | 部署后清非存活 `push` 行（存活 = `live` 行或本次引用）：删成功/已不存在→移出，删失败且仍在→保留重试；遇损坏行报错放弃（宁留残留不误删） |
+| `clean_old_tags` | 入口：`<reg>/<ns>/<repo>` 直清，`<reg>/<ns>/`（或 `/*`）进 fzf 多选散列仓库池 |
+| `_clean_tags_resolve` | 补齐省略的 registry（相对写法走 `ENV_DOCKER_REGISTRY`，该值已含命名空间；首段含 `.`/`:` 视为绝对引用） |
+| `_clean_tags_one` | 单仓库清理：`skopeo list-tags` → tag 尾部数字段当时间戳 → 超期删除；仓库不存在只 warn 并 return 1 |
+| `_clean_tags_select` | 生成 225 个候选（a-o × a-o，与 G_IMAGE_NAME 随机空间一致）交 `fzf -m` 多选；无 fzf / 非 tty 直接报错，不做存在性探测 |
 
 ### 2.11 lib/kubernetes.sh（K8s）
 
@@ -342,7 +350,7 @@ repo_overlay_files    →  覆盖 conf/root、生成 Dockerfile.base/Dockerfile 
 | `setup_git_repo` | `-g` 或 `GITEA_ACTIONS=true` | config_deploy_init（ENV_GITEA_SERVER/PATH），自装 git | 链首；且须在 config_repo_vars 前 |
 | `setup_svn_repo` | `-s` | config_deploy_init，自装 svn | 链首 |
 | `setup_git_branch` | `-b` 且无 `-g` | git + G_REPO_DIR | 链首；须在 config_repo_vars 前 |
-| `clean_old_tags` | `--clean-tags` | 仅 ENV_CLEAN_TAGS_* + skopeo（不自装） | config_deploy_init 后即可 |
+| `clean_old_tags` | `--clean-tags` | 仅 ENV_CLEAN_TAGS_* + skopeo（不自装）；散列池形态另需 fzf | config_deploy_init 后即可 |
 | `kube_setup_terraform` | `-K` | 仅 G_DATA/terraform，terraform 本机优先，缺则容器化（`common.sh _install_terraform`） | config_deploy_init 后即可 |
 | `copy_docker_image` | `-c` | ENV_DOCKER_MIRROR + skopeo + system_proxy（中国区代理） | system_proxy 后 |
 | `system_cert_renew` | `-r` | `$HOME/.acme.sh` 账号文件 + config_deploy_setup（软依赖，仅当 G_DATA/.acme.sh 存在才建链接，见 `config.sh config_deploy_setup`）+ glab API 触发流水线 | config_deploy_setup 后 |
@@ -503,6 +511,7 @@ auto 优先级链：
 - `G_IMAGE_TAG="t$(date +%s%3N)"`（毫秒时间戳）。
 - `G_IMAGE_NAME`：`ENV_DOCKER_IMAGE_RANDOM=true` 时取 2 个随机字符（a-o），否则仓库名去 `-_` 截 10 字符。
 - 随机仓库名的动因：ACR 个人版配额为 3 命名空间 / 300 仓库，且无 OpenAPI、无「版本自动清理」（官方仅企业版支持），发布频繁会让单仓库 tag 无限堆积；故按 a-o 两字符散列到 225 个仓库摊薄 tag。代价：仓库名不可推导、清理需遍历 225 个名字（占用 300 配额中的 225）。
+- 遗留镜像治理（单文件索引 `data/cache/image-refs.index`，两种标记行）：`push <ref>` 台账行由 `build_image` 在 push 前登记；`live <release>-<ns> <ref>` 存活行由 `record_deployed_image` 在部署成功后标记。`stage_deploy` 收尾调 `_clean_indexed_images` 删除非存活 `push` 行（存活 = `live` 行或本次引用）。随机池是所有项目共用的，因此只能按"本工具推过的引用"删，不能按仓库或年龄扫；索引损坏时放弃清理而非误删。
 - 目标镜像：`${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}`——build、deploy、record、buildpack、base image 多处复用的全工具核心命名。
 
 ### 4.7 dry-run 模式（`--dry`）

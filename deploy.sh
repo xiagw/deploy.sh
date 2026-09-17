@@ -161,7 +161,10 @@ Parameters:
     -D, --disable-overlay        Disable file overlay.
     -r, --renew-cert             Renew all the certs.
     --clean-tags REPO            Clean old tags from Docker registry.
-                               REPO: Repository to clean (e.g., registry.example.com/myapp)
+                               REPO: Repository to clean (e.g., registry.example.com/myapp).
+                               Registry may be omitted (uses ENV_DOCKER_REGISTRY): myapp
+                               Ending with "/" (or just "/") multi-selects the 225 hashed
+                               repos (a-o x a-o) via fzf: registry.example.com/myapp/ or myapp/
     -c, --copy-image SRC [DEST]     Copy Docker image from source to target registry.
                             SRC: Source image (e.g., nginx:latest)
                             DEST: Target registry (e.g., registry.example.com/ns).
@@ -450,6 +453,8 @@ main() {
     G_ENV="${G_DATA}/deploy.env"         # 环境变量配置文件
     G_LOG="${G_DATA}/logs/${G_NAME}.log" # 日志文件路径
     mkdir -p "$(dirname "$G_LOG")"
+    ## 镜像引用索引（单文件，两种标记行）: `push <ref>` = 本工具推过待跟踪；`live <release>-<ns> <ref>` = 当前部署在用
+    G_IMAGE_INDEX="${G_DATA}/cache/image-refs.index"
 
     ## ========================================================================
     ## 执行计划初始化

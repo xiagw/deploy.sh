@@ -94,35 +94,12 @@ _project_oss_dest() {
 }
 
 record_deployed_image() {
-    # 记录本次 release/namespace 当前部署的镜像引用
-    # and optionally delete the previous image if the deployment succeeded.
+    # 把本 release/命名空间 当前部署的镜像标记为 live（供 _clean_indexed_images 判定存活）
+    # deploy_ok != 0 时不动 live 指针：失败部署的镜像已无人引用，留作 push 行由下次清理删除
     local release_name="${1:?release_name is required}"
     local deploy_ok="${2:-0}"
-    local image_record_dir="${G_DATA}/cache"
-    local current_image="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
-    local image_record_file="${image_record_dir}/${release_name}-${G_NAMESPACE}.current"
-
-    mkdir -p "${image_record_dir}"
-
-    if [[ -f "${image_record_file}" && "${deploy_ok}" -eq 0 ]]; then
-        local previous_image
-        previous_image=$(<"${image_record_file}")
-        if [[ -n "${previous_image}" && "${previous_image}" != "${current_image}" ]]; then
-            _msg task "Deleting previous image: ${previous_image}"
-            ## 删除只走 registry v2 协议（skopeo）：ACR 个人版官方明确不提供 OpenAPI；
-            ## 企业版的 delete-repo-tag 需要实例ID + 仓库ID（还须先 list-repository 查），
-            ## 本工具没有这些配置项，故不再保留 aliyun CLI 兜底。
-            if command -v skopeo >/dev/null 2>&1; then
-                if ! skopeo delete "docker://${previous_image}"; then
-                    _msg warn "Failed to delete previous image (ignored): ${previous_image}"
-                fi
-            else
-                _msg warn "skopeo not found; skip remote delete of ${previous_image}"
-            fi
-        fi
-    fi
-
-    printf '%s\n' "${current_image}" >"${image_record_file}"
+    [[ "${deploy_ok}" -eq 0 ]] || return 0
+    _image_index_set_live "${release_name}-${G_NAMESPACE}" "${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
 }
 
 cleanup_evicted_pods() {
@@ -235,7 +212,7 @@ _wait_kubernetes_rollout() {
 deploy_to_kubernetes() {
     # 部署到 k8s 集群
     _msg task "Deploy to Kubernetes with Helm"
-    local release_name previous_image bad_pod helm_dir helm_dirs revision
+    local release_name bad_pod helm_dir helm_dirs revision
     release_name="$(format_release_name)"
 
     # Ensure PVC exists before proceeding with deployment
@@ -412,6 +389,9 @@ EOF
         fi
     fi
     rm -f "$functions_conf"
+
+    ## 记录本次引用并删上一张（函数计算与 k8s 同样长期引用 registry 镜像，漏记会被索引清理误删）
+    record_deployed_image "${release_name}" "${G_DEPLOY_RESULT:-0}"
 
     [[ "${G_DEPLOY_RESULT:-0}" -eq 0 ]] && _msg task "Aliyun Functions deployment completed"
 }
@@ -962,6 +942,8 @@ stage_deploy() {
     esac
     ## 部署结果写入 G_DEPLOY_RESULT 供通知与最终退出码使用；main 是裸调用，
     ## 此处固定返回 0，避免 set -e 中断流水线导致 handle_notify 被跳过
+    ## 部署后清理索引里已失效的镜像引用（随机仓库池的遗留 + 删除失败重试）
+    _clean_indexed_images || true
     return 0
 }
 
@@ -1043,32 +1025,176 @@ copy_docker_image() {
 # copy_docker_image "nginx" "registry.example.com/ns"              # -> registry.example.com/ns/nginx:latest
 # copy_docker_image "ubuntu:22.04" "registry.example.com/ns"       # -> registry.example.com/ns/ubuntu:22.04
 
-# Clean old tags from registry / 清理注册表中的旧标签
-# This function removes tags older than 6 months from a specified Docker registry repository
-# 此函数从指定的 Docker 注册表仓库中删除 6 个月以前的标签
-#
-# @param $1 repository The repository to clean / 要清理的仓库
-# @return 0 on success, 1 on failure / 成功返回 0，失败返回 1
-#
-# @note 无时间戳标签是否强制删除由 ENV_CLEAN_TAGS_FORCE 控制（true 时删除，默认 false）。
-#
+_image_index_add() {
+    # 登记一个"本工具 push 过、尚需跟踪删除"的引用（台账行: push <ref>），已登记过则跳过
+    # 在 push 前调用：中断或后续删除失败都不会丢引用（索引是唯一取证来源）
+    local ref="${1:?image ref required}"
+    mkdir -p "$(dirname "${G_IMAGE_INDEX}")"
+    ## live 行与 push 行都是" ref" 结尾，命中任一即无需重复登记
+    if [[ -f "${G_IMAGE_INDEX}" ]] && grep -Fq -- " ${ref}" "${G_IMAGE_INDEX}"; then
+        return 0
+    fi
+    printf 'push %s\n' "${ref}" >>"${G_IMAGE_INDEX}"
+}
+
+_image_index_set_live() {
+    # 把 key（<release_name>-<命名空间>）的当前部署引用标记为 live：
+    #   旧 live 引用降级为 push（下次清理删除），新引用升为 live 并删掉它可能存在的 push 行
+    # 索引是清理的唯一依据，故整文件原子重写（tmp + mv），不原地改
+    local key="${1:?key required}" ref="${2:?image ref required}"
+    local tmp="${G_IMAGE_INDEX}.tmp.$$" state f1 f2 old=""
+    mkdir -p "$(dirname "${G_IMAGE_INDEX}")"
+    : >"${tmp}"
+    if [[ -f "${G_IMAGE_INDEX}" ]]; then
+        while read -r state f1 f2; do
+            [[ -n "${state}" ]] || continue
+            case "${state}" in
+            live)
+                if [[ "${f1}" == "${key}" ]]; then
+                    old="${f2}"
+                else
+                    printf 'live %s %s\n' "${f1}" "${f2}" >>"${tmp}"
+                fi
+                ;;
+            push)
+                [[ "${f1}" == "${ref}" ]] || printf 'push %s\n' "${f1}" >>"${tmp}"
+                ;;
+            *)
+                _msg error "Corrupted index line, abort: ${state} ${f1} ${f2}"
+                rm -f "${tmp}"
+                return 1
+                ;;
+            esac
+        done <"${G_IMAGE_INDEX}"
+    fi
+    [[ -n "${old}" && "${old}" != "${ref}" ]] && printf 'push %s\n' "${old}" >>"${tmp}"
+    printf 'live %s %s\n' "${key}" "${ref}" >>"${tmp}"
+    mv -f "${tmp}" "${G_IMAGE_INDEX}"
+}
+
+_image_ref_exists() {
+    # 判断引用是否仍在 registry（ref 形如 <reg>[/<ns>...]/<repo>:<tag>；repo 可含多级路径，按最后一个 ':' 切 tag）
+    [[ "${1:-}" == *:* ]] || return 1
+    local ref="${1}" repo="${1%:*}" tag="${1##*:}"
+    skopeo list-tags "docker://${repo}" 2>/dev/null | grep -Fq "\"${tag}\""
+}
+
+_clean_indexed_images() {
+    # 清理索引里已不再存活的镜像引用（只删本工具 push 过的，不碰同仓库里其他项目的 tag）
+    # 存活 = live 行，或本次运行引用；push 行非存活才删
+    # 删除成功或引用本就不存在 → 移出索引；删除失败且引用仍在 → 保留待下次重试
+    # 索引出现无法解析的行 → 报错并放弃清理（宁可留残留，也不误删存活镜像）
+    [[ -f "${G_IMAGE_INDEX}" ]] || return 0
+    if ! command -v skopeo >/dev/null 2>&1; then
+        _msg note "skopeo not found; skip indexed image cleanup"
+        return 0
+    fi
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] clean indexed images: ${G_IMAGE_INDEX}"
+        return 0
+    fi
+
+    local state f1 f2
+    local current_ref="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME:-}:${G_IMAGE_TAG:-}"
+    local -A live_refs=()
+    local -a live_lines=() push_refs=()
+    while read -r state f1 f2; do
+        [[ -n "${state}" ]] || continue
+        case "${state}" in
+        live)
+            live_refs["${f2}"]=1
+            live_lines+=("live ${f1} ${f2}")
+            ;;
+        push)
+            push_refs+=("${f1}")
+            ;;
+        *)
+            _msg error "Corrupted index line, abort cleanup: ${state} ${f1} ${f2}"
+            return 1
+            ;;
+        esac
+    done <"${G_IMAGE_INDEX}"
+
+    local ref deleted=0 kept=0
+    local -a keep=()
+    for ref in "${push_refs[@]}"; do
+        ## 已有 live 行记录它 → 台账行冗余，丢弃
+        [[ -n "${live_refs[${ref}]:-}" ]] && continue
+        ## 本次运行刚 push、还没确认部署成功 → 保持跟踪（纯构建运行时不会有 live 行）
+        if [[ "${ref}" == "${current_ref}" ]]; then
+            keep+=("push ${ref}")
+            kept=$((kept + 1))
+            continue
+        fi
+        if skopeo delete "docker://${ref}" >/dev/null 2>&1; then
+            _msg task "Deleted stale image: ${ref}"
+            deleted=$((deleted + 1))
+        elif _image_ref_exists "${ref}"; then
+            _msg warn "Failed to delete stale image, keep for retry: ${ref}"
+            keep+=("push ${ref}")
+            kept=$((kept + 1))
+        else
+            _msg note "Stale image already gone: ${ref}"
+        fi
+    done
+
+    local tmp="${G_IMAGE_INDEX}.tmp.$$"
+    : >"${tmp}"
+    [[ "${#live_lines[@]}" -gt 0 ]] && printf '%s\n' "${live_lines[@]}" >>"${tmp}"
+    [[ "${#keep[@]}" -gt 0 ]] && printf '%s\n' "${keep[@]}" >>"${tmp}"
+    mv -f "${tmp}" "${G_IMAGE_INDEX}"
+    _msg task "Indexed image cleanup: deleted=${deleted}, kept=${kept}"
+}
+
 clean_old_tags() {
-    # 用法示例:
-    # clean_old_tags "registry.example.com/myapp"
-    ## RUN 单数组成员（--clean-tags 触发，parse 组装并必填校验 arg_clean_tags）
-    ## 守卫: 防御性校验 arg_clean_tags（parse 的 ${2:?} 已保证非空）
+    # 清理注册表旧 tag 的入口（RUN 单数组成员，--clean-tags 触发）
+    # 目标形态（可省略 registry，回退 ENV_DOCKER_REGISTRY，其值形如 host/namespace）:
+    #   <reg>/<ns>/<repo>  /  <repo>              直接清理该仓库
+    #   <reg>/<ns>/  /  /  /  <repo>/             散列仓库池（a-o × a-o = 225）→ fzf 多选后逐个清理
+    # 天龄阈值 ENV_CLEAN_TAGS_DAYS（默认 180）；无时间戳 tag 是否强删由 ENV_CLEAN_TAGS_FORCE 控制
     [[ -n "${arg_clean_tags:-}" ]] || return 0
-    # Required parameter validation / 必需参数验证
-    local repository="${arg_clean_tags:?'repository parameter is required'}" cutoff_time current_time tags_file tags_to_delete=() delete_force=false tag tag_timestamp
+    local target
+    target="$(_clean_tags_resolve "${arg_clean_tags}")"
+    if [[ "${target}" != */* ]]; then
+        _msg error "--clean-tags '${arg_clean_tags}' 无法解析成仓库（ENV_DOCKER_REGISTRY 未设置？）"
+        return 1
+    fi
+    case "${target}" in
+    */ | *'/*')
+        _clean_tags_select "${target%/*}"
+        return $?
+        ;;
+    esac
+    _clean_tags_one "${target}"
+}
+
+_clean_tags_resolve() {
+    # 相对写法补上 ENV_DOCKER_REGISTRY：首段为空或不含 '.'/':' 视为相对
+    #   相对: fm / fm/ / / / /fm → ${ENV_DOCKER_REGISTRY}/fm ...
+    #   绝对: registry.example.com/ns/repo、localhost:5000/ns/repo → 原样返回
+    local value="${1-}" first="${1%%/*}"
+    if [[ -n "${first}" && "${first}" == *.* || "${first}" == *:* ]]; then
+        printf '%s' "${value}"
+    elif [[ -n "${ENV_DOCKER_REGISTRY:-}" ]]; then
+        printf '%s' "${ENV_DOCKER_REGISTRY%/}/${value#/}"
+    else
+        printf '%s' "${value}"
+    fi
+}
+
+_clean_tags_one() {
+    # 清理单个仓库：skopeo list-tags → 取 tag 尾部数字段当时间戳 → 超期删除
+    # 仓库不存在/无权限时 list 失败，只 warn 并 return 1，不中断调用方（fzf 多选容易命中空仓库）
+    local repository="${1:?repository required}" cutoff_time current_time tags_file tags_to_delete=() delete_force=false tag tag_timestamp
     local clean_days="${ENV_CLEAN_TAGS_DAYS:-180}"
     local total_tags
     delete_force="${ENV_CLEAN_TAGS_FORCE:-false}"
 
-    _msg task "Cleaning old tags from registry"
+    _msg task "Cleaning old tags from registry: ${repository}"
     if ${G_DRY_RUN:-false}; then
         _msg note "[dry-run] clean_old_tags:"
         _msg note "  skopeo list-tags docker://${repository} + delete tags older than ${clean_days} days"
-        exit 0
+        return 0
     fi
 
     # Calculate cutoff time (6 months ago in seconds) / 计算截止时间（N 天前的秒数）
@@ -1079,9 +1205,9 @@ clean_old_tags() {
     tags_file=$(mktemp)
     echo "tags file is: ${tags_file}"
     if ! skopeo list-tags "docker://${repository}" >"$tags_file"; then
-        _msg error "Failed to get tags from registry / 从注册表获取标签失败"
+        _msg warn "Cannot list tags (repository missing or no permission), skip: ${repository}"
         rm -f "$tags_file"
-        exit 1
+        return 1
     fi
 
     # Parse tags and check timestamps / 解析标签并检查时间戳
@@ -1146,5 +1272,45 @@ clean_old_tags() {
     else
         _msg task "No old tags to delete / 没有需要删除的旧标签"
     fi
-    exit "$delete_failed"
+    return "$delete_failed"
+}
+
+_clean_tags_select() {
+    # 候选 = 该命名空间下的散列仓库池（a-o × a-o = 225，与 G_IMAGE_NAME 的随机空间一致）
+    # 不做存在性探测：ACR 个人版无 OpenAPI，225 次 list-tags 不划算；不存在的候选在清理阶段 warn 跳过
+    # 交互: fzf -m（TAB 多选、ENTER 确认）；无 fzf 或非 tty 时直接报错，避免 CI 里静默误删
+    local prefix="${1:?namespace prefix required}"
+    local -a chars candidates=() selected=()
+    local selection repo rc=0
+    chars=({a..o})
+    for c1 in "${chars[@]}"; do
+        for c2 in "${chars[@]}"; do
+            candidates+=("${prefix}/${c1}${c2}")
+        done
+    done
+
+    if ! command -v fzf >/dev/null 2>&1; then
+        _msg error "fzf not found; specify the repository explicitly (e.g. ${prefix}/ab)"
+        return 1
+    fi
+    if [[ ! -t 0 || ! -t 1 ]]; then
+        _msg error "not a tty; specify the repository explicitly (e.g. ${prefix}/ab)"
+        return 1
+    fi
+
+    if ! selection=$(printf '%s\n' "${candidates[@]}" | fzf -m --header="TAB 多选, ENTER 确认; 候选为 ${prefix} 下的散列仓库(a-o x a-o)"); then
+        _msg note "Selection cancelled"
+        return 0
+    fi
+    [[ -n "${selection}" ]] || {
+        _msg note "Nothing selected"
+        return 0
+    }
+    readarray -t selected <<<"${selection}"
+
+    for repo in "${selected[@]}"; do
+        [[ -n "${repo}" ]] || continue
+        _clean_tags_one "${repo}" || rc=1
+    done
+    return "$rc"
 }
