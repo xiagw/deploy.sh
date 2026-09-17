@@ -92,6 +92,39 @@ check_project_config_template() {
     return 0
 }
 
+config_clean_legacy_cache() {
+    # 清理历史版本遗留的 cache 文件（命名重构过、代码已不再读写），每个 run 幂等执行
+    # 只按"废弃命名"精确匹配，不做白名单反选：无法识别的文件与子目录（如 bin/ 的 flyh6/）一律不动
+    # 废弃命名:
+    #   *.current                         旧 live 指针 → 已被 image-refs.index 取代
+    #   *-last-tag / *-last_image         早期记录方式
+    #   *-md5                             更早的指纹命名（无 -base 前缀）
+    #   *-base.md5 / *-base-custom.md5 / *-base.explained / *-yarn
+    #                                     旧的"一仓库一分支多文件"指纹 → 已并入 build-state.index
+    local cache_dir="${G_DATA}/cache"
+    [[ -d "${cache_dir}" ]] || return 0
+    local -a found=()
+    local f
+    while IFS= read -r f; do
+        found+=("${f}")
+    done < <(find "${cache_dir}" -maxdepth 1 -type f \( \
+        -name '*.current' -o -name '*-last-tag' -o -name '*_last-tag' \
+        -o -name '*-last_image' -o -name '*_last_image' -o -name '*-md5' \
+        -o -name '*-base.md5' -o -name '*-base-custom.md5' -o -name '*-base.explained' -o -name '*-yarn' \) 2>/dev/null)
+    [[ "${#found[@]}" -gt 0 ]] || return 0
+
+    local shown="" listed
+    for listed in "${found[@]:0:8}"; do
+        shown+="${listed##*/} "
+    done
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] remove legacy cache files: ${#found[@]} (${shown})"
+        return 0
+    fi
+    rm -f "${found[@]}"
+    _msg note "Removed legacy cache files: ${#found[@]} (${shown})"
+}
+
 config_deploy_init() {
     # 初始化部署环境配置（deploy.env，不存在则从模板复制）
     # 写入: G_ENV / G_DATA / G_PATH；在项目路径确定前调用（G_CONF 由 config_repo_vars 之后设置）
@@ -125,6 +158,9 @@ config_deploy_init() {
         fi
     done
     export PATH
+
+    ## 顺手清掉历史版本遗留的 cache 文件（幂等，见函数注释）
+    config_clean_legacy_cache
 }
 
 _load_project_build_deploy_config() {

@@ -455,6 +455,8 @@ main() {
     mkdir -p "$(dirname "$G_LOG")"
     ## 镜像引用索引（单文件，两种标记行）: `push <ref>` = 本工具推过待跟踪；`live <release>-<ns> <ref>` = 当前部署在用
     G_IMAGE_INDEX="${G_DATA}/cache/image-refs.index"
+    ## 构建状态索引（单文件）: `<repo>-<branch> <field> <value>`，field ∈ base_md5 / base_custom_md5 / yarn_md5 / explained
+    G_BUILD_STATE="${G_DATA}/cache/build-state.index"
 
     ## ========================================================================
     ## 执行计划初始化

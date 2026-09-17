@@ -107,7 +107,8 @@ flowchart TD
 |---|---|
 | `find_project_config` | 定位/从模板创建 `data/conf/<ns>/<project>.json`，设 `G_CONF` |
 | `check_project_config_template` | 校验项目配置残留模板示例值（RFC 5737/保留域名） |
-| `config_deploy_init` | 初始化 `deploy.env`（无则复制模板）、建 data 目录、PATH 追加工具目录 |
+| `config_clean_legacy_cache` | 清 `data/cache` 下历史遗留命名（`*.current`、`*-last-tag`、`*_last_image`、`*-md5`、`*-base.md5`、`*-base-custom.md5`、`*-base.explained`、`*-yarn`）；按废弃命名精确匹配，不误伤在用文件与子目录 |
+| `config_deploy_init` | 初始化 `deploy.env`（无则复制模板）、建 data 目录、PATH 追加工具目录、调 `config_clean_legacy_cache` |
 | `_load_project_build_deploy_config` | 用 jq 解析 JSON，导出 `PROJECT_BUILD_METHOD`/`PROJECT_DEPLOY_METHOD` 等覆盖项 |
 | `config_deploy_setup` | 生成 SSH ed25519 密钥、为 .ssh/.acme.sh/.aws/.kube/.aliyun 建 $HOME 符号链接、glab 配置目录链接 |
 
@@ -183,9 +184,11 @@ flowchart TD
 | `ensure_buildx_builder_kubernetes` | 创建 kubernetes 驱动 builder |
 | `enable_buildx_mode` | 按 `ENV_BUILDX_MODE`（auto/kubernetes/remote）选 builder |
 | `generate_bake_file` | 生成 `docker-bake.hcl`（default + base 双 target；支持多架构 `ENV_BUILDX_PLATFORMS`、BuildKit 缓存 `ENV_BUILDX_CACHE`） |
-| `build_image` | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略 |
+| `build_state_get` / `build_state_set` | 读写 `data/cache/build-state.index`（`<repo>-<branch> <field> <value>`，field ∈ base_md5/base_custom_md5/yarn_md5/explained）；set 为 tmp+mv 原子重写 |
+| `base_explain` | 两段式构建说明每项目/分支只输出一次（状态记在 `build-state.index` 的 `explained`） |
+| `build_image` | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略；base 是否重建按 `build-state.index` 里的依赖指纹判定 |
 | `stage_build` | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
-| `build_<lang>` | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建（java/node 工具镜像可用 `ENV_BASE_BUILD_IMAGE` 覆盖） |
+| `build_<lang>` | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建（java/node 工具镜像可用 `ENV_BASE_BUILD_IMAGE` 覆盖）；node 的 yarn/npm 安装指纹记 `yarn_md5` |
 | `docker_login` | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
 | `generate_base_dockerfile` / `generate_lang_dockerfile` | 生成基础/语言 Dockerfile |
 | `detect_repo_language_and_build` | 用 Cloud Native Buildpacks（pack）构建 |
@@ -512,6 +515,7 @@ auto 优先级链：
 - `G_IMAGE_NAME`：`ENV_DOCKER_IMAGE_RANDOM=true` 时取 2 个随机字符（a-o），否则仓库名去 `-_` 截 10 字符。
 - 随机仓库名的动因：ACR 个人版配额为 3 命名空间 / 300 仓库，且无 OpenAPI、无「版本自动清理」（官方仅企业版支持），发布频繁会让单仓库 tag 无限堆积；故按 a-o 两字符散列到 225 个仓库摊薄 tag。代价：仓库名不可推导、清理需遍历 225 个名字（占用 300 配额中的 225）。
 - 遗留镜像治理（单文件索引 `data/cache/image-refs.index`，两种标记行）：`push <ref>` 台账行由 `build_image` 在 push 前登记；`live <release>-<ns> <ref>` 存活行由 `record_deployed_image` 在部署成功后标记。`stage_deploy` 收尾调 `_clean_indexed_images` 删除非存活 `push` 行（存活 = `live` 行或本次引用）。随机池是所有项目共用的，因此只能按"本工具推过的引用"删，不能按仓库或年龄扫；索引损坏时放弃清理而非误删。
+- `data/cache/` 终态只有少量文件：`image-refs.index`（镜像引用）、`build-state.index`（构建指纹与提示标记，按 `<repo>-<branch>` 存值）、`.docker.login.<type>.lock`（登录锁）、`base-bake.hcl`（临时 bake 文件）；早期"一仓库一分支多小文件"的命名（`*-base.md5`、`*-base-custom.md5`、`*-base.explained`、`*-yarn`、`*-last-tag`、`*_last_image`、`*.current`）由 `config_clean_legacy_cache` 每次运行自动清掉。
 - 目标镜像：`${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}`——build、deploy、record、buildpack、base image 多处复用的全工具核心命名。
 
 ### 4.7 dry-run 模式（`--dry`）

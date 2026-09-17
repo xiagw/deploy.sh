@@ -5,6 +5,32 @@
 # Author: xiagw <fxiaxiaoyu@gmail.com>
 # License: GNU/GPL
 
+build_state_get() {
+    # 读 G_BUILD_STATE 里 <key> <field> 的 value（无记录则输出空）
+    # 行格式: <key> <field> <value>；key = <repo>-<branch>
+    local key="${1:?key required}" field="${2:?field required}"
+    [[ -f "${G_BUILD_STATE}" ]] || return 0
+    awk -v k="${key}" -v f="${field}" '$1==k && $2==f {print $3; exit}' "${G_BUILD_STATE}"
+}
+
+build_state_set() {
+    # 写 <key> <field> <value>（已存在则替换）、删掉重复行；整文件 tmp+mv 原子重写
+    # 状态损坏只会导致多一次 base 重建/提示重复输出，故不做 fail-fast，无法解析的行按空值跳过
+    local key="${1:?key required}" field="${2:?field required}" value="${3-}" tmp="${G_BUILD_STATE}.tmp.$$"
+    local line_key line_field line_value
+    mkdir -p "$(dirname "${G_BUILD_STATE}")"
+    : >"${tmp}"
+    if [[ -f "${G_BUILD_STATE}" ]]; then
+        while read -r line_key line_field line_value; do
+            [[ -n "${line_key}" ]] || continue
+            [[ "${line_key}" == "${key}" && "${line_field}" == "${field}" ]] && continue
+            printf '%s\n' "${line_key} ${line_field} ${line_value}" >>"${tmp}"
+        done <"${G_BUILD_STATE}"
+    fi
+    printf '%s %s %s\n' "${key}" "${field}" "${value}" >>"${tmp}"
+    mv -f "${tmp}" "${G_BUILD_STATE}"
+}
+
 ensure_buildx_builder() {
     ## 在中国区环境下启用 buildx builder
     [[ "${G_DEBUG_ON:-false}" == true ]] && return
@@ -262,16 +288,16 @@ EOF
 }
 
 base_explain() {
-    # 自动生成两段式时的说明（每个项目/分支首次构建输出一次，marker 记录）
-    local lang="${1:-}" manifest_name
+    # 自动生成两段式时的说明（每个项目/分支首次构建输出一次，状态记在 G_BUILD_STATE 的 explained 字段）
+    local lang="${1:-}" manifest_name state_key
     manifest_name="$(lang_dep_manifest "${lang}")"
     manifest_name="${manifest_name##*/}"
     [[ -n "${manifest_name}" ]] || return 0
-    local marker="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base.explained"
-    if ! ${G_DRY_RUN:-false} && [[ -f "${marker}" ]]; then
+    state_key="${G_REPO_NAME}-${G_REPO_BRANCH}"
+    if ! ${G_DRY_RUN:-false} && [[ -n "$(build_state_get "${state_key}" explained)" ]]; then
         return 0
     fi
-    ${G_DRY_RUN:-false} || touch "${marker}"
+    ${G_DRY_RUN:-false} || build_state_set "${state_key}" explained 1
     _msg note "[${lang}] 两段式构建（加速设计）：base 镜像先按 ${manifest_name} 安装依赖，运行时镜像直接 FROM base"
     _msg note "      依赖只安装一次；${manifest_name} 变动才重建 base，未变动直接复用已有（构建更快）"
     _msg note "      base tag: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
@@ -317,7 +343,8 @@ build_image() {
     local dry="${G_DRY_RUN:-false}"
     local lang="${1:-}"
     local custom_build_script dockerfile_base_path dockerfile_path buildx_push_option image_uuid target_image_tag base_image_tag bake_file_path docker_mirror ret debug_flag
-    local custom_build_ret build_base dep_hash node_base_record deps_base_custom
+    local custom_build_ret build_base dep_hash state_key state_field deps_base_custom
+    state_key="${G_REPO_NAME}-${G_REPO_BRANCH}"
 
     ## 构建日志写入 G_ARTIFACT_DIR/logs（CI 下为项目内 ci-artifacts/logs，供 artifacts 收集）
     ## 目录不预先创建，写日志时由 mkdir -p "$(dirname ...)" 按需创建，避免产生空目录/空 artifact
@@ -361,8 +388,8 @@ build_image() {
                 ## base 是否重建以 Dockerfile.base + 全部 package.json + lockfile 内容指纹为准
                 deps_base_custom=true
                 dep_hash="$(custom_base_hash "${dockerfile_base_path}" "${lang_type}")"
-                node_base_record="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base-custom.md5"
-                if [[ -n "${dep_hash}" && "$(cat "${node_base_record}" 2>/dev/null || echo 0)" == "${dep_hash}" ]]; then
+                state_field="base_custom_md5"
+                if [[ -n "${dep_hash}" && "$(build_state_get "${state_key}" "${state_field}")" == "${dep_hash}" ]]; then
                     if $dry || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
                         build_base=false
                         _msg note "[${lang_type}] 仓库自带 Dockerfile.base 未变，复用基础镜像（本轮构建较快）"
@@ -371,12 +398,12 @@ build_image() {
             else
                 ## 自动生成的两段式：按依赖声明文件指纹决定是否重建 base
                 dep_hash="$(lang_dep_hash "${lang_type}")"
-                node_base_record="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-base.md5"
+                state_field="base_md5"
                 manifest_name="$(lang_dep_manifest "${lang_type}")"
                 manifest_name="${manifest_name##*/}"
                 base_explain "${lang_type}"
                 [[ "${lang_type}" == node ]] && node_lockfile_warn
-                if [[ "$(cat "${node_base_record}" 2>/dev/null || echo 0)" == "${dep_hash}" ]]; then
+                if [[ "$(build_state_get "${state_key}" "${state_field}")" == "${dep_hash}" ]]; then
                     if $dry || $G_DOCK manifest inspect "${base_image_tag}" >/dev/null 2>&1; then
                         build_base=false
                         _msg note "[${lang_type}] ${manifest_name} 未变，Dockerfile 直接复用基础镜像（本轮构建较快）"
@@ -482,9 +509,8 @@ DOCKERIGNORE
                 return 1
             fi
             ## 构建成功：记录依赖指纹，依赖未变时下次直接复用
-            if [[ -n "${dep_hash:-}" ]]; then
-                mkdir -p "$(dirname "${node_base_record}")"
-                echo "${dep_hash}" >"${node_base_record}"
+            if [[ -n "${dep_hash:-}" && -n "${state_field:-}" ]]; then
+                build_state_set "${state_key}" "${state_field}" "${dep_hash}"
             fi
             build_log_hint "$base_build_log" false
         fi
@@ -717,15 +743,16 @@ build_node() {
     local file_json
     local file_json_md5
     local yarn_install
-    local me_log="${G_DATA}/cache/${G_REPO_NAME}-${G_REPO_BRANCH}-yarn"
-
-    mkdir -p "${G_DATA}/cache"
+    local state_key="${G_REPO_NAME}-${G_REPO_BRANCH}" last_md5
 
     file_json="${G_REPO_DIR}/package.json"
-    file_json_md5="$G_REPO_GROUP_PATH/$G_NAMESPACE/$(md5sum "$file_json" | awk '{print $1}')"
+    file_json_md5="$(md5sum "$file_json" | awk '{print $1}')"
     yarn_install=false
 
-    if grep -q "$file_json_md5" "${me_log}"; then
+    ## 只与"上次安装成功"的指纹比较（不用历史任一值：package.json 回退时历史命中会跳过安装，
+    ## 而 node_modules 是新版本的，会构建出依赖不对的镜像）
+    last_md5="$(build_state_get "${state_key}" yarn_md5)"
+    if [[ -n "${last_md5}" && "${last_md5}" == "${file_json_md5}" ]]; then
         echo "Same checksum for ${file_json}, skip yarn install."
     else
         echo "New checksum for ${file_json}, run yarn install."
@@ -753,10 +780,10 @@ build_node() {
     if ${yarn_install}; then
         if [[ "${pkg_man}" == npm ]]; then
             $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "npm install" &&
-                echo "$file_json_md5" >>"${me_log}"
+                build_state_set "${state_key}" yarn_md5 "${file_json_md5}"
         else
             $G_RUN -u 1000:1000 -v "${G_REPO_DIR}":/app -w /app "${build_image_from:-${ENV_BASE_BUILD_IMAGE:-node:18-slim}}" bash -c "yarn install" &&
-                echo "$file_json_md5" >>"${me_log}"
+                build_state_set "${state_key}" yarn_md5 "${file_json_md5}"
         fi
     else
         _msg task "Skip yarn install..."
