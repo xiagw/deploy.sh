@@ -1127,7 +1127,8 @@ _clean_indexed_images() {
             continue
         fi
         if skopeo delete "docker://${ref}" >/dev/null 2>&1; then
-            _msg task "Deleted stale image: ${ref}"
+            ## 与 _clean_tags_one 的粒度一致：逐条删除用 note，批次结果用 task
+            _msg note "Deleted stale image: ${ref}"
             deleted=$((deleted + 1))
         elif _image_ref_exists "${ref}"; then
             _msg warn "Failed to delete stale image, keep for retry: ${ref}"
@@ -1143,7 +1144,10 @@ _clean_indexed_images() {
     [[ "${#live_lines[@]}" -gt 0 ]] && printf '%s\n' "${live_lines[@]}" >>"${tmp}"
     [[ "${#keep[@]}" -gt 0 ]] && printf '%s\n' "${keep[@]}" >>"${tmp}"
     mv -f "${tmp}" "${G_IMAGE_INDEX}"
-    _msg task "Indexed image cleanup: deleted=${deleted}, kept=${kept}"
+    ## 无删除也无保留（绝大多数部署）时不打印，避免每次部署一条 deleted=0, kept=0 噪音
+    if [[ "${deleted}" -gt 0 || "${kept}" -gt 0 ]]; then
+        _msg task "Indexed image cleanup: deleted=${deleted}, kept=${kept}"
+    fi
 }
 
 clean_old_tags() {
