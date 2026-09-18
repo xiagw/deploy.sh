@@ -217,6 +217,17 @@ _msg() {
     fi
 }
 
+stage_done() {
+    # 阶段结论：每个 stage_* 结束时恰好输出一条绿色完成行，规则集中在这里
+    # $1 结果码（0=成功）；$2 中文结论；$3 英文结论
+    # 失败不打（由调用方或内部 error 行承担）；干跑不打——干跑只报计划，不宣称完成
+    # 阶段内部的过程信息一律用 _msg task/note，禁止用 _msg ok，否则一个阶段出现多条绿线
+    local rc="${1}" zh="${2}" en="${3}"
+    [[ "${rc}" -eq 0 ]] || return 0
+    [[ "${G_DRY_RUN:-false}" == true ]] && return 0
+    _msg ok "$(_t "${zh}" "${en}")"
+}
+
 _check_root() {
     # use_sudo 语义（勿改勿加兜底）：root → 空串（直接执行）；非 root 有 sudo 权限 → sudo
     # 警告：调用点一律用 $use_sudo，禁止写成 ${use_sudo:-sudo} —— CI/容器以 root 运行且无 sudo，

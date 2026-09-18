@@ -40,7 +40,7 @@ _test_resolve_image() {
         if ! $G_DOCK image inspect "$image" >/dev/null 2>&1; then
             _msg task "Building test image from Dockerfile.tests" >&2
             if $G_DOCK build -q -t "$image" -f "$dockerfile" "$G_REPO_DIR" >/dev/null 2>&1; then
-                _msg ok "Test image built: $image" >&2
+                _msg task "Test image built: $image" >&2
             else
                 _msg error "Failed to build test image: $dockerfile" >&2
                 return 1
@@ -82,7 +82,6 @@ test_unit() {
     _msg task "Running unit tests (container)"
     dry_run_skip "run: ${docker_cmd[*]}" && return 0
     if "${docker_cmd[@]}"; then
-        _msg ok "Unit test passed"
         return 0
     fi
     _msg error "Unit test failed"
@@ -101,7 +100,6 @@ test_function() {
     _msg task "Running functional tests (container)"
     dry_run_skip "run: ${docker_cmd[*]}" && return 0
     if "${docker_cmd[@]}"; then
-        _msg ok "Functional test passed"
         return 0
     fi
     _msg error "Functional test failed"
@@ -120,7 +118,6 @@ test_performance() {
     _msg task "Running performance tests (container)"
     dry_run_skip "run: ${docker_cmd[*]}" && return 0
     if "${docker_cmd[@]}"; then
-        _msg ok "Performance test passed"
         return 0
     fi
     _msg error "Performance test failed"
@@ -131,12 +128,13 @@ stage_unit_test() {
     _msg stage "$(_t '单元测试' 'unit test')"
     _msg task "Unit tests (optional: --test-unit)"
     if ${arg_test_unit:-false} || [[ "${PIPELINE_UNIT_TEST:-false}" == true ]]; then
-        if test_unit; then
-            _msg ok "Unit tests completed successfully"
-        else
+        local rc=0
+        test_unit || rc=$?
+        if [[ "${rc}" -ne 0 ]]; then
             G_TEST_RESULT=1
             _msg error "Unit tests failed"
         fi
+        stage_done "${rc}" '单元测试完成' 'unit tests completed'
     else
         _msg note "$(_t '跳过' 'skipped') (use --test-unit or set PIPELINE_UNIT_TEST=true)"
     fi
@@ -150,12 +148,13 @@ stage_functional_test() {
     _msg stage "$(_t '功能测试' 'functional test')"
     _msg task "Functional tests (optional: --test-function)"
     if ${arg_test_func:-false} || [[ "${PIPELINE_FUNCTION_TEST:-false}" == true ]]; then
-        if test_function; then
-            _msg ok "Functional tests completed successfully"
-        else
+        local rc=0
+        test_function || rc=$?
+        if [[ "${rc}" -ne 0 ]]; then
             G_TEST_RESULT=1
             _msg error "Functional tests failed"
         fi
+        stage_done "${rc}" '功能测试完成' 'functional tests completed'
     else
         _msg note "$(_t '跳过' 'skipped') (use --test-function or set PIPELINE_FUNCTION_TEST=true)"
     fi
@@ -168,12 +167,13 @@ stage_performance_test() {
     _msg stage "$(_t '性能测试' 'performance test')"
     _msg task "Performance tests (optional: --test-performance)"
     if ${arg_test_perf:-false} || [[ "${PIPELINE_PERF_TEST:-false}" == true ]]; then
-        if test_performance; then
-            _msg ok "Performance tests completed successfully"
-        else
+        local rc=0
+        test_performance || rc=$?
+        if [[ "${rc}" -ne 0 ]]; then
             G_TEST_RESULT=1
             _msg error "Performance tests failed"
         fi
+        stage_done "${rc}" '性能测试完成' 'performance tests completed'
     else
         _msg note "$(_t '跳过' 'skipped') (use --test-performance or set PIPELINE_PERF_TEST=true)"
     fi

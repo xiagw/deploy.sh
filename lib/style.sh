@@ -200,7 +200,7 @@ style_check_shell() {
     done < <(find "$G_REPO_DIR" -type f -name "*.sh") || true
 
     if [ $exit_code -eq 0 ]; then
-        _msg ok "All shell scripts passed checks"
+        _msg task "All shell scripts passed checks"
     else
         _msg error "Some shell scripts failed checks"
     fi
@@ -222,20 +222,26 @@ stage_code_style() {
 
     dry_run_skip "run code style check for ${lang} (style_check_${lang})" && return 0
 
+    local rc=0
     case "$lang" in
-    php) style_check_php ;;
-    android) style_check_android ;;
-    python) style_check_python ;;
-    node) style_check_node ;;
-    java) style_check_java ;;
-    go | golang) style_check_go ;;
-    rust) style_check_rust ;;
-    ruby) style_check_ruby ;;
-    c) style_check_c ;;
-    docker) style_check_docker ;;
-    ios) style_check_ios ;;
-    django) style_check_django ;;
-    dotnet) style_check_dotnet ;;
-    *) _msg warn "No style checker available for language: $lang" ;;
+    php) style_check_php || rc=$? ;;
+    android) style_check_android || rc=$? ;;
+    python) style_check_python || rc=$? ;;
+    node) style_check_node || rc=$? ;;
+    java) style_check_java || rc=$? ;;
+    go | golang) style_check_go || rc=$? ;;
+    rust) style_check_rust || rc=$? ;;
+    ruby) style_check_ruby || rc=$? ;;
+    c) style_check_c || rc=$? ;;
+    docker) style_check_docker || rc=$? ;;
+    ios) style_check_ios || rc=$? ;;
+    django) style_check_django || rc=$? ;;
+    dotnet) style_check_dotnet || rc=$? ;;
+    *)
+        ## 无对应检查器：不算完成（不打绿线），仅告警
+        _msg warn "No style checker available for language: $lang"
+        rc=1
+        ;;
     esac
+    stage_done "${rc}" '代码风格检查完成' 'code style check completed'
 }

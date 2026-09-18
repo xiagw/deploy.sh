@@ -479,7 +479,7 @@ deploy_via_rsync_ssh() {
             continue
         fi
         if $ssh_opt -n "$ssh_host" "mkdir -p $rsync_dest" && ${rsync_opt} -e "$ssh_opt" "$rsync_src" "${ssh_host}:${rsync_dest}"; then
-            _msg ok "rsync+ssh deployment succeeded for ${ssh_host}:${rsync_dest}"
+            _msg task "rsync+ssh deployment succeeded for ${ssh_host}:${rsync_dest}"
         else
             G_DEPLOY_RESULT=1
             _msg error "rsync+ssh deployment failed for ${ssh_host}:${rsync_dest}"
@@ -525,7 +525,7 @@ _oss_upload() {
     _install_ossutil
 
     if ossutil cp "${source_path%/}/" "${oss_dest}" --recursive --force; then
-        _msg ok "Deployment successful"
+        _msg task "Deployment successful"
     else
         G_DEPLOY_RESULT=1
         _msg error "Deployment failed"
@@ -722,7 +722,7 @@ deploy_to_docker_compose() {
         if $ssh_opt -n "$ssh_host" "mkdir -p $rsync_dest" &&
             ${rsync_opt} -e "$ssh_opt" "$rsync_src" "${ssh_host}:${rsync_dest}/" &&
             $ssh_opt -n "$ssh_host" "cd $rsync_dest && docker compose up -d --build $service"; then
-            _msg ok "Docker Compose deployment completed for ${ssh_host}"
+            _msg task "Docker Compose deployment completed for ${ssh_host}"
         else
             G_DEPLOY_RESULT=1
             _msg error "Docker Compose deployment failed for ${ssh_host}:${rsync_dest}"
@@ -944,8 +944,8 @@ stage_deploy() {
     ## 此处固定返回 0，避免 set -e 中断流水线导致 handle_notify 被跳过
     ## 部署后清理索引里已失效的镜像引用（随机仓库池的遗留 + 删除失败重试）
     _clean_indexed_images || true
-    ## 阶段结论放在清理之后：否则日志停在清理明细上，且 ✓ 之后还有动作
-    [[ "${G_DEPLOY_RESULT:-0}" -eq 0 ]] && _msg ok "$(_t '部署完成' 'deployment completed')"
+    ## 阶段结论放在清理之后；失败与干跑都不打（见 stage_done）
+    stage_done "${G_DEPLOY_RESULT:-0}" '部署完成' 'deployment completed'
     return 0
 }
 

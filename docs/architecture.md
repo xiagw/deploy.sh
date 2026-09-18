@@ -92,7 +92,7 @@ flowchart TD
 
 ### 2.2 lib/common.sh（基础设施）
 
-- **日志/消息**：`_log`（级别+颜色+时间戳，写文件/终端）、`_msg`（统一消息分发，9 种类型）、`_t`/`_msg_lang`（中英 i18n）。
+- **日志/消息**：`_log`（级别+颜色+时间戳，写文件/终端）、`_msg`（统一消息分发，9 种类型）、`_t`/`_msg_lang`（中英 i18n）、`stage_done`（阶段唯一绿色结论，见 §3.4 阶段输出约定）。
 - **时间工具**：`_fmt_dur`（秒→`0h01m05s`）、`_now_ms`（毫秒，三级回退：`EPOCHREALTIME`→`date +%s%3N`→`SECONDS*1000`）。
 - **dry-run**：`dry_run_note`（`G_DRY_RUN` 环境下预览命令不执行）。
 - **环境检查**：`_check_commands`、`_check_disk_space`、`_check_root`（+探测包管理器）、`_check_distribution`、`_check_cmd`、`_set_package_manager`、`_install_packages`、`_check_timezone`。
@@ -190,7 +190,8 @@ flowchart TD
 | `build_state_get` / `build_state_set` | 读写 `data/cache/build-state.index`（`<repo>-<branch> <field> <value>`，field ∈ base_md5/base_custom_md5/yarn_md5/explained）；set 为 tmp+mv 原子重写 |
 | `base_explain` | 两段式构建说明每项目/分支只输出一次（状态记在 `build-state.index` 的 `explained`） |
 | `build_image` | 核心：buildx bake、push/load、ttl.sh 临时镜像、镜像保留策略；base 是否重建按 `build-state.index` 里的依赖指纹判定 |
-| `stage_build` | 总调度：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
+| `stage_build` | 阶段入口：打横幅、调 `_build_dispatch`，成功且非干跑时输出唯一绿色结论（`stage_done`） |
+| `_build_dispatch` | 构建方式分派（仅由 `stage_build` 调用）：配置覆盖 → Dockerfile 优先 → 失败回退系统构建 |
 | `build_<lang>` | java/node/python/android/ios/ruby/go/c/django/php/shell 系统构建（java/node 工具镜像可用 `ENV_BASE_BUILD_IMAGE` 覆盖）；node 的 yarn/npm 安装指纹记 `yarn_md5` |
 | `docker_login` | registry 登录（aws ECR / 普通），锁文件+12h 缓存 |
 | `generate_base_dockerfile` / `generate_lang_dockerfile` | 生成基础/语言 Dockerfile |
@@ -348,6 +349,21 @@ repo_overlay_files    →  覆盖 conf/root、生成 Dockerfile.base/Dockerfile 
 ```
 
 > 阶段横幅（`_msg stage`）由各 `stage_*` 函数自打印并自守卫，main 仅做顺序编排。
+
+**阶段输出约定**（所有 `stage_*` 统一遵守，`common.sh stage_done` 是唯一实现点）：
+
+| 情形 | 输出 |
+|---|---|
+| 开始 | `▶ STAGE N · 名称`（`_msg stage`，序号自动递增） |
+| 成功且非干跑 | 恰好一条 `✓ <阶段>完成` |
+| 失败 | 内部 `✗ ... failed` 行（或调用方 error），**不打**完成行 |
+| 整体跳过（未启用/环境不满足） | 一条 `⋯ 跳过 (...)`，**不打**完成行 |
+| 干跑 | 只打 `[dry-run]` 计划行；`stage_done` 自守卫，**不打**完成行 |
+| 阶段内部过程信息 | 一律 `·`（task）/`⋯`（note）；**禁止 `_msg ok`**，否则一个阶段出现多条绿线，读者会误判阶段已结束 |
+
+因此"日志里最后一条绿线 = 刚结束阶段的结论"恒成立（多主机场景的每主机成功行也降为 `·`，只有阶段级 `✓` 是绿的）。
+
+例外：准备/安装类函数（`system_install_tools`、`config_deploy_setup`、`handle_notify`、`bin/` 脚本等）不是 `stage_*`，仍自行打 `✓`，不受此约定约束。
 
 ### 3.5 可选函数依赖表（谁依赖谁、最早位置）
 

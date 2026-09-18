@@ -57,6 +57,8 @@ stage_security_scan() {
     for fn in "${todo[@]}"; do
         "$fn"
     done
+    ## 全跳过（[[ ${#todo[@]} -eq 0 ]]）时已提前 return，不打绿线；子扫描失败按原语义由 set -e 中断
+    stage_done 0 '安全扫描完成' 'security scans completed'
 }
 
 _scan_zap() {
@@ -75,7 +77,7 @@ _scan_zap() {
     mkdir -p "${G_ARTIFACT_DIR}/reports"
     if $G_RUN -v "${G_ARTIFACT_DIR}/reports:/zap/wrk" "$zap_image" zap-full-scan.sh "${ENV_ZAP_OPT:-"-t ${target_url} -r report.html"}"; then
         mv "${G_ARTIFACT_DIR}/reports/report.html" "${G_ARTIFACT_DIR}/reports/zap_report_latest.html" || _msg warn "ZAP report not found: report.html"
-        _msg ok "ZAP scan completed. Report saved to ${G_ARTIFACT_DIR}/reports/zap_report_latest.html"
+        _msg task "ZAP scan completed. Report saved to ${G_ARTIFACT_DIR}/reports/zap_report_latest.html"
     else
         _msg error "ZAP scan failed."
         return 1
@@ -108,7 +110,7 @@ _scan_vulmap() {
     mkdir -p "${G_ARTIFACT_DIR}/reports"
     $G_RUN -v "${G_ARTIFACT_DIR}/reports:/work" vulmap -u "${ENV_TARGET_URL}" -o "/work/$output_file"
     if [[ -f "${G_ARTIFACT_DIR}/reports/$output_file" ]]; then
-        _msg ok "vulmap scan completed. Results saved to '${G_ARTIFACT_DIR}/reports/$output_file'."
+        _msg task "vulmap scan completed. Results saved to '${G_ARTIFACT_DIR}/reports/$output_file'."
     else
         _msg error "vulmap scan failed or no vulnerabilities found."
         return 1
@@ -139,7 +141,7 @@ stage_code_quality() {
             fi
 
             if [[ ! -f "$sonar_conf" ]]; then
-                _msg ok "Creating $sonar_conf"
+                _msg task "Creating $sonar_conf"
                 cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
 sonar.projectKey=${G_REPO_NS}_${G_REPO_NAME}
@@ -181,6 +183,8 @@ EOF
         if ! analysis_pylint; then _msg warn "Pylint issues found"; fi
         ;;
     esac
+    ## 语言级分析失败只告警不中断，故此处恒为完成；SonarQube 失败走上方 return 1 不打绿线
+    stage_done 0 '代码质量检查完成' 'code quality check completed'
     return 0
 }
 
@@ -221,7 +225,7 @@ analysis_pmd() {
     fi
 
     if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
-        _msg ok "PMD analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
+        _msg task "PMD analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
     else
         _msg error "PMD report file not generated"
         return 1
@@ -250,7 +254,7 @@ analysis_codeclimate() {
 
     # 如果配置文件不存在，创建默认配置
     if [[ ! -f "$config_file" ]]; then
-        _msg ok "Creating default CodeClimate configuration"
+        _msg task "Creating default CodeClimate configuration"
         cat > "$config_file" <<EOF
 version: "2"
 checks:
@@ -323,11 +327,11 @@ EOF
                     </div>"' "${G_ARTIFACT_DIR}/reports/${report_file}" 2>/dev/null
                 echo "</body></html>"
             } > "$html_report"
-            _msg ok "CodeClimate analysis completed. Reports saved to:"
-            _msg ok "- JSON Report: ${report_file}"
-            _msg ok "- HTML Report: $(basename "$html_report")"
+            _msg task "CodeClimate analysis completed. Reports saved to:"
+            _msg task "- JSON Report: ${report_file}"
+            _msg task "- HTML Report: $(basename "$html_report")"
         else
-            _msg ok "CodeClimate analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
+            _msg task "CodeClimate analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
         fi
     else
         _msg error "CodeClimate report file not generated"
@@ -359,7 +363,7 @@ analysis_spotbugs() {
 
     # 创建默认的排除规则文件
     if [[ ! -f "$exclude_file" ]]; then
-        _msg ok "Creating default Spotbugs exclude file"
+        _msg task "Creating default Spotbugs exclude file"
         cat > "$exclude_file" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <FindBugsFilter>
@@ -389,7 +393,7 @@ EOF
     fi
 
     if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
-        _msg ok "Spotbugs analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
+        _msg task "Spotbugs analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
     else
         _msg error "Spotbugs report file not generated"
         return 1
@@ -419,7 +423,7 @@ analysis_pylint() {
 
     # 创建默认的Pylint配置文件
     if [[ ! -f "$config_file" ]]; then
-        _msg ok "Creating default Pylint configuration"
+        _msg task "Creating default Pylint configuration"
         $G_RUN "python:${pylint_version}-slim" bash -c "pip install pylint==${pylint_version} && pylint --generate-rcfile" > "$config_file"
     fi
 
@@ -438,7 +442,7 @@ analysis_pylint() {
     fi
 
     if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
-        _msg ok "Pylint analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
+        _msg task "Pylint analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
     else
         _msg error "Pylint report file not generated"
         return 1
@@ -468,7 +472,7 @@ analysis_checkstyle() {
 
     # 创建默认的Checkstyle配置文件（使用Google风格）
     if [[ ! -f "$config_file" ]]; then
-        _msg ok "Creating default Checkstyle configuration (Google style)"
+        _msg task "Creating default Checkstyle configuration (Google style)"
         cat > "$config_file" <<EOF
 <?xml version="1.0"?>
 <!DOCTYPE module PUBLIC
@@ -518,7 +522,7 @@ EOF
     fi
 
     if [[ -f "${G_ARTIFACT_DIR}/reports/${report_file}" ]]; then
-        _msg ok "Checkstyle analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
+        _msg task "Checkstyle analysis completed. Report saved to ${G_ARTIFACT_DIR}/reports/${report_file}"
     else
         _msg error "Checkstyle report file not generated"
         return 1
@@ -538,7 +542,7 @@ _scan_semgrep() {
     $G_RUN -v "$G_REPO_DIR:/src" -v "$out:/out" semgrep/semgrep scan \
         --config=auto --json -o /out/semgrep.json /src || ret=$?
     if [ "$ret" -eq 0 ]; then
-        _msg ok "Semgrep report: $out/semgrep.json"
+        _msg task "Semgrep report: $out/semgrep.json"
     elif [ "$ret" -eq 1 ]; then
         _msg warn "Semgrep found issues: $out/semgrep.json"
     else
@@ -560,7 +564,7 @@ _scan_sca() {
         --scanners vuln --exit-code 1 --ignore-unfixed \
         --format json --output /out/trivy-fs.json /repo || ret=$?
     if [ "$ret" -eq 0 ]; then
-        _msg ok "Trivy SCA report: $out/trivy-fs.json"
+        _msg task "Trivy SCA report: $out/trivy-fs.json"
     elif [ "$ret" -eq 1 ]; then
         _msg warn "Trivy SCA found vulnerabilities: $out/trivy-fs.json"
     else
@@ -592,12 +596,14 @@ stage_security_image() {
         --exit-code 1 --ignore-unfixed \
         --format json --output /out/trivy-image.json "$image_tag" || ret=$?
     if [ "$ret" -eq 0 ]; then
-        _msg ok "Trivy image report: $out/trivy-image.json"
+        _msg task "Trivy image report: $out/trivy-image.json"
     elif [ "$ret" -eq 1 ]; then
         _msg warn "Trivy image found vulnerabilities: $out/trivy-image.json"
     else
         _msg warn "Trivy image scan failed (exit $ret), continue"
     fi
+    ## 完成 ≠ 无漏洞：发现漏洞只 warn，阶段本身执行完毕
+    stage_done 0 '镜像漏洞扫描完成' 'image vulnerability scan completed'
     return 0
 }
 
@@ -609,7 +615,7 @@ _scan_gitleaks() {
 
     local config_file="$G_PATH/conf/templates/config.toml"
     if analysis_gitleaks "$G_REPO_DIR" "$config_file"; then
-        _msg ok "Gitleaks scan completed, no secrets found"
+        _msg task "Gitleaks scan completed, no secrets found"
     else
         _msg warn "Gitleaks found potential secrets (report above)"
     fi
