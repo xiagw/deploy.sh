@@ -160,7 +160,8 @@ flowchart TD
 | `stage_security_scan` | 安全扫描统一入口：一个横幅下按开关派发下面 5 个扫描 | 各行开关 |
 | `_scan_zap` | owasp/zap2docker-stable | `PIPELINE_SCAN_ZAP` / `-z` |
 | `_scan_vulmap` | 本地 vulmap | `PIPELINE_SCAN_VULMAP` / `-m` |
-| `stage_code_quality` | sonar + 语言分析分发 | `PIPELINE_SONAR` + `PIPELINE_PMD/CODECLIMATE/SPOTBUGS/PYLINT/CHECKSTYLE` |
+| `stage_code_quality` | 质量门禁统一入口：按开关派发 SonarQube 与本语言静态分析 | `PIPELINE_SONAR` + `PIPELINE_PMD/CODECLIMATE/SPOTBUGS/PYLINT/CHECKSTYLE` |
+| `_sonar_code_quality` | SonarQube 平台级门禁（由 `stage_code_quality` 派发；失败即停，平台级） | `PIPELINE_SONAR` |
 | `analysis_pmd` | pmd/pmd:6.55.0 | `PIPELINE_PMD` |
 | `analysis_codeclimate` | codeclimate/codeclimate | `PIPELINE_CODECLIMATE` |
 | `analysis_spotbugs` | spotbugs/spotbugs:4.7.3 | `PIPELINE_SPOTBUGS` |
@@ -172,7 +173,7 @@ flowchart TD
 | `stage_security_image` | aquasec/trivy（镜像，build 后；独立 stage，非上述 5 个） | `PIPELINE_SCAN_IMAGE` / `--scan-image` |
 
 统一模式：开关未启用输出 `⋯ 跳过 (PIPELINE_XX=false)`；失败 `✗ ... failed` return 1（pylint 例外，仅 warn）。
-`stage_security_scan` 例外：5 个扫描全未启用时只输出一行汇总跳过提示，不再逐个打印；各 `_scan_*` 由它按开关派发，自身不再判开关。
+`stage_security_scan` / `stage_code_quality` 例外：所有子项都未启用时只输出一行汇总跳过提示（不打绿线），各子函数由 stage 按开关派发、自身不再判开关，因此启用项才打印自己的过程行。
 报告统一落在 `data/reports/security/`（semgrep.json / trivy-fs.json / trivy-image.json）。
 
 ### 2.8 lib/style.sh（代码风格）

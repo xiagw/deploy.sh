@@ -121,28 +121,74 @@ _scan_vulmap() {
 
 stage_code_quality() {
     _msg stage "$(_t '代码质量' 'code quality')"
+    local lang
+    lang="$(detect_repo_language | cut -d: -f1)"
 
-    ## SonarQube（平台级质量门禁，PIPELINE_SONAR）
-    _msg task "SonarQube code quality check (optional: PIPELINE_SONAR=true)"
-    ## 在 gitlab 的 pipeline 配置环境变量 PIPELINE_SONAR ，true 启用，false 禁用[default]
-    [[ "${PIPELINE_SONAR:-false}" != true ]] && _msg note "$(_t '跳过' 'skipped') (PIPELINE_SONAR=false)"
-    if ${PIPELINE_SONAR:-false}; then
-        local sonar_url="${ENV_SONAR_URL:?empty}"
-        local sonar_conf="$G_REPO_DIR/sonar-project.properties"
+    ## 本阶段可选门禁（各自 PIPELINE_*）：先算出启用了哪些；全未启用只输出一行汇总跳过且不打绿线
+    ## 与 stage_security_scan 同规则——避免"全部跳过却打 ✓ 完成"
+    local -a todo=()
+    [[ "${PIPELINE_SONAR:-false}" == true ]] && todo+=(sonar)
+    [[ "${PIPELINE_CODECLIMATE:-false}" == true ]] && todo+=(analysis_codeclimate)
+    case "${lang}" in
+    java)
+        [[ "${PIPELINE_PMD:-false}" == true ]] && todo+=(analysis_pmd)
+        [[ "${PIPELINE_SPOTBUGS:-false}" == true ]] && todo+=(analysis_spotbugs)
+        [[ "${PIPELINE_CHECKSTYLE:-false}" == true ]] && todo+=(analysis_checkstyle)
+        ;;
+    python)
+        [[ "${PIPELINE_PYLINT:-false}" == true ]] && todo+=(analysis_pylint)
+        ;;
+    esac
+    if [[ ${#todo[@]} -eq 0 ]]; then
+        _msg note "$(_t '跳过' 'skipped') (PIPELINE_SONAR / PIPELINE_CODECLIMATE / PIPELINE_PMD / PIPELINE_SPOTBUGS / PIPELINE_CHECKSTYLE / PIPELINE_PYLINT 均未启用)"
+        return 0
+    fi
 
-        if ${G_DRY_RUN:-false}; then
-            _msg note "[dry-run] stage_code_quality:"
-            _msg note "  ${G_RUN} -u 1000:1000 -e SONAR_TOKEN=*** -v ${G_REPO_DIR}:/usr/src sonarsource/sonar-scanner-cli"
-            _msg note "  write ${sonar_conf#${G_REPO_DIR}/} if missing"
-        else
-            if ! curl --silent --head --fail --connect-timeout 5 "$sonar_url" >/dev/null 2>&1; then
-                _msg warn "SonarQube server not found, exiting."
-                return 1
-            fi
+    ## SonarQube 是平台级质量门禁，失败即停（不再跑后续语言级分析）且不打绿线；
+    ## 语言级分析失败仅告警，不中断流水线。显式收 rc：不依赖 errexit（bats 下 main 未启用 set -e）
+    local item rc=0
+    for item in "${todo[@]}"; do
+        case "${item}" in
+        sonar)
+            _sonar_code_quality || {
+                rc=$?
+                break
+            }
+            ;;
+        analysis_codeclimate) analysis_codeclimate || _msg warn "CodeClimate issues found" ;;
+        analysis_pmd) analysis_pmd || _msg warn "PMD issues found" ;;
+        analysis_spotbugs) analysis_spotbugs || _msg warn "SpotBugs issues found" ;;
+        analysis_checkstyle) analysis_checkstyle || _msg warn "Checkstyle issues found" ;;
+        analysis_pylint) analysis_pylint || _msg warn "Pylint issues found" ;;
+        esac
+    done
+    [[ "${rc}" -eq 0 ]] || return "${rc}"
+    stage_done 0 '代码质量检查完成' 'code quality check completed'
+    return 0
+}
 
-            if [[ ! -f "$sonar_conf" ]]; then
-                _msg task "Creating $sonar_conf"
-                cat >"$sonar_conf" <<EOF
+_sonar_code_quality() {
+    # SonarQube 平台级质量门禁（由 stage_code_quality 按 PIPELINE_SONAR 派发）
+    # 服务器不可达或扫描失败 → return 1，阶段随之中止且不打绿线
+    _msg task "SonarQube code quality check"
+    local sonar_url="${ENV_SONAR_URL:?empty}"
+    local sonar_conf="$G_REPO_DIR/sonar-project.properties"
+
+    if ${G_DRY_RUN:-false}; then
+        _msg note "[dry-run] _sonar_code_quality:"
+        _msg note "  ${G_RUN} -u 1000:1000 -e SONAR_TOKEN=*** -v ${G_REPO_DIR}:/usr/src sonarsource/sonar-scanner-cli"
+        _msg note "  write ${sonar_conf#${G_REPO_DIR}/} if missing"
+        return 0
+    fi
+
+    if ! curl --silent --head --fail --connect-timeout 5 "$sonar_url" >/dev/null 2>&1; then
+        _msg warn "SonarQube server not found, exiting."
+        return 1
+    fi
+
+    if [[ ! -f "$sonar_conf" ]]; then
+        _msg task "Creating $sonar_conf"
+        cat >"$sonar_conf" <<EOF
 sonar.host.url=$sonar_url
 sonar.projectKey=${G_REPO_NS}_${G_REPO_NAME}
 sonar.qualitygate.wait=true
@@ -156,35 +202,14 @@ test/**/*
 sonar.projectVersion=1.0
 sonar.import_unknown_files=true
 EOF
-            fi
-
-            if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
-                if ! $G_RUN -u 1000:1000 -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$G_REPO_DIR":/usr/src sonarsource/sonar-scanner-cli; then
-                    _msg error "SonarQube scan failed"
-                    return 1
-                fi
-            fi
-        fi
-        _msg task "Code quality check with SonarQube completed"
     fi
 
-    ## 语言级静态质量分析（各自 PIPELINE_* 开关自守卫；失败仅告警，不中断流水线）
-    _msg task "Running language-level code analysis"
-    local lang
-    lang="$(detect_repo_language | cut -d: -f1)"
-    if ! analysis_codeclimate; then _msg warn "CodeClimate issues found"; fi
-    case "$lang" in
-    java)
-        if ! analysis_pmd; then _msg warn "PMD issues found"; fi
-        if ! analysis_spotbugs; then _msg warn "SpotBugs issues found"; fi
-        if ! analysis_checkstyle; then _msg warn "Checkstyle issues found"; fi
-        ;;
-    python)
-        if ! analysis_pylint; then _msg warn "Pylint issues found"; fi
-        ;;
-    esac
-    ## 语言级分析失败只告警不中断，故此处恒为完成；SonarQube 失败走上方 return 1 不打绿线
-    stage_done 0 '代码质量检查完成' 'code quality check completed'
+    if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+        if ! $G_RUN -u 1000:1000 -e SONAR_TOKEN="${ENV_SONAR_TOKEN:?empty}" -v "$G_REPO_DIR":/usr/src sonarsource/sonar-scanner-cli; then
+            _msg error "SonarQube scan failed"
+            return 1
+        fi
+    fi
     return 0
 }
 
