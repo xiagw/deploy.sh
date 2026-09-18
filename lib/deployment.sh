@@ -170,14 +170,14 @@ _wait_kubernetes_rollout() {
     local deadline bad_pod current ret status_out
     deadline=$(( $(date +%s) + timeout ))
 
-    _msg task "Monitoring [${release_name}] on branch [${G_NAMESPACE}] (timeout: ${timeout}s)"
+    _msg task "Monitoring [${release_name}] in namespace [${G_NAMESPACE}] (timeout: ${timeout}s)"
     while :; do
         # Authoritative rolling-rollout check: blocks up to poll_interval, exits 0
         # only when the new RS is fully ready; non-zero while still in progress.
         status_out="$($KUBECTL_OPT -n "${G_NAMESPACE}" rollout status deployment "${release_name}" --timeout "${poll_interval}s" 2>&1)"
         ret=$?
         if [ $ret -eq 0 ]; then
-            _msg task "helm release name: [${release_name}] is ready"
+            _msg task "helm release [${release_name}] is ready"
             return 0
         fi
 
@@ -314,8 +314,6 @@ deploy_to_kubernetes() {
 
     execute_custom_deploy_hook
 
-    ## 这一步完成（非阶段结论）：阶段结论由 stage_deploy 在索引清理之后统一输出
-    _msg task "Kubernetes deployment completed"
     return "${G_DEPLOY_RESULT:-0}"
 }
 
@@ -392,8 +390,6 @@ EOF
 
     ## 记录本次引用并删上一张（函数计算与 k8s 同样长期引用 registry 镜像，漏记会被索引清理误删）
     record_deployed_image "${release_name}" "${G_DEPLOY_RESULT:-0}"
-
-    [[ "${G_DEPLOY_RESULT:-0}" -eq 0 ]] && _msg task "Aliyun Functions deployment completed"
 }
 
 deploy_via_rsync_ssh() {
@@ -512,7 +508,6 @@ deploy_aliyun_oss() {
     dry_run_skip "ossutil cp ${source_path%/}/ ${oss_dest} --recursive --force" && return 0
     _msg task "Deploy files to Aliyun OSS"
     _oss_upload "${source_path}" "${oss_dest}"
-    _msg task "Aliyun OSS deployment completed"
 }
 
 _oss_upload() {
@@ -583,7 +578,7 @@ deploy_via_ftp() {
         _msg error "Failed to create ${upload_file}"
         return 1
     fi
-    if ftp -inv "$ftp_host" <<EOF
+    if ! ftp -inv "$ftp_host" <<EOF
 user $ftp_username $ftp_password
 cd ${ftp_directory:-/}
 passive on
@@ -594,8 +589,6 @@ passive off
 bye
 EOF
     then
-        _msg task "FTP deployment completed"
-    else
         G_DEPLOY_RESULT=1
         _msg error "FTP deployment failed"
     fi
@@ -650,7 +643,6 @@ deploy_via_sftp() {
         _sftp_upload_one "$ssh_user" "$ssh_host_ip" "$ssh_port" "$remote_dir" "$upload_file"
     fi
     rm -f "$upload_file"
-    [[ "${G_DEPLOY_RESULT:-0}" -eq 0 ]] && _msg task "SFTP deployment completed"
 }
 
 _sftp_upload_one() {
