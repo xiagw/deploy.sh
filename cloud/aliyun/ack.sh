@@ -32,7 +32,7 @@ show_ack_help() {
     echo "  set-pool [<集群ID>] restart [<节点池>]              - 重启节点池内所有节点上的 deployment"
     echo "  del-pool [<集群ID>] [<节点池>]          - 删除节点池（池内有节点时提示）"
     echo "  自动扩缩容："
-    echo "  scale-pod <deployment>[/namespace] [选项] - 通用 Deployment 自动扩缩容（namespace 默认 main；--watch 常驻；--min 缩容下限 缺省1(PHP2)；--max 副本上限 缺省=真实节点数,0=不限；--step 扩容增量 缺省1(PHP2)；--interval 检查间隔秒 缺省15；默认单次执行）"
+    echo "  scale-pod <deployment>[/namespace] [选项] - 通用 Deployment 自动扩缩容（namespace 默认 main；--watch 常驻；--min 缩容下限 缺省1(PHP2)；--max 副本上限 缺省=真实节点数,0=不限；--step 扩容增量 缺省1(PHP2)；--interval 检查间隔秒 缺省15；--metric cpu|mem|both 判定指标 缺省PHP=cpu/其它=both；默认单次执行）"
     echo
     echo "示例："
     echo "  集群："
@@ -755,13 +755,18 @@ check_cooldown() {
 #      ... ack scale-pod <deployment>[/namespace]
 #   死循环意外退出兜底: b 由 Restart=always 自动拉起；a/c 每次都是新进程，崩溃只影响本轮，下次到点照跑。
 #
-# 触发逻辑（双因子 OR/AND 滞回）:
-#   扩容 = CPU求和 > warn 阈值  OR  内存求和 > warn 阈值      （任一资源过载即扩）
-#   缩容 = CPU求和 < normal 阈值 AND  内存求和 < normal 阈值   （两资源都回落才缩，避免抖动）
+# 触发逻辑（滞回）:
+#   判定指标由 --metric 决定，缺省 PHP=cpu、非 PHP=both:
+#     cpu  只看 CPU 求和；mem  只看内存求和；both  双因子
+#   扩容 = 任一参与指标 > warn 阈值（OR）
+#   缩容 = 全部参与指标 < normal 阈值（AND，避免抖动）
+#   PHP 缺省 cpu：PHP 进程内存不构成容量信号；需要内存参与时显式 --metric both|mem
 #   阈值 = 因子 × 当前副本数；因子单位: CPU 毫核/副本、内存 MiB/副本。
-#   默认值（适中，可用环境变量覆盖）:
-#     ACK_POD_CPU_WARN_FACTOR=2000 / ACK_POD_CPU_NORMAL_FACTOR=800
-#     ACK_POD_MEM_WARN_FACTOR=2500 / ACK_POD_MEM_NORMAL_FACTOR=1000
+#   默认值（可用环境变量覆盖；内存因子仅在 metric 含内存时参与）:
+#     PHP: ACK_CPU_WARN_FACTOR=1500 / ACK_CPU_NORMAL_FACTOR=500
+#          ACK_MEM_WARN_FACTOR=2500 / ACK_MEM_NORMAL_FACTOR=1000
+#     非 PHP: ACK_POD_CPU_WARN_FACTOR=2000 / ACK_POD_CPU_NORMAL_FACTOR=800
+#             ACK_POD_MEM_WARN_FACTOR=2500 / ACK_POD_MEM_NORMAL_FACTOR=1000
 #
 # 互斥/冷却:
 #   锁路径 ${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}（去尾斜杠）/lock.scale.all   helm 发布互斥（deploy.sh 部署时创建），5 分钟内跳过
@@ -785,8 +790,9 @@ ack_scale_pod() {
     fi
     [ -z "$namespace" ] && namespace=main
 
-    # 选项解析（step/min/max 用 -1 表示"未显式指定"，解析后按是否 PHP 特例套默认）
-    local watch_mode=false interval=15 step=-1 min_replicas=-1 max_replicas=-1
+    # 选项解析（step/min/max 用 -1 表示"未显式指定"，解析后按是否 PHP 特例套默认；
+    # metric 空表示未指定，解析后按是否 PHP 套默认：PHP=cpu、非 PHP=both）
+    local watch_mode=false interval=15 step=-1 min_replicas=-1 max_replicas=-1 metric=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
         --watch) watch_mode=true && shift ;;
@@ -794,6 +800,7 @@ ack_scale_pod() {
         --step) step="${2:?--step 需要数字}" && shift 2 ;;
         --min) min_replicas="${2:?--min 需要数字}" && shift 2 ;;
         --max) max_replicas="${2:?--max 需要数字}" && shift 2 ;;
+        --metric) metric="${2:?--metric 需要 cpu|mem|both}" && shift 2 ;;
         --once) watch_mode=false && shift ;;
         *)
             echo "错误：未知参数：$1" >&2
@@ -804,7 +811,7 @@ ack_scale_pod() {
 
     if [ -z "$deployment" ]; then
         echo "错误：部署名称不能为空。" >&2
-        echo "用法：ack scale-pod <deployment> [namespace] [--watch] [--interval 15] [--step 1] [--min 1] [--max N]" >&2
+        echo "用法：ack scale-pod <deployment> [namespace] [--watch] [--interval 15] [--step 1] [--min 1] [--max N] [--metric cpu|mem|both]" >&2
         return 1
     fi
 
@@ -822,6 +829,19 @@ ack_scale_pod() {
         [ "$min_replicas" -eq -1 ] && min_replicas=1
         # max 保持 -1：非 PHP 缺省 = 真实节点数（eff_max，见 run_once）
     fi
+
+    # 判定指标：缺省 PHP 只看 CPU（PHP 进程内存不构成容量信号）、非 PHP 双因子；
+    # 需要恢复 PHP 内存判定时显式 --metric both（或 mem）
+    if [ -z "$metric" ]; then
+        if $is_php; then metric=cpu; else metric=both; fi
+    fi
+    case "$metric" in
+    cpu | mem | both) ;;
+    *)
+        echo "错误：--metric 只支持 cpu|mem|both（当前：${metric}）" >&2
+        return 1
+        ;;
+    esac
 
     # 单次检查：求和判断 + 扩缩容 + virtual 闲时回收
     local run_once ret
@@ -847,6 +867,7 @@ ack_scale_pod() {
         fi
 
         # 阈值因子（环境变量可覆盖；PHP 特例走旧变量名 + 生产默认，非 PHP 走 ACK_POD_* + 适中默认）
+        # 因子只在其对应指标参与判定时才被用到（metric 见函数入口）
         if $is_php; then
             local CPU_WARN_FACTOR=${ACK_CPU_WARN_FACTOR:-1500}
             local CPU_NORMAL_FACTOR=${ACK_CPU_NORMAL_FACTOR:-500}
@@ -879,12 +900,14 @@ ack_scale_pod() {
         local pod_total
         pod_total=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" --no-headers | grep -c "$deployment")
 
-        # 阈值 = 因子 × 副本数
+        # 阈值 = 因子 × 副本数（内存阈值只在 metric 含内存时计算）
         local pod_cpu_warn pod_mem_warn pod_cpu_normal pod_mem_normal
         pod_cpu_warn=$((pod_total * CPU_WARN_FACTOR))
-        pod_mem_warn=$((pod_total * MEM_WARN_FACTOR))
         pod_cpu_normal=$((pod_total * CPU_NORMAL_FACTOR))
-        pod_mem_normal=$((pod_total * MEM_NORMAL_FACTOR))
+        if [ "$metric" != "cpu" ]; then
+            pod_mem_warn=$((pod_total * MEM_WARN_FACTOR))
+            pod_mem_normal=$((pod_total * MEM_NORMAL_FACTOR))
+        fi
 
         # 求和（CPU 毫核 / 内存归一 MiB）
         local cpu mem
@@ -902,18 +925,35 @@ ack_scale_pod() {
             }
             END {printf "%d %d", c, m}')
 
-        # 扩容：任一资源过 warn 阈值
-        if ((cpu > pod_cpu_warn)) || ((mem > pod_mem_warn)); then
+        # 判定与日志文案按 metric 组合（只统计参与判定的指标）：
+        #   扩容 = 任一参与指标越 warn 线（OR）；缩容 = 全部参与指标都低于 normal 线（AND，防抖动）
+        local warn_now=false normal_now=true
+        local metric_warn="" metric_normal=""
+        if [ "$metric" != "mem" ]; then
+            metric_warn="CPU求和 ${cpu}（阈值 ${pod_cpu_warn} 毫核）"
+            metric_normal="CPU求和 ${cpu}（正常阈值 ${pod_cpu_normal}）"
+            ((cpu > pod_cpu_warn)) && warn_now=true
+            ((cpu < pod_cpu_normal)) || normal_now=false
+        fi
+        if [ "$metric" != "cpu" ]; then
+            metric_warn="${metric_warn:+${metric_warn}, }内存求和 ${mem}MiB（阈值 ${pod_mem_warn}MiB）"
+            metric_normal="${metric_normal:+${metric_normal}, }内存求和 ${mem}MiB（正常阈值 ${pod_mem_normal}MiB）"
+            ((mem > pod_mem_warn)) && warn_now=true
+            ((mem < pod_mem_normal)) || normal_now=false
+        fi
+
+        # 扩容
+        if $warn_now; then
             ## 副本上限：eff_max=0 表示不限制；达到上限则跳过扩容（默认不扩到 virtual，virtual 由 kruise/人工管理）
             local target_replicas=$((pod_total + step))
             if [ "$eff_max" -gt 0 ] && [ "$target_replicas" -gt "$eff_max" ]; then
                 target_replicas=$eff_max
             fi
             if [ "$target_replicas" -le "$pod_total" ]; then
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 已达副本上限 ${eff_max}，跳过扩容（CPU 求和 ${cpu} / 内存求和 ${mem}MiB）"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 已达副本上限 ${eff_max}，跳过扩容（${metric_warn}）"
                 return 0
             fi
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment CPU求和 ${cpu}（阈值 ${pod_cpu_warn} 毫核）, 内存求和 ${mem}MiB（阈值 ${pod_mem_warn}MiB），扩容到 $target_replicas"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment ${metric_warn}，扩容到 $target_replicas"
             if ! kubectl -n "$namespace" scale --replicas="$target_replicas" deployment "$deployment"; then
                 echo "扩容失败" >&2
                 return 1
@@ -931,14 +971,14 @@ ack_scale_pod() {
             return 0
         fi
 
-        # 缩容：两资源都低于 normal 阈值；缩到基线(min_replicas，扩容前副本数)为止，
+        # 缩容：PHP 只看 CPU、非 PHP 两资源都低于 normal 阈值；缩到基线(min_replicas，扩容前副本数)为止，
         # 不被节点数拦截 —— 资源有限场景基线通常=1（单pod），特殊=2；峰值扩、低谷缩回基线
-        if ((cpu < pod_cpu_normal)) && ((mem < pod_mem_normal)); then
+        if $normal_now; then
             if ((pod_total > min_replicas)); then
                 local new_replicas=$((pod_total - 1))
                 ((new_replicas < min_replicas)) && new_replicas=$min_replicas
                 if ((new_replicas < pod_total)); then
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment CPU求和 ${cpu}（正常阈值 ${pod_cpu_normal}）, 内存求和 ${mem}MiB（正常阈值 ${pod_mem_normal}），缩容到 $new_replicas"
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment ${metric_normal}，缩容到 $new_replicas"
                     kubectl -n "$namespace" scale --replicas="$new_replicas" deployment "$deployment"
                     touch "$lock_file_down"
                     local down_msg
