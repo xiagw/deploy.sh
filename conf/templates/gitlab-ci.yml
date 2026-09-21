@@ -10,7 +10,27 @@
 
 variables:
   ## gitlab checkout 时不清理以下文件
-  GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e vendor/ -e root/ -e yarn.lock -e composer.lock -e .dockerignore
+  ## 注：lock 文件由 git 跟踪，git clean 本就不动它们，无需 -e（原 -e yarn.lock/-e composer.lock 是空操作）
+  GIT_CLEAN_FLAGS: -ffdx -e node_modules/ -e vendor/
+
+## 默认配置：依赖缓存跨流水线/job 复用，加速 composer/npm 安装（缓存为尽力而为，不保证命中）
+## 写 default: 下而非顶层：顶层 cache: 是已废弃写法
+default:
+  cache:
+    ## 缓存键 = prefix + 依赖声明文件的 SHA（两者拼接，如 main-ab12cd…）
+    ## files: 最多 2 个文件；只有 composer.lock/yarn.lock 内容变化才换键——依赖变则重建、不变则复用
+    ##        文件都不存在时 SHA 部分退化为 default
+    ## prefix: 项目 + 分支维度隔离，避免多项目共用本模板、以及分支之间互相覆盖同一份 cache.zip
+    key:
+      files:
+        - composer.lock
+        - yarn.lock
+      prefix: "$CI_PROJECT_PATH_SLUG-$CI_COMMIT_REF_SLUG"
+    ## 缓存路径白名单：只缓存依赖安装目录
+    ## 不缓存 lock 文件：它们由 git 跟踪，缓存解压会覆盖刚 checkout 的版本（可能回退成旧依赖）
+    paths:
+      - vendor/       # PHP composer 依赖
+      - node_modules/ # Node 依赖
 
 ## CI/CD 流水线阶段：自上而下串行执行，前一阶段失败则后续阶段不执行
 stages:
@@ -28,18 +48,6 @@ stages:
   - smoke
   ## 性能验收：发布后手动触发性能测试（JMeter / k6）
   - perf
-
-## 依赖缓存：跨流水线/job 复用依赖安装目录，加速 composer/npm 安装（缓存为尽力而为，不保证命中）
-cache:
-  # untracked: true
-  ## 缓存键：用项目路径 slug 命名，避免多项目共用本模板时落到默认键 default 上互相污染
-  key: "$CI_PROJECT_PATH_SLUG"
-  ## 缓存路径：依赖目录（lockfile 本已由 git 跟踪，缓存它们属冗余）
-  paths:
-    - vendor/       # PHP composer 依赖
-    - node_modules/ # Node 依赖
-    - composer.lock
-    - yarn.lock
 
 # lint:
 #   stage: lint
