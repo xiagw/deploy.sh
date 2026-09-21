@@ -1,3 +1,5 @@
+
+
 <h1 align="center">
   <img src="https://github.com/xiagw/deploy.sh/raw/main/docs/img/logo.png" alt="deploy.sh" width="200">
   <br>deploy.sh<br>
@@ -92,7 +94,7 @@ while true; do for d in /path/to/src/*/; do (cd $d && git pull && $HOME/runner/d
 ### option [3]. deploy.sh with GitLab-Runner
 1. Prepare a gitlab-server and gitlab-runner-server; [install gitlab-runner](https://docs.gitlab.com/runner/install/linux-manually.html), register it to gitlab-server (shell executor), and verify with `sudo gitlab-runner status`
 1. Refer to `conf/templates/gitlab-ci.yml` to setup `\<your_project.git\>/.gitlab-ci.yml`
-1. **Note**: `data/deploy.env` and the project config `data/conf/namespace/project-name.json` are auto-generated from templates on first run — **edit the customization fields (hosts, user, port, rsync_dest, etc.)** before deployment can proceed
+1. **Note**: `data/deploy.env` and the project config `data/conf/namespace/project-name.json` are auto-generated from templates on first run — **edit the customization fields (hosts, user, port, rsync_dest, etc.)** before deployment can proceed; the generated `data/` files are local runtime data and are gitignored by default
 
 ### option [4]. deploy.sh with Jenkins
 1. Create job,
@@ -198,5 +200,3 @@ BSC/ERC20 Address `0x007779971b2Df368E75F1a660c1308A51f45A02e`
 **TRX/TRC20**
 
 TRX/TRC20 Address `TAnZ537r98Jo63aKDTfbWmBeooz29ASd73`
-
-
