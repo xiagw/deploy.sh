@@ -495,7 +495,7 @@ cdn_logs() {
         echo "$rows" | awk -F'\t' '{printf "%-22s  %-22s  %-10s  %s\n", $1, $2, $3, $4}'
         if [ -n "$status_codes" ]; then
             echo
-            echo "正在分析状态码 $status_codes 的记录 ..."
+            _cdn_ts "正在分析状态码 $status_codes 的记录 ..."
             local size name path
             while IFS=$'\t' read -r _ _ size name path; do
                 echo "--------------------------------------------------"
@@ -564,7 +564,7 @@ _cdn_fetch_log_rows() {
         --page-size 1000 2>&1)
     ret=$?
     if [ $ret -ne 0 ]; then
-        echo "错误：获取 CDN 离线日志失败（${domain}）。" >&2
+        _cdn_ts "错误：获取 CDN 离线日志失败（${domain}）。"
         echo "$result" >&2
         return 1
     fi
@@ -590,6 +590,11 @@ _cdn_log_cache_dir() {
     echo "${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/cdn/logs/${1}"
 }
 
+_cdn_ts() {
+    # 下载/解析进度与告警统一加时间戳（本模块 stdout 只放数据，故一律写 stderr）
+    printf '[%s] %s\n' "$(date '+%F %T')" "$*" >&2
+}
+
 _cdn_fetch_log_gz() {
     # 取单个日志的本地 .gz 路径；未缓存则下载。成功打印路径到 stdout，进度/错误走 stderr
     local log_path=${1} log_name=${2} domain=${3}
@@ -603,7 +608,7 @@ _cdn_fetch_log_gz() {
     [[ "${log_path}" != http* ]] && log_path="https://${log_path}"
     mkdir -p "${cache_dir}"
     tmp="${local_gz}.tmp.$$"
-    echo "正在下载日志: ${domain}/${log_name} ..." >&2
+    _cdn_ts "正在下载日志: ${domain}/${log_name} ..."
     if ! curl -sfL --connect-timeout 10 "${log_path}" -o "${tmp}"; then
         rm -f "${tmp}"
         return 1
@@ -638,14 +643,14 @@ _cdn_analyze_log() {
     local work_dir local_gz local_txt
 
     local_gz=$(_cdn_fetch_log_gz "${log_url}" "${log_name}" "${domain}") || {
-        echo "错误：下载日志失败: $log_name" >&2
+        _cdn_ts "错误：下载日志失败: $log_name"
         return 1
     }
 
     work_dir=$(mktemp -d)
     local_txt="${work_dir}/${log_name%.gz}"
 
-    echo "正在解压日志: $log_name ..."
+    _cdn_ts "正在解压日志: $log_name ..."
     if ! gunzip -c "$local_gz" >"$local_txt"; then
         echo "错误：解压日志失败: $log_name" >&2
         rm -rf "$work_dir"
@@ -683,8 +688,8 @@ _cdn_analyze_log() {
     fi
     rm -f "${uris_file}.tmp"
 
-    echo "发现状态码 $status_codes 的记录 $count 条"
-    echo "$log_name 唯一 URI 列表已累积到: $uris_file （共 $(wc -l <"$uris_file") 条）"
+    _cdn_ts "发现状态码 $status_codes 的记录 $count 条"
+    _cdn_ts "$log_name 唯一 URI 列表已累积到: $uris_file （共 $(wc -l <"$uris_file") 条）"
 
     rm -rf "$work_dir"
 }
@@ -719,7 +724,7 @@ _cdn_fetch_parse_domain_day() {
         [ -z "$log_path" ] && continue
         local local_gz pipe_ok
         if ! local_gz=$(_cdn_fetch_log_gz "$log_path" "$log_name" "$domain"); then
-            echo "警告：$log_name 下载失败，跳过" >&2
+            _cdn_ts "警告：$log_name 下载失败，跳过"
             failed=$((failed + 1))
             continue
         fi
@@ -755,13 +760,13 @@ _cdn_fetch_parse_domain_day() {
         pipe_ok=${PIPESTATUS[0]}
         if [ "$pipe_ok" -ne 0 ]; then
             rm -f "$local_gz"
-            echo "警告：$log_name 解压失败，跳过（已清缓存待重试）" >&2
+            _cdn_ts "警告：$log_name 解压失败，跳过（已清缓存待重试）"
             failed=$((failed + 1))
         fi
     done < <(echo "$rows")
     if [ "$failed" -gt 0 ]; then
         rm -f "$tmp_access" "$tmp_abnormal"
-        echo "错误：$domain $day 有 $failed 个日志下载失败，不落档案（下次重试）" >&2
+        _cdn_ts "错误：$domain $day 有 $failed 个日志下载失败，不落档案（下次重试）"
         return 1
     fi
     sort -u -o "$tmp_access" "$tmp_access"
@@ -799,7 +804,7 @@ _cdn_archive() {
     prune_dir="${SCRIPT_DATA:-.}/cache/${profile:-}/${region:-}/prune"
     mkdir -p "$prune_dir"
 
-    echo "===== CDN 访问清单：范围=${start_day} ~ ${end_day}（北京时）/ 聚合窗口=${days} 天 ====="
+    _cdn_ts "===== CDN 访问清单：范围=${start_day} ~ ${end_day}（北京时）/ 聚合窗口=${days} 天 ====="
 
     # 1. 发现 OSS 源站域名（域名 -> bucket）
     local origin_rows domain_info available_buckets
@@ -850,7 +855,7 @@ _cdn_archive() {
     fi
     mkdir -p "$access_base" "$abnormal_base"
 
-    echo "== 拉取并解析访问日志 =="
+    _cdn_ts "== 拉取并解析访问日志 =="
     local d
     while IFS=$'\t' read -r d _; do
         [ -z "$d" ] && continue
@@ -870,12 +875,12 @@ _cdn_archive() {
                 date2=$(_cdn_epoch_to_sh_day $((today_epoch - i * 86400)))
                 [ -f "${access_base}/${d}/${date2}.txt" ] && continue
                 [ "$backfilled" -ge 3 ] && break
-                echo "  自动补档 $d $date2 ..."
+                _cdn_ts "  自动补档 $d $date2 ..."
                 local fb_ret
                 _cdn_fetch_parse_domain_day "$d" "$date2" 1
                 fb_ret=$?
                 if [ "$fb_ret" -ne 0 ] && [ "$fb_ret" -ne 2 ]; then
-                    echo "    警告：$d $date2 补档失败" >&2
+                    _cdn_ts "    警告：$d $date2 补档失败"
                 fi
                 backfilled=$((backfilled + 1))
             done
@@ -893,20 +898,20 @@ _cdn_archive() {
                 _cdn_fetch_parse_domain_day "$d" "$date2" 1
                 main_ret=$?
                 if [ "$main_ret" -ne 0 ]; then
-                    echo "    警告：$d $date2 主任务日志拉取失败，跳过该天" >&2
+                    _cdn_ts "    警告：$d $date2 主任务日志拉取失败，跳过该天"
                     main_ok=0
                 fi
             fi
             day_cursor=$((day_cursor + 86400))
         done
         [ "$main_ok" -eq 0 ] && continue
-        echo "  ${d} 覆盖 ${start_day} ~ ${end_day}，昨日访问目录 $(wc -l <"${access_base}/${d}/${start_day}.txt" | tr -d ' ') 个，异常 URI $(wc -l <"${abnormal_base}/${d}/${start_day}.txt" | tr -d ' ') 条"
+        _cdn_ts "  ${d} 覆盖 ${start_day} ~ ${end_day}，昨日访问目录 $(wc -l <"${access_base}/${d}/${start_day}.txt" | tr -d ' ') 个，异常 URI $(wc -l <"${abnormal_base}/${d}/${start_day}.txt" | tr -d ' ') 条"
     done < <(echo "$domain_info")
 
     # 3. 按 bucket 聚合最近 days 天的访问目录/异常并集
     local buckets bucket
     buckets=$(echo "$domain_info" | awk -F'\t' '{print $2}' | sort -u)
-    echo "== 聚合三层访问清单（窗口 ${days} 天）=="
+    _cdn_ts "== 聚合三层访问清单（窗口 ${days} 天）=="
     for bucket in $buckets; do
         local domains_of_bucket d2 i date2 f
         domains_of_bucket=$(echo "$domain_info" | awk -F'\t' -v b="$bucket" '$2 == b {print $1}')
@@ -928,10 +933,10 @@ _cdn_archive() {
                 done
             done
         } | sort -u >"${prune_dir}/abnormal-${bucket}.txt"
-        echo "  ${bucket}：访问目录 $(wc -l <"${prune_dir}/access-${bucket}.txt" | tr -d ' ') 条，异常 $(wc -l <"${prune_dir}/abnormal-${bucket}.txt" | tr -d ' ') 条 -> access-${bucket}.txt"
+        _cdn_ts "  ${bucket}：访问目录 $(wc -l <"${prune_dir}/access-${bucket}.txt" | tr -d ' ') 条，异常 $(wc -l <"${prune_dir}/abnormal-${bucket}.txt" | tr -d ' ') 条 -> access-${bucket}.txt"
     done
 
-    echo "===== 完成：${prune_dir}/access-<bucket>.txt ====="
+    _cdn_ts "===== 完成：${prune_dir}/access-<bucket>.txt ====="
 }
 
 cdn_pay() {
