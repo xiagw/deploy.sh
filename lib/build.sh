@@ -501,10 +501,8 @@ DOCKERIGNORE
             set -eo pipefail
 
             if [ "$ret" -ne 0 ]; then
-                echo "============================================================"
-                _msg error "Base image build failed (exit code: $ret), showing last 100 lines of build log:"
-                echo "============================================================"
-                tail -100 "$base_build_log"
+                ## 不在控制台 dump 日志末尾：完整日志由 artifacts 收集，由 build_log_hint 给直链
+                _msg error "Base image build failed (exit code: $ret)"
                 build_log_hint "$base_build_log" false
                 return 1
             fi
@@ -516,8 +514,8 @@ DOCKERIGNORE
         fi
     fi
 
-    # Docker build 输出到日志文件，默认不显示构建详情
-    # 构建失败时显示最后100行日志便于排查
+    ## Docker build 输出到日志文件，控制台不显示构建详情
+    ## 失败时不 dump 日志末尾（完整日志已由 artifacts 收集），由 build_log_hint 给直链
     local build_log="${build_log_dir}/${G_REPO_NAME}-${G_REPO_BRANCH}-build.log.txt"
     mkdir -p "$(dirname "$build_log")"
 
@@ -530,10 +528,7 @@ DOCKERIGNORE
     set -eo pipefail
 
     if [ "$ret" -ne 0 ]; then
-        echo "============================================================"
-        _msg error "Image build failed (exit code: $ret), showing last 100 lines of build log:"
-        echo "============================================================"
-        tail -100 "$build_log"
+        _msg error "Image build failed (exit code: $ret)"
         build_log_hint "$build_log"
         return 1
     fi
