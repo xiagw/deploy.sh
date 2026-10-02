@@ -96,10 +96,14 @@ _project_oss_dest() {
 record_deployed_image() {
     # 把本 release/命名空间 当前部署的镜像标记为 live（供 _clean_indexed_images 判定存活）
     # deploy_ok != 0 时不动 live 指针：失败部署的镜像已无人引用，留作 push 行由下次清理删除
+    # 索引写入失败只 warn 不改部署结论：台账是收尾动作，不能反过来把成功的部署判成失败
     local release_name="${1:?release_name is required}"
     local deploy_ok="${2:-0}"
+    local ref="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
     [[ "${deploy_ok}" -eq 0 ]] || return 0
-    _image_index_set_live "${release_name}-${G_NAMESPACE}" "${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}"
+    if ! _image_index_set_live "${release_name}-${G_NAMESPACE}" "${ref}"; then
+        _msg warn "Failed to mark ${ref} as live; it may be cleaned up as stale next run"
+    fi
 }
 
 cleanup_evicted_pods() {
@@ -1020,28 +1024,38 @@ copy_docker_image() {
 # copy_docker_image "ubuntu:22.04" "registry.example.com/ns"       # -> registry.example.com/ns/ubuntu:22.04
 
 _image_index_add() {
-    # 登记一个"本工具 push 过、尚需跟踪删除"的引用（台账行: push <ref>），已登记过则跳过
+    # 登记一个"本项目 push 过、尚需跟踪删除"的引用（台账行: push <owner> <ref>），已登记过则跳过
     # 在 push 前调用：中断或后续删除失败都不会丢引用（索引是唯一取证来源）
+    # owner = G_REPO_GROUP_PATH（项目唯一路径）：索引由同一 runner 上所有项目共用，
+    #   清理只允许收回本项目推的镜像，否则并发项目的 run 会把本 run 刚推、还没转 live 的镜像删掉
     local ref="${1:?image ref required}"
+    local owner="${G_REPO_GROUP_PATH:-unknown}"
     mkdir -p "$(dirname "${G_IMAGE_INDEX}")"
-    ## live 行与 push 行都是" ref" 结尾，命中任一即无需重复登记
+    ## live 行与 push 行都以" <ref>"结尾，命中任一即无需重复登记
     if [[ -f "${G_IMAGE_INDEX}" ]] && grep -Fq -- " ${ref}" "${G_IMAGE_INDEX}"; then
         return 0
     fi
-    printf 'push %s\n' "${ref}" >>"${G_IMAGE_INDEX}"
+    printf 'push %s %s\n' "${owner}" "${ref}" >>"${G_IMAGE_INDEX}"
 }
 
 _image_index_set_live() {
     # 把 key（<release_name>-<命名空间>）的当前部署引用标记为 live：
-    #   旧 live 引用降级为 push（下次清理删除），新引用升为 live 并删掉它可能存在的 push 行
+    #   旧 live 引用降级为 push（记为本次归属，由本次清理删除），新引用升为 live 并删掉它可能存在的 push 行
     # 索引是清理的唯一依据，故整文件原子重写（tmp + mv），不原地改
     local key="${1:?key required}" ref="${2:?image ref required}"
     local tmp="${G_IMAGE_INDEX}.tmp.$$" state f1 f2 old=""
+    local owner="${G_REPO_GROUP_PATH:-unknown}"
     mkdir -p "$(dirname "${G_IMAGE_INDEX}")"
     : >"${tmp}"
     if [[ -f "${G_IMAGE_INDEX}" ]]; then
         while read -r state f1 f2; do
             [[ -n "${state}" ]] || continue
+            ## 两种行都固定三段（push <owner> <ref> / live <key> <ref>），缺段即格式不符
+            if [[ "${state}" == push || "${state}" == live ]] && { [[ -z "${f1}" ]] || [[ -z "${f2}" ]]; }; then
+                _msg error "Corrupted index line, abort (delete ${G_IMAGE_INDEX} to reset): ${state} ${f1} ${f2}"
+                rm -f "${tmp}"
+                return 1
+            fi
             case "${state}" in
             live)
                 if [[ "${f1}" == "${key}" ]]; then
@@ -1051,17 +1065,17 @@ _image_index_set_live() {
                 fi
                 ;;
             push)
-                [[ "${f1}" == "${ref}" ]] || printf 'push %s\n' "${f1}" >>"${tmp}"
+                [[ "${f2}" == "${ref}" ]] || printf 'push %s %s\n' "${f1}" "${f2}" >>"${tmp}"
                 ;;
             *)
-                _msg error "Corrupted index line, abort: ${state} ${f1} ${f2}"
+                _msg error "Corrupted index line, abort (delete ${G_IMAGE_INDEX} to reset): ${state} ${f1} ${f2}"
                 rm -f "${tmp}"
                 return 1
                 ;;
             esac
         done <"${G_IMAGE_INDEX}"
     fi
-    [[ -n "${old}" && "${old}" != "${ref}" ]] && printf 'push %s\n' "${old}" >>"${tmp}"
+    [[ -n "${old}" && "${old}" != "${ref}" ]] && printf 'push %s %s\n' "${owner}" "${old}" >>"${tmp}"
     printf 'live %s %s\n' "${key}" "${ref}" >>"${tmp}"
     mv -f "${tmp}" "${G_IMAGE_INDEX}"
 }
@@ -1074,10 +1088,11 @@ _image_ref_exists() {
 }
 
 _clean_indexed_images() {
-    # 清理索引里已不再存活的镜像引用（只删本工具 push 过的，不碰同仓库里其他项目的 tag）
-    # 存活 = live 行，或本次运行引用；push 行非存活才删
+    # 清理索引里本项目已不再存活的镜像引用（只删本项目 push 过的，不碰他项目的台账行、也不碰同仓库里其他 tag）
+    # 存活 = live 行，或本次运行引用；本项目 push 行非存活才删
+    # 他项目 push 行原样保留，由对方自己的 run 回收（索引在同一 runner 上跨项目共用）
     # 删除成功或引用本就不存在 → 移出索引；删除失败且引用仍在 → 保留待下次重试
-    # 索引出现无法解析的行 → 报错并放弃清理（宁可留残留，也不误删存活镜像）
+    # 索引出现无法解析/旧格式的行 → 报错并放弃清理（宁可留残留，也不误删存活镜像）
     [[ -f "${G_IMAGE_INDEX}" ]] || return 0
     if ! command -v skopeo >/dev/null 2>&1; then
         _msg note "skopeo not found; skip indexed image cleanup"
@@ -1089,34 +1104,49 @@ _clean_indexed_images() {
     fi
 
     local state f1 f2
+    local owner="${G_REPO_GROUP_PATH:-unknown}"
     local current_ref="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME:-}:${G_IMAGE_TAG:-}"
     local -A live_refs=()
-    local -a live_lines=() push_refs=()
+    local -a live_lines=() push_refs=() push_owners=()
     while read -r state f1 f2; do
         [[ -n "${state}" ]] || continue
+        ## 两种行都固定三段（push <owner> <ref> / live <key> <ref>），缺段即旧格式或损坏
+        if [[ "${state}" == push || "${state}" == live ]] && { [[ -z "${f1}" ]] || [[ -z "${f2}" ]]; }; then
+            _msg error "Corrupted index line, abort cleanup (delete ${G_IMAGE_INDEX} to reset): ${state} ${f1} ${f2}"
+            return 1
+        fi
         case "${state}" in
         live)
             live_refs["${f2}"]=1
             live_lines+=("live ${f1} ${f2}")
             ;;
         push)
-            push_refs+=("${f1}")
+            push_owners+=("${f1}")
+            push_refs+=("${f2}")
             ;;
         *)
-            _msg error "Corrupted index line, abort cleanup: ${state} ${f1} ${f2}"
+            _msg error "Corrupted index line, abort cleanup (delete ${G_IMAGE_INDEX} to reset): ${state} ${f1} ${f2}"
             return 1
             ;;
         esac
     done <"${G_IMAGE_INDEX}"
 
-    local ref deleted=0 kept=0
+    local ref ref_owner deleted=0 kept=0 foreign=0 i
     local -a keep=()
-    for ref in "${push_refs[@]}"; do
+    for i in "${!push_refs[@]}"; do
+        ref="${push_refs[i]}"
+        ref_owner="${push_owners[i]}"
         ## 已有 live 行记录它 → 台账行冗余，丢弃
         [[ -n "${live_refs[${ref}]:-}" ]] && continue
+        ## 他项目的台账行：不删镜像、不丢行，留给对方回收
+        if [[ "${ref_owner}" != "${owner}" ]]; then
+            keep+=("push ${ref_owner} ${ref}")
+            foreign=$((foreign + 1))
+            continue
+        fi
         ## 本次运行刚 push、还没确认部署成功 → 保持跟踪（纯构建运行时不会有 live 行）
         if [[ "${ref}" == "${current_ref}" ]]; then
-            keep+=("push ${ref}")
+            keep+=("push ${ref_owner} ${ref}")
             kept=$((kept + 1))
             continue
         fi
@@ -1126,7 +1156,7 @@ _clean_indexed_images() {
             deleted=$((deleted + 1))
         elif _image_ref_exists "${ref}"; then
             _msg warn "Failed to delete stale image, keep for retry: ${ref}"
-            keep+=("push ${ref}")
+            keep+=("push ${ref_owner} ${ref}")
             kept=$((kept + 1))
         else
             [[ "${G_DEBUG_ON:-false}" == true ]] && _msg note "Stale image already gone: ${ref}"
@@ -1141,7 +1171,7 @@ _clean_indexed_images() {
     ## 默认全静默：索引维护是自动收尾动作，普通用户无需关注；-d 调试时才输出逐条明细与汇总
     ## 删除失败仍走上方 warn（会自动重试，且往往指向权限问题，需要可见）
     if [[ "${G_DEBUG_ON:-false}" == true ]]; then
-        _msg note "Indexed image cleanup: deleted=${deleted}, kept=${kept}"
+        _msg note "Indexed image cleanup: deleted=${deleted}, kept=${kept}, foreign=${foreign}"
     fi
 }
 
