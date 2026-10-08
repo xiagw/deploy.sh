@@ -48,8 +48,16 @@ done
 run_normal_user=false
 for u in spring node; do
     if id "$u" &>/dev/null; then
-        log "使用普通用户 [$u] 启动服务"
-        chown -R 1000:1000 /opt
+        app_uid="$(id -u "$u")"
+        app_gid="$(id -g "$u")"
+        log "使用普通用户 [$u] (uid=${app_uid} gid=${app_gid}) 启动服务"
+        ## /opt 必须可写：run1 在此写 run1.pid / *.pid / *.nohup.out / run1.sh.log
+        ## 不硬编码 1000：spring 是 uid 1000，但循环里的 node 等其它账号未必
+        chown -R "${app_uid}:${app_gid}" /opt
+        ## jar 补读位：jar 由 Dockerfile COPY 落成 root:root、模式沿用 builder 侧，缺读位时
+        ## 普通用户 java -jar 直接报 Unable to access jarfile。/app 不归该用户，故只 chmod 不改属主
+        ## （挂载卷也安全）；查找口径与 run1.sh 的 jar 发现一致
+        find "$PWD" /app -maxdepth 2 -type f -name '*.jar' -exec chmod a+r {} + 2>/dev/null || true
         su "$u" -c "bash /opt/run1.sh" &
         pids+=("$!")
         run_normal_user=true

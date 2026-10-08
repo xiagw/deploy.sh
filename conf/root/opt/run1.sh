@@ -173,6 +173,12 @@ start_java() {
             log "错误: JAR文件 ${jar_file} 不存在"
             continue
         fi
+        ## 可读性检查：run1 已由 run0（su 普通用户）降权，此处 -r 才是真实权限（root 的 -r 恒真）
+        ## 不可读时 java -jar 只会打印 Unable to access jarfile 后立刻退出，定位困难
+        if [ ! -r "${jar_file}" ]; then
+            log "错误: JAR文件无读权限，跳过: ${jar_file} [$(ls -ld "${jar_file}" 2>/dev/null | awk '{print $1, $3, $4}')]"
+            continue
+        fi
         ## 跳过sdk开头的jar文件
         case "$(basename "${jar_file}")" in
         sdk* | core*)
@@ -227,6 +233,13 @@ start_java() {
         G_PIDS+=("${pid}")
         echo "${pid}" >"${G_PATH}/$(basename "${jar_file}").pid"
         log "应用已在后台启动，进程ID: ${pid}"
+
+        ## 启动即退出（jar 损坏 / 端口被占 / 配置错误 / 缺依赖）时进程会立刻死掉；不校验的话
+        ## run1/run0 照常 wait，容器显示"运行中"而服务没起，只能等 k8s 探针兜底，排查时看不到原因
+        sleep 2
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            log "错误: JAR 启动后 2s 内已退出，请查看容器日志或 ${G_PATH}/$(basename "${jar_file}").nohup.out: ${jar_file}"
+        fi
 
         i=$((i + 1))
     done
