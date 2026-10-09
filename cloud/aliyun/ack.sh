@@ -721,6 +721,9 @@ check_cooldown() {
 #   PHP 的固定池上限（kruise chart 静态 4）与这里动态节点数口径不同，各自适用场景不同，勿混用。
 #
 # 隐形条件（设计约束，勿随意改动）:
+#   0) 扩缩容基准 = Deployment 的 spec.replicas（期望副本数），禁止用 kubectl get pod 的观测量：
+#      观测量含 Terminating / WorkloadSpread 注入 elastic 的 pod / 滚动更新 maxSurge 额外 pod，
+#      会大于 spec.replicas → 缩容目标 pod_total-1 反而 > spec → "缩容"把副本调大 → 正反馈棘轮。
 #   1) 缩容终点 = 基线 min_replicas（扩容前的副本数，通常=1 单pod 运行、特殊=2）；
 #      峰值扩、低谷缩回基线，不被节点数拦截。
 #   2) 扩容上限 = --max（缺省=真实节点数，每节点 1 副本的朴素预期）；
@@ -770,7 +773,7 @@ check_cooldown() {
 #
 # 互斥/冷却:
 #   锁路径 ${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}（去尾斜杠）/lock.scale.all   helm 发布互斥（deploy.sh 部署时创建），5 分钟内跳过
-#   /tmp/lock.scale.up|down.$deployment  冷却锁（扩容 1 分钟 / 缩容 5 分钟）
+#   同目录 /lock.scale.up|down.$deployment  冷却锁（扩容 1 分钟 / 缩容 5 分钟）；与 helm 互斥锁同目录，避免两套锁口径不一致互踩
 # 闲时回收: 资源回落后若 pod 仍跑在 virtual 节点，rollout restart 迁回真实节点（机制详见该分支注释）。
 # ============================================================
 ack_scale_pod() {
@@ -850,8 +853,8 @@ ack_scale_pod() {
         local runtime_dir="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
         runtime_dir="${runtime_dir%/}"
         local lock_file_all="${runtime_dir}/lock.scale.all"
-        local lock_file_up="/tmp/lock.scale.up.$deployment"
-        local lock_file_down="/tmp/lock.scale.down.$deployment"
+        local lock_file_up="${runtime_dir}/lock.scale.up.$deployment"
+        local lock_file_down="${runtime_dir}/lock.scale.down.$deployment"
 
         ## helm 发布互斥：deploy.sh 部署期间跳过扩缩容（锁存在 5 分钟内静默跳过；GNU stat/date 探测兼容 macOS）
         if [[ -f "${lock_file_all}" ]]; then
@@ -896,17 +899,23 @@ ack_scale_pod() {
         local eff_max=$max_replicas
         [ "$eff_max" -eq -1 ] && eff_max=$node_fixed
 
-        # pod 数
-        local pod_total
-        pod_total=$(kubectl -n "$namespace" get pod -l "app.kubernetes.io/name=$deployment" --no-headers | grep -c "$deployment")
+        # 期望副本数 spec.replicas：扩缩容唯一基准（见函数头"隐形条件 0"）。
+        # 用观测量（kubectl get pod）会含 Terminating/elastic/surge 额外 pod，大于 spec.replicas，
+        # 导致缩容目标 pod_total-1 > spec → 反向扩容 → 棘轮。读不到则跳过本轮，避免瞎算。
+        local spec_replicas
+        spec_replicas=$(kubectl -n "$namespace" get deployment "$deployment" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+        if [[ ! "$spec_replicas" =~ ^[0-9]+$ ]]; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 无法读取 spec.replicas（值=${spec_replicas:-空}），跳过本轮" >&2
+            return 1
+        fi
 
-        # 阈值 = 因子 × 副本数（内存阈值只在 metric 含内存时计算）
+        # 阈值 = 因子 × 期望副本数（内存阈值只在 metric 含内存时计算）
         local pod_cpu_warn pod_mem_warn pod_cpu_normal pod_mem_normal
-        pod_cpu_warn=$((pod_total * CPU_WARN_FACTOR))
-        pod_cpu_normal=$((pod_total * CPU_NORMAL_FACTOR))
+        pod_cpu_warn=$((spec_replicas * CPU_WARN_FACTOR))
+        pod_cpu_normal=$((spec_replicas * CPU_NORMAL_FACTOR))
         if [ "$metric" != "cpu" ]; then
-            pod_mem_warn=$((pod_total * MEM_WARN_FACTOR))
-            pod_mem_normal=$((pod_total * MEM_NORMAL_FACTOR))
+            pod_mem_warn=$((spec_replicas * MEM_WARN_FACTOR))
+            pod_mem_normal=$((spec_replicas * MEM_NORMAL_FACTOR))
         fi
 
         # 求和（CPU 毫核 / 内存归一 MiB）
@@ -945,11 +954,11 @@ ack_scale_pod() {
         # 扩容
         if $warn_now; then
             ## 副本上限：eff_max=0 表示不限制；达到上限则跳过扩容（默认不扩到 virtual，virtual 由 kruise/人工管理）
-            local target_replicas=$((pod_total + step))
+            local target_replicas=$((spec_replicas + step))
             if [ "$eff_max" -gt 0 ] && [ "$target_replicas" -gt "$eff_max" ]; then
                 target_replicas=$eff_max
             fi
-            if [ "$target_replicas" -le "$pod_total" ]; then
+            if [ "$target_replicas" -le "$spec_replicas" ]; then
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 已达副本上限 ${eff_max}，跳过扩容（${metric_warn}）"
                 return 0
             fi
@@ -974,17 +983,22 @@ ack_scale_pod() {
         # 缩容：PHP 只看 CPU、非 PHP 两资源都低于 normal 阈值；缩到基线(min_replicas，扩容前副本数)为止，
         # 不被节点数拦截 —— 资源有限场景基线通常=1（单pod），特殊=2；峰值扩、低谷缩回基线
         if $normal_now; then
-            if ((pod_total > min_replicas)); then
-                local new_replicas=$((pod_total - 1))
+            if ((spec_replicas > min_replicas)); then
+                local new_replicas=$((spec_replicas - 1))
                 ((new_replicas < min_replicas)) && new_replicas=$min_replicas
-                if ((new_replicas < pod_total)); then
+                if ((new_replicas < spec_replicas)); then
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment ${metric_normal}，缩容到 $new_replicas"
-                    kubectl -n "$namespace" scale --replicas="$new_replicas" deployment "$deployment"
-                    touch "$lock_file_down"
-                    local down_msg
-                    down_msg="[$(date '+%Y-%m-%d %H:%M:%S')] 应用 ${deployment} 空闲, 缩容到 ${new_replicas} 个副本"
-                    log_result "${profile:-}" "$region" "ack" "scale-pod" "$down_msg"
-                    type _notify_wecom >/dev/null 2>&1 && _notify_wecom "${WECOM_KEY:-}" "$down_msg"
+                    ## 校验返回码：scale 失败（如被其它控制器回滚/HPA 抢占）不发通知，避免假"缩容"告警
+                    if kubectl -n "$namespace" scale --replicas="$new_replicas" deployment "$deployment"; then
+                        touch "$lock_file_down"
+                        local down_msg
+                        down_msg="[$(date '+%Y-%m-%d %H:%M:%S')] 应用 ${deployment} 空闲, 缩容到 ${new_replicas} 个副本"
+                        log_result "${profile:-}" "$region" "ack" "scale-pod" "$down_msg"
+                        type _notify_wecom >/dev/null 2>&1 && _notify_wecom "${WECOM_KEY:-}" "$down_msg"
+                    else
+                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $deployment 缩容失败（目标 ${new_replicas}），跳过通知" >&2
+                        return 1
+                    fi
                 fi
                 return 0
             fi
