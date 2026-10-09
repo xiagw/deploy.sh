@@ -533,6 +533,8 @@ DOCKERIGNORE
         return 1
     fi
     _msg task "Image build completed"
+    ## 构建成功即已 push 到 registry（buildx bake --push）：打出可拉取的完整地址，便于核对/复制
+    _msg task "Image: ${target_image_tag}"
     build_log_hint "$build_log"
 
     ## 不包含敏感信息的镜像可以推送到公开仓库 push to ttl.sh
