@@ -5,8 +5,9 @@ bats_require_minimum_version 1.5.0
 load_helper="${BATS_TEST_DIRNAME}/helper.bash"
 
 ## 镜像索引（image-refs.index）纯逻辑测试
-## 该索引在同一 runner 上被所有项目共用（G_DATA 是工具自身目录），故清理只允许删本项目
-## G_REPO_GROUP_PATH 的 push 行；否则并发项目的 run 会把本 run 刚 push、还没转 live 的镜像删掉
+## 行格式: <flag> <owner> <branch> <ref>；flag 0=本轮 push 登记（未部署）/ 1=已部署成功
+## 行序即推送序：清理按 (owner,branch) 保留顺序上最后 ENV_IMAGE_KEEP_MAX 个已部署行（与时间无关）
+## 索引在同一 runner 上被所有项目共用（G_DATA 是工具自身目录），故只回收本项目 owner 的行
 setup() {
     source "$load_helper"
     source "${REPO_ROOT}/lib/common.sh"
@@ -16,59 +17,140 @@ setup() {
 
     G_IMAGE_INDEX="${BATS_TEST_TMPDIR}/image-refs.index"
     G_REPO_GROUP_PATH="my/proj"
+    G_REPO_BRANCH="main"
     ENV_DOCKER_REGISTRY="registry.example.com/my"
     G_IMAGE_NAME="mm"
     G_IMAGE_TAG="t1000"
+    ENV_IMAGE_KEEP_MAX=3
     G_DRY_RUN=false
     G_DEBUG_ON=false
 
-    ## skopeo stub: 只记录被删的引用，不触网
+    ## skopeo stub: 只记录调用，不触网；删除结果与"镜像是否仍在"可分别设定
     SKOPEO_LOG="${BATS_TEST_TMPDIR}/skopeo.log"
     : >"${SKOPEO_LOG}"
+    SKOPEO_DELETE_RC=0
+    REF_STILL_EXISTS=false
     skopeo() {
         printf '%s\n' "$*" >>"${SKOPEO_LOG}"
+        case "$*" in
+        delete*) return "${SKOPEO_DELETE_RC}" ;;
+        esac
         return 0
     }
+    _image_ref_exists() { [[ "${REF_STILL_EXISTS}" == true ]]; }
 }
 
-@test "cleanup deletes own stale push line and keeps foreign ones verbatim" {
+@test "index add writes an unpublished line and skips duplicates" {
+    _image_index_add "registry.example.com/my/mm:t1"
+    _image_index_add "registry.example.com/my/mm:t1"
+    [ "$(cat "${G_IMAGE_INDEX}")" = "0 my/proj main registry.example.com/my/mm:t1" ]
+}
+
+@test "mark_deployed flips the row to deployed and leaves other rows alone" {
     cat >"${G_IMAGE_INDEX}" <<EOF
-push other/proj registry.example.com/org-o/oo:t1
-push my/proj registry.example.com/my/mm:t900
-live keep-1 registry.example.com/my/mm:t2000
+0 my/proj main registry.example.com/my/mm:t1
+0 other/proj main registry.example.com/o:t9
+EOF
+    _image_index_mark_deployed "registry.example.com/my/mm:t1"
+    [ "$(cat "${G_IMAGE_INDEX}")" = "$(printf '1 my/proj main registry.example.com/my/mm:t1\n0 other/proj main registry.example.com/o:t9')" ]
+}
+
+@test "mark_deployed appends a row when the ref has none" {
+    : >"${G_IMAGE_INDEX}"
+    _image_index_mark_deployed "registry.example.com/my/mm:t2"
+    [ "$(cat "${G_IMAGE_INDEX}")" = "1 my/proj main registry.example.com/my/mm:t2" ]
+}
+
+@test "cleanup keeps the last N deployed rows and deletes the older one" {
+    cat >"${G_IMAGE_INDEX}" <<EOF
+1 my/proj main registry.example.com/my/mm:t1
+1 my/proj main registry.example.com/my/mm:t2
+1 my/proj main registry.example.com/my/mm:t3
+1 my/proj main registry.example.com/my/mm:t4
 EOF
     run _clean_indexed_images
     [ "$status" -eq 0 ]
     [ "$(wc -l <"${SKOPEO_LOG}")" -eq 1 ]
-    run grep -q "docker://registry.example.com/my/mm:t900" "${SKOPEO_LOG}"
-    [ "$status" -eq 0 ]
-    run grep -q "org-o" "${SKOPEO_LOG}"
-    [ "$status" -ne 0 ]
-    [ "$(wc -l <"${G_IMAGE_INDEX}")" -eq 2 ]
-    grep -qx "push other/proj registry.example.com/org-o/oo:t1" "${G_IMAGE_INDEX}"
-    grep -qx "live keep-1 registry.example.com/my/mm:t2000" "${G_IMAGE_INDEX}"
+    grep -q "delete docker://registry.example.com/my/mm:t1" "${SKOPEO_LOG}"
+    [ "$(wc -l <"${G_IMAGE_INDEX}")" -eq 3 ]
+    grep -qx "1 my/proj main registry.example.com/my/mm:t2" "${G_IMAGE_INDEX}"
+    grep -qx "1 my/proj main registry.example.com/my/mm:t3" "${G_IMAGE_INDEX}"
+    grep -qx "1 my/proj main registry.example.com/my/mm:t4" "${G_IMAGE_INDEX}"
 }
 
-@test "cleanup keeps the current run ref for retry" {
-    printf 'push my/proj registry.example.com/my/mm:t1000\n' >"${G_IMAGE_INDEX}"
+@test "failed rows do not consume the version window" {
+    ENV_IMAGE_KEEP_MAX=2
+    cat >"${G_IMAGE_INDEX}" <<EOF
+1 my/proj main registry.example.com/my/mm:t1
+0 my/proj main registry.example.com/my/mm:t2
+1 my/proj main registry.example.com/my/mm:t3
+0 my/proj main registry.example.com/my/mm:t4
+EOF
+    run _clean_indexed_images
+    [ "$status" -eq 0 ]
+    [ "$(wc -l <"${G_IMAGE_INDEX}")" -eq 2 ]
+    grep -qx "1 my/proj main registry.example.com/my/mm:t1" "${G_IMAGE_INDEX}"
+    grep -qx "1 my/proj main registry.example.com/my/mm:t3" "${G_IMAGE_INDEX}"
+    [ "$(wc -l <"${SKOPEO_LOG}")" -eq 2 ]
+}
+
+@test "cleanup never deletes this run's ref" {
+    printf '0 my/proj main registry.example.com/my/mm:t1000\n' >"${G_IMAGE_INDEX}"
     run _clean_indexed_images
     [ "$status" -eq 0 ]
     [ ! -s "${SKOPEO_LOG}" ]
-    [ "$(cat "${G_IMAGE_INDEX}")" = "push my/proj registry.example.com/my/mm:t1000" ]
+    [ "$(cat "${G_IMAGE_INDEX}")" = "0 my/proj main registry.example.com/my/mm:t1000" ]
 }
 
-@test "cleanup drops a push line already covered by a live line, image untouched" {
+@test "cleanup leaves other projects' rows verbatim" {
     cat >"${G_IMAGE_INDEX}" <<EOF
-push my/proj registry.example.com/my/mm:t1
-live fly-nginx-main registry.example.com/my/mm:t1
+0 other/proj main registry.example.com/o:t1
+1 my/proj main registry.example.com/my/mm:t1
+1 my/proj main registry.example.com/my/mm:t2
+1 my/proj main registry.example.com/my/mm:t3
 EOF
     run _clean_indexed_images
     [ "$status" -eq 0 ]
     [ ! -s "${SKOPEO_LOG}" ]
-    [ "$(cat "${G_IMAGE_INDEX}")" = "live fly-nginx-main registry.example.com/my/mm:t1" ]
+    [ "$(wc -l <"${G_IMAGE_INDEX}")" -eq 4 ]
+    grep -qx "0 other/proj main registry.example.com/o:t1" "${G_IMAGE_INDEX}"
 }
 
-@test "cleanup aborts on a legacy two-field push line and leaves the file as is" {
+@test "cleanup keeps the row when deletion fails and the image still exists" {
+    ENV_IMAGE_KEEP_MAX=1
+    printf '1 my/proj main registry.example.com/my/mm:t1\n1 my/proj main registry.example.com/my/mm:t2\n' >"${G_IMAGE_INDEX}"
+    SKOPEO_DELETE_RC=1
+    REF_STILL_EXISTS=true
+    run _clean_indexed_images
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"keep for retry"* ]]
+    [ "$(wc -l <"${G_IMAGE_INDEX}")" -eq 2 ]
+}
+
+@test "cleanup drops the row when the image is gone (failed push self-heals)" {
+    ENV_IMAGE_KEEP_MAX=1
+    printf '1 my/proj main registry.example.com/my/mm:t1\n1 my/proj main registry.example.com/my/mm:t2\n' >"${G_IMAGE_INDEX}"
+    SKOPEO_DELETE_RC=1
+    REF_STILL_EXISTS=false
+    run _clean_indexed_images
+    [ "$status" -eq 0 ]
+    [ "$(cat "${G_IMAGE_INDEX}")" = "1 my/proj main registry.example.com/my/mm:t2" ]
+}
+
+@test "windows are per branch: develop rows do not consume main's window" {
+    cat >"${G_IMAGE_INDEX}" <<EOF
+1 my/proj main registry.example.com/my/mm:m1
+1 my/proj main registry.example.com/my/mm:m2
+1 my/proj main registry.example.com/my/mm:m3
+1 my/proj develop registry.example.com/my/mm:d1
+EOF
+    run _clean_indexed_images
+    [ "$status" -eq 0 ]
+    [ ! -s "${SKOPEO_LOG}" ]
+    [ "$(wc -l <"${G_IMAGE_INDEX}")" -eq 4 ]
+}
+
+@test "cleanup aborts on a malformed line and leaves the file as is" {
     printf 'push registry.example.com/my/mm:t1\n' >"${G_IMAGE_INDEX}"
     before="$(cat "${G_IMAGE_INDEX}")"
     run _clean_indexed_images
@@ -78,43 +160,11 @@ EOF
     [[ "$output" == *"abort cleanup"* ]]
 }
 
-@test "index add records the owner and skips duplicates" {
-    _image_index_add "registry.example.com/my/mm:t1"
-    _image_index_add "registry.example.com/my/mm:t1"
-    [ "$(cat "${G_IMAGE_INDEX}")" = "push my/proj registry.example.com/my/mm:t1" ]
-}
-
-@test "set_live demotes the old live ref to an owned push line" {
-    cat >"${G_IMAGE_INDEX}" <<EOF
-live keep-1 registry.example.com/my/mm:t1
-push my/proj registry.example.com/my/mm:t2
-EOF
-    run _image_index_set_live "keep-1" "registry.example.com/my/mm:t2"
-    [ "$status" -eq 0 ]
-    [ "$(cat "${G_IMAGE_INDEX}")" = "$(printf 'push my/proj registry.example.com/my/mm:t1\nlive keep-1 registry.example.com/my/mm:t2')" ]
-}
-
-@test "set_live aborts on a legacy two-field line without rewriting the index" {
-    printf 'live keep-1 registry.example.com/my/mm:t1\npush registry.example.com/my/mm:t9\n' >"${G_IMAGE_INDEX}"
+@test "mark_deployed aborts on a malformed line without rewriting the index" {
+    printf 'push registry.example.com/my/mm:t1\n' >"${G_IMAGE_INDEX}"
     before="$(cat "${G_IMAGE_INDEX}")"
-    run _image_index_set_live "keep-1" "registry.example.com/my/mm:t2"
+    run _image_index_mark_deployed "registry.example.com/my/mm:t2"
     [ "$status" -eq 1 ]
     [ "$(cat "${G_IMAGE_INDEX}")" = "$before" ]
     [ -z "$(ls "${BATS_TEST_TMPDIR}"/image-refs.index.tmp.* 2>/dev/null)" ]
-}
-
-@test "cleanup still reclaims the previous image of the same project after a redeploy" {
-    ## 第 1 轮: 推 t1 并部署成功 → t1 转 live
-    _image_index_add "registry.example.com/my/mm:t1"
-    _image_index_set_live "keep-1" "registry.example.com/my/mm:t1"
-    ## 第 2 轮: 推 t2 并部署成功 → t1 降级为本项目的 push 行，t2 转 live
-    G_IMAGE_TAG="t2"
-    _image_index_add "registry.example.com/my/mm:t2"
-    _image_index_set_live "keep-1" "registry.example.com/my/mm:t2"
-
-    run _clean_indexed_images
-    [ "$status" -eq 0 ]
-    run grep -q "docker://registry.example.com/my/mm:t1" "${SKOPEO_LOG}"
-    [ "$status" -eq 0 ]
-    [ "$(cat "${G_IMAGE_INDEX}")" = "live keep-1 registry.example.com/my/mm:t2" ]
 }

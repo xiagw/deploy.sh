@@ -478,8 +478,9 @@ main() {
     ## （gitlab/gitea/zentao/backup）也落这里，而它们只建父目录或走 _msg log 的目录判断，
     ## 删掉这行会导致新环境下这些脚本落盘失败 / 静默降级为只打屏
     mkdir -p "${G_DATA}/logs"
-    ## 镜像引用索引（单文件，两种标记行，跨项目共用）: `push <owner项目路径> <ref>` = 本项目推过待跟踪；`live <release>-<ns> <ref>` = 当前部署在用
-    ## 只删本项目 owner 的 push 行（见 lib/deployment.sh _clean_indexed_images）：并发项目收尾不得删掉他项目刚推的镜像
+    ## 镜像引用索引（单文件，跨项目共用）: `<flag> <owner项目路径> <branch> <ref>`
+    ##   flag=0 = 本轮 push 登记（部署未成功）；flag=1 = 已部署成功（行序即推送序）
+    ##   清理按 (owner,branch) 保留顺序上最后 ENV_IMAGE_KEEP_MAX（默认 3）个已部署行，且只回收本项目行
     G_IMAGE_INDEX="${G_DATA}/cache/image-refs.index"
     ## 构建状态索引（单文件）: `<repo>-<branch> <field> <value>`，field ∈ base_md5 / base_custom_md5 / yarn_md5 / explained
     G_BUILD_STATE="${G_DATA}/cache/build-state.index"

@@ -218,9 +218,9 @@ flowchart TD
 | `detect_deployment_method` | 自动探测部署方式（见 4.4） |
 | `stage_deploy` | 部署入口分发，返回 `G_DEPLOY_RESULT` |
 | `copy_docker_image` | skopeo 多架构镜像跨 registry 复制 |
-| `record_deployed_image` | 部署成功后把 `<release>-<ns>` 的当前引用标记为 `live`（部署失败不动指针，交下次清理删） |
-| `_image_index_add` | push 前登记台账行 `push <ref>`（去重）；中断/删除失败时引用不丢 |
-| `_image_index_set_live` | 把该 key 引用升为 `live` 行、旧 live 引用降级为 `push`、吸收其 `push` 行；整文件 tmp+mv 原子重写 |
+| `record_deployed_image` | 部署成功后把本轮镜像在索引里标记为已部署（flag 0→1）；失败不动，交下次清理回收 |
+| `_image_index_add` | push 前登记写前日志行 `0 <owner> <branch> <ref>`（去重）；中断/删除失败时引用不丢 |
+| `_image_index_mark_deployed` | 把本轮镜像的标记位改为已部署（行序即推送序，清理据此保留最近 N 个已部署版本） |
 | `_image_ref_exists` | 用 `skopeo list-tags` 判断引用是否仍在 registry（区分"删除失败"与"本就不存在"） |
 | `_clean_indexed_images` | 部署后清非存活 `push` 行（存活 = `live` 行或本次引用）：删成功/已不存在→移出，删失败且仍在→保留重试；遇损坏行报错放弃（宁留残留不误删） |
 | `clean_old_tags` | 入口：`<reg>/<ns>/<repo>` 直清，`<reg>/<ns>/`（或 `/*`）进 fzf 多选散列仓库池 |
@@ -530,7 +530,7 @@ auto 优先级链：
 - `G_IMAGE_TAG="t$(date +%s%3N)"`（毫秒时间戳）。
 - `G_IMAGE_NAME`：`ENV_DOCKER_IMAGE_RANDOM=true` 时取 2 个随机字符（a-o），否则仓库名去 `-_` 截 10 字符。
 - 随机仓库名的动因：ACR 个人版配额为 3 命名空间 / 300 仓库，且无 OpenAPI、无「版本自动清理」（官方仅企业版支持），发布频繁会让单仓库 tag 无限堆积；故按 a-o 两字符散列到 225 个仓库摊薄 tag。代价：仓库名不可推导、清理需遍历 225 个名字（占用 300 配额中的 225）。
-- 遗留镜像治理（单文件索引 `data/cache/image-refs.index`，两种标记行）：`push <owner> <ref>` 台账行由 `build_image` 在 push 前登记，`owner` = `G_REPO_GROUP_PATH`（项目唯一路径）；`live <release>-<ns> <ref>` 存活行由 `record_deployed_image` 在部署成功后标记。索引在同一 runner 上被所有项目共用（`G_DATA` 是工具自身目录），因此 `_clean_indexed_images` 只删"本项目 + 非存活"的 `push` 行（存活 = `live` 行或本次运行引用）：他项目的台账行原样保留、由其自己的 run 回收，否则并发项目的收尾会把本 run 刚 push、还没转 live 的镜像删掉（表现为新 pod `ErrImagePull`/`ImagePullBackOff`）。随机池是所有项目共用的，因此只能按"本项目推过的引用"删，不能按仓库或年龄扫；索引损坏或仍是旧的两段格式时放弃清理而非误删。清理输出默认全静默（自动收尾，普通用户无需关注），`-d` 时打印逐条明细与 `deleted=/kept=/foreign=` 汇总；删除失败仍打 `warn`（会自动重试，且常指向删除权限问题）。
+- 遗留镜像治理（单文件索引 `data/cache/image-refs.index`，行格式 `<flag> <owner> <branch> <ref>`）：`0` 由 `build_image` 在 push **前**登记（写前日志：push 成功但进程被杀时引用不丢；push 失败留下的"幽灵"条目由下次清理自愈——`skopeo delete` 失败且 `_image_ref_exists` 判定不存在 → 直接丢行）；部署成功由 `record_deployed_image` 把该行标记为 `1`（行序即推送序，不参与排序），与时间无关。`stage_deploy` 收尾调 `_clean_indexed_images`：按 `(owner,branch)` 保留顺序上最后 `ENV_IMAGE_KEEP_MAX`（默认 3）个**已部署**版本，即长期不发布的项目也永远留着当前版与前两版，`kubectl rollout undo` / 手工拉回上一版都拉得到；`flag=0`（部署失败/纯构建）不占版本窗口，下一轮回收。索引在同一 runner 上被所有项目共用（`G_DATA` 是工具自身目录），因此**只回收本项目 owner 的行**，他项目行原样保留由其自己的 run 回收（否则并发项目的收尾会误删他项目刚推的镜像）；本轮 `current_ref` 永不删（pod 可能正在拉，见 2026-10-02 fly-nginx 事件）。随机池是所有项目共用的，因此只能按"本项目推过的引用"删，不能按仓库或年龄扫；索引损坏或仍是旧格式时放弃清理而非误删。清理输出默认全静默（自动收尾，普通用户无需关注），`-d` 时打印逐条明细与 `deleted=/kept=/foreign=/keep_max=` 汇总；删除失败仍打 `warn`（会自动重试，且常指向删除权限问题）。
 - `data/cache/` 终态只有少量文件：`image-refs.index`（镜像引用）、`build-state.index`（构建指纹与提示标记，按 `<repo>-<branch>` 存值）、`.docker.login.<type>.lock`（登录锁）、`base-bake.hcl`（临时 bake 文件）；早期"一仓库一分支多小文件"的命名（`*-base.md5`、`*-base-custom.md5`、`*-base.explained`、`*-yarn`、`*-last-tag`、`*_last_image`、`*.current`）由 `config_clean_legacy_cache` 每次运行自动清掉。
 - 目标镜像：`${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}:${G_IMAGE_TAG}`——build、deploy、record、buildpack、base image 多处复用的全工具核心命名。
 
