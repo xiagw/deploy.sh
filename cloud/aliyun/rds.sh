@@ -14,13 +14,14 @@ show_rds_help() {
     echo "  add <名称> <引擎> <版本> <规格> [地域]  - 创建 RDS 实例"
     echo "  set [<实例ID>] [<新名称>] [地域]        - 更新 RDS 实例（实例ID和新名称都是可选的，可使用fzf选择）"
     echo "  del [<实例ID>] [地域]                   - 删除 RDS 实例（实例ID可选，可使用fzf选择）"
-    echo "  add-acc <实例ID> <账号> <密码> [描述] - 创建数据库账号"
+    echo "  add-acc <实例ID> <账号> <密码> [描述] - 创建数据库账号（顺带建同名库，字符集按引擎默认）"
     echo "  del-acc <实例ID> <账号>             - 删除数据库账号"
     echo "  get-acc <实例ID> [format]           - 列出数据库账号"
-    echo "  set-acc <实例ID> <账号> <数据库名[,数据库名...]> [rw|ro] - 设置账号数据库权限（rw=读写 默认，ro=只读；支持多库）"
+    echo "  set-acc <实例ID> <账号> <数据库名[,数据库名...]> [rw|ro] - 设置账号数据库权限（rw=读写 默认，ro=只读；支持多库）
+                                         注意：PostgreSQL 该接口只支持 DBOwner，故 rw 映射为 DBOwner、ro 不支持"
     echo "  set-pass <实例ID> <账号> [新密码]       - 重置账号密码（省略密码则随机生成两段式 xxxxxxx-yyyyyyy）"
     echo "  get-db <实例ID> [format]                - 列出数据库"
-    echo "  add-db <实例ID> <数据库名> [字符集]     - 创建数据库"
+    echo "  add-db <实例ID> <数据库名> [字符集]     - 创建数据库（字符集缺省按引擎：MySQL utf8mb4、PG UTF8,C,en_US.utf8、SQLServer Chinese_PRC_CI_AS）"
     echo "  del-db <实例ID> <数据库名>              - 删除数据库"
     echo "  get-bak [<实例ID>] [format]          - 列出实例备份集"
     echo "  del-bak [<实例ID>] [<备份ID>]        - 删除备份集（可用 fzf 选择；自动备份保留期内不可删）"
@@ -442,9 +443,12 @@ rds_account_create() {
         return 1
     fi
 
-    # 先创建同名数据库（使用 rds_db_create 函数）
-    echo "创建同名数据库..."
-    if ! rds_db_create "$instance_id" "$account_name" "utf8mb4"; then
+    # 先创建同名数据库；字符集按实例引擎取（不能写死 utf8mb4：PostgreSQL / SQL Server 不支持）
+    local engine charset
+    engine=$(_rds_instance_engine "$instance_id")
+    charset=$(_rds_default_charset "$engine")
+    echo "创建同名数据库（${engine:-引擎未知}，字符集 ${charset}）..."
+    if ! rds_db_create "$instance_id" "$account_name" "$charset"; then
         echo "错误：数据库创建失败。"
         return 1
     fi
@@ -472,8 +476,8 @@ rds_account_create() {
         echo "等待账号创建完成..."
         sleep 5
 
-        # 自动设置默认权限
-        if ! rds_account_grant "$instance_id" "$account_name" "$account_name" "ReadWrite"; then
+        # 自动设置默认权限（rw；PostgreSQL 会被映射为 DBOwner）
+        if ! rds_account_grant "$instance_id" "$account_name" "$account_name" "rw"; then
             echo "警告：默认权限设置失败，请手动设置权限。"
         fi
         log_result "${profile:-}" "$region" "rds" "account-create" "$result"
@@ -657,17 +661,32 @@ rds_db_create() {
         fi
     fi
 
-    # 如果没有提供字符集，则交互式选择
+    # 字符集缺省按实例引擎取：MySQL 的 utf8mb4 在 PostgreSQL / SQL Server 上非法
+    local engine
+    engine=$(_rds_instance_engine "$instance_id")
     if [ -z "$charset" ]; then
-        local charset_list="utf8mb4
+        local charset_list=""
+        case "$engine" in
+        MySQL | MariaDB)
+            charset_list="utf8mb4
 utf8
 gbk
 latin1"
-        if type select_with_fzf >/dev/null 2>&1; then
-            charset=$(select_with_fzf "选择字符集" "$charset_list")
-        else
-            read -r -p "请输入字符集 (utf8mb4/utf8/gbk/latin1): " charset
-            charset=${charset:-utf8mb4}
+            ;;
+        "SQL Server")
+            charset_list="Chinese_PRC_CI_AS
+Chinese_PRC_CS_AS
+SQL_Latin1_General_CP1_CI_AS
+SQL_Latin1_General_CP1_CS_AS
+Chinese_PRC_BIN"
+            ;;
+        esac
+        if [ -n "$charset_list" ] && type select_with_fzf >/dev/null 2>&1; then
+            charset=$(select_with_fzf "选择字符集（${engine:-未知引擎}）" "$charset_list")
+        fi
+        if [ -z "$charset" ]; then
+            charset=$(_rds_default_charset "$engine")
+            echo "字符集采用引擎默认：${charset}（${engine:-引擎未知}）"
         fi
     fi
 
@@ -737,14 +756,14 @@ rds_account_grant() {
         return 1
     fi
 
-    # 权限：rw=ReadWrite（默认）/ ro=ReadOnly；兼容中英文全称
+    # 权限别名归一（rw / ro，兼容中英文全称）；实际 API 取值按引擎映射（PostgreSQL 只有 DBOwner）
     privilege=${privilege:-rw}
     case "${privilege}" in
     rw | RW | 读写 | readwrite | Readwrite | READWRITE | ReadWrite)
-        privilege="ReadWrite"
+        privilege="rw"
         ;;
     ro | RO | 只读 | readonly | Readonly | READONLY | ReadOnly)
-        privilege="ReadOnly"
+        privilege="ro"
         ;;
     *)
         echo "错误：权限仅支持 rw/ro（或 读写/只读、ReadWrite/ReadOnly）。" >&2
@@ -752,16 +771,20 @@ rds_account_grant() {
         ;;
     esac
 
+    local engine privilege_api
+    engine=$(_rds_instance_engine "$instance_id")
+    privilege_api=$(_rds_grant_privilege "${engine}" "${privilege}") || return 1
+
     # AccountPrivilege 需与 DBName 数量一致：同一权限按序重复 N 次
     local n_db privilege_list
     n_db=$(echo "${db_list}" | tr ',' '\n' | awk 'NF' | wc -l | tr -d ' ')
-    privilege_list=$(awk -v p="${privilege}" -v n="${n_db}" 'BEGIN { for (i = 0; i < n; i++) printf "%s%s", (i ? "," : ""), p }')
+    privilege_list=$(awk -v p="${privilege_api}" -v n="${n_db}" 'BEGIN { for (i = 0; i < n; i++) printf "%s%s", (i ? "," : ""), p }')
 
     echo "设置账号权限："
     echo "实例ID: $instance_id"
     echo "账号名: $account_name"
     echo "数据库: $db_list"
-    echo "权限: $privilege"
+    echo "权限: ${privilege_api}（${engine:-引擎未知}）"
 
     local result
     if call_api_logged "rds" "account-set" "错误：权限设置失败。" \
@@ -771,7 +794,7 @@ rds_account_grant() {
         --account-name "$account_name" \
         --db-name "$db_list" \
         --account-privilege "$privilege_list"; then
-        echo "账号 $account_name 已被授予 $privilege 权限，可访问数据库 $db_list"
+        echo "账号 $account_name 已被授予 ${privilege_api} 权限，可访问数据库 $db_list"
     fi
 }
 
@@ -809,6 +832,45 @@ _rds_resolve_instance_id() {
     resolve_resource_id "$1" "${2:-选择 RDS 实例}" "错误：没有找到 RDS 实例。" \
         '.Items.DBInstance[] | "\(.DBInstanceId) (\(.DBInstanceDescription // .DBInstanceId)) [\(.Engine) \(.EngineVersion)]"' \
         -- rds describe-db-instances --biz-region-id "$region"
+}
+
+_rds_instance_engine() {
+    # 取实例引擎名（MySQL / MariaDB / PostgreSQL / SQL Server）；查不到则输出空，调用方按默认处理
+    call_aliyun_api rds describe-db-instances --biz-region-id "$region" --db-instance-id "${1}" 2>/dev/null |
+        jq -r '.Items.DBInstance[0].Engine // empty'
+}
+
+_rds_default_charset() {
+    # 按引擎给出创建数据库的默认字符集（取值以 `aliyun rds create-database --help` 为准）：
+    #   MySQL/MariaDB → utf8mb4；PostgreSQL → "UTF8,C,en_US.utf8"（PG 要求「字符集,Collate,Ctype」三段）；
+    #   SQL Server → Chinese_PRC_CI_AS；引擎未知（查询失败）→ utf8mb4
+    case "${1}" in
+    PostgreSQL) echo "UTF8,C,en_US.utf8" ;;
+    "SQL Server") echo "Chinese_PRC_CI_AS" ;;
+    *) echo "utf8mb4" ;;
+    esac
+}
+
+_rds_grant_privilege() {
+    # 账号权限别名 → GrantAccountPrivilege 的 AccountPrivilege 取值（各引擎支持集不同，
+    # 以 `aliyun rds grant-account-privilege --help` 为准）：
+    #   MySQL/MariaDB、SQL Server：rw→ReadWrite、ro→ReadOnly
+    #   PostgreSQL：只有 DBOwner（无独立只读）→ rw→DBOwner、ro 直接报错
+    # 用法: _rds_grant_privilege <引擎> <rw|ro>；不支持时写 stderr 并返回非 0
+    local engine=${1} want=${2}
+    if [ "${engine}" = "PostgreSQL" ]; then
+        if [ "${want}" = "rw" ]; then
+            echo "DBOwner"
+            return 0
+        fi
+        echo "错误：PostgreSQL 的账号权限仅支持 DBOwner（没有独立只读权限），无法授予 ro。" >&2
+        return 1
+    fi
+    case "${want}" in
+    rw) echo "ReadWrite" ;;
+    ro) echo "ReadOnly" ;;
+    *) return 1 ;;
+    esac
 }
 
 # 列出实例备份集（DescribeBackups）
