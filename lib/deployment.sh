@@ -248,6 +248,9 @@ deploy_to_kubernetes() {
     local helm_opt_array
     read -ra helm_opt_array <<<"${HELM_OPT:-}"
 
+    ## 本次部署的镜像 ref（helm 参数与成功日志共用，避免两处各拼一遍）
+    local image_ref="${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}"
+
     local helm_args=(
         "${helm_opt_array[@]}"
         upgrade
@@ -260,7 +263,7 @@ deploy_to_kubernetes() {
         --hide-notes
         --timeout "${ENV_HELM_TIMEOUT:-120s}"
         --set "image.pullPolicy=Always"
-        --set "image.repository=${ENV_DOCKER_REGISTRY%/}/${G_IMAGE_NAME}"
+        --set "image.repository=${image_ref}"
         --set "image.tag=${G_IMAGE_TAG}"
     )
     if [ "${G_NAMESPACE}" != main ]; then
@@ -291,12 +294,15 @@ deploy_to_kubernetes() {
             G_DEPLOY_RESULT=1
         fi
     fi
+    ## 可复用命令：成功/失败都打印，便于复制到本机手工重跑（$HOME 脱敏）；此处只在失败分支前算一次
+    local reusable_cmd
+    reusable_cmd="$(printf '%s' "${helm_args[*]}" | sed "s#$HOME#\$HOME#g")"
+
     # Display rollback cmd on failure / 部署失败时显示回滚命令
     if [[ "${G_DEPLOY_RESULT:-0}" -eq 1 ]]; then
         _msg error "Deployment failed: ${release_name}; rollback/diagnostic commands:"
-        ## 可复用命令：仅在失败时输出，便于本机修复后手工重跑（$HOME 脱敏）
         echo "helm upgrade/install command (reusable):"
-        echo "  ${helm_args[*]}" | sed "s#$HOME#\$HOME#g"
+        echo "  ${reusable_cmd}"
         revision="$(helm -n "${G_NAMESPACE}" history "${release_name}" 2>/dev/null | awk 'END {print $1}' || true)"
         if [[ -n "$revision" && "$revision" -gt 1 ]]; then
             ## helm rollback to previous revision / 回滚到上一个版本
@@ -308,6 +314,11 @@ deploy_to_kubernetes() {
         echo "kubectl -n ${G_NAMESPACE} scale deployment/${release_name} --replicas=0"
         return 1
     fi
+
+    ## 成功：同样给出可复用命令（与失败分支同款，便于复制重跑），再一行本次部署的镜像作为结论
+    echo "helm upgrade/install command (reusable):"
+    echo "  ${reusable_cmd}"
+    _msg task "Deployed image: ${image_ref}:${G_IMAGE_TAG}"
 
     record_deployed_image "${G_DEPLOY_RESULT:-0}"
 
