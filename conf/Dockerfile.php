@@ -50,6 +50,7 @@ CMD ["/bin/bash", "-c", "${APP_CMD:-/opt/run0.sh}"]
 
 ONBUILD COPY --chown=${ONBUILD_CHOWN} ${ONBUILD_COPY_SRC} ${ONBUILD_COPY_DEST}
 ONBUILD RUN set -xe; \
+    chmod +x /opt/*.sh 2>/dev/null || true; \
     if [ -f /opt/onbuild.sh ]; then \
         if command -v bash >/dev/null 2>&1; then bash /opt/onbuild.sh; else sh /opt/onbuild.sh; fi; \
     fi
