@@ -973,7 +973,7 @@ copy_docker_image() {
     target_registry="${arg_target}"
 
     if ${G_DRY_RUN:-false}; then
-        dry_run_note "skopeo --override-os linux copy --multi-arch all docker://${source_image} docker://${target_registry%/}/..."
+        dry_run_note "skopeo --override-os linux copy --multi-arch <源平台列表> --strip-removed-platforms docker://${source_image} docker://${target_registry%/}/..."
         exit 0
     fi
 
@@ -1014,10 +1014,23 @@ copy_docker_image() {
         _msg warn "Target image already exists: ${target}"
     fi
 
-    echo "Copying multi-arch image to custom registry..."
-    echo "skopeo --override-os linux copy --multi-arch all docker://${source_image} docker://${target}"
+    ## ACR 个人版拒绝 attestation manifest（application/vnd.oci.empty.v1+json →
+    ## "denied: unknown manifest class"）。源为 manifest list 时按真实平台精确复制，
+    ## --strip-removed-platforms 剥掉 unknown/unknown 的 attestation 项；单 manifest 源保持原行为
+    local copy_args=(--multi-arch all) raw_manifest platforms
+    raw_manifest="$(skopeo inspect --raw "docker://${source_image}" 2>/dev/null)" || true
+    if platforms="$(jq -r '[.manifests[]?
+            | select((.annotations["vnd.docker.reference.type"] // "") != "attestation-manifest")
+            | select(.platform.os != null and .platform.os != "unknown")
+            | "\(.platform.os)/\(.platform.architecture)"] | unique | join(",")' \
+        <<<"${raw_manifest}" 2>/dev/null)" && [ -n "${platforms}" ]; then
+        copy_args=(--multi-arch "${platforms}" --strip-removed-platforms)
+    fi
 
-    if skopeo --override-os linux copy --multi-arch all \
+    echo "Copying multi-arch image to custom registry..."
+    echo "skopeo --override-os linux copy ${copy_args[*]} docker://${source_image} docker://${target}"
+
+    if skopeo --override-os linux copy "${copy_args[@]}" \
         "docker://${source_image}" \
         "docker://${target}"; then
         _msg ok "Successfully copied image to ${target}"

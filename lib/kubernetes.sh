@@ -461,7 +461,9 @@ EOF
     docker run --privileged --rm "${image}" --install all || return 1
   fi
 
-  docker buildx bake --file "${bake_file}" --progress=plain
+  ## --provenance=false：ACR 个人版拒绝 attestation manifest（unknown manifest class），
+  ## 与 lib/build.sh 两处 bake 同口径，不生成 provenance 附件
+  docker buildx bake --file "${bake_file}" --progress=plain --provenance=false
   rm -f "${dk_file}" 2>/dev/null || true
   rm -f "${bake_file}" 2>/dev/null || true
 }

@@ -27,6 +27,7 @@ LABEL maintainer="xiagw <fxiaxiaoyu@gmail.com>" \
     php.version="${PHP_VERSION}"
 
 ENV TZ=${TZ} \
+    PHP_VERSION=${PHP_VERSION} \
     ONBUILD_CHOWN=${ONBUILD_CHOWN} \
     ONBUILD_COPY_SRC=${ONBUILD_COPY_SRC} \
     ONBUILD_COPY_DEST=${ONBUILD_COPY_DEST}
