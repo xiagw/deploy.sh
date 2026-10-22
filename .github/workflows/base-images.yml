@@ -7,6 +7,8 @@
 #   gh workflow run base-images.yml -f images=all
 #   gh workflow run base-images.yml -f images=php:8.4 -f platforms=linux/amd64
 # images 必填，空值直接报错；`all` 才是全量。设计取舍见 docs/development.md。
+# 前置：Docker Hub 缺失的仓库由 ensure-repos job 自动创建，
+#       PAT 需要 "manage repositories" 权限（Repo Read, Write, Delete），仅 Read & Write 会 403。
 # 依赖的仓库 secret：DOCKERHUB_USERNAME / DOCKERHUB_TOKEN（PAT，需 Read & Write）
 name: Base Images
 
@@ -40,7 +42,7 @@ jobs:
       images: ${{ steps.gen.outputs.images }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 生成构建矩阵
         id: gen
@@ -77,7 +79,8 @@ jobs:
           echo "matrix=${matrix}" >>"${GITHUB_OUTPUT}"
           echo "images=${SELECTED[*]}" >>"${GITHUB_OUTPUT}"
 
-  ## Docker Hub 不会在 push 时自动建仓库，已存在的跳过（HEAD 返回 200）
+  ## 先确保 Docker Hub 仓库存在。PAT 需要 "manage repositories" 权限
+  ## （Repo Read, Write, Delete）；只有 Read & Write 时创建会 403。
   ensure-repos:
     needs: prepare
     runs-on: ubuntu-latest
@@ -89,7 +92,7 @@ jobs:
           IMAGES: ${{ needs.prepare.outputs.images }}
         run: |
           set -euo pipefail
-          TOKEN="$(curl -fsS -X POST https://hub.docker.com/v2/users/login \
+          TOKEN="$(curl -sS --fail-with-body -X POST https://hub.docker.com/v2/users/login \
             -H 'Content-Type: application/json' \
             -d "$(jq -cn --arg u "${DOCKERHUB_USERNAME}" --arg p "${DOCKERHUB_TOKEN}" '{username: $u, password: $p}')" |
             jq -r '.token')"
@@ -106,7 +109,7 @@ jobs:
               continue
             fi
             echo "创建仓库: ${DOCKERHUB_USERNAME}/${repo}"
-            curl -fsS -X POST \
+            curl -sS --fail-with-body -X POST \
               "https://hub.docker.com/v2/namespaces/${DOCKERHUB_USERNAME}/repositories" \
               -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
               -d "$(jq -cn --arg n "${repo}" --arg ns "${DOCKERHUB_USERNAME}" '{name: $n, namespace: $ns, is_private: false}')" \
@@ -123,7 +126,7 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

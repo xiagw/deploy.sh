@@ -82,7 +82,8 @@ gh run watch
 - 默认平台 `linux/amd64,linux/arm64`，只出单架构时传 `platforms=linux/amd64`。
 - 名单会对照 `conf/base-images.txt` 校验，写错立即失败；该文件同时是 `deploy.sh -x`（本地构建）的 fzf 列表来源。
 - 推送 tag 规则：`<DOCKERHUB_USERNAME>/<image>:<version>-base`，如 `xiagw/php:8.4-base`。
-- 依赖仓库 secret：`DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`（PAT，Read & Write，不要用账号密码）。
+- 依赖仓库 secret：`DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`（PAT，不要用账号密码）。`ensure-repos` job 会自动创建缺失的仓库，因此 PAT 需要 **Repo Read, Write, Delete**（含 manage repositories）；只给 Read & Write 时建仓库会 403。
+- 缺仓库时 push 报 `denied: requested access to the resource is denied`，先看 `ensure-repos` 的日志。
 - 构建参数由 `build_base_image` 生成，CI 与本地不维护第二份映射；平台通过 `G_BAKE_PLATFORMS` 传入。
 
 ## 流程
