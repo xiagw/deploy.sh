@@ -1,7 +1,6 @@
 # 可构建的基础镜像 tag（每行一个，`#` 开头为注释）。
 # 唯一事实源：本地 deploy.sh -x / -X 与 .github/workflows/base-images.yml 都读这份列表。
 # 构建参数映射在 lib/kubernetes.sh 的 build_base_image，模板为 conf/Dockerfile.single。
-php:5.6
 php:7.1
 php:7.3
 php:7.4

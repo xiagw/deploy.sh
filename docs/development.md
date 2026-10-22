@@ -54,9 +54,9 @@
 
 ## 基础镜像的 CI
 
-`.github/workflows/base-images.yml` 负责构建 `conf/Dockerfile.single` 的 29 个基础镜像并推送到 Docker Hub。
+`.github/workflows/base-images.yml` 负责构建 `conf/Dockerfile.single` 的 28 个基础镜像并推送到 Docker Hub。
 
-**为什么不在 push 时自动构建**：`conf/Dockerfile.single` 是所有镜像共享的模板，改一行就可能让全部镜像失效，从 diff 无法判断影响面；全量是 29 个 job × 2 架构（arm64 走 QEMU），2–4 小时。所以不挂 `push` 触发，改为显式调用。
+**为什么不在 push 时自动构建**：`conf/Dockerfile.single` 是所有镜像共享的模板，改一行就可能让全部镜像失效，从 diff 无法判断影响面；全量是 28 个 job × 2 架构（arm64 走 QEMU），2–4 小时。所以不挂 `push` 触发，改为显式调用。
 
 **为什么不用 commit message 关键字**：GitHub 的 `on:` 读不到 commit message（GitLab 的 `rules:if` 可以），只能在 job 内解析，workflow 照样启动并留下一条空 run；关键字还是隐式契约，漏写不会有任何提示。
 

@@ -263,13 +263,19 @@ _build_php() {
     locale-gen en_US.UTF-8
 
     # Add PHP repository and install PHP
-    echo "Installing PHP ${PHP_VERSION} from ppa:ondrej/php..."
-    $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
-    LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
+    ## PHP_PPA=false 时用发行版自带包（如 ubuntu:22.04 的 php8.1 已含安全 backport）
+    if "${PHP_PPA:-true}"; then
+        echo "Installing PHP ${PHP_VERSION} from ppa:ondrej/php..."
+        $cmd_pkg_opt lsb-release gnupg2 ca-certificates apt-transport-https software-properties-common
+        LC_ALL=C.UTF-8 LANG=C.UTF-8 add-apt-repository -y ppa:ondrej/php
 
-    if "${IS_CHINA:-false}"; then
-        find /etc/apt/sources.list.d/ -iname 'ondrej*.list' -print0 |
-            xargs -0 -r -t -I {} sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" {}
+        if "${IS_CHINA:-false}"; then
+            find /etc/apt/sources.list.d/ -iname 'ondrej*.list' -print0 |
+                xargs -0 -r -t -I {} sed -i -e "s/ppa.launchpadcontent.net/launchpad.proxy.ustclug.org/" {}
+        fi
+    else
+        echo "Installing PHP ${PHP_VERSION} from distro packages..."
+        $cmd_pkg_opt ca-certificates
     fi
 
     # Install PHP-specific packages based on version
