@@ -1,18 +1,14 @@
 # =============================================================================
 # PHP 运行时基础镜像（conf/Dockerfile.single 的 PHP 专用版本）
-# 由 lib/kubernetes.sh 的 build_base_image 传入参数：
-#   PHP_VERSION      版本号，如 8.1 / 8.4
-#   PHP_BASE_IMAGE   基底，如 ubuntu:22.04 / ubuntu:24.04
-#   PHP_PPA          true=加 ondrej PPA；false=用发行版自带包（如 jammy 的 php8.1）
+# 由 lib/kubernetes.sh 的 build_base_image 传入 PHP_VERSION。
+# 所有版本统一 ubuntu:24.04 + ondrej PPA：该 PPA 已为 7.1/7.3/7.4/8.1 回填 PHP2Shell 补丁。
 # 运行期契约与 Dockerfile.single 保持一致：CMD /opt/run0.sh、VOLUME、ONBUILD。
 # =============================================================================
 ARG MIRROR=
-ARG PHP_BASE_IMAGE=ubuntu:24.04
 
-FROM ${MIRROR}${PHP_BASE_IMAGE}
+FROM ${MIRROR}ubuntu:24.04
 
 ARG PHP_VERSION=8.4
-ARG PHP_PPA=true
 ARG IS_CHINA=false
 ARG BUILD_URL=https://gitee.com/xiagw/deploy.sh/raw/main/conf/root/opt/build.sh
 ARG TZ=UTC

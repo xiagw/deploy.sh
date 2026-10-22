@@ -358,17 +358,10 @@ build_base_image() {
         APP_PORTS = \"8080 8081\""
     ;;
   php)
-    ## 8.1 用 ubuntu:22.04 自带的 php8.1（含安全 backport）；其余版本用 ondrej PPA
-    local php_base="ubuntu:24.04" php_ppa="true"
-    if [[ "${tag_right}" == "8.1" ]]; then
-      php_base="ubuntu:22.04"
-      php_ppa="false"
-    fi
+    ## 所有版本统一 ubuntu:24.04 + ondrej PPA（该 PPA 已为 7.1/7.3/7.4/8.1 回填 PHP2Shell 补丁）
     dk_file="${G_PATH}/conf/Dockerfile.php"
     extra_args="
         PHP_VERSION = \"${tag_right}\"
-        PHP_BASE_IMAGE = \"${php_base}\"
-        PHP_PPA = \"${php_ppa}\"
         APP_PORTS = \"80 9000\""
     ;;
   node)
