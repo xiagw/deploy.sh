@@ -146,14 +146,16 @@ EOF
 
 _check_run_sh() {
     ## Dockerfile 中 mount bind /src 内sh
+    ## 只装仓库真实存在的 run0/run1；curl 必须 -f，否则 404 页面会被当成脚本落盘
     local f target
-    for f in /src/root/opt/{run0.sh,run1.sh,init.sh}; do
+    for f in /src/root/opt/run0.sh /src/root/opt/run1.sh; do
         target="${f#/src/root}"
         if [ -f "$f" ]; then
             install -m 0755 "$f" "$target"
+        elif curl -fsSL "$url_deploy_raw/conf/root/${target}" -o "$target"; then
+            chmod +x "$target"
         else
-            curl -L "$url_deploy_raw/conf/root/${target}" -o "$target" || true
-            chmod +x "$target" || true
+            rm -f "$target"
         fi
     done
 }
@@ -181,7 +183,7 @@ EOF
         if [ -f /src/root/opt/startup.sh ]; then
             install -m 0755 /src/root/opt/startup.sh /opt/startup.sh
         else
-            curl -L "$url_deploy_raw/conf/root/opt/startup.sh" -o /opt/startup.sh || true
+            curl -fsSL "$url_deploy_raw/conf/root/opt/startup.sh" -o /opt/startup.sh || rm -f /opt/startup.sh
         fi
         return 0
     fi
