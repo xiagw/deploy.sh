@@ -576,25 +576,37 @@ _build_dispatch() {
     ## 语言由构建流程内部探测（detect_repo_language 有缓存，重复调用廉价）
     lang="$(detect_repo_language)"
     local lang_type="${lang%%:*}" # Extract language type without version/docker suffix
-    local has_dockerfile=false
+    local has_dockerfile=false file
     local docker_build_failed=false
+
+    ## 仓库是否自带 Dockerfile：早于提示块判定——已有 Dockerfile 说明研发已接管构建，无需再刷接管清单
+    for file in Dockerfile{,.*}; do
+        if [[ -f "${G_REPO_DIR}/${file}" ]]; then
+            has_dockerfile=true
+            break
+        fi
+    done
 
     _msg task "Starting build process for ${lang%:}"
 
-    ## 研发控制权清单：git 提交以下文件即可接管对应环节；tests 类默认跳过，需指定参数或环境变量启用。
-    ## 每行格式: 文件 -> 作用；启用方式
-    _msg note "研发可提交以下文件接管自动环节（默认使用 CI/CD 自动模板）:"
-    _msg note "Dockerfile.base -> 基础镜像 (可选/非必须; 预装依赖，相当于中间层缓存) "
-    _msg note "  重建时机: 首次构建或依赖声明变更 (node=package.json / php=composer.json / python=requirements.txt)"
-    _msg note "  声明未变且 registry 已有 base 时直接复用 (构建快), base 由 deploy.sh 自动构建并推送"
-    _msg note "  base TAG: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
-    _msg note "  示例: node=npm install / php=composer install / python=pip install -r requirements.txt(或uv), 其他语言自行处理"
-    _msg note "Dockerfile -> 业务镜像 (支持单独提交 Dockerfile ，不必成对提交 base) 固定写法:"
-    _msg note "  ARG BASE_IMAGE"
-    _msg note "  FROM \${BASE_IMAGE} (deploy.sh 会自动注入 tag, 其余行自由)"
-    _msg note "Dockerfile.tests -> 测试镜像 (默认跳过; 启用: --test-unit/--test-function/--test-performance 或 PIPELINE_*_TEST)"
-    _msg note "  镜像内 CMD/ENTRYPOINT 定义测试入口, 框架参考: phpunit/npm test/mvn test/pytest/go test/k6/jmeter 等"
-
+    if [[ "${has_dockerfile}" == true ]]; then
+        ## 已接管：只留仍需研发决策的 tests 一句，避免每次构建都刷 10 行接管说明
+        _msg note "仓库已有 Dockerfile，构建方式由仓库决定（跳过自动模板）；测试镜像可用 Dockerfile.tests 接管: --test-unit/--test-function/--test-performance 或 PIPELINE_*_TEST"
+    else
+        ## 研发控制权清单：git 提交以下文件即可接管对应环节；tests 类默认跳过，需指定参数或环境变量启用。
+        ## 每行格式: 文件 -> 作用；启用方式
+        _msg note "研发可提交以下文件接管自动环节（默认使用 CI/CD 自动模板）:"
+        _msg note "Dockerfile.base -> 基础镜像 (可选/非必须; 预装依赖，相当于中间层缓存) "
+        _msg note "  重建时机: 首次构建或依赖声明变更 (node=package.json / php=composer.json / python=requirements.txt)"
+        _msg note "  声明未变且 registry 已有 base 时直接复用 (构建快), base 由 deploy.sh 自动构建并推送"
+        _msg note "  base TAG: ${ENV_DOCKER_REGISTRY%/}/base:${G_REPO_NAME}-${G_REPO_BRANCH}"
+        _msg note "  示例: node=npm install / php=composer install / python=pip install -r requirements.txt(或uv), 其他语言自行处理"
+        _msg note "Dockerfile -> 业务镜像 (支持单独提交 Dockerfile ，不必成对提交 base) 固定写法:"
+        _msg note "  ARG BASE_IMAGE"
+        _msg note "  FROM \${BASE_IMAGE} (deploy.sh 会自动注入 tag, 其余行自由)"
+        _msg note "Dockerfile.tests -> 测试镜像 (默认跳过; 启用: --test-unit/--test-function/--test-performance 或 PIPELINE_*_TEST)"
+        _msg note "  镜像内 CMD/ENTRYPOINT 定义测试入口, 框架参考: phpunit/npm test/mvn test/pytest/go test/k6/jmeter 等"
+    fi
     ## 检查配置文件中的构建方式覆盖
     if [[ -n "${PROJECT_BUILD_METHOD:-}" && "${PROJECT_BUILD_METHOD}" != "auto" ]]; then
         case "${PROJECT_BUILD_METHOD}" in
@@ -615,14 +627,6 @@ _build_dispatch() {
             ;;
         esac
     fi
-
-    # Check if Dockerfile exists
-    for file in Dockerfile{,.*}; do
-        if [[ -f "${G_REPO_DIR}/${file}" ]]; then
-            has_dockerfile=true
-            break
-        fi
-    done
 
     # Priority 1: Try Docker build if Dockerfile exists and Docker is available
     # prefer_docker=false: 自动模式下直接走系统构建，跳过 Docker（由 Priority 2 承接）
