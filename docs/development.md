@@ -52,6 +52,34 @@
 - 标题必须带 emoji 前缀：`✨` 新功能、`🐛` 修 bug、`♻️` 重构、`📝` 文档、`🚀` 部署/发布。
 - 涉及 issue 时 body 写 `Close #xxx`。
 
+## 基础镜像的 CI
+
+`.github/workflows/base-images.yml` 负责构建 `conf/Dockerfile.single` 的 29 个基础镜像并推送到 Docker Hub。
+
+**为什么不在 push 时自动构建**：`conf/Dockerfile.single` 是所有镜像共享的模板，改一行就可能让全部镜像失效，从 diff 无法判断影响面；全量是 29 个 job × 2 架构（arm64 走 QEMU），2–4 小时。所以不挂 `push` 触发，改为显式调用。
+
+**为什么不用 commit message 关键字**：GitHub 的 `on:` 读不到 commit message（GitLab 的 `rules:if` 可以），只能在 job 内解析，workflow 照样启动并留下一条空 run；关键字还是隐式契约，漏写不会有任何提示。
+
+**触发方式**（两个入口，镜像名单统一读 `conf/base-images.txt`）：
+
+```bash
+# 交互式：fzf 多选后触发 GitHub Actions（本机把 gh 当触发器用）
+./deploy.sh -X
+
+# 脚本化：直接调 gh
+gh workflow run base-images.yml -f images=mysql:8.0
+gh workflow run base-images.yml -f images=php:8.4,redis:7-alpine -f platforms=linux/amd64
+gh workflow run base-images.yml -f images=all
+gh run watch
+```
+
+- `images` 必填，空值直接报错；只有 `all` 表示全量。
+- 默认平台 `linux/amd64,linux/arm64`，只出单架构时传 `platforms=linux/amd64`。
+- 名单会对照 `conf/base-images.txt` 校验，写错立即失败；该文件同时是 `deploy.sh -x`（本地构建）的 fzf 列表来源。
+- 推送 tag 规则：`<DOCKERHUB_USERNAME>/<image>:<version>-base`，如 `xiagw/php:8.4-base`。
+- 依赖仓库 secret：`DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`（PAT，Read & Write，不要用账号密码）。
+- 构建参数由 `build_base_image` 生成，CI 与本地不维护第二份映射；平台通过 `G_BAKE_PLATFORMS` 传入。
+
 ## 流程
 
 1. 阅读相关 `lib/*.sh` 模块与 `conf/` 模板，理解现有模式。

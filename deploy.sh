@@ -144,6 +144,7 @@ Parameters:
     -B, --build                   Build project (build and push to registry).
     --buildx-mode MODE          Select buildx builder mode: remote|context|kubernetes|auto.
     -x, --build-base            Execute function build_base_image; append --dry for preview mode.
+    -X, --build-base-ci         Pick base images with fzf, trigger GitHub Actions build and push.
     --gen-dockerfile            Generate Dockerfile.<lang> from detected language.
     --build-buildpacks          Build image with Cloud Native Buildpacks (needs pack CLI).
 
@@ -212,6 +213,7 @@ parse_args() {
         -s | --svn-checkout) arg_svn_checkout_url="${2:?empty svn url}" && shift ;;
         # Build operations
         -x | --build-base) arg_build_base=true ;;
+        -X | --build-base-ci) arg_build_base_ci=true ;;
         -B | --build) arg_build=true ;;
         --buildx-mode)
             arg_buildx_mode="${2:-auto}"
@@ -282,6 +284,7 @@ parse_args() {
         [[ -n "${arg_src:-}" ]] ||
         [[ "${arg_create_storage_class:-false}" == true || -n "${arg_sub_path:-}" ]] ||
         [[ "${arg_renew_cert:-false}" == true || "${arg_build_base:-false}" == true ]] ||
+        [[ "${arg_build_base_ci:-false}" == true ]] ||
         [[ "${arg_build:-false}" == true || "${arg_test_unit:-false}" == true || "${arg_test_func:-false}" == true ]] ||
         [[ "${arg_test_perf:-false}" == true || "${arg_code_style:-false}" == true || "${arg_code_quality:-false}" == true ]] ||
         [[ "${arg_security_zap:-false}" == true || "${arg_security_vulmap:-false}" == true ]] ||
@@ -343,6 +346,7 @@ parse_args() {
 
     ## 依赖 config_build_env 设置的 IS_CHINA
     [[ "${arg_build_base:-false}" == true ]] && RUN+=(build_base_image_select)
+    [[ "${arg_build_base_ci:-false}" == true ]] && RUN+=(build_base_image_ci_select)
 
     RUN+=(repo_overlay_files)
 

@@ -325,7 +325,10 @@ EOF
 build_base_image() {
     # 构建项目的基础镜像
     # @param $1 image_tag The tag of the base image to build (e.g. mysql:8.0, amazoncorretto:17)
+    # 环境变量 G_BAKE_PLATFORMS：逗号分隔的构建平台，默认 linux/amd64,linux/arm64；
+    #   CI 只出单架构时设为 linux/amd64，省掉 QEMU 模拟（arm64 构建慢数倍）
   local image_tag="$1" mirror registry proxy_url bake_target tag_left tag_right
+  local platforms platform_list p
   local bake_file="${G_DATA}/cache/base-bake.hcl"
   mkdir -p "${G_DATA}/cache"
   mirror="${ENV_DOCKER_MIRROR:+${ENV_DOCKER_MIRROR%/}/}"
@@ -334,6 +337,14 @@ build_base_image() {
   tag_left="${image_tag%:*}"
   tag_right="${image_tag#*:}"
   bake_target="${tag_left/amazoncorretto/java}"
+
+  ## 平台列表转 HCL 数组元素：linux/amd64,linux/arm64 -> "linux/amd64", "linux/arm64"
+  platforms="${G_BAKE_PLATFORMS:-linux/amd64,linux/arm64}"
+  platform_list=""
+  for p in ${platforms//,/ }; do
+    platform_list+="\"${p}\", "
+  done
+  platform_list="${platform_list%, }"
 
   ## 按语言生成完整 args，与 docker-bake.hcl 各 target 保持一致
   local extra_args=""
@@ -414,7 +425,7 @@ build_base_image() {
 target "default" {
     context = "${G_PATH}/conf"
     dockerfile = "${dk_file:-Dockerfile.single}"
-    platforms = ["linux/amd64", "linux/arm64"]
+    platforms = [${platform_list}]
     args = {
         IS_CHINA = "${IS_CHINA:-true}"
         MIRROR = "${mirror}"${extra_args}
@@ -456,27 +467,63 @@ EOF
   rm -f "${bake_file}" 2>/dev/null || true
 }
 
+build_base_image_tags() {
+    # 输出可构建的基础镜像 tag（每行一个），读取 conf/base-images.txt
+    # 本地 `-x/-X` 与 CI workflow 共用同一份列表，避免三处各维护一份
+  local file="${G_PATH}/conf/base-images.txt" line
+  if [[ ! -f "${file}" ]]; then
+    _msg error "缺少 ${file}"
+    return 1
+  fi
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%%#*}"
+    line="${line//[[:space:]]/}"
+    [[ -n "${line}" ]] && printf '%s\n' "${line}"
+  done <"${file}"
+}
+
 build_base_image_select() {
-    # 构建选定的基础镜像
-    # @param $@ Optional specific image tags to build
+    # 构建选定的基础镜像（本机 docker buildx bake）
   ## RUN 单数组成员（-x/--build-base 触发，parse 组装），无守卫直接执行
-  local all_tags=() tags=()
+  local i tags=()
 
   dry_run_note "select base image tags"
 
-  all_tags=(
-    "php:5.6" "php:7.1" "php:7.3" "php:7.4" "php:8.1" "php:8.2" "php:8.3" "php:8.4" "php:8.5"
-    "mysql:5.6" "mysql:5.7" "mysql:8.0" "mysql:8.4" "mysql:9.0"
-    "amazoncorretto:8" "amazoncorretto:17" "amazoncorretto:21" "amazoncorretto:25" "amazoncorretto:26"
-    "node:18" "node:20" "node:21" "node:22" "node:23" "node:24"
-    "redis:latest" "redis:7-alpine" "redis:8-alpine"
-    "nginx:stable-alpine"
-  )
-
-  readarray -t tags < <(echo "${all_tags[@]}" | sed 's/\ /\n/g' | fzf -m --header="Use TAB to select multiple items, ENTER to confirm")
+  readarray -t tags < <(build_base_image_tags | fzf -m --header="Use TAB to select multiple items, ENTER to confirm")
 
   for i in "${tags[@]}"; do
     build_base_image "$i"
   done
   exit $?
+}
+
+build_base_image_ci_select() {
+    # 用 fzf 选镜像，触发 GitHub Actions 的 base-images.yml 在 CI 构建并推送
+    # 依赖：gh 已登录（gh auth login）、当前仓库为 xiagw/deploy.sh、
+    #      仓库已配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secret
+  ## RUN 单数组成员（-X/--build-base-ci 触发，parse 组装），无守卫直接执行
+  local images tags=()
+
+  dry_run_note "select base image tags for GitHub Actions"
+
+  if ! command -v gh >/dev/null 2>&1; then
+    _msg error "gh CLI 未安装：brew install gh && gh auth login"
+    return 1
+  fi
+
+  readarray -t tags < <(build_base_image_tags | fzf -m --header="TAB 多选，ENTER 触发 GitHub Actions 构建")
+  if [[ "${#tags[@]}" -eq 0 ]]; then
+    _msg warning "未选择任何镜像，已取消"
+    return 0
+  fi
+
+  ## workflow 的 images 输入用逗号分隔
+  images="$(IFS=,; echo "${tags[*]}")"
+  _msg task "触发 GitHub Actions 构建：${images}"
+  if ! gh workflow run base-images.yml -f "images=${images}"; then
+    _msg error "触发失败：检查 gh auth status，以及 base-images.yml 是否已在默认分支"
+    exit 1
+  fi
+  _msg info "查看进度：gh run watch"
+  exit 0
 }

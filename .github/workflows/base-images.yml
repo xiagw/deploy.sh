@@ -1,0 +1,150 @@
+# 按矩阵构建 conf/Dockerfile.single 的基础镜像并推送到 Docker Hub。
+# 构建参数映射复用 lib/kubernetes.sh 的 build_base_image（唯一事实源），
+# 所以 CI 和本地 `deploy.sh -x` 构建出的 tag 规则完全一致：
+#   <DOCKERHUB_USERNAME>/<image>:<version>-base   例：xiagw/php:8.4-base
+# 只有一个入口：workflow_dispatch（本地等价物 `deploy.sh -x`），不随 push 自动跑：
+#   gh workflow run base-images.yml -f images=mysql:8.0,redis:7-alpine
+#   gh workflow run base-images.yml -f images=all
+#   gh workflow run base-images.yml -f images=php:8.4 -f platforms=linux/amd64
+# images 必填，空值直接报错；`all` 才是全量。设计取舍见 docs/development.md。
+# 依赖的仓库 secret：DOCKERHUB_USERNAME / DOCKERHUB_TOKEN（PAT，需 Read & Write）
+name: Base Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: '镜像列表：逗号/空格分隔，或 all（必填）'
+        required: true
+      platforms:
+        description: '构建平台'
+        required: false
+        default: linux/amd64,linux/arm64
+        type: choice
+        options:
+          - linux/amd64,linux/arm64
+          - linux/amd64
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      images: ${{ steps.gen.outputs.images }}
+    steps:
+      - name: 生成构建矩阵
+        id: gen
+        env:
+          INPUT: ${{ inputs.images }}
+        run: |
+          set -euo pipefail
+          ## 列表唯一事实源，本地 -x/-X 与 CI 共用
+          ALL=""
+          while IFS= read -r line || [[ -n "${line}" ]]; do
+            line="${line%%#*}"
+            line="${line//[[:space:]]/}"
+            [[ -n "${line}" ]] && ALL+="${line} "
+          done <conf/base-images.txt
+          if [[ -z "${INPUT//[[:space:]]/}" ]]; then
+            echo "::error::images 不能为空：用 'all' 构建全部，或逗号分隔指定，如 mysql:8.0,redis:7-alpine"
+            exit 1
+          fi
+          if [[ "${INPUT//[[:space:]]/}" == "all" ]]; then
+            LIST="${ALL}"
+          else
+            LIST="${INPUT//,/ }"
+          fi
+          read -ra CANDIDATES <<<"${LIST}"
+          SELECTED=()
+          for img in "${CANDIDATES[@]}"; do
+            if ! grep -qw -- "${img}" <<<"${ALL}"; then
+              echo "::error::未知镜像 '${img}'，不在 conf/base-images.txt 里"
+              exit 1
+            fi
+            SELECTED+=("${img}")
+          done
+          matrix="$(printf '%s\n' "${SELECTED[@]}" | jq -R -s -c 'split("\n") | map(select(length > 0)) | {image: .}')"
+          echo "matrix=${matrix}" >>"${GITHUB_OUTPUT}"
+          echo "images=${SELECTED[*]}" >>"${GITHUB_OUTPUT}"
+
+  ## Docker Hub 不会在 push 时自动建仓库，已存在的跳过（HEAD 返回 200）
+  ensure-repos:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: 确保 Docker Hub 仓库存在
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          IMAGES: ${{ needs.prepare.outputs.images }}
+        run: |
+          set -euo pipefail
+          TOKEN="$(curl -fsS -X POST https://hub.docker.com/v2/users/login \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -cn --arg u "${DOCKERHUB_USERNAME}" --arg p "${DOCKERHUB_TOKEN}" '{username: $u, password: $p}')" |
+            jq -r '.token')"
+          ## 运行时 JWT 不在 secret 列表里，GitHub 不会自动打码，手动注册遮蔽
+          echo "::add-mask::${TOKEN}"
+          read -ra IMGS <<<"${IMAGES}"
+          REPOS="$(printf '%s\n' "${IMGS[@]}" | cut -d: -f1 | sort -u)"
+          while IFS= read -r repo; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -I \
+              -H "Authorization: Bearer ${TOKEN}" \
+              "https://hub.docker.com/v2/namespaces/${DOCKERHUB_USERNAME}/repositories/${repo}")"
+            if [[ "${code}" == "200" ]]; then
+              echo "仓库已存在: ${DOCKERHUB_USERNAME}/${repo}"
+              continue
+            fi
+            echo "创建仓库: ${DOCKERHUB_USERNAME}/${repo}"
+            curl -fsS -X POST \
+              "https://hub.docker.com/v2/namespaces/${DOCKERHUB_USERNAME}/repositories" \
+              -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
+              -d "$(jq -cn --arg n "${repo}" --arg ns "${DOCKERHUB_USERNAME}" '{name: $n, namespace: $ns, is_private: false}')" \
+              >/dev/null
+          done <<<"${REPOS}"
+
+  build:
+    needs: [prepare, ensure-repos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.image }}
+        env:
+          G_PATH: ${{ github.workspace }}
+          G_DATA: ${{ github.workspace }}/data
+          G_DRY_RUN: 'false'
+          G_BAKE_PLATFORMS: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
+          ENV_DOCKER_REGISTRY: ${{ secrets.DOCKERHUB_USERNAME }}/
+          ## GitHub runner 在境外，中国镜像源（ustc/aliyun/cnpm）反而更慢且易失败
+          IS_CHINA: 'false'
+        run: |
+          set -euo pipefail
+          source lib/common.sh
+          source lib/kubernetes.sh
+          build_base_image "${{ matrix.image }}"
