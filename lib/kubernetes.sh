@@ -472,7 +472,7 @@ build_base_image_tags() {
     # 本地 `-x/-X` 与 CI workflow 共用同一份列表，避免三处各维护一份
   local file="${G_PATH}/conf/base-images.txt" line
   if [[ ! -f "${file}" ]]; then
-    _msg error "缺少 ${file}"
+    _msg error "缺少 ${file}" >&2
     return 1
   fi
   while IFS= read -r line || [[ -n "${line}" ]]; do
@@ -482,14 +482,40 @@ build_base_image_tags() {
   done <"${file}"
 }
 
+build_base_image_pick() {
+    # 输出选中的基础镜像 tag（每行一个）
+    # 有直传参数（deploy.sh -x/-X TAG...）时直接用，否则 fzf 多选；
+    # 两种情况都对照 conf/base-images.txt 校验，避免拼错 tag 构建出错误镜像
+  local all tag tags=()
+  if [[ "${#arg_images[@]}" -gt 0 ]]; then
+    tags=("${arg_images[@]}")
+  else
+    readarray -t tags < <(build_base_image_tags | fzf -m --header="TAB 多选，ENTER 确认")
+  fi
+  [[ "${#tags[@]}" -eq 0 ]] && return 0
+  all="$(build_base_image_tags)"
+  for tag in "${tags[@]}"; do
+    if ! grep -qxF -- "${tag}" <<<"${all}"; then
+      _msg error "未知镜像：${tag}（可用列表见 conf/base-images.txt）" >&2
+      return 1
+    fi
+  done
+  printf '%s\n' "${tags[@]}"
+}
+
 build_base_image_select() {
     # 构建选定的基础镜像（本机 docker buildx bake）
   ## RUN 单数组成员（-x/--build-base 触发，parse 组装），无守卫直接执行
-  local i tags=()
+  local i picked tags=()
 
   dry_run_note "select base image tags"
 
-  readarray -t tags < <(build_base_image_tags | fzf -m --header="Use TAB to select multiple items, ENTER to confirm")
+  picked="$(build_base_image_pick)" || exit 1
+  if [[ -z "${picked//[[:space:]]/}" ]]; then
+    _msg warning "未选择任何镜像，已取消"
+    exit 0
+  fi
+  readarray -t tags <<<"${picked}"
 
   for i in "${tags[@]}"; do
     build_base_image "$i"
@@ -498,11 +524,11 @@ build_base_image_select() {
 }
 
 build_base_image_ci_select() {
-    # 用 fzf 选镜像，触发 GitHub Actions 的 base-images.yml 在 CI 构建并推送
+    # 触发 GitHub Actions 的 base-images.yml 在 CI 构建并推送
     # 依赖：gh 已登录（gh auth login）、当前仓库为 xiagw/deploy.sh、
     #      仓库已配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secret
   ## RUN 单数组成员（-X/--build-base-ci 触发，parse 组装），无守卫直接执行
-  local images tags=()
+  local images picked tags=()
 
   dry_run_note "select base image tags for GitHub Actions"
 
@@ -511,15 +537,20 @@ build_base_image_ci_select() {
     return 1
   fi
 
-  readarray -t tags < <(build_base_image_tags | fzf -m --header="TAB 多选，ENTER 触发 GitHub Actions 构建")
-  if [[ "${#tags[@]}" -eq 0 ]]; then
+  picked="$(build_base_image_pick)" || exit 1
+  if [[ -z "${picked//[[:space:]]/}" ]]; then
     _msg warning "未选择任何镜像，已取消"
-    return 0
+    exit 0
   fi
+  readarray -t tags <<<"${picked}"
 
   ## workflow 的 images 输入用逗号分隔
   images="$(IFS=,; echo "${tags[*]}")"
   _msg task "触发 GitHub Actions 构建：${images}"
+  if ${G_DRY_RUN:-false}; then
+    _msg note "[dry-run] gh workflow run base-images.yml -f images=${images}"
+    exit 0
+  fi
   if ! gh workflow run base-images.yml -f "images=${images}"; then
     _msg error "触发失败：检查 gh auth status，以及 base-images.yml 是否已在默认分支"
     exit 1

@@ -143,8 +143,8 @@ Parameters:
     # Build operations
     -B, --build                   Build project (build and push to registry).
     --buildx-mode MODE          Select buildx builder mode: remote|context|kubernetes|auto.
-    -x, --build-base            Execute function build_base_image; append --dry for preview mode.
-    -X, --build-base-ci         Pick base images with fzf, trigger GitHub Actions build and push.
+    -x, --build-base [IMAGE...] Build base images locally; append --dry for preview. IMAGE 省略则 fzf 多选.
+    -X, --build-base-ci [IMAGE...] Trigger GitHub Actions to build/push base images. IMAGE 省略则 fzf 多选.
     --gen-dockerfile            Generate Dockerfile.<lang> from detected language.
     --build-buildpacks          Build image with Cloud Native Buildpacks (needs pack CLI).
 
@@ -197,6 +197,7 @@ parse_args() {
     # 解析命令行参数并组装执行计划 RUN（位置即依赖顺序）
     # 写入: RUN（必备步骤+条件函数+阶段+handle_notify）/ RUN_DEPLOY（部署方式 key，供 stage_deploy 选型）/
     #       G_DEBUG_ON / arg_*；组装规则见 docs/architecture.md §3
+    arg_images=()
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
         # Basic options
@@ -265,7 +266,14 @@ parse_args() {
         -D | --disable-overlay) arg_disable_overlay=true ;;
         -r | --renew-cert) arg_renew_cert=true ;;
         --clean-tags) arg_clean_tags="${2:?ERROR: repository parameter is required}" && shift ;;
-        *) usage && exit 1 ;;
+        *)
+            ## -x/-X 后面的镜像 tag 直传，跳过 fzf（脚本与测试用）
+            if [[ "${arg_build_base:-false}" == true || "${arg_build_base_ci:-false}" == true ]]; then
+                arg_images+=("$1")
+            else
+                usage && exit 1
+            fi
+            ;;
         esac
         shift
     done

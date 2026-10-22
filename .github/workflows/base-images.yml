@@ -39,6 +39,9 @@ jobs:
       matrix: ${{ steps.gen.outputs.matrix }}
       images: ${{ steps.gen.outputs.images }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: 生成构建矩阵
         id: gen
         env:

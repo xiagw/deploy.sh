@@ -63,8 +63,11 @@
 **触发方式**（两个入口，镜像名单统一读 `conf/base-images.txt`）：
 
 ```bash
-# 交互式：fzf 多选后触发 GitHub Actions（本机把 gh 当触发器用）
+# 交互式：fzf 多选后触发 GitHub Actions
 ./deploy.sh -X
+
+# 直传镜像，跳过 fzf（脚本/测试用；-x 本地构建同理）
+./deploy.sh -X mysql:8.0 redis:7-alpine
 
 # 脚本化：直接调 gh
 gh workflow run base-images.yml -f images=mysql:8.0
@@ -72,6 +75,8 @@ gh workflow run base-images.yml -f images=php:8.4,redis:7-alpine -f platforms=li
 gh workflow run base-images.yml -f images=all
 gh run watch
 ```
+
+`-x`/`-X` 的直传参数会先对照 `conf/base-images.txt` 校验，写错直接报错退出；`--dry` 只打印将要执行的 `gh workflow run`，不会真的触发。
 
 - `images` 必填，空值直接报错；只有 `all` 表示全量。
 - 默认平台 `linux/amd64,linux/arm64`，只出单架构时传 `platforms=linux/amd64`。
