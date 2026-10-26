@@ -167,11 +167,15 @@ _build_nginx() {
     # 如果只需要运行时依赖
     if [ "${1:-runtime}" = runtime ]; then
         $cmd_pkg_opt pcre openssl bash curl shadow libmaxminddb
+        ## 预生成 DH 参数：laradock 的 ssl_dhparam 依赖，构建期生成避免容器启动重算（-dsaparam 约 1 秒）
+        mkdir -p /etc/nginx/ssl
+        [ -f /etc/nginx/ssl/dhparams.pem ] || openssl dhparam -dsaparam -out /etc/nginx/ssl/dhparams.pem 2048
         touch /var/log/messages
         # 设置用户权限
         groupmod -g 1000 nginx
         usermod -u 1000 -g 1000 nginx
         ## 往 /docker-entrypoint.d/run0.sh 写入启动脚本，CMD ["bash", "/opt/run0.sh"] 会调用它
+        ## onrun.sh 给公司使用，startup.sh 给laradock使用
         cat >/docker-entrypoint.d/run0.sh <<'EOF'
 if [ -f /opt/onrun.sh ]; then
     bash /opt/onrun.sh;

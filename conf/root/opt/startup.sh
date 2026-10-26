@@ -11,6 +11,18 @@ mkdir -p "$ssl_dir"
 }
 [ -f "$ssl_dir/default.csr" ] || openssl req -new -key "$ssl_dir/default.key" -out "$ssl_dir/default.csr" -subj "/CN=default/O=default/C=CN"
 [ -f "$ssl_dir/default.pem" ] || openssl x509 -req -days 3650 -in "$ssl_dir/default.csr" -signkey "$ssl_dir/default.key" -out "$ssl_dir/default.pem"
+
+## DH 参数：laradock main 分支的 ssl_dhparam 指向 /etc/nginx/ssl/dhparams.pem。
+## 用 -dsaparam 生成（2048 位只需 1 秒；不带该参数要几分钟）；
+## 构建期已在 _build_nginx 预生成，这里只做兜底。
+if [ ! -f "$ssl_dir/dhparams.pem" ]; then
+    if command -v openssl >/dev/null 2>&1; then
+        openssl dhparam -dsaparam -out "$ssl_dir/dhparams.pem" 2048
+        chmod 644 "$ssl_dir/dhparams.pem"
+    else
+        echo "[startup] openssl 命令缺失，无法生成 dhparams.pem（laradock 的 ssl_dhparam 会失败）" >&2
+    fi
+fi
 # chown 1000:1000 $html_path
 if compgen -G "$ssl_dir"/*.key >/dev/null; then
     chmod 600 "$ssl_dir"/*.key
